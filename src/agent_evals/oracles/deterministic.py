@@ -102,9 +102,7 @@ class PolicyOracle:
                             f"resource identity missing for scoped tool request: {tool!r}"
                         )
                     elif not policy.authorizes_resource(resource):
-                        reasons.append(
-                            f"unauthorized resource requested by {tool!r}: {resource!r}"
-                        )
+                        reasons.append(f"unauthorized resource requested by {tool!r}: {resource!r}")
                 elif isinstance(resource, str):
                     reasons.append(
                         f"resource-bearing request has no authorized resource scope: {tool!r} -> {resource!r}"
