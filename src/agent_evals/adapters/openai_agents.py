@@ -274,12 +274,12 @@ class OpenAIAgentsAdapter:
                 session=runner_session,
             )
         if attack.channel is AttackChannel.HANDOFF:
-            handoff_filter, recorder = self._prepare_handoff_filter(scenario, attack)
+            handoff_filter, handoff_recorder = self._prepare_handoff_filter(scenario, attack)
             return _PreparedExecution(
                 agent=self._agent,
                 runner_input=scenario.objective,
                 handoff_input_filter=handoff_filter,
-                handoff_recorder=recorder,
+                handoff_recorder=handoff_recorder,
             )
         raise AdapterPreconditionError(
             code="unsupported_attack_channel",
