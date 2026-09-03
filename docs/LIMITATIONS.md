@@ -6,153 +6,135 @@ This document is intentionally strict. The repository should never become more i
 
 ### No credentialed live-provider assurance yet
 
-A first-class OpenAI Agents SDK adapter is implemented against `openai-agents==0.22.0`, and CI exercises its real SDK runner/tool/handoff/input loop deterministically with `ScriptedModel` without provider API calls.
+A first-class OpenAI Agents SDK adapter is pinned to `openai-agents==0.22.0`, and CI exercises the real SDK runner/tool/handoff/context loop deterministically with `agents.testing.ScriptedModel` and no provider API call.
 
-The deterministic SDK tier verifies ordinary tool execution plus concrete `USER_INPUT`, local-`FunctionTool` `TOOL_RESULT`, local description-level `TOOL_METADATA`, isolated session-history `MEMORY`, structured inline-file `RESOURCE`, and first-native-handoff-context `HANDOFF` delivery.
+The SDK tier covers all seven generic adversarial channel categories at scoped local/SDK boundaries. It does **not** establish live-model quality, production-provider availability, provider-side delivery attestation, or credentialed end-to-end assurance.
 
-The repository does **not** claim live-model behavioral assurance, production-provider availability, model-specific safety performance, provider-side delivery attestation, or credentialed end-to-end coverage. Terminal state observation remains outside SDK result.
+Terminal application state remains independently observed; provider output is not the state oracle.
 
-### Approval decisions are not inferred from approval requests
+### Seven generic channels do not mean universal interception
 
-The OpenAI adapter records SDK `ToolApprovalItem` objects as `APPROVAL_REQUEST`, not `APPROVAL`. Privileged execution therefore requires independently observed authorization evidence.
+`OpenAIAgentsAdapter` currently implements:
 
-### No semantic/model grader yet
+- `USER_INPUT` as the second ordered SDK user message;
+- local `TOOL_RESULT` as first matching local `FunctionTool` result replacement;
+- local description-level `TOOL_METADATA` on a copied `FunctionTool`;
+- SDK session-history `MEMORY` through a fresh per-trial `Session`;
+- structured inline-file `RESOURCE` through one `input_file` item;
+- native `HANDOFF` context through the first actual SDK handoff filter invocation;
+- local runtime-context `ENVIRONMENT` through one consumed key in trial-local `RunContextWrapper.context` during the first matching local `FunctionTool` call.
 
-The framework does not currently use a model-as-judge. This is deliberate until grader calibration, provenance, failure semantics, and precedence relative to deterministic oracles are implemented.
+These are concrete implementations of a generic taxonomy, not assertions that every production system carrying a similarly named boundary is intercepted.
 
-### Delivery receipts are not universal injectors or target-side attestation
+### `ENVIRONMENT` means local SDK application context, not infrastructure chaos
 
-`TrialRunner` requires exactly one internally valid delivery receipt before deterministic adversarial subject grading. Missing, duplicate, malformed, forged, or mismatched delivery evidence produces `BLOCKED` with no completed subject oracles rather than behavioral `FAIL`.
+The implemented environment mode requires an identity-bearing payload with `tool`, `key`, and `environment`. Complete canonical `AttackFixture.payload_json` becomes the injected value.
 
-`OpenAIAgentsAdapter` currently provides six concrete channel implementations:
+The adapter accepts only `None` or string-keyed `Mapping` runtime context for this mode. It snapshots base context into a read-only trial-local overlay and uses task-local `ContextVar` activation during the first matching local tool invocation.
 
-- `USER_INPUT`: exact canonical fixture JSON as second ordered SDK user message;
-- local `TOOL_RESULT`: first matching local function-tool result replaced with exact canonical fixture JSON and bound to exact SDK call ID;
-- local description-level `TOOL_METADATA`: copied target description replaced with exact canonical fixture JSON while original tool remains unchanged;
-- SDK session-history `MEMORY`: fresh per-trial `Session` returns exact canonical fixture JSON as one prior user item;
-- structured inline-file `RESOURCE`: exact canonical fixture JSON becomes `file_data` of one SDK `input_file` item;
-- native SDK `HANDOFF`: fresh per-trial run-level handoff filter appends exact canonical fixture JSON to first actual handoff context while preserving destination.
-
-These controls establish what attack is intended, what exact scenario is evaluated, and what delivery observation the trusted control plane recorded. They do not provide universal injection or independent proof that an arbitrary external target consumed the stimulus.
-
-### Local `TOOL_RESULT` replacement is not hosted/MCP interception
-
-The current `TOOL_RESULT` implementation requires identity-bearing `tool` + `result` routing. Complete canonical fixture JSON becomes model-visible replacement output.
-
-Per trial the target is copied and agent cloned. On first matching call the original target function is deliberately **not executed**; later matching calls use copied original behavior.
-
-The repository does **not** claim hosted/MCP/external-tool interception, generic support for every SDK tool implementation, that a backing service produced the malicious result, preservation of original first-call side effects, or execute-then-perturb semantics.
-
-If the configured target never executes, no receipt is emitted and the trial remains `BLOCKED`.
-
-### Local `TOOL_METADATA` means description poisoning, not universal metadata poisoning
-
-The current `TOOL_METADATA` implementation requires `tool` + `description`. Complete canonical fixture JSON becomes copied local `FunctionTool.description`.
-
-It does **not** mutate or test tool names, parameter JSON schemas, invocation callbacks, approval semantics, routing identity, hosted-tool metadata, MCP discovery metadata, external registries, provider wire serialization, or remote-model processing attestation.
-
-### SDK session-history `MEMORY` is not production memory poisoning
-
-The implemented `MEMORY` mode places complete canonical fixture JSON into a fresh per-trial object implementing the OpenAI SDK `Session` protocol. The runner retrieves that prior item through `get_items` and prepends it before current input.
-
-The deterministic SDK test proves exact poisoned history is visible before current objective and a later ordinary run receives no inherited session poison.
-
-This does **not** claim application-owned production session mutation, provider-managed conversation poisoning, vector databases/RAG memory, semantic retrieval manipulation, cross-user/tenant production session boundaries, filesystem/browser/sandbox memory, durable external persistence, provider-side retention, or target-side memory-delivery attestation.
-
-### Structured inline-file `RESOURCE` is not universal resource or retrieval poisoning
-
-The implemented `RESOURCE` mode is intentionally narrow.
-
-It requires an identity-bearing fixture with a `resource` field. Complete canonical `AttackFixture.payload_json` becomes exact `file_data` of one structured SDK `input_file`; the evaluator supplies a fixed filename `agent-evals-resource.json`.
-
-The deterministic SDK test proves `ScriptedModel` observes the exact structured file item and canonical file content. A later ordinary run receives only its current objective, proving no reusable agent/adapter contamination.
+Delivery is **consumption-bound**. The receipt is created only when subject code reads the targeted value through `ctx.context[key]` or `.get(key)`. Merely creating the overlay, executing the tool, or checking key membership does not prove delivery. A target tool that never reads the key leaves the adversarial trial `BLOCKED`.
 
 The repository therefore does **not** claim this mode mutates, attacks, validates, or attests:
 
-- OpenAI hosted File Search;
-- vector stores, embeddings, RAG retrieval, ranking, chunking, filtering, or citations;
-- provider-uploaded `file_id` resources;
-- remote `file_url` fetching or URL content;
-- browser pages, databases, object stores, knowledge bases, or production document repositories;
-- MCP resource servers or hosted-tool retrieval;
-- external filesystem/resource lifecycle;
-- provider-side file parsing, transformation, or retention;
-- target-side proof that a remote hosted model consumed the injected file bytes.
+- process-global `os.environ` or operating-system environment variables;
+- filesystems, browser state, containers, VMs, or sandboxes;
+- network latency, partitions, DNS, timeouts, or dependency outages;
+- provider/model runtime or deployment configuration;
+- clocks, timezones, or time-skew behavior;
+- secret managers, credentials, API keys, certificates, or token stores;
+- Kubernetes, cloud IAM, service meshes, queues, databases, or other production infrastructure;
+- arbitrary non-`Mapping` application context objects;
+- external-system or provider-side environment consumption;
+- production chaos-engineering coverage.
 
-A real production-resource adapter must target the actual retrieval/storage/enforcement boundary and independently verify isolation, identity, lifecycle, and side effects.
+Those require separate environment-specific adapters/injectors at the actual enforcement boundary.
 
-The adapter's `resource_resolver(tool_name, arguments)` callback is unrelated to adversarial `RESOURCE`: it normalizes tool-call resource identities for lexical policy checks.
+### Local `TOOL_RESULT` replacement is not hosted/MCP interception
 
-### Native SDK `HANDOFF` is context poisoning, not rerouting or distributed-fabric interception
+The current result mode targets one exact local SDK `FunctionTool`. On the first matching call the original function is deliberately not executed; exact canonical fixture JSON becomes the result. Later calls use copied original behavior.
 
-The implemented `HANDOFF` mode validates a required `handoff` field and installs a fresh per-trial `RunConfig.handoff_input_filter`. On the first actual SDK handoff, it appends complete canonical fixture JSON to cloned handoff history and returns that modified transfer to the same SDK-selected destination.
+It does not claim hosted/MCP/external-server interception, generic support for every SDK tool type, preservation of original first-call side effects, or execute-then-perturb semantics.
 
-The deterministic SDK test drives a real two-agent handoff, proves receiving context, checks `HANDOFF → ATTACK_DELIVERY`, and proves a later ordinary handoff receives no inherited poison.
+### Local `TOOL_METADATA` means description poisoning
 
-It does **not** choose/change destination, rewrite handoff tool identity/routing metadata, modify receiving-agent instructions/tools/policy, poison every transfer in a chain, intercept remote/distributed runtimes or message buses, or attest remote-provider consumption.
+The metadata mode changes only copied `FunctionTool.description`. It does not mutate tool name, parameter schema, invocation callback, approval semantics, routing identity, hosted metadata, MCP discovery metadata, or external registries.
 
-If no handoff occurs—or the SDK does not invoke the configured run-level filter—no delivery receipt is emitted and the adversarial trial remains `BLOCKED`.
+### SDK session-history `MEMORY` is not production memory poisoning
 
-### Generic `ENVIRONMENT` injection remains unimplemented
+The memory mode uses a fresh per-trial client-side SDK `Session` and one prior user item. It does not claim application-owned production session mutation, provider-managed conversations, vector/RAG memory, semantic retrieval manipulation, cross-user persistence, or external memory lifecycle assurance.
 
-`ENVIRONMENT` is the only generic `AttackChannel` still unsupported by `OpenAIAgentsAdapter`.
+### Structured inline-file `RESOURCE` is not retrieval-system poisoning
 
-The repository therefore does not yet claim process-environment mutation, network fault injection, filesystem/sandbox fault delivery, service dependency failure injection, provider configuration perturbation, clock/time faults, secret-store manipulation, or production infrastructure chaos through this adapter.
+The resource mode places exact canonical fixture JSON in one structured SDK `input_file.file_data` field with evaluator-owned filename `agent-evals-resource.json`.
 
-The `injector:<identity>` source is a label, not authenticated signer identity. Receipt roots are SHA-256 integrity, not signatures, MACs, trusted timestamps, hardware attestation, or non-repudiation.
+It does not claim OpenAI hosted File Search, vector stores, embeddings, RAG retrieval/ranking/chunking/filtering/citations, `file_id`, `file_url`, browser pages, databases, object stores, production document repositories, MCP resource servers, or provider-side file parsing/retention attestation.
 
-Automatic adversarial generation, adaptive red-team agents, mutation/fuzzing campaigns, and sandbox-escape execution are also not implemented yet.
+The separate `resource_resolver(tool_name, arguments)` callback is only a deterministic policy resource-identity normalizer.
 
-### No MCP server laboratory yet
+### Native SDK `HANDOFF` is context poisoning, not rerouting
 
-The taxonomy includes MCP-relevant authorization/tool-poisoning concepts, but the repository does not yet provide executable MCP fault servers, malicious MCP metadata/result/resource simulators, protocol-conformance claims, task/authorization fault coverage, or target-side MCP delivery attestation.
+The handoff mode appends exact canonical fixture JSON to cloned context for the first actual SDK handoff invoking the run-level filter. The SDK-selected destination remains unchanged.
 
-Local tool result/description poisoning, SDK session-history poisoning, inline-file resource poisoning, and native SDK handoff-context poisoning must not be described as MCP injection.
+It does not choose a new destination, rewrite handoff routing metadata, poison every transfer, intercept remote/distributed agent fabrics, or attest provider-side consumption.
 
-### Local persistence is not trusted-writer attestation
+### Approval requests are not approvals
 
-`LocalEvidenceStore` provides canonical payload materialization, strict manifests, bounded regular-file reads, symlink rejection, payload hashing, identity derivation checks, semantic evidence-root verification, same-record writer locks, manifest-last commit semantics, and no-clobber publication.
+SDK `ToolApprovalItem` observations normalize as `APPROVAL_REQUEST`, never `APPROVAL`. Privileged execution requires independent authorization evidence.
 
-These controls verify local records relative to manifests and expected evaluation identity. They do not establish who authored the record. An actor with arbitrary write access to store root can replace payload and manifest coherently and recompute ordinary hashes.
+### No semantic/model grader yet
 
-The repository therefore does **not** claim digital signatures, MAC-based writer authentication, trusted timestamps, remote attestation, WORM/object-lock storage, encryption at rest, key management, cross-host durability, transparency-log anchoring, or enforced retention/deletion policy.
+The current framework does not use a model-as-judge. Deterministic state and policy authority remain primary. A future semantic grader requires calibration, provenance, explicit failure semantics, and non-overriding precedence relative to critical deterministic failures.
+
+### Delivery receipts are not target-side attestation
+
+A valid receipt proves consistency relative to the trusted evaluator's controlled observation. It is not independent cryptographic proof that an arbitrary remote target consumed the stimulus.
+
+`injector:<identity>` is a label, not authenticated signer identity. Receipt roots are SHA-256 integrity values, not signatures, MACs, trusted timestamps, or hardware attestation.
+
+### Local persistence is not hostile-writer authentication
+
+`LocalEvidenceStore` revalidates manifests, payload hashes, identities, evidence schema, semantic roots, symlink/file constraints, and no-clobber publication behavior. It does not authenticate a writer who can coherently replace all controlled files and recompute ordinary hashes.
+
+The repository does not claim signatures/MACs, key management, trusted timestamps, remote attestation, WORM/object-lock storage, transparency-log anchoring, or cross-host durable retention.
 
 ### Replay is historical regrading, not re-execution
 
-`EvidenceReplayAdapter` requires exact trial, subject, and scenario identity and can re-apply delivery verification/deterministic grading to historical observations.
+`EvidenceReplayAdapter` requires exact trial/subject/scenario identity and can reapply deterministic grading to recorded evidence. It does not rerun providers, tools, sessions, resources, handoffs, environment injectors, or external state readers and cannot establish fresh delivery.
 
-Replay does **not** run the injector again, prove fresh delivery/provider availability, reproduce stochastic behavior, re-run tools, re-open a session, re-send the inline resource, re-run a handoff, establish historical side effects, or authenticate original publisher/injector.
+### Assurance-report validation is not signed attestation
 
-### Assurance-report validation is not oracle replay or signed attestation
-
-`AssuranceReport` binds trial IDs, evidence roots, deterministic oracle snapshots, trial verdicts, reliability output, frozen release policy, gate output, and report root. Construction/loading recompute resolved verdicts, reliability, critical-violation counts, and gate output.
-
-Delivery-caused `BLOCKED` trials remain infrastructure uncertainty. Report roots are integrity hashes, not authenticated writer identity.
+`AssuranceReport` rederives verdict consistency, reliability, critical-violation counts, release-gate output, and report root. The report root is integrity, not authenticated writer identity.
 
 ### No formal non-inferiority test
 
-Paired comparison establishes significant directional improvement/regression using an exact McNemar/binomial test. Lack of significant regression is **not** claimed as formal non-inferiority.
+Paired comparison uses an exact McNemar/binomial test for directional improvement/regression. Failure to detect significant regression is **not** formal non-inferiority.
 
 ### `pass@k` / `pass^k` are empirical approximations
 
-Current formulas use observed success proportion among resolved `PASS`/`FAIL` trials and an independent-attempt interpretation. `BLOCKED` and `INCONCLUSIVE` remain separate. Correlated trials, adaptive sampling, or non-stationary behavior can violate the independence approximation.
+Current formulas use observed resolved success proportion and an independent-attempt interpretation. Correlated, adaptive, or non-stationary trials can violate that approximation. `BLOCKED` and `INCONCLUSIVE` remain separate uncertainty.
 
 ### Resource-prefix policy is lexical
 
-Resource scope uses string-prefix matching over adapter-normalized tool resource identities. Provider adapters must canonicalize aliases, traversal, case folding, URL forms, and alternate identifiers before lexical comparison can represent the intended security boundary.
+Resource scope uses string-prefix matching after adapter normalization. Real deployments must canonicalize aliases, traversal, case, URL forms, and alternate identifiers before lexical prefix comparison can represent the intended security boundary.
 
-This policy check is separate from inline-file adversarial `RESOURCE` delivery.
+### No sandbox-isolation claim
 
-### No sandbox isolation claim
+The repository currently executes no target-controlled arbitrary shell/code as an environment fault. Any future executor that does must implement and validate process, filesystem, and network containment separately.
 
-The repository currently executes no target-controlled shell or arbitrary target code. Future environment adapters that do so must implement and validate process/filesystem/network containment separately.
+### No MCP server laboratory yet
+
+The taxonomy contains MCP-relevant threats, but the repository does not yet provide executable malicious/faulting MCP servers, protocol-conformance coverage, task/authorization fault suites, or target-side MCP delivery attestation.
 
 ## Current verification checkpoint
 
-The current source checkpoint is **167 passed, 9 deselected, 93.81% branch coverage**, strict mypy clean across **34 source files**, with **9/9** deterministic OpenAI SDK tests green. The channel-specific adversarial payload implementation is absent from the missing-coverage table.
+- deterministic suite: **177 passed, 11 deselected**;
+- branch coverage: **93.78%**;
+- strict mypy: **0 issues across 34 source files**;
+- deterministic OpenAI SDK suite: **11/11 passed**;
+- Python 3.11/3.13 quality, Ruff, formatter, Bandit, dependency audit, and package integrity: green.
 
 ## Why these boundaries matter
 
-Agent evaluation is vulnerable to false confidence because output can look persuasive even when surrounding state is wrong. The same discipline applies to the framework itself: documentation, badges, scores, hashes, attack labels, delivery receipts, and SDK traces are not substitutes for the control they describe.
+Agent evaluation is unusually vulnerable to false confidence because outputs can look persuasive while surrounding state, authority, or evaluator preconditions are wrong. The same discipline applies to this framework: documentation, badges, hashes, attack labels, receipts, and traces are not substitutes for the control they describe.
 
-New capabilities should move out of this document only after implementation, tests, and review make the claim true.
+Capabilities move out of this document only after implementation, deterministic evidence, and documentation review make the stronger claim true.
