@@ -119,8 +119,7 @@ def test_missing_delivery_remains_infrastructure_uncertainty_through_session_rep
     assert session.reliability.blocked == 2
     assert session.critical_violations == 0
     assert all(
-        trial.evidence.events[-1].kind is EvidenceKind.EVALUATION_ERROR
-        for trial in session.trials
+        trial.evidence.events[-1].kind is EvidenceKind.EVALUATION_ERROR for trial in session.trials
     )
 
     report = AssuranceReport.from_session(
