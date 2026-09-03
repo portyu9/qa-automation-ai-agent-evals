@@ -128,15 +128,22 @@ class MCPFaultLab:
         if fault.kind is MCPFaultKind.TOOL_METADATA_POISON:
             if advertised_description != fault.payload_json:
                 return None
+            observed_text = advertised_description
             point = f"mcp:{_PROTOCOL_VERSION}:tools/list:{fault.tool_name}:description"
         elif fault.kind is MCPFaultKind.TOOL_RESULT_POISON:
             if first_call_is_error or first_call_text != (fault.payload_json,):
                 return None
+            observed_text = first_call_text[0]
             point = f"mcp:{_PROTOCOL_VERSION}:tools/call:{fault.tool_name}:result.content[0].text"
         elif fault.kind is MCPFaultKind.TOOL_ERROR:
-            if not first_call_is_error or first_call_text != (fault.payload_json,):
+            expected = f"Error executing tool {fault.tool_name}: {fault.payload_json}"
+            if not first_call_is_error or first_call_text != (expected,):
                 return None
-            point = f"mcp:{_PROTOCOL_VERSION}:tools/call:{fault.tool_name}:error.content[0].text"
+            observed_text = first_call_text[0]
+            point = (
+                f"mcp:{_PROTOCOL_VERSION}:tools/call:{fault.tool_name}:"
+                "error.content[0].text:message-suffix"
+            )
         else:  # pragma: no cover - enum exhaustiveness guard
             return None
 
@@ -144,13 +151,12 @@ class MCPFaultLab:
             fault=fault,
             protocol_version=protocol_version,
             injection_point=point,
+            observed_text=observed_text,
         )
 
 
 def _text_content(content: list[Any]) -> tuple[str, ...]:
     """Extract only public text blocks without interpreting non-text MCP content."""
     return tuple(
-        text
-        for block in content
-        if isinstance((text := getattr(block, "text", None)), str)
+        text for block in content if isinstance((text := getattr(block, "text", None)), str)
     )
