@@ -167,6 +167,13 @@ def test_plain_scenario_has_no_attack_envelope() -> None:
     assert extract_attack(base_scenario()) is None
 
 
+def test_attack_can_be_extracted_without_full_base_rederivation() -> None:
+    attack = injection_attack()
+    derived = attack.apply(base_scenario())
+
+    assert extract_attack(derived) == attack
+
+
 def test_tampered_attack_payload_fails_envelope_identity_validation() -> None:
     derived = injection_attack().apply(base_scenario())
     envelope = derived.initial_state["__agent_evals_adversarial__"]
@@ -244,6 +251,22 @@ def test_campaign_identity_and_scenario_order_ignore_input_order() -> None:
     assert tuple(scenario.identity for scenario in first.scenarios()) == tuple(
         scenario.identity for scenario in second.scenarios()
     )
+
+
+def test_campaign_prevalidation_passes_non_mapping_input_through() -> None:
+    with pytest.raises(ValidationError):
+        AdversarialCampaign.model_validate(["not", "a", "mapping"])
+
+
+def test_campaign_missing_base_scenario_fails_schema_validation() -> None:
+    with pytest.raises(ValidationError, match="base_scenario"):
+        AdversarialCampaign.model_validate(
+            {
+                "campaign_id": "missing-base",
+                "revision": "1",
+                "attacks": (injection_attack(),),
+            }
+        )
 
 
 def test_campaign_rejects_supplied_wrong_base_identity() -> None:
