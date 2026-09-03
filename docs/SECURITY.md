@@ -2,7 +2,7 @@
 
 ## Security posture
 
-The repository treats the evaluated agent and all provider/tool/MCP/memory content as untrusted with respect to evaluation authority. Evidence may describe what happened; it may not redefine what is allowed or what counts as success.
+The repository treats the evaluated agent and all provider/tool/MCP/memory/handoff content as untrusted with respect to evaluation authority. Evidence may describe what happened; it may not redefine what is allowed or what counts as success.
 
 The evaluation control plane is explicit about its own preconditions. An adversarial trial is not behaviorally gradeable until the controlled environment has produced one exact, internally valid delivery receipt for the attack bound to that scenario. Failure to establish that precondition is `BLOCKED` evaluation uncertainty, not an agent defect.
 
@@ -26,12 +26,15 @@ Implemented controls include:
 - concrete OpenAI local-`FunctionTool` `TOOL_RESULT` delivery using exact canonical fixture JSON as one-shot first-result replacement;
 - concrete OpenAI local-`FunctionTool` `TOOL_METADATA` description poisoning using exact canonical fixture JSON;
 - concrete OpenAI SDK session-history `MEMORY` poisoning using exact canonical fixture JSON as a prior session item;
+- concrete OpenAI native `HANDOFF` context poisoning using exact canonical fixture JSON on the first SDK handoff while preserving the destination agent;
 - shared fail-closed local-tool resolution for result and metadata attacks;
 - per-trial copied-tool/cloned-agent isolation for local-tool attacks;
 - per-trial fresh `Session` isolation for memory attacks;
+- per-trial one-shot handoff-filter/recorder isolation for handoff attacks;
 - exact SDK call-ID binding and request → delivery → result chronology for result injection;
 - exact copied-description observation through the deterministic SDK model-call tool snapshot for metadata injection;
 - exact session-history-before-current-input observation through the deterministic SDK model-call snapshot for memory injection;
+- real two-agent SDK handoff observation with `HANDOFF → ATTACK_DELIVERY` evidence chronology and clean subsequent handoff isolation;
 - fail-closed target validation for malformed, missing, unsupported, ambiguous, or unbindable local-tool attack targets;
 - exact historical replay of recorded delivery evidence without claiming fresh injection;
 - bounded counterexample minimization;
@@ -43,7 +46,7 @@ Stable identifiers cover direct/indirect prompt injection, tool poisoning, unaut
 
 The taxonomy is not mitigation by itself. The adversarial layer binds threat identifiers to deterministic scenarios; the delivery layer requires evidence that the trusted evaluation control plane reports successful injection before behavioral grading.
 
-The OpenAI adapter now exercises four concrete surfaces: direct user input, indirect content returned by a targeted local `FunctionTool`, poisoned description metadata on a targeted copied local `FunctionTool`, and poisoned client-side SDK session history. Resources, handoffs, environment state, production application memory, vector/RAG memory, hosted tools, external registries/tool servers, and MCP surfaces still require dedicated real-boundary infrastructure.
+The OpenAI adapter now exercises five concrete surfaces: direct user input, indirect content returned by a targeted local `FunctionTool`, poisoned description metadata on a targeted copied local `FunctionTool`, poisoned client-side SDK session history, and poisoned context transferred through the first actual native SDK handoff. Resources, environment state, production application memory, vector/RAG memory, hosted tools, external registries/tool servers, MCP surfaces, and distributed/remote handoff fabrics still require dedicated real-boundary infrastructure.
 
 See [Adversarial Testing](ADVERSARIAL_TESTING.md).
 
@@ -132,18 +135,40 @@ The deterministic SDK test proves the first model call observes exact poisoned h
 
 The session object may receive ordinary runner history writes during that trial, but it is discarded afterward.
 
-This boundary does **not** claim:
-
-- mutation or validation of an application production session database;
-- OpenAI server-managed conversation poisoning;
-- vector database, embedding-store, or RAG memory poisoning;
-- semantic retrieval-memory manipulation;
-- cross-user/cross-tenant session contamination;
-- filesystem or sandbox memory poisoning;
-- provider-side persistence attestation;
-- proof that a remote hosted model processed or retained injected session history.
+This boundary does **not** claim mutation or validation of an application production session database, OpenAI server-managed conversation poisoning, vector/RAG memory poisoning, semantic retrieval-memory manipulation, cross-user/cross-tenant session contamination, filesystem/sandbox memory poisoning, provider-side persistence attestation, or proof that a remote hosted model processed or retained injected session history.
 
 Those controls must be tested where the actual application memory system is enforced.
+
+## OpenAI native `HANDOFF` boundary
+
+The handoff injector targets **context transferred through the first actual OpenAI Agents SDK handoff in one trial**.
+
+A valid fixture requires a `handoff` field. Complete canonical fixture JSON becomes one appended `user` item in the handoff input history presented to the receiving agent.
+
+The adapter installs a fresh `RunConfig.handoff_input_filter`. When the first handoff invokes that filter, the adapter clones the SDK `HandoffInputData` with injected history, then emits:
+
+```text
+source          = injector:openai-agents:handoff-context
+injection_point = openai-agents:RunConfig.handoff_input_filter:first:input_history[-1]
+```
+
+The adapter does **not** choose a new destination. The SDK-selected target agent, handoff tool identity, and routing decision remain unchanged. The normalized evidence stream records the native `HANDOFF` and then the corresponding `ATTACK_DELIVERY` receipt.
+
+The deterministic SDK test drives a real two-agent transfer, requires the receiving agent to observe the expected pre-handoff context plus exact canonical poisoned context, and then performs an ordinary second handoff proving the injected run-level filter did not contaminate reusable agent state.
+
+If no handoff occurs, or the SDK does not invoke the configured run-level filter for the transfer, no receipt is emitted and the adversarial trial cannot pass delivery verification. This prevents a configured-but-unused handoff injector from manufacturing a successful red-team result.
+
+This boundary does **not** claim:
+
+- rerouting to a different agent;
+- mutation of the destination agent's instructions or tool set;
+- poisoning of every handoff in a multi-agent chain;
+- interception of remote/distributed agent fabrics;
+- external message-bus or orchestration-layer handoff control;
+- target-side delivery attestation;
+- proof that a remote hosted model processed the injected handoff context.
+
+Those are separate boundaries and must be tested where routing and transfer are actually enforced.
 
 ## Delivery integrity is not attestation
 
@@ -161,17 +186,21 @@ A stronger durable artifact layer must separately address provenance, signer ide
 
 The deterministic core does not automatically upload traces or persist provider content. Delivery receipts store only canonical attack payload digest, not attack body.
 
-OpenAI controlled injectors necessarily place raw canonical attack content into in-memory SDK user input, a local tool result, a copied local tool description, or isolated session history because that content is the stimulus under test. Other subject/tool/session observations can still contain sensitive data and require normal minimization/redaction discipline.
+OpenAI controlled injectors necessarily place raw canonical attack content into in-memory SDK user input, a local tool result, a copied local tool description, isolated session history, or native handoff context because that content is the stimulus under test. Other subject/tool/session/handoff observations can still contain sensitive data and require normal minimization/redaction discipline.
 
 No adapter or red-team environment should treat observability as permission to retain secrets.
 
 ## Deployment boundary
 
-Application-layer policy cannot prove process isolation, network egress control, secret-manager policy, tenant separation, production IAM, sandbox containment, faithful behavior of an external MCP/tool server, production memory-store isolation, or provider preservation of controlled inputs/metadata/results after the tested SDK boundary. Those controls must be tested at actual enforcement boundaries.
+Application-layer policy cannot prove process isolation, network egress control, secret-manager policy, tenant separation, production IAM, sandbox containment, faithful behavior of an external MCP/tool server, production memory-store isolation, remote/distributed handoff correctness, or provider preservation of controlled inputs/metadata/results/context after the tested SDK boundary. Those controls must be tested at actual enforcement boundaries.
+
+## Current unsupported OpenAI attack channels
+
+`RESOURCE` and `ENVIRONMENT` remain unsupported by `OpenAIAgentsAdapter`. They precondition-block rather than silently degrading to another channel.
 
 ## Current verification checkpoint
 
-The current source checkpoint is **159 passed, 7 deselected, 93.71% branch coverage**, strict mypy clean across **34 source files**, with **7/7** deterministic OpenAI SDK tests green. The channel-specific adversarial payload implementation is absent from the missing-coverage table at this checkpoint.
+The current source checkpoint is **163 passed, 8 deselected, 93.76% branch coverage**, strict mypy clean across **34 source files**, with **8/8** deterministic OpenAI SDK tests green. The channel-specific adversarial payload implementation is absent from the missing-coverage table at this checkpoint.
 
 ## Reporting vulnerabilities
 
