@@ -7,6 +7,7 @@ from agent_evals.adversarial.cases import (
     extract_attack,
 )
 from agent_evals.adversarial.channels import (
+    HandoffAttackPayload,
     MemoryAttackPayload,
     ToolMetadataAttackPayload,
     ToolResultAttackPayload,
@@ -23,6 +24,7 @@ __all__ = [
     "AttackDeliveryError",
     "AttackDeliveryReceipt",
     "AttackFixture",
+    "HandoffAttackPayload",
     "MemoryAttackPayload",
     "ToolMetadataAttackPayload",
     "ToolResultAttackPayload",
