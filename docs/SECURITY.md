@@ -24,9 +24,12 @@ Implemented controls include:
 - raw attack-body exclusion from delivery receipts and evaluator delivery-error evidence;
 - concrete OpenAI `USER_INPUT` delivery using exact canonical fixture JSON;
 - concrete OpenAI local-`FunctionTool` `TOOL_RESULT` delivery using exact canonical fixture JSON as a one-shot first-result replacement;
-- per-trial copy/clone isolation for tool-result injection so reusable original agent/tool objects are not mutated;
-- exact SDK call-ID binding and request → delivery → result evidence chronology;
-- fail-closed target validation for malformed, missing, unsupported, ambiguous, or unbindable tool-result targets;
+- concrete OpenAI local-`FunctionTool` `TOOL_METADATA` description poisoning using exact canonical fixture JSON;
+- one shared fail-closed local-tool resolver for result and metadata attacks;
+- per-trial copy/clone isolation so reusable original agent/tool objects are not mutated;
+- exact SDK call-ID binding and request → delivery → result chronology for result injection;
+- exact copied-description observation through the deterministic SDK model-call tool snapshot for metadata injection;
+- fail-closed target validation for malformed, missing, unsupported, ambiguous, or unbindable local-tool attack targets;
 - exact historical replay of recorded delivery evidence without claiming fresh injection;
 - bounded counterexample minimization;
 - pinned GitHub Actions and read-only workflow permissions.
@@ -37,7 +40,7 @@ Stable identifiers cover direct/indirect prompt injection, tool poisoning, unaut
 
 The taxonomy is not mitigation by itself. The adversarial layer binds threat identifiers to deterministic scenarios; the delivery layer requires evidence that the trusted evaluation control plane reports successful injection before behavioral grading.
 
-The OpenAI adapter now exercises two concrete surfaces: direct user-input injection and indirect content returned by a targeted local `FunctionTool`. Tool metadata, memory, resources, handoffs, environment state, hosted tools, external tool servers, and MCP surfaces still require dedicated real-boundary infrastructure.
+The OpenAI adapter now exercises three concrete surfaces: direct user input, indirect content returned by a targeted local `FunctionTool`, and poisoned description metadata on a targeted copied local `FunctionTool`. Memory, resources, handoffs, environment state, hosted tools, external registries/tool servers, and MCP surfaces still require dedicated real-boundary infrastructure.
 
 See [Adversarial Testing](ADVERSARIAL_TESTING.md).
 
@@ -79,7 +82,7 @@ This stops at the controlled SDK harness boundary. It does not prove that a remo
 
 The current tool-result injector deliberately targets **local SDK `FunctionTool` instances only**.
 
-The identity-bearing attack payload must contain a valid `tool` and `result`. The full canonical fixture JSON is returned as the replacement output so the receipt's payload digest binds the exact model-visible replacement bytes.
+The identity-bearing attack payload must contain a valid `tool` and `result`. The full canonical fixture JSON is returned as replacement output so the receipt payload digest binds the exact model-visible replacement bytes.
 
 Per adversarial execution the adapter copies only the targeted function tool, wraps the copy, and clones the agent with a fresh tools list. The reusable original agent/tool are not modified.
 
@@ -91,13 +94,42 @@ On the first matching invocation:
 - the receipt uses source `injector:openai-agents:tool-result` and an injection point containing exact tool name and call ID;
 - normalized evidence orders `TOOL_REQUEST`, then `ATTACK_DELIVERY`, then the matching `TOOL_RESULT`.
 
-Subsequent matching calls in that same trial use the copied original behavior.
+Subsequent matching calls in that trial use the copied original behavior.
 
-This is controlled **result replacement**, not an assertion that the real underlying service emitted malicious content. It is especially suitable for read/retrieval fault simulation. It does not preserve the original function's side effects on the injected first call.
+This is controlled **result replacement**, not an assertion that the real underlying service emitted malicious content. It is especially suitable for read/retrieval fault simulation and does not preserve original function side effects on the injected first call.
 
-If the target never executes, no receipt exists and the trial is blocked by delivery verification. Missing/ambiguous/non-function targets and malformed routing contracts precondition-block before a false test can run.
+If the target never executes, no receipt exists and delivery verification blocks the trial. Missing/ambiguous/non-function targets and malformed routing contracts precondition-block before a false test can run.
 
 The implementation does not intercept hosted tools, MCP tools, remote tool servers, or arbitrary non-`FunctionTool` implementations.
+
+## OpenAI local-`FunctionTool` `TOOL_METADATA` boundary
+
+The metadata injector targets the `description` of **one exact local SDK `FunctionTool` copy**.
+
+The identity-bearing fixture requires `tool` and `description`. The complete canonical fixture JSON becomes the copied `FunctionTool.description`, which keeps the existing receipt payload digest bound to the exact model-visible metadata string.
+
+Per adversarial execution the adapter:
+
+- resolves one exact local `FunctionTool` with the same fail-closed resolver used by result injection;
+- copies the target;
+- replaces only the copied description;
+- clones the agent with a fresh tool list;
+- emits a receipt from `injector:openai-agents:tool-metadata` at `openai-agents:FunctionTool:<tool>:description`;
+- leaves the original agent/tool unchanged.
+
+The deterministic SDK test observes the exact poisoned description in `ScriptedModel`'s model-call tool snapshot and then proves a later ordinary run still sees the original description.
+
+The v1 boundary intentionally does **not** change the tool name, parameter schema, callback, approval behavior, or routing identity. This prevents a description-poisoning test from silently becoming a schema/routing mutation test.
+
+Therefore this implementation does not claim:
+
+- parameter-schema poisoning;
+- tool renaming or route manipulation;
+- hosted-tool metadata mutation;
+- MCP tool/server discovery poisoning;
+- external registry/tool-server metadata poisoning;
+- provider wire-format attestation;
+- proof that a remote hosted model processed or preserved the poisoned description unchanged.
 
 ## Delivery integrity is not attestation
 
@@ -115,13 +147,17 @@ A stronger durable artifact layer must separately address provenance, signer ide
 
 The deterministic core does not automatically upload traces or persist provider content. Delivery receipts store only the canonical attack payload digest, not the attack body.
 
-The OpenAI controlled injector necessarily places the raw canonical attack payload into in-memory SDK input or a local tool result because that content is the stimulus under test. Other subject/tool observations can still contain sensitive data and require normal minimization/redaction discipline.
+The OpenAI controlled injectors necessarily place raw canonical attack content into in-memory SDK user input, a local tool result, or a copied local tool description because that content is the stimulus under test. Other subject/tool observations can still contain sensitive data and require normal minimization/redaction discipline.
 
 No adapter or red-team environment should treat observability as permission to retain secrets.
 
 ## Deployment boundary
 
-Application-layer policy cannot prove process isolation, network egress control, secret-manager policy, tenant separation, production IAM, sandbox containment, or faithful behavior of an external MCP/tool server. Those controls must be tested at their actual enforcement boundaries.
+Application-layer policy cannot prove process isolation, network egress control, secret-manager policy, tenant separation, production IAM, sandbox containment, faithful behavior of an external MCP/tool server, or provider preservation of controlled metadata/results after the tested SDK boundary. Those controls must be tested at their actual enforcement boundaries.
+
+## Current verification checkpoint
+
+The current source checkpoint is **155 passed, 6 deselected, 93.67% branch coverage**, strict mypy clean across **34 source files**, with **6/6** deterministic OpenAI SDK tests green. The channel-specific adversarial payload implementation is absent from the missing-coverage table at this checkpoint.
 
 ## Reporting vulnerabilities
 
