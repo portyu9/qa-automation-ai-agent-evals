@@ -9,7 +9,25 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_valida
 from agent_evals.adversarial.cases import AttackChannel, AttackFixture
 
 
-class ToolResultAttackPayload(BaseModel):
+class _LocalToolAttackPayload(BaseModel):
+    """Common exact-name routing contract for attacks targeting one local SDK tool."""
+
+    model_config = ConfigDict(frozen=True, extra="allow")
+
+    tool: str = Field(min_length=1, max_length=128)
+
+    @field_validator("tool")
+    @classmethod
+    def normalize_tool(cls, value: str) -> str:
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("local-tool attack target must be non-empty")
+        if normalized != value:
+            raise ValueError("local-tool attack target must not contain surrounding whitespace")
+        return normalized
+
+
+class ToolResultAttackPayload(_LocalToolAttackPayload):
     """Routing contract for a deterministic tool-result replacement attack.
 
     The complete canonical `AttackFixture.payload_json` remains the model-visible replacement
@@ -18,20 +36,7 @@ class ToolResultAttackPayload(BaseModel):
     Additional JSON fields are permitted because realistic tool-result envelopes vary by system.
     """
 
-    model_config = ConfigDict(frozen=True, extra="allow")
-
-    tool: str = Field(min_length=1, max_length=128)
     result: Any
-
-    @field_validator("tool")
-    @classmethod
-    def normalize_tool(cls, value: str) -> str:
-        normalized = value.strip()
-        if not normalized:
-            raise ValueError("tool-result attack tool must be non-empty")
-        if normalized != value:
-            raise ValueError("tool-result attack tool must not contain surrounding whitespace")
-        return normalized
 
     @classmethod
     def from_fixture(cls, attack: AttackFixture) -> Self:
@@ -42,4 +47,30 @@ class ToolResultAttackPayload(BaseModel):
         except ValidationError as exc:
             raise ValueError(
                 "tool-result attack payload must be a JSON object with valid 'tool' and 'result' fields"
+            ) from exc
+
+
+class ToolMetadataAttackPayload(_LocalToolAttackPayload):
+    """Routing contract for deterministic local function-tool description poisoning.
+
+    `tool` identifies one exact local SDK FunctionTool. `description` makes the fixture
+    self-describing, while the complete canonical `AttackFixture.payload_json` is what the adapter
+    places in the copied FunctionTool description. The delivery receipt therefore binds the exact
+    model-visible metadata bytes rather than an adapter-selected nested field.
+    """
+
+    description: Any
+
+    @classmethod
+    def from_fixture(cls, attack: AttackFixture) -> Self:
+        if attack.channel is not AttackChannel.TOOL_METADATA:
+            raise ValueError(
+                "tool-metadata payload contract requires a TOOL_METADATA attack fixture"
+            )
+        try:
+            return cls.model_validate(attack.payload)
+        except ValidationError as exc:
+            raise ValueError(
+                "tool-metadata attack payload must be a JSON object with valid 'tool' and "
+                "'description' fields"
             ) from exc
