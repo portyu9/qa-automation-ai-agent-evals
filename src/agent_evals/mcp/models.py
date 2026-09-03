@@ -10,9 +10,7 @@ from typing import Any, Literal, Self
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 _FAULT_SCHEMA: Literal["agent-evals/mcp-fault/v1"] = "agent-evals/mcp-fault/v1"
-_RECEIPT_SCHEMA: Literal["agent-evals/mcp-fault-receipt/v1"] = (
-    "agent-evals/mcp-fault-receipt/v1"
-)
+_RECEIPT_SCHEMA: Literal["agent-evals/mcp-fault-receipt/v1"] = "agent-evals/mcp-fault-receipt/v1"
 _PROTOCOL_VERSION = "2026-07-28"
 
 
@@ -27,9 +25,10 @@ class MCPFaultKind(StrEnum):
 class MCPFaultSpec(BaseModel):
     """Content-addressed MCP fault stimulus independent of an agent provider.
 
-    The complete canonical ``payload_json`` becomes the malicious metadata, result, or
-    model-visible tool-error text. Routing identity and exact injected bytes are therefore bound to
-    one immutable fault identity rather than selected independently by the runtime harness.
+    The complete canonical ``payload_json`` becomes malicious metadata/result content or the
+    controlled message carried inside the SDK's model-visible tool-error envelope. Routing identity
+    and exact controlled bytes are therefore bound to one immutable fault identity rather than
+    selected independently by the runtime harness.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -84,7 +83,7 @@ class MCPFaultSpec(BaseModel):
 
     @property
     def payload_sha256(self) -> str:
-        return hashlib.sha256(self.payload_json.encode("utf-8")).hexdigest()
+        return _sha256_text(self.payload_json)
 
     @property
     def identity(self) -> str:
@@ -103,9 +102,10 @@ class MCPFaultSpec(BaseModel):
 class MCPFaultReceipt(BaseModel):
     """Integrity-bound observation that a fault reached one exact MCP protocol boundary.
 
-    The receipt stores the payload digest rather than raw malicious content. It is evaluator-side
-    evidence relative to the trusted in-process client observation; it is not cryptographic server
-    identity, remote-host attestation, or proof that an autonomous agent consumed the bytes.
+    ``payload_sha256`` binds the controlled stimulus while ``observation_sha256`` binds the exact
+    public protocol text observed by the official client. Those digests intentionally differ when
+    the SDK wraps controlled bytes in a protocol/model-visible envelope, as it does for ``ToolError``.
+    Raw malicious content is not duplicated into the receipt.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -117,6 +117,7 @@ class MCPFaultReceipt(BaseModel):
     tool_name: str = Field(min_length=1, max_length=128)
     injection_point: str = Field(min_length=1, max_length=512)
     payload_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    observation_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     receipt_root: str = Field(pattern=r"^[0-9a-f]{64}$")
 
     @classmethod
@@ -125,6 +126,7 @@ class MCPFaultReceipt(BaseModel):
         *,
         fault: MCPFaultSpec,
         injection_point: str,
+        observed_text: str,
         protocol_version: str = _PROTOCOL_VERSION,
     ) -> Self:
         material = {
@@ -135,6 +137,7 @@ class MCPFaultReceipt(BaseModel):
             "tool_name": fault.tool_name,
             "injection_point": injection_point,
             "payload_sha256": fault.payload_sha256,
+            "observation_sha256": _sha256_text(observed_text),
         }
         return cls(**material, receipt_root=_sha256_json(material))
 
@@ -148,6 +151,7 @@ class MCPFaultReceipt(BaseModel):
             "tool_name": self.tool_name,
             "injection_point": self.injection_point,
             "payload_sha256": self.payload_sha256,
+            "observation_sha256": self.observation_sha256,
         }
         if self.receipt_root != _sha256_json(material):
             raise ValueError("MCP fault receipt root does not match receipt material")
@@ -178,8 +182,12 @@ class MCPProbeResult(BaseModel):
         return self
 
 
+def _sha256_text(value: str) -> str:
+    return hashlib.sha256(value.encode("utf-8")).hexdigest()
+
+
 def _sha256_json(value: Any) -> str:
-    return hashlib.sha256(_canonical_json(value).encode("utf-8")).hexdigest()
+    return _sha256_text(_canonical_json(value))
 
 
 def _canonical_json(value: Any) -> str:
