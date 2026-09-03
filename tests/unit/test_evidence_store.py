@@ -183,15 +183,12 @@ def test_existing_record_lock_fails_closed(tmp_path: Path) -> None:
     store = LocalEvidenceStore(tmp_path / "evidence")
     original = evidence()
     manifest = store.write(original)
-    lock = (
-        store.root
-        / "records"
-        / manifest.record_key[:2]
-        / f"{manifest.record_key}.lock"
-    )
+    lock = store.root / "records" / manifest.record_key[:2] / f"{manifest.record_key}.lock"
     lock.write_text("operator-review-required", encoding="utf-8")
 
-    with pytest.raises(EvidenceStoreBusyError, match="stale locks require explicit operator review"):
+    with pytest.raises(
+        EvidenceStoreBusyError, match="stale locks require explicit operator review"
+    ):
         store.write(original)
 
 
