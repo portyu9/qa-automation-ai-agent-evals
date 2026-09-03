@@ -12,15 +12,19 @@ The architecture starts with identity and evidence, then derives conclusions. It
 Trusted evaluation control plane
 ├── subject/scenario contracts
 ├── deterministic adversarial derivation
-├── controlled attack injectors
-│   ├── OpenAI USER_INPUT
-│   ├── OpenAI local FunctionTool TOOL_RESULT
-│   ├── OpenAI local FunctionTool TOOL_METADATA description
-│   ├── OpenAI per-trial Session-history MEMORY
-│   ├── OpenAI structured inline-file RESOURCE
-│   ├── OpenAI first-native-handoff context
-│   └── OpenAI targeted runtime-context ENVIRONMENT
+├── controlled OpenAI attack injectors
+│   ├── USER_INPUT
+│   ├── local FunctionTool TOOL_RESULT
+│   ├── local FunctionTool TOOL_METADATA description
+│   ├── per-trial Session-history MEMORY
+│   ├── structured inline-file RESOURCE
+│   ├── first-native-handoff context
+│   └── targeted runtime-context ENVIRONMENT
 ├── attack-delivery verifier
+├── deterministic MCP protocol fault laboratory
+│   ├── tools/list description poison
+│   ├── first tools/call result poison
+│   └── first tools/call model-visible ToolError
 ├── evidence normalization and persistence verification
 ├── exact-identity replay
 ├── deterministic policy and outcome oracles
@@ -32,11 +36,11 @@ Untrusted / evaluated subject
 └── agent runtime + model + orchestration + tools + memory + resources + handoffs + app context
 
 External systems
-└── providers, hosted/external tools, MCP servers, production memory/retrieval,
+└── providers, hosted/external tools, remote MCP servers, production memory/retrieval,
     target systems, infrastructure, fault injectors
 ```
 
-External content can become evidence or adversarial stimulus. It does not become control-plane authority merely because a model, tool, resource, session, handoff, application context, or external service produced it.
+External content can become evidence or adversarial stimulus. It does not become control-plane authority merely because a model, tool, MCP server, resource, session, handoff, application context, or external service produced it.
 
 ## Identity contracts
 
@@ -44,9 +48,11 @@ External content can become evidence or adversarial stimulus. It does not become
 
 `AttackFixture` and `AdversarialCampaign` add deterministic adversarial identity without changing base authority or redefining success.
 
+The MCP layer has a separate identity domain. `MCPFaultSpec` binds schema, fault ID/revision, `MCPFaultKind`, exact tool name, and canonical finite JSON payload. A protocol fault does not silently become an `AttackFixture`, because protocol delivery and agent behavioral grading answer different questions.
+
 ## Attack delivery is an evaluation precondition
 
-An adversarial scenario is behaviorally gradeable only after one exact matching `ATTACK_DELIVERY` receipt verifies.
+An adversarial agent scenario is behaviorally gradeable only after one exact matching `ATTACK_DELIVERY` receipt verifies.
 
 ```text
 unverified delivery                         → BLOCKED
@@ -70,9 +76,39 @@ The receipt binds exact scenario identity, attack identity, channel, concrete in
 
 These seven categories are **not universal production interception claims**. Each implementation is bounded by its documented concrete surface.
 
+## MCP protocol fault boundary
+
+`MCPFaultLab` is provider-neutral protocol test infrastructure. It uses the official Python SDK `mcp==2.1.1`, creates a fresh real `MCPServer`, and connects an official `Client` in modern `2026-07-28` mode.
+
+```text
+content-addressed MCPFaultSpec
+        ↓
+fresh MCPServer
+        ↓
+official Client / protocol 2026-07-28
+        ↓
+tools/list + tools/call observations
+        ↓
+MCPFaultReceipt
+```
+
+The first implementation closes three exact protocol observations:
+
+- target tool description returned by `tools/list` equals canonical fault JSON;
+- first target `tools/call` result text equals canonical fault JSON;
+- first target `ToolError` preserves canonical fault JSON inside the SDK-generated model-visible error envelope.
+
+Result/error probes execute a second benign call to prove one-shot recovery. Every `probe()` uses a fresh server, so one probe cannot contaminate another.
+
+`MCPFaultReceipt` deliberately binds both `payload_sha256` and `observation_sha256`. They match when the protocol exposes the controlled payload directly; they differ when the SDK wraps the payload in the `ToolError` envelope. That distinction records protocol transformation instead of pretending it did not occur.
+
+This MCP receipt is **not** an OpenAI `ATTACK_DELIVERY` event and does not derive an agent `PASS`/`FAIL`. Agent-through-MCP behavioral assurance remains a later integration layer.
+
+See [MCP Fault Laboratory](MCP_LAB.md).
+
 ## Local-tool isolation
 
-For result, metadata, and environment attacks, the adapter resolves one exact local SDK `FunctionTool`, copies it, and clones the agent with a fresh tools list. The reusable original tool and agent remain unchanged.
+For OpenAI result, metadata, and environment attacks, the adapter resolves one exact local SDK `FunctionTool`, copies it, and clones the agent with a fresh tools list. The reusable original tool and agent remain unchanged.
 
 Result replacement and metadata poisoning alter only the copied tool's requested boundary. Environment injection additionally requires `run_context` to be `None` or a string-keyed `Mapping`.
 
@@ -99,7 +135,7 @@ This gives the framework a useful distinction between **environment availability
 
 ## Evidence chronology
 
-Important channel-specific ordering includes:
+Important OpenAI channel-specific ordering includes:
 
 ```text
 TOOL_RESULT:  TOOL_REQUEST → ATTACK_DELIVERY → TOOL_RESULT
@@ -108,6 +144,8 @@ HANDOFF:      HANDOFF → ATTACK_DELIVERY
 ```
 
 User-input, metadata, memory, and resource structures can be prepared before subject execution; independent SDK tests prove the prepared content reaches the tested model/tool boundary.
+
+MCP protocol receipts are a separate evidence family. They record exact client-side protocol observation and are not inserted into agent trial chronology until a future integration contract explicitly defines that bridge.
 
 ## Authority remains fail-closed
 
@@ -127,11 +165,13 @@ Provider/SDK execution exceptions remain `RUNTIME_ERROR / BLOCKED`.
 
 Neither is rewritten as subject `FAIL`.
 
+The MCP laboratory currently returns protocol observations rather than `TrialEvidence`; it therefore does not manufacture trial failure semantics from an MCP client/server exception.
+
 ## Persistence and replay
 
 `LocalEvidenceStore` revalidates persisted bytes, manifests, hashes, identities, and semantic evidence roots before reuse. Local integrity hashes do not authenticate a hostile writer who can coherently replace all associated bytes.
 
-`EvidenceReplayAdapter` performs exact-identity historical regrading. It does not re-run the agent, provider, tool, session, resource, handoff, or environment injector and cannot establish fresh delivery.
+`EvidenceReplayAdapter` performs exact-identity historical regrading. It does not re-run the agent, provider, tool, session, resource, handoff, environment injector, or MCP protocol probe and cannot establish fresh delivery.
 
 ## Statistical and release authority
 
@@ -139,16 +179,19 @@ Repeated trials feed `ReliabilityReport`; resolved behavior remains separate fro
 
 `ReleaseGate` preserves non-compensatory critical safety evidence. Insufficient evidence produces `INCONCLUSIVE`, not acceptance.
 
+MCP protocol-probe success is not currently an input to release acceptance unless a caller separately establishes the required agent/evaluation contract.
+
 ## Current boundary
 
-The framework currently provides deterministic contracts, content-addressed adversarial scenarios, evidence-bound delivery verification, all seven generic OpenAI adapter channel categories at scoped boundaries, integrity-verified local persistence, exact historical replay, deterministic policy/outcome oracles, metamorphic relations, repeated-trial statistics, assurance reports, release gating, failure minimization, and a credential-free deterministic OpenAI SDK tier.
+The framework currently provides deterministic contracts, content-addressed adversarial scenarios, evidence-bound OpenAI delivery verification, all seven generic OpenAI adapter channel categories at scoped boundaries, a deterministic official-SDK MCP protocol fault laboratory, integrity-verified local persistence, exact historical replay, deterministic policy/outcome oracles, metamorphic relations, repeated-trial statistics, assurance reports, release gating, failure minimization, and credential-free deterministic SDK tiers.
 
 Verified checkpoint:
 
-- **177 passed, 11 deselected**;
-- **93.78% branch coverage**;
-- strict mypy: **0 issues across 34 source files**;
+- deterministic core: **180 passed, 14 deselected**;
+- branch coverage: **93.21%**;
+- strict mypy: **0 issues across 37 source files**;
 - deterministic OpenAI SDK: **11/11 passed**;
+- deterministic MCP protocol: **3/3 passed**;
 - Python 3.11/3.13 quality, Ruff, formatter, Bandit, dependency audit, and package integrity: green.
 
-Credentialed live-provider assurance, production application-memory/RAG injection, hosted File Search/vector-store/URL retrieval manipulation, tool-name/schema poisoning, hosted/MCP interception, distributed handoff-fabric injection, process/network/filesystem/cloud environment chaos, target-side delivery attestation, authenticated hostile-writer evidence/report signing, automatic adversarial generation, MCP fault servers, calibrated semantic graders, and production deployment attestation remain separate implementation layers.
+Credentialed live-provider assurance, agent-through-MCP behavioral grading, remote MCP transport/proxy faults, MCP authorization/caching/resource/prompt/task fault families, full MCP conformance certification, production application-memory/RAG injection, hosted File Search/vector-store/URL retrieval manipulation, OpenAI hosted/MCP interception, tool-name/schema poisoning, distributed handoff-fabric injection, process/network/filesystem/cloud environment chaos, target-side delivery attestation, authenticated hostile-writer evidence/report signing, automatic adversarial generation, calibrated semantic graders, and production deployment attestation remain separate implementation layers.
