@@ -161,9 +161,16 @@ This is **local SDK application-context perturbation**, not process-wide `os.env
 
 The repository also has a real official-SDK MCP protocol fault laboratory. It is deliberately **not** folded into the OpenAI `AttackChannel` implementation above.
 
-`MCPFaultSpec` / `MCPFaultReceipt` currently prove exact trusted-client observations for `tools/list` description poisoning, first `tools/call` result poisoning, and the model-visible `ToolError` envelope under protocol `2026-07-28`.
+`MCPFaultSpec` / `MCPFaultReceipt` currently prove four deterministic official-client observations under protocol `2026-07-28`:
 
-That protocol evidence does not establish that an autonomous agent consumed or resisted the MCP-delivered content. No MCP protocol receipt is converted into `ATTACK_DELIVERY`, agent `PASS`/`FAIL`, or release acceptance without a future explicit integration contract.
+- `tools/list` description poisoning;
+- first `tools/call` result poisoning;
+- the model-visible `ToolError` envelope;
+- a private `tools/list` stale-discovery relation where the target is initially advertised, removed from the live server registry, still returned by a normal cached client call, and absent after `cache_mode="refresh"` forces current server truth.
+
+The first three are controlled content observations. The fourth is a protocol-state observation: its fault payload binds the configured TTL while its receipt observation binds the initial/cached/refreshed tool-name sets and observed TTL.
+
+That protocol evidence does not establish that an autonomous agent consumed or resisted the MCP-delivered content or stale discovery state. No MCP protocol receipt is converted into `ATTACK_DELIVERY`, agent `PASS`/`FAIL`, or release acceptance without a future explicit integration contract.
 
 See [MCP Fault Laboratory](MCP_LAB.md).
 
@@ -183,21 +190,21 @@ MCP fault probes are not yet `TrialEvidence` and are therefore outside this repl
 
 ## Current verified checkpoint
 
-The implemented OpenAI adversarial layer establishes all seven generic adapter channel categories at the scoped boundaries above, including both positive and negative `ENVIRONMENT` consumption semantics. The separate MCP layer establishes three deterministic protocol-fault observations.
+The implemented OpenAI adversarial layer establishes all seven generic adapter channel categories at the scoped boundaries above, including both positive and negative `ENVIRONMENT` consumption semantics. The separate MCP layer establishes four deterministic protocol-fault observations.
 
 Verified source baseline:
 
-- deterministic core: **180 passed, 14 deselected**;
-- branch coverage: **93.21%**;
+- deterministic core: **181 passed, 15 deselected**;
+- branch coverage: **93.14%**;
 - strict mypy: **0 issues across 37 source files**;
 - deterministic OpenAI SDK suite: **11/11 passed**;
-- deterministic MCP protocol suite: **3/3 passed**;
+- deterministic MCP protocol suite: **4/4 passed**;
 - Python 3.11/3.13 quality, Ruff, formatter, Bandit, dependency audit, and package integrity: green.
 
 ## Explicit non-claims
 
-Seven generic OpenAI channel categories implemented does **not** mean seven universal production interceptors. Three MCP protocol faults implemented does **not** mean complete MCP assurance.
+Seven generic OpenAI channel categories implemented does **not** mean seven universal production interceptors. Four MCP protocol faults implemented does **not** mean complete MCP assurance.
 
-Production application memory/RAG, hosted File Search/vector stores, URL/document retrieval, OpenAI hosted/MCP tool interception, schema poisoning, distributed handoff fabrics, process/network/filesystem/cloud environment faults, agent-through-MCP behavioral grading, remote MCP transport/auth/cache/resource/prompt/task fault families, complete MCP conformance certification, target-side delivery attestation, automatic/adaptive attack generation, mutation/fuzzing campaigns, sandbox-escape infrastructure, and credentialed live-provider red-team assurance remain separate implementation layers.
+Production application memory/RAG, hosted File Search/vector stores, URL/document retrieval, OpenAI hosted/MCP tool interception, schema poisoning, distributed handoff fabrics, process/network/filesystem/cloud environment faults, agent-through-MCP behavioral grading, remote MCP transport/auth/resource/prompt/task fault families, general MCP cache correctness beyond the tested private stale-after-removal relation, complete MCP conformance certification, target-side delivery attestation, automatic/adaptive attack generation, mutation/fuzzing campaigns, sandbox-escape infrastructure, and credentialed live-provider red-team assurance remain separate implementation layers.
 
 [← Documentation hub](README.md)
