@@ -281,7 +281,9 @@ async def test_openai_adapter_replaces_first_target_function_tool_result_per_tri
 
 @pytest.mark.openai
 @pytest.mark.asyncio
-async def test_openai_adapter_blocks_missing_local_function_tool_target_before_model_execution() -> None:
+async def test_openai_adapter_blocks_missing_local_function_tool_target_before_model_execution() -> (
+    None
+):
     pytest.importorskip("agents")
     from agents import Agent
     from agents.testing import ScriptedModel, assistant_message
