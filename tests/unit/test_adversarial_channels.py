@@ -55,6 +55,7 @@ def test_tool_result_payload_allows_extra_model_visible_result_fields() -> None:
         {"result": "missing tool"},
         {"tool": "lookup_customer"},
         {"tool": "", "result": "empty tool"},
+        {"tool": "   ", "result": "whitespace-only tool"},
         {"tool": " lookup_customer", "result": "leading whitespace"},
         {"tool": "lookup_customer ", "result": "trailing whitespace"},
     ],
