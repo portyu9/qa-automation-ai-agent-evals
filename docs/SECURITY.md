@@ -18,6 +18,7 @@ Implemented controls include:
 - critical classification of policy-oracle failure;
 - non-compensatory release gating;
 - provider/runtime exceptions converted to `BLOCKED` rather than accepted;
+- structured adapter-precondition failures separated from provider/runtime failures and converted to `EVALUATION_ERROR / BLOCKED`;
 - immutable evidence objects with ordered-sequence validation;
 - hash-chain evidence root binding trajectory and terminal state;
 - content-addressed adversarial fixtures with canonical finite JSON payloads;
@@ -28,6 +29,8 @@ Implemented controls include:
 - exact-one delivery-receipt validation before adversarial policy/outcome grading;
 - fail-closed `BLOCKED` semantics for missing, duplicate, malformed, or mismatched delivery evidence;
 - raw adversarial payload exclusion from delivery receipts and evaluator delivery-error evidence;
+- one concrete OpenAI Agents SDK `USER_INPUT` injector that places the exact canonical attack payload at a tested `Runner.run` input position and emits the corresponding receipt;
+- fail-closed precondition blocking for unsupported OpenAI adversarial channels before model execution;
 - exact historical replay of recorded delivery evidence without claiming fresh injection;
 - bounded counterexample minimization;
 - pinned GitHub Actions and read-only workflow permissions.
@@ -53,6 +56,8 @@ The current code defines stable identifiers for:
 - MCP authorization failure.
 
 The taxonomy is not itself mitigation. The implemented adversarial layer binds these threat identifiers to deterministic attack fixtures and exact security scenarios. The delivery layer then requires evidence that the trusted evaluation control plane reports successful injection before behavioral grading begins.
+
+The OpenAI adapter provides one concrete delivery implementation for direct `USER_INPUT` stimuli. Threats that require tool-result, metadata, memory, resource, handoff, MCP, or environment manipulation still require dedicated delivery infrastructure at those real boundaries.
 
 See [Adversarial Testing](ADVERSARIAL_TESTING.md).
 
@@ -82,12 +87,26 @@ If delivery evidence is absent, duplicated, malformed, has an invalid source lab
 That distinction prevents evaluator defects from being mislabeled as subject defects:
 
 ```text
-unverified delivery → BLOCKED / infrastructure uncertainty
+unsupported controlled injection → BLOCKED / evaluation uncertainty
+provider/runtime unavailable     → BLOCKED / runtime uncertainty
 verified delivery + violated requirement → FAIL / behavioral evidence
 verified delivery + requirements satisfied → PASS
 ```
 
 The recorded receipt participates in the ordinary trial evidence root. Exact historical replay therefore rechecks the recorded receipt, but does not perform a fresh injection.
+
+## OpenAI `USER_INPUT` boundary
+
+For a derived OpenAI `USER_INPUT` adversarial scenario, `OpenAIAgentsAdapter` constructs two ordered user messages for `Runner.run`:
+
+```text
+input[0] = scenario objective
+input[1] = exact canonical AttackFixture.payload_json
+```
+
+The matching receipt identifies `openai-agents:Runner.run.input[1]` as the injection point and uses source `injector:openai-agents:user-input`. The independent deterministic SDK test asserts that exact input reaches `ScriptedModel` and that unsupported channels do not invoke the model at all.
+
+This is a useful control-plane guarantee, but it stops at the SDK harness boundary. It does not prove that a remote hosted model processed the message, that a provider preserved it unchanged after that boundary, or that the model resisted the attack. Credentialed live-provider behavior remains a separate test tier.
 
 ## Delivery integrity is not attestation
 
@@ -109,7 +128,7 @@ A stronger durable artifact layer must separately address provenance, signer/run
 
 The deterministic core does not automatically upload traces or persist provider content. Provider adapters must default to data minimization and must document whether prompts, tool arguments/results, user data, secrets, attack payloads, or model content can enter traces.
 
-Delivery receipts intentionally persist only the canonical attack payload digest, not the attack payload itself. Other evidence produced by the subject or its tools can still contain sensitive data and requires normal minimization/redaction discipline.
+Delivery receipts intentionally persist only the canonical attack payload digest, not the attack payload itself. The OpenAI injector necessarily places the raw canonical attack payload into the in-memory SDK input because that is the stimulus under test; the receipt does not duplicate it into delivery evidence. Other evidence produced by the subject or its tools can still contain sensitive data and requires normal minimization/redaction discipline.
 
 No adapter or red-team environment should treat observability as permission to retain secrets.
 
