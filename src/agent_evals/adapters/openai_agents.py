@@ -373,12 +373,14 @@ class OpenAIAgentsAdapter:
                 handoff_recorder=handoff_recorder,
             )
         if attack.channel is AttackChannel.ENVIRONMENT:
-            runner_agent, run_context, recorder = self._prepare_environment_agent(scenario, attack)
+            runner_agent, environment_context, environment_recorder = (
+                self._prepare_environment_agent(scenario, attack)
+            )
             return _PreparedExecution(
                 agent=runner_agent,
                 runner_input=scenario.objective,
-                run_context=run_context,
-                environment_recorder=recorder,
+                run_context=environment_context,
+                environment_recorder=environment_recorder,
             )
         raise AdapterPreconditionError(
             code="unsupported_attack_channel",
