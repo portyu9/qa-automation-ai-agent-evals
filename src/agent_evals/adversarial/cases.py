@@ -214,12 +214,22 @@ class AdversarialCampaign(BaseModel):
         return tuple(attack.apply(self.base_scenario) for attack in self.attacks)
 
 
-def extract_attack(scenario: EvaluationScenario) -> AttackFixture | None:
-    """Validate and decode the reserved attack envelope for an adapter or environment."""
+def extract_attack(
+    scenario: EvaluationScenario,
+    *,
+    expected_base_scenario: EvaluationScenario | None = None,
+) -> AttackFixture | None:
+    """Validate and decode an attack envelope, optionally proving full scenario derivation."""
     raw = scenario.initial_state.get(_RESERVED_STATE_KEY)
     if raw is None:
         return None
     envelope = _AttackEnvelope.model_validate(raw)
+    if expected_base_scenario is not None:
+        if envelope.base_scenario_identity != expected_base_scenario.identity:
+            raise ValueError("adversarial envelope base scenario identity does not match expected base")
+        expected = envelope.attack.apply(expected_base_scenario)
+        if expected.identity != scenario.identity:
+            raise ValueError("adversarial scenario does not match deterministic attack derivation")
     return envelope.attack
 
 
