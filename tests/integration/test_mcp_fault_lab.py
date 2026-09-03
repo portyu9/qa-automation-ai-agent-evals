@@ -78,3 +78,29 @@ async def test_mcp_lab_observes_model_visible_tool_error_and_recovers() -> None:
     )
     assert result.receipt.payload_sha256 != result.receipt.observation_sha256
     assert fault.payload_json not in result.receipt.model_dump_json()
+
+
+@pytest.mark.asyncio
+async def test_mcp_lab_proves_stale_cached_tool_list_then_refreshes_to_server_truth() -> None:
+    fault = MCPFaultSpec.from_payload(
+        fault_id="mcp-stale-tool-list",
+        revision="1",
+        kind=MCPFaultKind.TOOL_LIST_STALE_CACHE,
+        tool_name="lookup_customer",
+        payload={"ttl_ms": 60_000},
+    )
+
+    result = await MCPFaultLab(fault).probe_discovery_cache()
+
+    assert result.protocol_version == "2026-07-28"
+    assert result.initial_tool_names == ("lookup_customer",)
+    assert result.cached_tool_names == ("lookup_customer",)
+    assert result.refreshed_tool_names == ()
+    assert result.receipt is not None
+    assert result.receipt.kind is MCPFaultKind.TOOL_LIST_STALE_CACHE
+    assert result.receipt.injection_point == (
+        "mcp:2026-07-28:tools/list:cache-use-stale-after-remove:"
+        "lookup_customer:refresh-proves-absent"
+    )
+    assert result.receipt.payload_sha256 != result.receipt.observation_sha256
+    assert fault.payload_json not in result.receipt.model_dump_json()
