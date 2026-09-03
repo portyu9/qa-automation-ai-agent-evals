@@ -42,6 +42,33 @@ def test_mcp_fault_rejects_non_finite_json_payloads() -> None:
         )
 
 
+def test_mcp_stale_cache_fault_requires_one_bounded_integer_ttl() -> None:
+    valid = MCPFaultSpec.from_payload(
+        fault_id="stale-tool-list",
+        revision="1",
+        kind=MCPFaultKind.TOOL_LIST_STALE_CACHE,
+        tool_name="lookup_customer",
+        payload={"ttl_ms": 60_000},
+    )
+    assert valid.payload == {"ttl_ms": 60_000}
+
+    invalid_payloads = (
+        {"ttl_ms": True},
+        {"ttl_ms": 0},
+        {"ttl_ms": 86_400_001},
+        {"ttl_ms": 60_000, "scope": "public"},
+    )
+    for index, payload in enumerate(invalid_payloads):
+        with pytest.raises(ValidationError):
+            MCPFaultSpec.from_payload(
+                fault_id=f"invalid-stale-cache-{index}",
+                revision="1",
+                kind=MCPFaultKind.TOOL_LIST_STALE_CACHE,
+                tool_name="lookup_customer",
+                payload=payload,
+            )
+
+
 def test_mcp_fault_receipt_detects_tampered_integrity_material() -> None:
     fault = MCPFaultSpec.from_payload(
         fault_id="poisoned-tool-result",
