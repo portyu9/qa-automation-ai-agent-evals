@@ -712,7 +712,10 @@ class OpenAIAgentsAdapter:
                 code="tool_call_identity_unavailable",
                 reason="tool-result injector could not bind delivery to a tool call identity",
             )
-        if prepared.environment_recorder is not None and prepared.environment_recorder.identity_error:
+        if (
+            prepared.environment_recorder is not None
+            and prepared.environment_recorder.identity_error
+        ):
             raise AdapterPreconditionError(
                 code="environment_call_identity_unavailable",
                 reason="environment injector could not bind delivery to a tool call identity",
