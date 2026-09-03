@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import os
 from pathlib import Path
 
 import pytest
@@ -85,7 +84,7 @@ def test_tampered_payload_fails_integrity_verification(tmp_path: Path) -> None:
     payload = next(store.root.rglob("*.evidence.json"))
     payload.write_bytes(b"{}")
 
-    with pytest.raises(EvidenceIntegrityError, match="length|hash"):
+    with pytest.raises(EvidenceIntegrityError, match=r"length|hash"):
         store.read(manifest.record_key)
 
 
@@ -130,7 +129,7 @@ def test_root_symlink_is_rejected_when_platform_supports_symlinks(tmp_path: Path
     target.mkdir()
     link = tmp_path / "evidence-link"
     try:
-        os.symlink(target, link, target_is_directory=True)
+        link.symlink_to(target, target_is_directory=True)
     except (OSError, NotImplementedError):
         pytest.skip("symlinks unavailable on this platform")
 
