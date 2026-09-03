@@ -239,11 +239,11 @@ The repository uses `agents.testing.ScriptedModel` against the real Agents SDK r
 
 Current repository verification checkpoint:
 
-- deterministic core: **180 passed, 14 deselected**;
-- branch coverage: **93.21%** against the 90% gate;
+- deterministic core: **181 passed, 15 deselected**;
+- branch coverage: **93.14%** against the 90% gate;
 - strict mypy: **0 issues across 37 source files**;
 - independent OpenAI SDK suite: **11/11 passed**;
-- independent MCP protocol suite: **3/3 passed**;
+- independent MCP protocol suite: **4/4 passed**;
 - Python 3.11 and 3.13 quality jobs, Ruff, formatter, Bandit, dependency audit, and package integrity: green.
 
 The additional MCP suite does not broaden this adapter's claim. These OpenAI tests establish controlled SDK-harness behavior; they do not establish live-model quality, provider reliability, production deployment safety, target-side delivery attestation, OpenAI hosted/MCP interception, production memory/retrieval assurance, distributed-agent-fabric interception, or external infrastructure fault coverage.
