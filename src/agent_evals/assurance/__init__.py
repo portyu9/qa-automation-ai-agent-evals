@@ -3,6 +3,7 @@
 from agent_evals.assurance.report import (
     AssuranceReport,
     GateSnapshot,
+    OracleSnapshot,
     ReliabilitySnapshot,
     TrialAssuranceRecord,
 )
@@ -10,6 +11,7 @@ from agent_evals.assurance.report import (
 __all__ = [
     "AssuranceReport",
     "GateSnapshot",
+    "OracleSnapshot",
     "ReliabilitySnapshot",
     "TrialAssuranceRecord",
 ]
