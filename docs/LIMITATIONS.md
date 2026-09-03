@@ -6,7 +6,9 @@ This document is intentionally strict. The repository should never become more i
 
 ### No credentialed live-provider assurance yet
 
-A first-class OpenAI Agents SDK adapter is implemented against `openai-agents==0.22.0`, and CI exercises its real SDK tool loop deterministically with `ScriptedModel` without API calls. The repository does **not** yet claim live-model behavioral assurance, production-provider availability, model-specific safety performance, or credentialed end-to-end coverage.
+A first-class OpenAI Agents SDK adapter is implemented against `openai-agents==0.22.0`, and CI exercises its real SDK runner/tool loop deterministically with `ScriptedModel` without API calls. The same deterministic SDK tier also verifies the concrete `USER_INPUT` adversarial injector and fail-closed handling for an unsupported attack channel.
+
+The repository does **not** yet claim live-model behavioral assurance, production-provider availability, model-specific safety performance, provider-side delivery attestation, or credentialed end-to-end coverage.
 
 The adapter also keeps terminal state observation outside the SDK result. This is intentional: provider output is execution evidence, not the state oracle.
 
@@ -22,17 +24,19 @@ The framework does not currently use a model-as-judge. This is deliberate until 
 
 The repository provides content-addressed `AttackFixture` objects, deterministic attack-to-scenario derivation, a provider-neutral reserved attack envelope, canonical `AdversarialCampaign` objects, full derived-scenario verification when an expected base is supplied, fail-closed detection of campaign base drift, and evidence-bound `AttackDeliveryReceipt` verification.
 
-For an adversarial scenario, `TrialRunner` now requires exactly one internally valid delivery receipt before deterministic policy/outcome grading. The receipt binds the exact derived scenario, exact attack, declared channel, environment-defined injection point, and canonical attack-payload digest. Missing, duplicate, malformed, forged, or mismatched delivery evidence produces `BLOCKED` with no completed subject oracles rather than behavioral `FAIL`.
+For an adversarial scenario, `TrialRunner` requires exactly one internally valid delivery receipt before deterministic policy/outcome grading. The receipt binds the exact derived scenario, exact attack, declared channel, environment-defined injection point, and canonical attack-payload digest. Missing, duplicate, malformed, forged, or mismatched delivery evidence produces `BLOCKED` with no completed subject oracles rather than behavioral `FAIL`.
+
+`OpenAIAgentsAdapter` now provides one real channel implementation: `USER_INPUT`. It supplies the ordinary objective as the first SDK user message and exact canonical `AttackFixture.payload_json` as the second, emits the matching receipt for `openai-agents:Runner.run.input[1]`, and is tested through the SDK's deterministic `ScriptedModel`. Unsupported OpenAI attack channels raise a structured adapter precondition failure before any model call occurs.
 
 Those controls establish **what attack is intended, what exact scenario is being evaluated, and what delivery observation the trusted evaluation control plane recorded**. They do not provide a universal injector for every `AttackChannel`, and they do not independently prove that an arbitrary external target consumed the stimulus.
 
-A fixture labeled `tool_result`, `memory`, `tool_metadata`, `resource`, `handoff`, or `environment` still requires a concrete controlled injector at that real boundary. The repository therefore does not yet claim universal prompt-injection harnessing, production memory poisoning, external target fault injection, or complete channel coverage.
+A fixture labeled `tool_result`, `memory`, `tool_metadata`, `resource`, `handoff`, or `environment` still requires a concrete controlled injector at that real boundary. The repository therefore does not yet claim production memory poisoning, external target fault injection, complete channel coverage, or universal prompt-injection harnessing across all context sources.
 
 The `injector:<identity>` evidence source is a label, not authenticated signer identity. The receipt root is SHA-256 integrity, not a signature, MAC, trusted timestamp, hardware attestation, or non-repudiation mechanism. A buggy or malicious trusted injector can still lie about delivery unless a stronger independent acknowledgement/authentication boundary is added.
 
 The repository also does not yet provide automatic adversarial generation, adaptive red-team agents, mutation/fuzzing campaigns, or sandbox-escape execution.
 
-See [Adversarial Testing](ADVERSARIAL_TESTING.md).
+See [Adversarial Testing](ADVERSARIAL_TESTING.md) and [OpenAI Adapter](OPENAI_ADAPTER.md).
 
 ### No MCP server laboratory yet
 
