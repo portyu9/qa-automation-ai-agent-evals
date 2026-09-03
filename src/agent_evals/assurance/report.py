@@ -16,6 +16,7 @@ from agent_evals.runtime.session import EvaluationSessionResult
 from agent_evals.statistics.reliability import ReliabilityReport
 
 _REPORT_SCHEMA: Literal["agent-evals/assurance-report/v1"] = "agent-evals/assurance-report/v1"
+_EVIDENCE_SCHEMA: Literal["agent-evals/trial-evidence/v2"] = "agent-evals/trial-evidence/v2"
 _REPORT_DOMAIN = b"agent-evals/assurance-report/v1\0"
 _RESOLVED_VERDICTS = frozenset({TrialVerdict.PASS, TrialVerdict.FAIL})
 
@@ -64,6 +65,10 @@ class TrialAssuranceRecord(BaseModel):
 
     @model_validator(mode="after")
     def validate_trial_derivation(self) -> Self:
+        oracle_names = [result.name for result in self.oracle_results]
+        if len(set(oracle_names)) != len(oracle_names):
+            raise ValueError("assurance trial oracle names must be unique")
+
         if self.verdict in _RESOLVED_VERDICTS:
             if not self.oracle_results:
                 raise ValueError("resolved assurance trial requires deterministic oracle results")
@@ -145,6 +150,7 @@ class AssuranceReport(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     schema_version: Literal["agent-evals/assurance-report/v1"] = _REPORT_SCHEMA
+    evidence_schema: Literal["agent-evals/trial-evidence/v2"] = _EVIDENCE_SCHEMA
     subject_identity: str = Field(pattern=r"^[0-9a-f]{64}$")
     scenario_identity: str = Field(pattern=r"^[0-9a-f]{64}$")
     trials: tuple[TrialAssuranceRecord, ...] = Field(min_length=1)
@@ -207,6 +213,7 @@ class AssuranceReport(BaseModel):
         )
         unsigned = {
             "schema_version": _REPORT_SCHEMA,
+            "evidence_schema": _EVIDENCE_SCHEMA,
             "subject_identity": session.subject_identity,
             "scenario_identity": session.scenario_identity,
             "trials": [record.model_dump(mode="json") for record in records],
@@ -216,6 +223,7 @@ class AssuranceReport(BaseModel):
         }
         return cls(
             schema_version=_REPORT_SCHEMA,
+            evidence_schema=_EVIDENCE_SCHEMA,
             subject_identity=session.subject_identity,
             scenario_identity=session.scenario_identity,
             trials=tuple(records),
