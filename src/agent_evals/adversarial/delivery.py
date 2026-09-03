@@ -112,7 +112,9 @@ def verify_attack_delivery(
     try:
         receipt = AttackDeliveryReceipt.model_validate(event.payload)
     except ValidationError as exc:
-        raise AttackDeliveryError("attack delivery receipt is malformed or internally inconsistent") from exc
+        raise AttackDeliveryError(
+            "attack delivery receipt is malformed or internally inconsistent"
+        ) from exc
 
     expected = AttackDeliveryReceipt.from_scenario(
         scenario,
