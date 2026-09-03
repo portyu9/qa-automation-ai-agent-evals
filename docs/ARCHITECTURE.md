@@ -12,6 +12,8 @@ The design therefore starts with identity and evidence, then derives conclusions
 Trusted evaluation control plane
 ├── subject/scenario contracts
 ├── deterministic adversarial scenario derivation
+├── controlled attack injector boundary
+├── attack-delivery receipt verifier
 ├── evidence normalization contract
 ├── local evidence-store verifier
 ├── exact-identity replay boundary
@@ -33,6 +35,8 @@ Persistence substrate
 ```
 
 External content may become evidence or adversarial stimulus. It does not become control-plane authority merely because the agent, provider, tool, MCP server, or attack fixture returned it. Persisted bytes likewise do not become trusted merely because they occupy a framework-shaped filename. Serialized report fields likewise do not become true merely because they carry a percentage, verdict, or release label.
+
+The trusted evaluation control plane is itself bounded: an attack-delivery receipt is accepted as a control-plane observation, not as cryptographic proof that an arbitrary external target consumed the stimulus. Stronger injector authentication or target-side attestation is a separate deployment layer.
 
 ## Subject identity
 
@@ -77,6 +81,33 @@ The attack envelope is a **delivery contract**, not proof of delivery. An adapte
 
 See [Adversarial Testing](ADVERSARIAL_TESTING.md).
 
+## Attack-delivery verification
+
+`AttackDeliveryReceipt` binds the control plane's successful-delivery observation to:
+
+- exact derived scenario identity;
+- exact attack identity;
+- attack channel;
+- concrete injection point;
+- SHA-256 of the canonical attack payload;
+- a domain-separated receipt root.
+
+The receipt deliberately excludes the raw adversarial payload. `receipt.to_event()` emits normalized `ATTACK_DELIVERY` evidence with an explicit `injector:<identity>` source label.
+
+For an adversarial scenario, `TrialRunner` requires exactly one valid receipt before behavioral oracles execute. `verify_attack_delivery()` recomputes the receipt and requires it to match the exact scenario/attack/channel/payload digest. Missing, duplicate, malformed, or mismatched delivery evidence causes a critical `EVALUATION_ERROR` and `BLOCKED` with no completed policy/outcome oracle results.
+
+This is an **evaluation precondition**, not a subject oracle:
+
+```text
+unverified attack delivery → BLOCKED
+verified attack + requirement violation → FAIL
+verified attack + requirements close → PASS
+```
+
+Therefore injector/evaluation failures do not pollute behavioral failure rates or critical subject-violation counts.
+
+The source label and receipt root are integrity/control-plane identities, not digital signatures, MACs, or target-side attestations.
+
 ## Authority is fail-closed
 
 `AuthorityPolicy` has explicit allowed and forbidden tools, approval-required tools, resource prefixes, and tool/handoff budgets. An unknown tool is not implicitly permitted. A resource outside all authorized prefixes is rejected. Approval-required tools must also be present in the allowlist.
@@ -97,6 +128,8 @@ Adversarial scenario derivation does not get a special authority path: the base 
 ## Evidence model
 
 Every `EvidenceEvent` has an ordered sequence number, event kind, source, payload, timestamp, and critical flag. `TrialEvidence` requires the event stream to be contiguous from sequence zero.
+
+The evidence vocabulary includes subject/runtime observations plus evaluation-control observations such as `ATTACK_DELIVERY` and `EVALUATION_ERROR`. Delivery receipts participate in the same ordered evidence chain; they are not maintained as a disconnected side log.
 
 The trial computes a domain-separated `evidence_root` that first binds `trial_id`, `subject_identity`, and `scenario_identity`, then hash-chains event digests in order, then binds terminal state, final output, timing, token usage, and cost metadata into the final digest.
 
@@ -124,7 +157,7 @@ The adapter does **not**:
 - grant release authority;
 - substitute final prose for state.
 
-For adversarial scenarios, the adapter/evaluation environment additionally owns the concrete delivery mechanism for the declared attack channel. Merely seeing an attack envelope does not prove that a malicious tool result, memory record, MCP description, resource, or handoff was actually presented to the subject.
+For adversarial scenarios, the adapter/evaluation environment additionally owns the concrete delivery mechanism for the declared attack channel. After successful controlled delivery it can emit an `AttackDeliveryReceipt`; merely seeing an attack envelope does not prove that a malicious tool result, memory record, MCP description, resource, or handoff was actually presented to the subject.
 
 The deterministic `ScriptedAdapter` exists to test the harness itself without provider credentials.
 
@@ -135,10 +168,12 @@ The deterministic `ScriptedAdapter` exists to test the harness itself without pr
 1. execute the adapter against one exact subject/scenario pair;
 2. convert provider/runtime exceptions into critical `RUNTIME_ERROR` evidence and `BLOCKED` without retaining raw exception detail;
 3. construct immutable `TrialEvidence`;
-4. run deterministic policy and outcome oracles;
-5. derive `FAIL` if any deterministic oracle fails, otherwise `PASS`.
+4. for adversarial scenarios, verify exactly one matching attack-delivery receipt;
+5. if delivery verification fails, append critical `EVALUATION_ERROR`, return `BLOCKED`, and run no subject oracles;
+6. run deterministic policy and outcome oracles;
+7. derive `FAIL` if any deterministic oracle fails, otherwise `PASS`.
 
-An adversarial scenario enters this same path. There is no model-authored red-team score and no special rule that treats the absence of suspicious prose as safety evidence.
+An adversarial scenario otherwise enters the same subject-grading path as every other scenario. There is no model-authored red-team score and no special rule that treats the absence of suspicious prose as safety evidence.
 
 A future semantic/model grader may enrich quality measurement but will remain subordinate to deterministic safety and state authority.
 
@@ -146,13 +181,15 @@ A future semantic/model grader may enrich quality measurement but will remain su
 
 `EvidenceReplayAdapter` is an adapter boundary for **historical regrading**, not agent re-execution. It refuses replay when the requested trial ID, subject identity, or scenario identity differs from the recorded evidence.
 
-A valid replay emits the historical observations unchanged so `TrialRunner` can apply the deterministic policy and outcome oracles again. For the same evidence model, exact-identity replay reproduces the original evidence root.
+A valid replay emits the historical observations unchanged. For an adversarial trial, this includes the recorded `ATTACK_DELIVERY` event, which `TrialRunner` revalidates before it reapplies deterministic policy/outcome grading. For the same evidence model, exact-identity replay reproduces the original evidence root.
 
-Replay cannot establish current provider liveness, current external state, fresh side effects, current attack delivery, or publisher identity.
+Replay does not call the injector again. It therefore cannot establish current provider liveness, current external state, fresh side effects, fresh attack delivery, or publisher/injector identity.
 
 ## Repeated trials
 
 `EvaluationSession` repeats isolated trials and builds a `ReliabilityReport`. Trial IDs bind scenario ID, revision, and an attempt index. Repeated execution is required because an agent's observed behavior is stochastic even when its configuration is fixed.
+
+A delivery-caused `BLOCKED` result remains blocked at the session layer. It is not silently converted to `FAIL`, so evaluator/injector reliability remains distinct from subject behavioral reliability.
 
 ## Session assurance artifacts
 
@@ -160,7 +197,9 @@ Replay cannot establish current provider liveness, current external state, fresh
 
 The report is self-validating at the **session derivation** layer. On construction and load it verifies unique trial identities, resolved verdict/oracle consistency, blocked-trial semantics, reliability recomputation, critical-violation recomputation, release-gate recomputation, and report-root integrity.
 
-The report does not contain the entire underlying `TrialEvidence`, so it does not claim to rerun policy/outcome oracles from an evidence hash alone. Full per-trial historical regrading still flows through integrity-verified evidence retrieval and `EvidenceReplayAdapter`.
+Delivery-caused `BLOCKED` trials contain no completed deterministic oracle snapshots. They remain blocked in the reliability snapshot, do not contribute behavioral failures or critical oracle-violation counts, and may cause the release decision to remain `INCONCLUSIVE` when evidence requirements are not met.
+
+The report does not contain the entire underlying `TrialEvidence`, so it does not claim to rerun delivery verification or policy/outcome oracles from an evidence hash alone. Full per-trial historical regrading still flows through integrity-verified evidence retrieval and `EvidenceReplayAdapter`.
 
 This separation prevents a stored success percentage or release label from becoming authority merely because it was serialized. See [Session Assurance Reports](ASSURANCE_REPORTS.md).
 
@@ -170,7 +209,7 @@ This separation prevents a stored success percentage or release label from becom
 
 Its safety rule is deliberately non-compensatory: if critical violations exceed the policy maximum, the decision is `REJECT` regardless of aggregate success rate.
 
-Insufficient trials, weak confidence bounds, or excess inconclusive evidence produce `INCONCLUSIVE` rather than acceptance.
+Insufficient trials, weak confidence bounds, or excess blocked/inconclusive evidence produce `INCONCLUSIVE` rather than acceptance.
 
 ## Why exact trajectories are not the default oracle
 
@@ -180,6 +219,6 @@ Trajectory assertions are appropriate when the path itself is part of correctnes
 
 ## Current boundary
 
-The core currently provides deterministic contracts, identity-bound adversarial fixtures/campaigns and scenario derivation, identity-bound evidence, local integrity-verified evidence persistence, exact-identity replay, execution, state/policy oracles, metamorphic relations, repeated-trial statistics, self-validating session assurance reports, release gating, failure minimization, and a deterministic OpenAI Agents SDK integration tier.
+The core currently provides deterministic contracts, identity-bound adversarial fixtures/campaigns and scenario derivation, evidence-bound attack-delivery verification, identity-bound trial evidence, local integrity-verified evidence persistence, exact-identity historical replay, execution, state/policy oracles, metamorphic relations, repeated-trial statistics, self-validating session assurance reports, release gating, failure minimization, and a deterministic OpenAI Agents SDK integration tier.
 
-Credentialed live-provider assurance, universal per-channel attack injectors, automatic/adaptive adversarial generation, hostile-writer authenticated evidence/report signing, remote attestation, immutable remote retention, MCP fault servers, calibrated semantic graders, and automatic perturbation generation remain separate implementation layers and are not represented as complete in this document.
+Credentialed live-provider assurance, universal concrete per-channel injectors, cryptographically authenticated injector identity, target-side delivery attestation, automatic/adaptive adversarial generation, hostile-writer authenticated evidence/report signing, remote attestation, immutable remote retention, MCP fault servers, calibrated semantic graders, and automatic perturbation generation remain separate implementation layers and are not represented as complete in this document.
