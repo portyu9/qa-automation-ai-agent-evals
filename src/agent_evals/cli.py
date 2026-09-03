@@ -10,6 +10,11 @@ import typer
 app = typer.Typer(add_completion=False, no_args_is_help=True)
 
 
+@app.callback()
+def root() -> None:
+    """Inspect and operate the deterministic agent-assurance framework."""
+
+
 @app.command()
 def doctor() -> None:
     """Report local framework identity without requiring a model provider."""
