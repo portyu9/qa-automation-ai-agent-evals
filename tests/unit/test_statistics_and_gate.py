@@ -26,9 +26,7 @@ def test_blocked_trials_are_not_relabelled_as_behavioral_failures() -> None:
 
 
 def test_all_unresolved_trials_retain_full_statistical_uncertainty() -> None:
-    report = ReliabilityReport.from_verdicts(
-        [TrialVerdict.BLOCKED, TrialVerdict.INCONCLUSIVE]
-    )
+    report = ReliabilityReport.from_verdicts([TrialVerdict.BLOCKED, TrialVerdict.INCONCLUSIVE])
     assert report.resolved_trials == 0
     assert report.success_rate == 0.0
     assert (report.wilson_low, report.wilson_high) == (0.0, 1.0)
