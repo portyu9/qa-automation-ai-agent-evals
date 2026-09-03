@@ -343,7 +343,7 @@ def _bounded_ttl_ms(value: Any, label: str) -> int:
         raise ValueError(f"{label} ttl_ms must be an integer")
     if value <= 0 or value > _MAX_CACHE_TTL_MS:
         raise ValueError(f"{label} ttl_ms must be between 1 and 86400000 milliseconds")
-    return value
+    return int(value)
 
 
 def _verify_probe_receipt(
