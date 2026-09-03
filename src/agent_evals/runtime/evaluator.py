@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 from dataclasses import dataclass
 from time import perf_counter
 
@@ -53,11 +54,18 @@ class TrialRunner:
             )
         except Exception as exc:  # adapter boundary: provider failure becomes structured evidence
             elapsed_ms = (perf_counter() - started) * 1000.0
+            detail = str(exc)
+            payload: dict[str, object] = {
+                "exception_type": type(exc).__name__,
+                "detail_present": bool(detail),
+            }
+            if detail:
+                payload["detail_sha256"] = hashlib.sha256(detail.encode("utf-8")).hexdigest()
             event = EvidenceEvent(
                 sequence=0,
                 kind=EvidenceKind.RUNTIME_ERROR,
                 source=f"adapter:{adapter.name}",
-                payload={"exception_type": type(exc).__name__, "message": str(exc)},
+                payload=payload,
                 critical=True,
             )
             evidence = TrialEvidence(

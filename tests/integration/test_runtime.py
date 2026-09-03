@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+
 import pytest
 
 from agent_evals.adapters.base import AdapterResult
@@ -80,13 +82,15 @@ async def test_runtime_pass_requires_policy_and_state_closure() -> None:
 
 
 @pytest.mark.asyncio
-async def test_runtime_exception_is_blocked_not_pass() -> None:
+async def test_runtime_exception_is_blocked_without_retaining_raw_exception_text() -> None:
+    secret_detail = "provider unavailable token=super-secret-value"
+
     def crash(
         _subject: SubjectFingerprint,
         _scenario: EvaluationScenario,
         _trial: str,
     ) -> AdapterResult:
-        raise RuntimeError("provider unavailable")
+        raise RuntimeError(secret_detail)
 
     result = await TrialRunner().run(
         ScriptedAdapter(crash),
@@ -95,4 +99,8 @@ async def test_runtime_exception_is_blocked_not_pass() -> None:
         trial_id="trial-2",
     )
     assert result.verdict is TrialVerdict.BLOCKED
-    assert result.evidence.events[0].kind is EvidenceKind.RUNTIME_ERROR
+    event = result.evidence.events[0]
+    assert event.kind is EvidenceKind.RUNTIME_ERROR
+    assert secret_detail not in str(event.payload)
+    assert event.payload["detail_present"] is True
+    assert event.payload["detail_sha256"] == hashlib.sha256(secret_detail.encode()).hexdigest()
