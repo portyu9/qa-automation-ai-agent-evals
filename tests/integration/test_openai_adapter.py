@@ -376,7 +376,7 @@ async def test_openai_adapter_replaces_local_function_tool_description_per_trial
     )
 
     assert normal.verdict is TrialVerdict.PASS
-    assert normal.final_output == "Original metadata preserved."
+    assert normal.evidence.final_output == "Original metadata preserved."
     normal_model.assert_complete()
 
 
