@@ -2,9 +2,11 @@
 
 ## Purpose
 
-The adversarial layer turns stable threat identifiers into **content-addressed, versioned evaluation stimuli**. It does not ask a model to invent attacks at runtime and then trust that model to describe what it tested. One `AttackFixture` deterministically derives one `EvaluationScenario`; an `AdversarialCampaign` canonicalizes a set of independent attacks against one exact base scenario.
+The adversarial layer turns stable threat identifiers into **content-addressed, versioned evaluation stimuli** and requires evidence that the controlled evaluation environment actually delivered the exact stimulus before agent behavior is graded. It does not ask a model to invent attacks at runtime and then trust that model to describe what it tested.
 
-The objective is reproducible red-team input generation without weakening the framework's existing outcome, authority, evidence, replay, or release semantics.
+One `AttackFixture` deterministically derives one `EvaluationScenario`; an `AdversarialCampaign` canonicalizes a set of independent attacks against one exact base scenario; an `AttackDeliveryReceipt` binds the exact derived scenario, attack, delivery channel, injection point, and payload digest observed by the trusted evaluation control plane.
+
+The objective is reproducible red-team evaluation without weakening the framework's existing outcome, authority, evidence, replay, statistical, or release semantics.
 
 ## Core contract
 
@@ -14,15 +16,21 @@ base EvaluationScenario
 content-addressed AttackFixture
         ↓ deterministic derivation
 security EvaluationScenario
-        ↓ adapter/environment injects declared channel
-agent system under test
-        ↓ ordinary evidence path
+        ↓
+controlled injector delivers declared channel
+        ↓ successful delivery
+AttackDeliveryReceipt → ATTACK_DELIVERY evidence
+        ↓ exact receipt verification
+agent observations become TrialEvidence
+        ↓
 policy + outcome oracles
         ↓
 trial verdict / reliability / release gate
 ```
 
-The attack definition is input to the evaluation. It is never grading authority.
+The attack definition is input to the evaluation. The delivery receipt is an evaluation precondition. Neither is grading authority.
+
+If adversarial delivery cannot be verified, the trial is `BLOCKED` **before** deterministic subject oracles run. It is not converted into agent `FAIL` or `PASS`.
 
 ## Attack fixtures
 
@@ -54,7 +62,7 @@ The current channel contract distinguishes where an evaluation environment is ex
 | `handoff` | cross-agent handoff/context material |
 | `environment` | other controlled environment state |
 
-A channel label is a contract, not proof that injection occurred. The adapter/test environment must implement and verify the actual delivery mechanism.
+A channel label is a delivery contract, not proof that injection occurred. The adapter/test environment must implement the actual delivery mechanism and emit a valid receipt only after its controlled injection step succeeds.
 
 ## Deterministic scenario derivation
 
@@ -109,9 +117,71 @@ The campaign identity binds campaign schema/version, campaign ID/revision, exact
 
 Although Pydantic models are frozen, nested JSON structures remain mutable Python objects. `AdversarialCampaign.scenarios()` consequently rechecks the live base scenario identity against the identity captured during construction and fails closed if nested base state/outcomes drifted afterward.
 
+## Evidence-bound delivery receipts
+
+`AttackDeliveryReceipt` is the control-plane record that a controlled injector reports after delivering one adversarial fixture. Version `agent-evals/attack-delivery/v1` binds:
+
+- exact derived `scenario_identity`;
+- exact `attack_identity`;
+- declared `AttackChannel`;
+- a non-empty environment-defined `injection_point`;
+- SHA-256 of the fixture's canonical payload JSON;
+- a domain-separated `receipt_root` over the complete receipt content.
+
+The receipt deliberately stores only a payload digest, not the raw malicious payload. This reduces unnecessary duplication of adversarial content in durable evidence while still binding the receipt to the exact fixture.
+
+`receipt.to_event()` produces `ATTACK_DELIVERY` evidence and requires an explicit `injector:<identity>` source label. That source label identifies the control-plane component that claims delivery; it is **not** a signature or cryptographic authentication of that component.
+
+## Delivery as an evaluation precondition
+
+`TrialRunner` validates delivery after adapter observations have been normalized into `TrialEvidence` and before policy/outcome oracles execute.
+
+For an ordinary scenario, no delivery receipt is required.
+
+For an adversarial scenario, `verify_attack_delivery()` requires exactly one `ATTACK_DELIVERY` event and verifies:
+
+1. the source label identifies a non-empty `injector:<identity>`;
+2. the receipt schema is valid;
+3. the receipt root recomputes;
+4. the scenario identity matches the exact derived adversarial scenario;
+5. the attack identity matches;
+6. the channel matches;
+7. the payload digest matches the exact canonical attack payload;
+8. the bound injection point is included in the recomputed receipt.
+
+Missing, duplicate, malformed, forged, or mismatched delivery evidence causes `TrialRunner` to append a critical `EVALUATION_ERROR` and return `BLOCKED` with **no deterministic oracle results**.
+
+This separation is intentional:
+
+```text
+attack not delivered / cannot prove delivery → evaluation infrastructure uncertainty → BLOCKED
+attack delivered, agent violates requirement → behavioral evidence → FAIL
+attack delivered, requirements close         → PASS
+```
+
+A broken injector therefore cannot make an agent appear unsafe by manufacturing a behavioral failure, and it cannot make the agent appear safe by silently skipping the attack.
+
+## Replay and reporting semantics
+
+A valid delivery receipt is part of the ordered `TrialEvidence`, so it participates in the evidence root and survives exact historical replay unchanged.
+
+`EvidenceReplayAdapter` can replay that historical receipt together with the rest of the observations. The delivery verifier then rechecks the recorded receipt before deterministic policy/outcome grading proceeds.
+
+Replay does **not** run the injector again and therefore does not prove fresh delivery.
+
+Delivery-caused `BLOCKED` trials also remain infrastructure uncertainty through higher layers:
+
+- they have no completed deterministic oracle results;
+- they are counted as `blocked`, not behavioral failures, by `ReliabilityReport`;
+- they do not create critical oracle-violation counts;
+- `AssuranceReport` preserves those semantics;
+- release gating can become `INCONCLUSIVE` because required evidence is unavailable.
+
+The integration suite exercises both exact replay of verified delivery and the full `BLOCKED` → reliability → assurance-report → `INCONCLUSIVE` path.
+
 ## Evaluation semantics
 
-A derived adversarial scenario uses the ordinary framework path. There is no separate "red-team PASS" shortcut.
+Once delivery is verified, a derived adversarial scenario uses the ordinary framework path. There is no separate "red-team PASS" shortcut.
 
 The adapter executes the subject, observable behavior becomes `TrialEvidence`, deterministic policy/outcome oracles grade that evidence, repeated trials can quantify reliability, and `ReleaseGate` retains terminal release authority.
 
@@ -123,6 +193,7 @@ This matters because "the agent ignored the injected string" is not by itself pr
 from agent_evals.adversarial import (
     AdversarialCampaign,
     AttackChannel,
+    AttackDeliveryReceipt,
     AttackFixture,
 )
 from agent_evals.security.taxonomy import ThreatClass
@@ -147,9 +218,19 @@ campaign = AdversarialCampaign(
 )
 
 derived_scenario = campaign.scenarios()[0]
+
+# A controlled injector performs the real tool-result injection first.
+receipt = AttackDeliveryReceipt.from_scenario(
+    derived_scenario,
+    injection_point="tool:lookup_customer:result:call-1",
+)
+delivery_event = receipt.to_event(
+    sequence=0,
+    source="injector:tool-result-lab",
+)
 ```
 
-An adapter/environment can then call `extract_attack(derived_scenario)` and inject the decoded payload at the declared boundary.
+The receipt is emitted only after the controlled environment's real injection step succeeds. The framework verifies the exact receipt before behavioral grading.
 
 ## What this layer proves
 
@@ -164,16 +245,27 @@ The implemented layer provides deterministic evidence that:
 - full derived-scenario drift can be detected when the expected base is supplied;
 - campaign identity/order is canonical;
 - duplicate attack IDs are rejected;
-- post-construction nested base drift is detected before scenario generation.
+- post-construction nested base drift is detected before scenario generation;
+- delivery receipts bind the exact scenario, attack, channel, injection point, and payload digest;
+- receipt content tampering is detected;
+- raw adversarial payload is not duplicated into the receipt;
+- exactly one valid delivery receipt is required before adversarial oracle grading;
+- missing/ambiguous/invalid delivery remains `BLOCKED` rather than behavioral `FAIL`;
+- historical replay preserves and revalidates the recorded receipt;
+- blocked delivery remains non-behavioral uncertainty through reliability and session assurance reporting.
 
-The unit test suite exercises all code/branch paths in the adversarial module at the current checkpoint.
+The current test suite exercises all code/branch paths in both adversarial source modules at the tested checkpoint.
 
 ## Explicit non-claims
 
-This layer does **not** prove that every adapter implements every `AttackChannel`, that an external tool/MCP server actually emitted the requested malicious content, or that a live model resists any particular attack class.
+A delivery receipt is **not target-side attestation**. The evaluator verifies consistency relative to a trusted control-plane observation; it cannot independently prove that an arbitrary external system actually consumed the stimulus. A buggy or malicious trusted injector could lie unless a stronger authenticated/attested delivery boundary is added.
 
-It also does not provide automatic attack generation, mutation/fuzzing, multi-step adaptive adversaries, MCP fault servers, sandbox escape infrastructure, or credentialed provider red-team coverage yet.
+The `injector:<identity>` source label and `receipt_root` are not a digital signature, MAC, trusted timestamp, hardware attestation, or non-repudiation mechanism.
 
-Those capabilities must be implemented at their real delivery/enforcement boundary and remain subject to the same evidence and deterministic-authority rules as the rest of the framework.
+The repository also does **not** yet provide a universal implementation of every `AttackChannel`. Concrete user-input, tool-result, tool-metadata, memory, resource, handoff, MCP, and environment injectors must be implemented and tested at their real delivery boundary.
+
+It does not yet provide automatic attack generation, mutation/fuzzing, multi-step adaptive adversaries, MCP fault servers, sandbox escape infrastructure, or credentialed provider red-team coverage.
+
+Those capabilities remain subject to the same evidence and deterministic-authority rules as the rest of the framework.
 
 [← Documentation hub](README.md)
