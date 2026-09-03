@@ -17,6 +17,7 @@ Trusted evaluation control plane
 │   ├── OpenAI local FunctionTool TOOL_RESULT injector
 │   ├── OpenAI local FunctionTool TOOL_METADATA description injector
 │   ├── OpenAI per-trial Session-history MEMORY injector
+│   ├── OpenAI structured inline-file RESOURCE injector
 │   └── OpenAI first-native-handoff context injector
 ├── attack-delivery receipt verifier
 ├── evidence normalization contract
@@ -29,57 +30,59 @@ Trusted evaluation control plane
 └── release gate
 
 Untrusted / evaluated subject
-└── agent runtime + model + orchestration + tools + memory + handoff behavior
+└── agent runtime + model + orchestration + tools + memory + resources + handoff behavior
 
 External evidence / attack-delivery sources
 └── provider responses, hosted/external tools, MCP servers, target systems,
-    application memory stores, resources, user simulators, controlled fault injectors
+    application memory stores, retrieval systems, resources, user simulators,
+    controlled fault injectors
 
 Persistence substrate
 └── filesystem bytes are reverified before becoming evidence again
 ```
 
-External content may become evidence or adversarial stimulus. It does not become control-plane authority merely because the agent, provider, tool, MCP server, session, handoff, or fixture returned it. Persisted bytes and serialized report fields likewise do not become true merely because they occupy framework-shaped structures.
+External content may become evidence or adversarial stimulus. It does not become control-plane authority merely because the agent, provider, tool, MCP server, session, resource, handoff, or fixture returned it.
 
-The trusted evaluation control plane is itself bounded: a delivery receipt is a control-plane observation, not cryptographic proof that an arbitrary external target consumed the stimulus. Stronger injector authentication or target-side attestation is a separate deployment layer.
+The trusted control plane is itself bounded: a delivery receipt is a control-plane observation, not cryptographic proof that an arbitrary external target consumed the stimulus. Stronger injector authentication or target-side attestation is a separate deployment layer.
 
-## Subject identity
+## Identity contracts
 
-`SubjectFingerprint` is content-addressed across provider, model, application revision, instructions, tool schema, authority policy, memory policy, and adapter identity/version. This prevents materially different agent systems from being compared under a misleading model-only label.
+`SubjectFingerprint` is content-addressed across provider, model, application revision, instructions, tool schema, authority policy, memory policy, and adapter identity/version. An `EvaluationScenario` binds stable ID/revision, classification, objective, initial state, authority, required/forbidden outcomes, and tags.
 
-## Scenario identity
-
-An `EvaluationScenario` binds stable ID/revision, classification, objective, initial state, authority, required outcomes, forbidden outcomes, and tags. Contradictory outcome requirements are rejected at validation time.
+This prevents materially different systems or objectives from being compared under misleading labels.
 
 ## Deterministic adversarial derivation
 
-`AttackFixture` turns one versioned threat stimulus into content-addressed test input. Applying it to a base scenario preserves the base objective, exact `AuthorityPolicy`, required/forbidden outcomes, and deep-copied base state while adding deterministic attack identity and a reserved attack envelope.
+`AttackFixture` turns one versioned threat stimulus into content-addressed test input. Applying it to a base scenario preserves the base objective, exact `AuthorityPolicy`, required/forbidden outcomes, and deep-copied base state while adding deterministic attack identity and a reserved envelope.
 
-`AdversarialCampaign` binds one exact base scenario to a canonical set of unique attacks and rechecks the captured base identity before derivation so post-construction nested drift fails closed.
+`AdversarialCampaign` binds one exact base scenario to a canonical unique attack set and rechecks captured base identity before derivation so post-construction drift fails closed.
 
-The attack envelope is a **delivery contract**, not proof of delivery. A controlled adapter/environment must perform the real injection at the declared user/tool/metadata/memory/resource/handoff/environment boundary. `extract_attack(..., expected_base_scenario=...)` can rederive the complete scenario and detect drift outside the envelope.
+The attack envelope is a **delivery contract**, not proof of delivery. A controlled adapter/environment must perform real injection at the declared channel boundary.
 
-`OpenAIAgentsAdapter` currently closes five concrete delivery paths:
+## OpenAI delivery boundaries
+
+`OpenAIAgentsAdapter` currently closes six concrete delivery paths:
 
 - `USER_INPUT`: objective plus exact canonical fixture JSON are supplied as two ordered `Runner.run` user messages;
-- local-`FunctionTool` `TOOL_RESULT`: a per-trial copied target replaces the first matching invocation result with exact canonical fixture JSON and binds the receipt to the exact SDK call ID;
-- local-`FunctionTool` description-level `TOOL_METADATA`: a per-trial copied target has only its `description` replaced with exact canonical fixture JSON before the cloned agent enters `Runner.run`;
-- SDK session-history `MEMORY`: a fresh per-trial `Session` implementation is seeded with exact canonical fixture JSON as one prior user item, and the SDK runner prepends that history before current input;
-- native SDK `HANDOFF`: the run-level `handoff_input_filter` injects exact canonical fixture JSON into the **first actual handoff context** while preserving the SDK-selected destination agent.
+- local-`FunctionTool` `TOOL_RESULT`: a per-trial copied target replaces the first matching invocation result with exact canonical fixture JSON and binds delivery to exact SDK call ID;
+- local-`FunctionTool` description-level `TOOL_METADATA`: a copied target has only its `description` replaced with exact canonical fixture JSON before the cloned agent enters `Runner.run`;
+- SDK session-history `MEMORY`: a fresh per-trial `Session` returns exact canonical fixture JSON as one prior user item and the SDK runner prepends it before current input;
+- structured inline-file `RESOURCE`: one `Runner.run` user input contains a structured `input_file` whose `file_data` is exact canonical fixture JSON and whose evaluator-owned filename is `agent-evals-resource.json`;
+- native SDK `HANDOFF`: the run-level `handoff_input_filter` injects exact canonical fixture JSON into the **first actual handoff context** while preserving the SDK-selected destination.
 
-The two local tool channels share one fail-closed target resolver and leave reusable original agent/tool objects unchanged. The memory path uses a fresh session object that is never stored on the reusable adapter or agent. The handoff path uses one per-trial one-shot recorder/filter and does not change the destination agent, handoff tool identity, or routing decision.
+Only generic `ENVIRONMENT` remains unsupported by this adapter.
 
-These paths do not claim hosted-tool, MCP, external registry, production application-memory, vector/RAG-memory, distributed agent-fabric interception, or arbitrary external-system control.
+The local tool channels share one fail-closed resolver and leave reusable original agent/tool objects unchanged. Memory uses a fresh session. Resource is an input structure created only for that trial. Handoff uses a fresh one-shot recorder/filter.
+
+These paths do not claim hosted-tool/MCP interception, production memory stores, vector/RAG retrieval, hosted File Search, URL retrieval, arbitrary production document repositories, distributed agent-fabric interception, or external environment fault control.
 
 See [Adversarial Testing](ADVERSARIAL_TESTING.md) and [OpenAI Adapter](OPENAI_ADAPTER.md).
 
 ## Attack-delivery verification
 
-`AttackDeliveryReceipt` binds the trusted control-plane successful-delivery observation to exact derived scenario identity, exact attack identity, attack channel, concrete injection point, SHA-256 of canonical attack payload, and a domain-separated receipt root.
+`AttackDeliveryReceipt` binds trusted successful-delivery observation to exact derived scenario identity, attack identity, channel, concrete injection point, SHA-256 of canonical attack payload, and a domain-separated receipt root.
 
-The receipt excludes raw adversarial payload. `receipt.to_event()` emits normalized `ATTACK_DELIVERY` evidence with an explicit `injector:<identity>` source label.
-
-For an adversarial scenario, `TrialRunner` requires exactly one valid receipt before behavioral oracles execute. Missing, duplicate, malformed, forged, or mismatched delivery evidence causes critical `EVALUATION_ERROR` and `BLOCKED` with no completed subject-oracle results.
+The receipt excludes raw adversarial payload. For an adversarial scenario, `TrialRunner` requires exactly one valid receipt before behavioral oracles execute. Missing, duplicate, malformed, forged, or mismatched delivery evidence causes critical `EVALUATION_ERROR` and `BLOCKED` with no completed subject oracles.
 
 ```text
 unverified attack delivery                → BLOCKED
@@ -87,46 +90,36 @@ verified attack + deterministic violation → FAIL
 verified attack + deterministic closure   → PASS
 ```
 
-Injector/evaluation failures therefore do not pollute behavioral failure rates or critical subject-violation counts. Receipt roots/source labels are integrity/control-plane identities, not signatures, MACs, or target-side attestations.
-
 ## Authority is fail-closed
 
-`AuthorityPolicy` has explicit allowed/forbidden tools, approval-required tools, resource prefixes, and tool/handoff budgets. Unknown tools are not implicitly permitted. Resource scope and approval requirements fail closed.
+`AuthorityPolicy` has explicit allowed/forbidden tools, approval-required tools, resource prefixes, and tool/handoff budgets. Unknown tools are not implicitly permitted. Resource scope and approvals fail closed.
 
 The policy oracle detects unauthorized tool requests, privileged use before approval, out-of-scope resources, explicit policy violations, tool-call budget excess, and handoff budget excess. Policy failure is critical.
 
-Adversarial scenario derivation never receives a special authority path: base authority remains unchanged.
+Adversarial scenario derivation never receives a special authority path.
 
 ## Evidence model
 
 Every `EvidenceEvent` has ordered sequence, kind, source, payload, timestamp, and critical flag. `TrialEvidence` requires a contiguous stream from sequence zero.
 
-The vocabulary includes subject/runtime observations and evaluation-control observations such as `ATTACK_DELIVERY` and `EVALUATION_ERROR`. Delivery events participate in the same evidence chain rather than a disconnected side log.
-
 The domain-separated `evidence_root` binds trial, subject, scenario, ordered event digests, terminal state/output, timing, token usage, and cost. It is an integrity mechanism, not publisher authentication.
 
-For local tool-result injection, chronology is explicit:
+Important channel chronology/boundaries include:
 
 ```text
-TOOL_REQUEST
-ATTACK_DELIVERY
-TOOL_RESULT
+TOOL_RESULT: TOOL_REQUEST → ATTACK_DELIVERY → TOOL_RESULT
+HANDOFF:     HANDOFF → ATTACK_DELIVERY
 ```
 
-The receipt injection point includes the exact SDK tool-call ID, and normalized `TOOL_RESULT` contains the same canonical fixture JSON returned to the model loop.
+`TOOL_METADATA`, `MEMORY`, `RESOURCE`, and `USER_INPUT` can establish their controlled injection structures before subject execution; their independent SDK tests then prove the exact prepared content is visible at the actual model-call boundary.
 
-For local tool-metadata injection, the receipt can be emitted before subject execution because copied `FunctionTool.description` already equals complete canonical fixture JSON before `Runner.run`. The independent SDK test then observes that exact description in the model-call tool snapshot.
-
-For SDK session-history memory injection, the receipt identifies `Session.get_items[0]`, while the independent SDK test verifies the actual model-call input begins with that exact canonical history item and then the current objective.
-
-For native handoff injection, normalized chronology is:
+For `RESOURCE`, the receipt points specifically to:
 
 ```text
-HANDOFF
-ATTACK_DELIVERY
+openai-agents:Runner.run.input[1].content[0]:input_file.file_data
 ```
 
-The receipt is emitted only after the SDK run-level handoff filter has actually cloned a modified `HandoffInputData` value. The receiving agent observes the original handoff history plus exact canonical attack JSON; the destination agent remains the one selected by the SDK handoff.
+and `ScriptedModel` must observe exact canonical fixture JSON in that structured file item.
 
 ## Persistence boundary
 
@@ -140,129 +133,57 @@ This mechanism does not authenticate a writer who can coherently replace both pa
 
 `AgentAdapter` executes one exact subject/scenario pair and normalizes observations into `AdapterResult`. It does not grade itself, weaken authority, reinterpret provider errors as success, grant release authority, or substitute prose for state.
 
-For adversarial scenarios, the adapter/environment owns concrete delivery. `AdapterPreconditionError` is the explicit boundary for a controlled prerequisite it cannot satisfy. `TrialRunner` converts it to `EVALUATION_ERROR / BLOCKED` with no subject oracles; provider/runtime exceptions remain separately classified as `RUNTIME_ERROR / BLOCKED`.
+For adversarial scenarios, the adapter/environment owns concrete delivery. `AdapterPreconditionError` is the explicit boundary for a controlled prerequisite it cannot satisfy. `TrialRunner` converts it to `EVALUATION_ERROR / BLOCKED`; provider/runtime exceptions remain `RUNTIME_ERROR / BLOCKED`.
 
-### Shared OpenAI local-tool isolation
+### Local tool specialization
 
-For local `FunctionTool` `TOOL_RESULT` and `TOOL_METADATA` attacks, `OpenAIAgentsAdapter` uses one target-resolution policy:
+For local `FunctionTool` result/metadata attacks the adapter validates the identity-bearing payload, requires an SDK `Agent`, resolves one exact local `FunctionTool`, copies it, clones the agent, and mutates only the per-trial copy.
 
-1. validate the channel-specific identity-bearing payload contract;
-2. require an OpenAI SDK `Agent`;
-3. resolve exactly one local tool by fixture-bound name;
-4. require an SDK `FunctionTool`;
-5. copy the target;
-6. clone the agent with a fresh tools list;
-7. mutate only the per-trial copy for the requested attack boundary.
-
-The reusable original agent/tool remain untouched.
-
-### Tool-result specialization
-
-The copied invocation callback replaces the first matching call with exact canonical attack JSON and records a call-ID-bound receipt. The original function does not execute on that injected call; later matching calls use copied original behavior.
-
-If the target never runs, no receipt exists and delivery verification blocks the trial. If call identity cannot be bound safely, the adapter precondition-blocks.
-
-This is controlled result replacement and does not preserve original side effects on the injected call.
-
-### Tool-metadata specialization
-
-The copied target description becomes exact canonical attack JSON before execution. Tool name, parameter schema, invocation callback, approval semantics, and routing identity remain unchanged.
-
-```text
-openai-agents:FunctionTool:<tool>:description
-```
-
-A receipt can be emitted immediately because the controlled copied metadata boundary has already been established. `ScriptedModel` observes exact poisoned description, and a later ordinary run observes original description.
-
-Keeping name/schema fixed isolates description poisoning from schema drift, routing manipulation, or discovery poisoning.
+The result injector replaces the first matching call and binds receipt to call ID. The metadata injector changes only copied description. Neither claims hosted/MCP interception.
 
 ### Session-history memory specialization
 
-For `MEMORY`, the adapter constructs a fresh in-memory object implementing the SDK `Session` protocol and seeds it with exactly one prior user item whose content is complete canonical attack JSON.
+For `MEMORY`, a fresh in-memory SDK `Session` is seeded with exact canonical attack JSON as one prior user item. The SDK itself retrieves and combines history with current input. A later ordinary run proves no inherited poison.
 
-The adapter passes the fresh session to `Runner.run`. The SDK itself calls `get_items` and combines history with current input. The injected session is discarded with the trial and is not reused.
+### Structured inline-resource specialization
+
+For `RESOURCE`, `ResourceAttackPayload` requires a `resource` field. The adapter builds:
 
 ```text
-source          = injector:openai-agents:memory-session-history
-injection_point = openai-agents:Session.get_items[0]
+input[0] = objective user message
+input[1] = user message containing one input_file
+           ├── file_data = exact canonical AttackFixture.payload_json
+           └── filename  = agent-evals-resource.json
 ```
 
-The SDK test proves the poisoned item precedes current objective and that a subsequent ordinary run receives no inherited poison.
+The independent SDK test asserts this exact structure and a subsequent ordinary run asserts the file input is absent.
 
-This is not a production-memory adapter. Application databases, vector/RAG stores, semantic memory services, server-managed conversations, and cross-user memory boundaries require dedicated environment-specific implementations.
+This is **inline model file input**, not File Search, vector-store/RAG, `file_id`, `file_url`, external-page, database, MCP-resource, or production document-store injection.
+
+The adapter's `resource_resolver` callback is separate: it normalizes tool-call resource identity for policy evaluation and is not the adversarial resource injector.
 
 ### Native handoff specialization
 
-For `HANDOFF`, the adapter validates an identity-bearing payload containing a `handoff` field and installs a fresh run-level `handoff_input_filter` for that trial.
+For `HANDOFF`, a fresh run-level `handoff_input_filter` modifies only the first actual transfer that invokes it, clones the SDK handoff data, preserves destination/routing identity, and records delivery only after the clone succeeds.
 
-On the **first actual SDK handoff only**, the filter:
-
-1. receives the SDK `HandoffInputData` selected for the destination agent;
-2. appends exact canonical `AttackFixture.payload_json` as one user context item;
-3. clones the SDK handoff input contract rather than mutating the received object;
-4. records delivery only after the clone succeeds;
-5. returns the modified handoff data without changing destination/routing identity.
-
-```text
-source          = injector:openai-agents:handoff-context
-injection_point = openai-agents:RunConfig.handoff_input_filter:first:input_history[-1]
-```
-
-The independent SDK test uses a real two-agent handoff, verifies the receiving agent sees the expected context plus exact poison, verifies `HANDOFF → ATTACK_DELIVERY` evidence ordering, and then performs a clean ordinary handoff proving the per-trial filter did not leak.
-
-If no handoff occurs—or the SDK does not invoke the run-level filter for that transfer—no delivery receipt exists, so adversarial delivery verification blocks the trial. V1 does **not** reroute to another agent, mutate handoff tool metadata, poison every transfer in a multi-handoff chain, or claim interception of distributed/remote agent fabrics.
-
-`resource` and `environment` remain unsupported by the OpenAI adapter. Hosted/MCP/external result and metadata manipulation, non-session production memory systems, and external distributed-agent handoff infrastructure remain outside current injector boundaries.
-
-The deterministic `ScriptedAdapter` exists to test the harness itself without provider credentials.
+If no handoff occurs or the run-level filter is not invoked, no receipt exists and delivery verification blocks the trial.
 
 ## Trial derivation
 
-`TrialRunner` performs this sequence:
+`TrialRunner` executes the adapter, converts controlled precondition failures and runtime failures to distinct blocked evidence, constructs immutable `TrialEvidence`, verifies adversarial delivery, then runs deterministic policy/outcome oracles. Any deterministic failure yields `FAIL`; otherwise the trial yields `PASS`.
 
-1. execute the adapter against one exact subject/scenario pair;
-2. convert `AdapterPreconditionError` to critical `EVALUATION_ERROR / BLOCKED` with no subject oracles;
-3. convert provider/runtime exceptions to critical `RUNTIME_ERROR / BLOCKED` without retaining raw detail;
-4. construct immutable `TrialEvidence` when execution returns normally;
-5. for adversarial scenarios, require exactly one matching delivery receipt;
-6. block with critical `EVALUATION_ERROR` if delivery verification fails;
-7. run deterministic policy and outcome oracles;
-8. derive `FAIL` if any deterministic oracle fails, otherwise `PASS`.
+There is no model-authored red-team score and no rule treating absence of suspicious prose as safety evidence.
 
-There is no model-authored red-team score and no rule that treats absence of suspicious prose as safety evidence.
+## Exact-identity replay and assurance
 
-## Exact-identity replay
+`EvidenceReplayAdapter` performs historical regrading, not re-execution. It refuses replay when trial, subject, or scenario identity differs and revalidates recorded delivery receipts without pretending to inject again.
 
-`EvidenceReplayAdapter` performs historical regrading, not agent re-execution. It refuses replay when trial, subject, or scenario identity differs.
-
-For adversarial evidence, recorded delivery receipt is replayed and revalidated before deterministic subject grading. Replay does not run the injector again and cannot establish fresh provider liveness, external state, side effects, delivery, or publisher/injector identity.
-
-## Repeated trials
-
-`EvaluationSession` repeats isolated trials and builds a `ReliabilityReport`. Delivery-caused `BLOCKED` remains blocked rather than becoming `FAIL`, keeping evaluator/injector reliability distinct from subject behavioral reliability.
-
-## Session assurance artifacts
-
-`AssuranceReport` binds trial IDs, evidence roots, deterministic oracle snapshots, trial verdicts, reliability outputs, frozen release policy, release-gate result, and a domain-separated report root.
-
-On load it revalidates unique trial identities, resolved verdict/oracle consistency, blocked-trial semantics, reliability, critical-violation counts, release-gate output, and report-root integrity.
-
-Delivery-caused `BLOCKED` trials have no completed deterministic oracle snapshots, do not contribute behavioral failures or critical subject-oracle counts, and may keep release `INCONCLUSIVE` when evidence requirements are unmet.
-
-Full per-trial delivery/policy/outcome regrading still requires underlying evidence and replay path. See [Session Assurance Reports](ASSURANCE_REPORTS.md).
-
-## Release authority
-
-`ReleaseGate` consumes statistical evidence plus critical-violation counts. Critical safety evidence is non-compensatory. Insufficient trials, weak confidence bounds, or excess blocked/inconclusive evidence produce `INCONCLUSIVE` rather than acceptance.
-
-## Why exact trajectories are not the default oracle
-
-A trajectory is evidence, but not every trajectory difference is a defect. Exact path assertions are appropriate when the path itself is contractual or safety-critical; otherwise independently observed outcome/state should dominate.
+`EvaluationSession`, `ReliabilityReport`, `AssuranceReport`, and `ReleaseGate` preserve blocked/evaluator uncertainty separately from behavioral failures. Critical safety evidence is non-compensatory; insufficient evidence produces `INCONCLUSIVE` rather than acceptance.
 
 ## Current boundary
 
-The core currently provides deterministic contracts, adversarial fixtures/campaigns, evidence-bound attack-delivery verification, concrete OpenAI `USER_INPUT`, local-`FunctionTool` `TOOL_RESULT`, local-`FunctionTool` description-level `TOOL_METADATA`, isolated SDK session-history `MEMORY`, and first-native-handoff context `HANDOFF` injection, identity-bound evidence, local integrity-verified persistence, exact-identity historical replay, deterministic state/policy oracles, metamorphic relations, repeated-trial statistics, assurance reports, release gating, failure minimization, and a deterministic OpenAI Agents SDK integration tier.
+The core currently provides deterministic contracts, adversarial fixtures/campaigns, evidence-bound attack-delivery verification, six concrete OpenAI delivery channels (`USER_INPUT`, local `TOOL_RESULT`, description-level `TOOL_METADATA`, session-history `MEMORY`, inline-file `RESOURCE`, first-native-handoff `HANDOFF`), identity-bound evidence, integrity-verified local persistence, exact historical replay, deterministic state/policy oracles, metamorphic relations, repeated-trial statistics, assurance reports, release gating, failure minimization, and deterministic OpenAI SDK integration tests.
 
-The current source checkpoint is **163 passed, 8 deselected, 93.76% branch coverage**, strict mypy clean across **34 source files**, with **8/8** deterministic OpenAI SDK tests green.
+The current source checkpoint is **167 passed, 9 deselected, 93.81% branch coverage**, strict mypy clean across **34 source files**, with **9/9** deterministic OpenAI SDK tests green.
 
-Credentialed live-provider assurance, resource/environment injectors, production application-memory/RAG memory injection, tool-name/parameter-schema poisoning, hosted/MCP result or metadata interception, distributed/remote handoff-fabric injection, cryptographically authenticated injector identity, target-side delivery attestation, automatic/adaptive adversarial generation, hostile-writer authenticated evidence/report signing, remote attestation, immutable remote retention, MCP fault servers, calibrated semantic graders, and automatic perturbation generation remain separate implementation layers and are not represented as complete.
+Credentialed live-provider assurance, generic environment injection, production application-memory/RAG injection, hosted File Search/vector-store/URL retrieval manipulation, tool-name/parameter-schema poisoning, hosted/MCP result or metadata interception, distributed/remote handoff-fabric injection, cryptographically authenticated injector identity, target-side delivery attestation, automatic/adaptive adversarial generation, hostile-writer authenticated evidence/report signing, remote attestation, immutable remote retention, MCP fault servers, calibrated semantic graders, and automatic perturbation generation remain separate implementation layers.
