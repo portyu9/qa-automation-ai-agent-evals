@@ -71,7 +71,7 @@ class OpenAIAgentsAdapter:
 
         try:
             result = await Runner.run(
-                self._agent,  # type: ignore[arg-type]
+                self._agent,
                 scenario.objective,
                 max_turns=scenario.authority.max_turns,
                 run_config=run_config,
@@ -278,7 +278,7 @@ def _json_safe(value: object) -> object:
     if callable(model_dump):
         return _json_safe(model_dump(mode="json"))
     if is_dataclass(value) and not isinstance(value, type):
-        return _json_safe(asdict(value))  # type: ignore[arg-type]
+        return _json_safe(asdict(value))
     return repr(value)
 
 
