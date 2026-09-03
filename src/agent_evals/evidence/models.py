@@ -10,6 +10,8 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+_EVIDENCE_ROOT_DOMAIN = b"agent-evals/trial-evidence/v2\0"
+
 
 class EvidenceKind(StrEnum):
     TOOL_REQUEST = "tool_request"
@@ -46,20 +48,15 @@ class EvidenceEvent(BaseModel):
     @model_validator(mode="after")
     def validate_json_payload(self) -> EvidenceEvent:
         try:
-            json.dumps(self.payload, sort_keys=True, separators=(",", ":"), allow_nan=False)
+            _canonical_json_bytes(self.payload)
         except (TypeError, ValueError) as exc:
             raise ValueError("evidence payload must be finite JSON-compatible data") from exc
         return self
 
     @property
     def digest(self) -> str:
-        canonical = json.dumps(
-            self.model_dump(mode="json"),
-            sort_keys=True,
-            separators=(",", ":"),
-            allow_nan=False,
-        )
-        return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+        canonical = _canonical_json_bytes(self.model_dump(mode="json"))
+        return hashlib.sha256(canonical).hexdigest()
 
 
 class TrialEvidence(BaseModel):
@@ -87,9 +84,11 @@ class TrialEvidence(BaseModel):
         expected = list(range(len(self.events)))
         actual = [event.sequence for event in self.events]
         if actual != expected:
-            raise ValueError(f"event sequence must be contiguous from zero: expected {expected!r}, got {actual!r}")
+            raise ValueError(
+                f"event sequence must be contiguous from zero: expected {expected!r}, got {actual!r}"
+            )
         try:
-            json.dumps(self.final_state, sort_keys=True, separators=(",", ":"), allow_nan=False)
+            _canonical_json_bytes(self.final_state)
         except (TypeError, ValueError) as exc:
             raise ValueError("final_state must be finite JSON-compatible data") from exc
         return self
@@ -100,11 +99,18 @@ class TrialEvidence(BaseModel):
 
     @property
     def evidence_root(self) -> str:
-        """Hash-chain root binding event order and terminal state into one trial identity."""
-        chain = bytes(32)
+        """Bind subject, scenario, trial, event order, and terminal observations into one root."""
+        envelope_identity = _canonical_json_bytes(
+            {
+                "trial_id": self.trial_id,
+                "subject_identity": self.subject_identity,
+                "scenario_identity": self.scenario_identity,
+            }
+        )
+        chain = hashlib.sha256(_EVIDENCE_ROOT_DOMAIN + envelope_identity).digest()
         for event in self.events:
             chain = hashlib.sha256(chain + bytes.fromhex(event.digest)).digest()
-        terminal = json.dumps(
+        terminal = _canonical_json_bytes(
             {
                 "final_state": self.final_state,
                 "final_output": self.final_output,
@@ -112,9 +118,15 @@ class TrialEvidence(BaseModel):
                 "input_tokens": self.input_tokens,
                 "output_tokens": self.output_tokens,
                 "estimated_cost_usd": self.estimated_cost_usd,
-            },
-            sort_keys=True,
-            separators=(",", ":"),
-            allow_nan=False,
-        ).encode("utf-8")
-        return hashlib.sha256(chain + terminal).hexdigest()
+            }
+        )
+        return hashlib.sha256(_EVIDENCE_ROOT_DOMAIN + chain + terminal).hexdigest()
+
+
+def _canonical_json_bytes(value: Any) -> bytes:
+    return json.dumps(
+        value,
+        sort_keys=True,
+        separators=(",", ":"),
+        allow_nan=False,
+    ).encode("utf-8")

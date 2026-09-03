@@ -89,9 +89,7 @@ async def test_openai_adapter_observes_sdk_tool_loop_but_state_reader_owns_outco
         EvidenceKind.OUTPUT,
     }
     request = next(
-        event
-        for event in evaluated.evidence.events
-        if event.kind is EvidenceKind.TOOL_REQUEST
+        event for event in evaluated.evidence.events if event.kind is EvidenceKind.TOOL_REQUEST
     )
     assert request.payload["resource"] == "tenant/7/refunds"
     model.assert_complete()

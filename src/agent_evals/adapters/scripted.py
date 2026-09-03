@@ -29,6 +29,7 @@ class ScriptedAdapter:
     ) -> AdapterResult:
         result = self._script(subject, scenario, trial_id)
         normalized = tuple(
-            event.model_copy(update={"sequence": index}) for index, event in enumerate(result.events)
+            event.model_copy(update={"sequence": index})
+            for index, event in enumerate(result.events)
         )
         return replace(result, events=normalized)

@@ -170,7 +170,12 @@ import asyncio
 
 from agent_evals.adapters.base import AdapterResult
 from agent_evals.adapters.scripted import ScriptedAdapter
-from agent_evals.contracts.models import AuthorityPolicy, EvaluationScenario, ScenarioKind, SubjectFingerprint
+from agent_evals.contracts.models import (
+    AuthorityPolicy,
+    EvaluationScenario,
+    ScenarioKind,
+    SubjectFingerprint,
+)
 from agent_evals.evidence.models import EvidenceEvent, EvidenceKind
 from agent_evals.runtime.evaluator import TrialRunner
 

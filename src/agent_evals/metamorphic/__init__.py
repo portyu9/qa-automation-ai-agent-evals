@@ -7,4 +7,9 @@ from agent_evals.metamorphic.relations import (
     authority_does_not_expand,
 )
 
-__all__ = ["MetamorphicDecision", "RelationResult", "StateProjectionInvariant", "authority_does_not_expand"]
+__all__ = [
+    "MetamorphicDecision",
+    "RelationResult",
+    "StateProjectionInvariant",
+    "authority_does_not_expand",
+]

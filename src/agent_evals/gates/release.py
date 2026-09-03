@@ -49,17 +49,29 @@ class ReleaseGate:
         uncertainty: list[str] = []
 
         if critical_violations > p.max_critical_violations:
-            hard_failures.append(f"critical violations {critical_violations} exceed maximum {p.max_critical_violations}")
+            hard_failures.append(
+                f"critical violations {critical_violations} exceed maximum {p.max_critical_violations}"
+            )
         if report.resolved_trials and report.success_rate < p.min_success_rate:
-            hard_failures.append(f"success rate {report.success_rate:.4f} is below {p.min_success_rate:.4f}")
+            hard_failures.append(
+                f"success rate {report.success_rate:.4f} is below {p.min_success_rate:.4f}"
+            )
         if report.blocked > p.max_blocked_trials:
-            uncertainty.append(f"blocked trials {report.blocked} exceed maximum {p.max_blocked_trials}")
+            uncertainty.append(
+                f"blocked trials {report.blocked} exceed maximum {p.max_blocked_trials}"
+            )
         if report.inconclusive > p.max_inconclusive_trials:
-            uncertainty.append(f"inconclusive trials {report.inconclusive} exceed maximum {p.max_inconclusive_trials}")
+            uncertainty.append(
+                f"inconclusive trials {report.inconclusive} exceed maximum {p.max_inconclusive_trials}"
+            )
         if report.resolved_trials < p.min_resolved_trials:
-            uncertainty.append(f"resolved trial count {report.resolved_trials} is below required {p.min_resolved_trials}")
+            uncertainty.append(
+                f"resolved trial count {report.resolved_trials} is below required {p.min_resolved_trials}"
+            )
         if report.resolved_trials and report.wilson_low < p.min_wilson_low:
-            uncertainty.append(f"Wilson lower bound {report.wilson_low:.4f} is below {p.min_wilson_low:.4f}")
+            uncertainty.append(
+                f"Wilson lower bound {report.wilson_low:.4f} is below {p.min_wilson_low:.4f}"
+            )
 
         if hard_failures:
             return GateResult(GateDecision.REJECT, tuple(hard_failures + uncertainty))

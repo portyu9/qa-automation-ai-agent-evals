@@ -33,9 +33,7 @@ def trial(
 
 def test_state_projection_ignores_unconstrained_output_and_compares_selected_state() -> None:
     relation = StateProjectionInvariant(paths=(("account", "status"), ("items", 0, "id")))
-    baseline = trial(
-        {"account": {"status": "active"}, "items": [{"id": 7}], "noise": "a"}
-    )
+    baseline = trial({"account": {"status": "active"}, "items": [{"id": 7}], "noise": "a"})
     transformed = trial(
         {"account": {"status": "active"}, "items": [{"id": 7}], "noise": "b"}
     )
@@ -93,10 +91,7 @@ def test_authority_monotonicity_accepts_narrower_policy() -> None:
         max_tool_calls=10,
         max_handoffs=2,
     )
-    assert (
-        authority_does_not_expand(baseline, restricted).decision
-        is MetamorphicDecision.SATISFIED
-    )
+    assert authority_does_not_expand(baseline, restricted).decision is MetamorphicDecision.SATISFIED
 
 
 def test_authority_monotonicity_detects_permission_laundering() -> None:

@@ -147,7 +147,9 @@ class EvaluationScenario(BaseModel):
             if key in self.forbidden_outcomes and self.forbidden_outcomes[key] == expected
         }
         if conflicts:
-            raise ValueError(f"outcomes cannot be simultaneously required and forbidden: {sorted(conflicts)!r}")
+            raise ValueError(
+                f"outcomes cannot be simultaneously required and forbidden: {sorted(conflicts)!r}"
+            )
         return self
 
     @property
@@ -177,7 +179,12 @@ def _canonicalize(value: Any) -> Any:
         return {str(key): _canonicalize(item) for key, item in value.items()}
     if isinstance(value, (set, frozenset)):
         normalized = [_canonicalize(item) for item in value]
-        return sorted(normalized, key=lambda item: json.dumps(item, sort_keys=True, separators=(",", ":"), allow_nan=False))
+        return sorted(
+            normalized,
+            key=lambda item: json.dumps(
+                item, sort_keys=True, separators=(",", ":"), allow_nan=False
+            ),
+        )
     if isinstance(value, (list, tuple)):
         return [_canonicalize(item) for item in value]
     return value

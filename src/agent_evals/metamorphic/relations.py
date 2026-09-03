@@ -50,7 +50,9 @@ class StateProjectionInvariant:
 
     def evaluate(self, baseline: EvaluatedTrial, transformed: EvaluatedTrial) -> RelationResult:
         if baseline.evidence.subject_identity != transformed.evidence.subject_identity:
-            raise ValueError("metamorphic state invariants require the same evaluated subject identity")
+            raise ValueError(
+                "metamorphic state invariants require the same evaluated subject identity"
+            )
         unresolved = {TrialVerdict.BLOCKED, TrialVerdict.INCONCLUSIVE}
         if baseline.verdict in unresolved or transformed.verdict in unresolved:
             return RelationResult(
@@ -62,7 +64,9 @@ class StateProjectionInvariant:
         changed: list[str] = []
         for path in self.paths:
             baseline_found, baseline_value = _resolve_path(baseline.evidence.final_state, path)
-            transformed_found, transformed_value = _resolve_path(transformed.evidence.final_state, path)
+            transformed_found, transformed_value = _resolve_path(
+                transformed.evidence.final_state, path
+            )
             rendered = _render_path(path)
             if not baseline_found or not transformed_found:
                 missing.append(rendered)
