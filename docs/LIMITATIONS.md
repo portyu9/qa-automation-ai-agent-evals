@@ -18,13 +18,23 @@ The OpenAI adapter records SDK `ToolApprovalItem` objects as `APPROVAL_REQUEST` 
 
 The framework does not currently use a model-as-judge. This is deliberate until grader calibration, provenance, failure semantics, and precedence relative to deterministic oracles are implemented.
 
+### Adversarial scenario generation is not universal attack injection
+
+The repository now provides content-addressed `AttackFixture` objects, deterministic attack-to-scenario derivation, a provider-neutral reserved attack envelope, canonical `AdversarialCampaign` objects, full derived-scenario verification when an expected base is supplied, and fail-closed detection of campaign base drift.
+
+Those controls establish **what attack fixture and exact derived scenario are being evaluated**. They do not prove that every adapter or test environment can deliver every `AttackChannel` correctly. A fixture labeled `tool_result`, `memory`, `tool_metadata`, `resource`, `handoff`, or `environment` still requires a concrete controlled injector at that real boundary.
+
+The repository therefore does not yet claim universal prompt-injection harnessing, automatic adversarial generation, adaptive red-team agents, mutation/fuzzing campaigns, production memory poisoning, sandbox-escape execution, or live external-system fault injection. A channel label is a delivery contract, not evidence that delivery occurred.
+
+See [Adversarial Testing](ADVERSARIAL_TESTING.md).
+
 ### No MCP server laboratory yet
 
-The security taxonomy includes MCP authorization/tool-poisoning concepts, but the repository does not yet provide executable MCP fault servers or protocol conformance claims.
+The security taxonomy and adversarial fixture layer include MCP-relevant authorization/tool-poisoning concepts, but the repository does not yet provide executable MCP fault servers, malicious MCP metadata/result simulators, protocol conformance claims, or MCP task/authorization fault coverage.
 
 ### Local persistence is not trusted-writer attestation
 
-`LocalEvidenceStore` now provides durable local record materialization with canonical payload bytes, a strict manifest, bounded regular-file reads, symlink rejection, payload hashing, identity derivation checks, semantic evidence-root verification, same-record writer locks, manifest-last commit semantics, and no-clobber publication.
+`LocalEvidenceStore` provides durable local record materialization with canonical payload bytes, a strict manifest, bounded regular-file reads, symlink rejection, payload hashing, identity derivation checks, semantic evidence-root verification, same-record writer locks, manifest-last commit semantics, and no-clobber publication.
 
 Those controls verify a local record **relative to its manifest and expected evaluation identity**. They do not establish who authored the record. An actor with arbitrary write access to the store root can replace payload and manifest coherently and recompute ordinary hashes.
 
@@ -40,7 +50,7 @@ Replay does **not** prove current provider availability, reproduce stochastic ag
 
 ### Assurance-report validation is not oracle replay or signed attestation
 
-`AssuranceReport` now binds trial IDs, evidence roots, deterministic oracle snapshots, trial verdicts, reliability output, a frozen release policy, release-gate output, and a domain-separated report root. Construction and loading recompute resolved trial verdicts from oracle snapshots, reliability from trial verdicts, critical-violation counts from oracle snapshots, and the release-gate result from the frozen policy.
+`AssuranceReport` binds trial IDs, evidence roots, deterministic oracle snapshots, trial verdicts, reliability output, a frozen release policy, release-gate output, and a domain-separated report root. Construction and loading recompute resolved trial verdicts from oracle snapshots, reliability from trial verdicts, critical-violation counts from oracle snapshots, and the release-gate result from the frozen policy.
 
 That makes serialized session conclusions internally auditable; it does **not** make the report an independent source of per-trial truth. The report stores evidence roots rather than full `TrialEvidence`, so it cannot rerun policy/outcome oracles from the hash alone. Re-establishing oracle results requires loading the underlying evidence and using the replay path.
 
@@ -64,6 +74,6 @@ The repository currently executes no target-controlled shell or arbitrary target
 
 ## Why these boundaries matter
 
-Agent evaluation is especially vulnerable to false confidence because output often looks persuasive even when surrounding state is wrong. The same discipline applies to the framework itself: documentation, badges, scores, hashes, and SDK traces are not substitutes for the control they describe.
+Agent evaluation is especially vulnerable to false confidence because output often looks persuasive even when surrounding state is wrong. The same discipline applies to the framework itself: documentation, badges, scores, hashes, attack labels, and SDK traces are not substitutes for the control they describe.
 
 New capabilities should move out of this document only after implementation, tests, and review make the claim true.
