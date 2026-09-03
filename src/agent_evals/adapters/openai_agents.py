@@ -239,9 +239,7 @@ class OpenAIAgentsAdapter:
         if not function_matches:
             raise AdapterPreconditionError(
                 code="unsupported_attack_target_type",
-                reason=(
-                    f"tool-result attack target {spec.tool!r} is not a local FunctionTool"
-                ),
+                reason=(f"tool-result attack target {spec.tool!r} is not a local FunctionTool"),
             )
         if len(same_name) != 1 or len(function_matches) != 1:
             raise AdapterPreconditionError(
