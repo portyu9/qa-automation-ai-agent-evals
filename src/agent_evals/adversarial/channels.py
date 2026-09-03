@@ -81,7 +81,7 @@ class MemoryAttackPayload(BaseModel):
 
     `memory` makes the fixture semantically explicit, while the complete canonical
     `AttackFixture.payload_json` becomes one prior session-history user message. That keeps the
-    delivery receipt's payload digest bound to the exact bytes prepended by the SDK session layer.
+    delivery receipt payload digest bound to the exact bytes prepended by the SDK session layer.
     Additional fields are allowed for realistic memory envelopes.
     """
 
@@ -98,4 +98,29 @@ class MemoryAttackPayload(BaseModel):
         except ValidationError as exc:
             raise ValueError(
                 "memory attack payload must be a JSON object with a 'memory' field"
+            ) from exc
+
+
+class HandoffAttackPayload(BaseModel):
+    """Contract for one-shot poisoning of context transferred across the first SDK handoff.
+
+    `handoff` makes the fixture semantically explicit. The complete canonical
+    `AttackFixture.payload_json` is appended to the run input history by the SDK handoff input
+    filter, so the standard delivery-receipt digest binds the exact context bytes visible to the
+    receiving agent. The v1 contract does not select or replace the destination agent.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="allow")
+
+    handoff: Any
+
+    @classmethod
+    def from_fixture(cls, attack: AttackFixture) -> Self:
+        if attack.channel is not AttackChannel.HANDOFF:
+            raise ValueError("handoff payload contract requires a HANDOFF attack fixture")
+        try:
+            return cls.model_validate(attack.payload)
+        except ValidationError as exc:
+            raise ValueError(
+                "handoff attack payload must be a JSON object with a 'handoff' field"
             ) from exc
