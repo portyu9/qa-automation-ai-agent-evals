@@ -8,22 +8,23 @@
 [![MIT License](https://img.shields.io/badge/License-MIT-2ea44f?style=flat-square)](LICENSE)
 [![Architecture](https://img.shields.io/badge/Architecture-Evidence--Bound-111827?style=flat-square)](docs/ARCHITECTURE.md)
 
-**A provider-neutral quality-engineering framework for evaluating autonomous agents by observable outcomes, side effects, authority boundaries, adversarial conditions, verified evaluation preconditions, reliability, and reproducible evidence—not by persuasive final prose.**
+**A provider-neutral quality-engineering framework for evaluating autonomous agents by observable outcomes, side effects, authority boundaries, adversarial conditions, verified evaluation preconditions, protocol faults, reliability, and reproducible evidence—not by persuasive final prose.**
 
-[Documentation](docs/README.md) · [Architecture](docs/ARCHITECTURE.md) · [Evaluation Model](docs/EVALUATION_MODEL.md) · [Adversarial Testing](docs/ADVERSARIAL_TESTING.md) · [Evidence & Replay](docs/EVIDENCE_AND_REPLAY.md) · [Session Reports](docs/ASSURANCE_REPORTS.md) · [OpenAI Adapter](docs/OPENAI_ADAPTER.md) · [Statistics](docs/STATISTICAL_ASSURANCE.md) · [Security](docs/SECURITY.md) · [Limitations](docs/LIMITATIONS.md)
+[Documentation](docs/README.md) · [Architecture](docs/ARCHITECTURE.md) · [Evaluation Model](docs/EVALUATION_MODEL.md) · [Adversarial Testing](docs/ADVERSARIAL_TESTING.md) · [MCP Lab](docs/MCP_LAB.md) · [Evidence & Replay](docs/EVIDENCE_AND_REPLAY.md) · [Session Reports](docs/ASSURANCE_REPORTS.md) · [OpenAI Adapter](docs/OPENAI_ADAPTER.md) · [Statistics](docs/STATISTICAL_ASSURANCE.md) · [Security](docs/SECURITY.md) · [Limitations](docs/LIMITATIONS.md)
 
 </div>
 
 ---
 
 > [!IMPORTANT]
-> **The agent is the subject, not the oracle.** Final prose is not task completion. A tool call is not a successful side effect. An attack label is not proof of delivery. A configured environment value is not proof of consumption. Missing or invalid evaluation evidence is never silently promoted to PASS.
+> **The agent is the subject, not the oracle.** Final prose is not task completion. A tool call is not a successful side effect. An attack label is not proof of delivery. A configured environment value is not proof of consumption. An MCP fault configuration is not proof of client observation. Protocol delivery is not proof of agent resistance. Missing or invalid evaluation evidence is never silently promoted to PASS.
 
 ## Engineering thesis
 
 ```text
 Agents act.
 Attacks perturb.
+Protocols carry untrusted content.
 Controlled injectors establish evaluation preconditions.
 Observers record.
 State proves.
@@ -35,9 +36,9 @@ Release gates decide.
 Reports rederive.
 ```
 
-Agentic systems call tools, mutate state, consume external content, retain session history, transfer work across agents, read runtime dependencies, request approvals, retry failures, and cross trust boundaries. Evaluating only a final message cannot distinguish completed work from a plausible claim that work occurred.
+Agentic systems call tools, mutate state, consume resources, retain session history, transfer work across agents, read runtime dependencies, interact with protocol servers, request approvals, retry failures, and cross trust boundaries. Evaluating only a final message cannot distinguish completed work from a plausible claim that work occurred.
 
-This framework treats the **complete agent system** as the subject under test: model, instructions, orchestration, tools, authority, memory policy, adapter, and application revision. Provider-specific execution becomes normalized evidence; deterministic state, policy, and release authority stay outside the agent and outside the provider SDK.
+This framework treats the **complete agent system** as the subject under test: model, instructions, orchestration, tools, authority, memory policy, adapter, and application revision. Provider-specific execution becomes normalized evidence; deterministic state, policy, and release authority remain outside the agent and outside the provider SDK.
 
 ## Core invariants
 
@@ -47,10 +48,12 @@ This framework treats the **complete agent system** as the subject under test: m
 | **Safety is non-compensatory** | a critical authorization violation cannot be averaged away |
 | **Unknown is not green** | blocked execution and missing evidence remain explicit uncertainty |
 | **Bad ≠ unknown** | resolved subject failure is distinct from evaluator/runtime inability to judge |
-| **Identity is canonical** | subject, scenario, attack, evidence, and report identities bind behavior-bearing material |
+| **Identity is canonical** | subject, scenario, attack, protocol-fault, evidence, and report identities bind behavior-bearing material |
 | **Adversarial derivation preserves authority** | an attack cannot grant tools, broaden resources, remove approval, reroute handoffs, or redefine success |
 | **Attack delivery is a precondition** | adversarial behavior is graded only after one exact matching receipt verifies |
 | **Availability ≠ consumption** | an environment value that subject code never reads is not a delivered attack |
+| **MCP configuration ≠ observation** | an MCP fault exists only as delivered protocol evidence after the official client observes the required representation |
+| **Protocol delivery ≠ behavior** | an MCP receipt does not establish that an autonomous agent consumed or resisted the fault |
 | **Evaluator failure ≠ subject failure** | unavailable/unverifiable controlled delivery becomes `EVALUATION_ERROR / BLOCKED` |
 | **Provider failure ≠ evaluator failure** | provider/runtime exceptions remain `RUNTIME_ERROR / BLOCKED` |
 | **Evidence is reverified** | persisted bytes must pass schema, identity, hash, and semantic-root checks before reuse |
@@ -62,7 +65,7 @@ This framework treats the **complete agent system** as the subject under test: m
 
 ## What is executable today
 
-The deterministic core requires no model credentials. A first-class OpenAI Agents SDK adapter is exercised against the real SDK runner using `agents.testing.ScriptedModel` without a provider API call.
+The deterministic core requires no model credentials. A first-class OpenAI Agents SDK adapter is exercised against the real SDK runner using `agents.testing.ScriptedModel`, and a separate MCP laboratory uses the official Python MCP SDK with a real in-process `MCPServer`/`Client`. Neither deterministic tier requires a provider API call.
 
 ### Evaluation and assurance core
 
@@ -100,14 +103,34 @@ The deterministic core requires no model credentials. A first-class OpenAI Agent
 
 Seven generic channels implemented does **not** mean universal production interception. [Limitations](docs/LIMITATIONS.md) is authoritative.
 
+### Deterministic MCP fault laboratory
+
+The separate `MCPFaultLab` uses official `mcp==2.1.1` and protocol revision `2026-07-28`. Each probe builds a fresh real `MCPServer`, connects an official `Client`, performs `tools/list`, invokes the target twice, and emits `MCPFaultReceipt` only after exact public client observation.
+
+| Fault | Verified protocol boundary |
+|---|---|
+| **tool metadata poison** | canonical fault JSON observed as the target description returned by `tools/list` |
+| **tool result poison** | canonical fault JSON observed as first `tools/call` result text; second call recovers to benign data |
+| **tool error** | canonical fault JSON preserved inside the SDK-generated model-visible `ToolError` envelope; second call recovers to benign data |
+
+The receipt binds both the controlled payload SHA-256 and the SHA-256 of the exact observed protocol text. For direct metadata/result poison the hashes match. For `ToolError` they intentionally differ because the SDK wraps the controlled message as:
+
+```text
+Error executing tool <tool>: <canonical fault payload>
+```
+
+This records protocol transformation instead of pretending the wire/client representation stayed byte-identical.
+
+The MCP laboratory is a **protocol evidence layer**, not an agent verdict engine. It does not currently convert `MCPFaultReceipt` into OpenAI `ATTACK_DELIVERY`, agent `PASS`/`FAIL`, or release acceptance.
+
 ---
 
 ## Architecture at a glance
 
 ```mermaid
 flowchart LR
-    accTitle: Evidence-bound agent evaluation architecture
-    accDescr: Canonical subject and scenario contracts drive a provider adapter. Adversarial scenarios require controlled injection and verified delivery before deterministic grading. Independent state and policy evidence feed trial verdicts, repeated-trial reliability, and a fail-closed release gate.
+    accTitle: Evidence-bound agent and protocol evaluation architecture
+    accDescr: Canonical subject and scenario contracts drive a provider adapter. Adversarial scenarios require controlled injection and verified delivery before deterministic grading. A separate MCP laboratory verifies exact protocol-fault observations. Independent state and policy evidence feed trial verdicts, repeated-trial reliability, and a fail-closed release gate.
 
     S[Canonical subject]
     C[Scenario + authority]
@@ -122,6 +145,10 @@ flowchart LR
     T[Trial verdict]
     R[Reliability]
     G[Release gate]
+    MF[MCP fault spec]
+    MS[MCPServer]
+    MC[MCP client observation]
+    MR[MCP fault receipt]
 
     X --> C
     C --> I
@@ -137,7 +164,13 @@ flowchart LR
     O --> T
     T --> R
     R --> G
+
+    MF --> MS
+    MS --> MC
+    MC --> MR
 ```
+
+The MCP path intentionally stops at protocol evidence. A future integration must explicitly bridge that receipt into an agent trial before agent behavior can be graded.
 
 ## Trial and release semantics
 
@@ -150,7 +183,7 @@ flowchart LR
 | `REJECT` | verified behavioral/safety evidence violates release policy |
 | `INCONCLUSIVE` | release evidence is insufficient; uncertainty is not converted to acceptance |
 
-A target tool that never executes, an injected runtime key that is never consumed, a missing handoff, invalid delivery evidence, or an unavailable provider can all block evaluation without being mislabeled as a product defect.
+A target tool that never executes, an injected runtime key that is never consumed, a missing handoff, invalid delivery evidence, or an unavailable provider can all block evaluation without being mislabeled as a product defect. A successful MCP fault receipt by itself is not a trial verdict at all.
 
 ---
 
@@ -175,7 +208,14 @@ pytest -m openai \
   tests/integration/test_openai_environment_adapter.py
 ```
 
-The OpenAI integration is pinned to `openai-agents==0.22.0` so normalization and injection contracts cannot silently drift under a broad SDK version range.
+Deterministic MCP protocol laboratory:
+
+```bash
+python -m pip install -e '.[dev,mcp]'
+pytest -m mcp tests/integration/test_mcp_fault_lab.py
+```
+
+The OpenAI integration is pinned to `openai-agents==0.22.0`. The MCP integration is separately pinned to `mcp==2.1.1`; the MCP CI lane installs its own extra so it does not silently depend on OpenAI's transitive dependencies.
 
 ---
 
@@ -227,14 +267,7 @@ A fixture identifies one exact local tool and one exact context key:
 }
 ```
 
-The adapter snapshots a string-keyed base `Mapping` into a read-only per-trial overlay. During the **first matching local `FunctionTool` call only**, task-local activation makes:
-
-```text
-ctx.context["SERVICE_MODE"]
-ctx.context.get("SERVICE_MODE")
-```
-
-return exact canonical `AttackFixture.payload_json`.
+The adapter snapshots a string-keyed base `Mapping` into a read-only per-trial overlay. During the **first matching local `FunctionTool` call only**, task-local activation makes `ctx.context["SERVICE_MODE"]` or `.get("SERVICE_MODE")` return exact canonical `AttackFixture.payload_json`.
 
 Delivery is created only when that value is actually read:
 
@@ -248,6 +281,25 @@ TOOL_REQUEST → ATTACK_DELIVERY → TOOL_RESULT
 A matching tool that runs without reading the key produces **no receipt** and the adversarial trial remains `BLOCKED`. A later ordinary run sees the original base context value.
 
 This is local SDK application-context perturbation. It is not `os.environ`, network/service fault injection, filesystem/sandbox mutation, clock manipulation, secret-store mutation, provider configuration change, or cloud/IAM chaos.
+
+---
+
+## MCP fault receipt contracts
+
+```text
+metadata:
+  mcp:2026-07-28:tools/list:<tool>:description
+
+result:
+  mcp:2026-07-28:tools/call:<tool>:result.content[0].text
+
+error:
+  mcp:2026-07-28:tools/call:<tool>:error.content[0].text:message-suffix
+```
+
+Every probe uses a fresh server. Result/error faults are first-call-only and must recover to controlled benign output on the second call. Raw fault text is excluded from the receipt itself; the receipt stores integrity digests and the concrete protocol observation location.
+
+See [MCP Fault Laboratory](docs/MCP_LAB.md) for the complete trust and non-claim boundary.
 
 ---
 
@@ -268,6 +320,7 @@ qa-automation-ai-agent-evals/
 │       ├── contracts/
 │       ├── evidence/
 │       ├── gates/
+│       ├── mcp/
 │       ├── metamorphic/
 │       ├── minimization/
 │       ├── oracles/
@@ -283,12 +336,13 @@ qa-automation-ai-agent-evals/
 
 ## Verified quality baseline
 
-Current source + deterministic OpenAI SDK checkpoint:
+Current source checkpoint:
 
-- deterministic suite: **177 passed, 11 deselected**;
-- branch coverage: **93.78%** against the 90% gate;
-- strict mypy: **0 issues across 34 source files**;
-- independent OpenAI SDK suite: **11/11 passed**;
+- deterministic core: **180 passed, 14 deselected**;
+- branch coverage: **93.21%** against the 90% gate;
+- strict mypy: **0 issues across 37 source files**;
+- deterministic OpenAI SDK suite: **11/11 passed**;
+- deterministic MCP protocol suite: **3/3 passed**;
 - Python **3.11 and 3.13** quality jobs: green;
 - Ruff lint + formatter: green;
 - Bandit: green;
@@ -302,14 +356,20 @@ Current source + deterministic OpenAI SDK checkpoint:
 The repository does not currently claim:
 
 - credentialed live-provider behavioral assurance or production-provider reliability;
+- agent-through-MCP behavioral assurance, MCP-derived agent verdicts, or release acceptance from protocol receipts alone;
+- remote MCP Streamable HTTP, stdio, proxy, network, TLS, DNS, or transport fault coverage;
+- MCP authorization issuer/scope/credential-reuse/token-binding/CIMD assurance;
+- MCP cache staleness/invalidation/poisoning, header-routing faults, malformed JSON-RPC/framing, schema drift, duplicate/out-of-order responses, or complete protocol conformance;
+- malicious MCP resources, resource templates, prompts, roots, elicitation, sampling, subscriptions, or Tasks-extension coverage;
+- hosted third-party MCP server fidelity or remote target-side MCP delivery attestation;
 - production application-memory, vector/RAG-memory, provider-managed-conversation, or cross-user memory poisoning under SDK `MEMORY` mode;
 - hosted File Search/vector-store/RAG, `file_id`, `file_url`, external document/database/web, or MCP-resource interception under inline-file `RESOURCE` mode;
 - destination rerouting, every-hop poisoning, or distributed/remote handoff interception under native `HANDOFF` mode;
 - process-global environment variables, network/service faults, filesystem/sandbox state, clock faults, secrets, cloud/IAM, or production infrastructure chaos under local runtime-context `ENVIRONMENT` mode;
-- tool-name or parameter-schema poisoning under description-level `TOOL_METADATA` mode;
-- hosted/MCP/external-tool result or metadata interception;
-- cryptographically authenticated injector identity or target-side delivery attestation;
-- automatic/adaptive red-team generation, mutation/fuzzing campaigns, or executable MCP fault-server coverage;
+- tool-name or parameter-schema poisoning under description-level OpenAI `TOOL_METADATA` mode;
+- OpenAI hosted/MCP/external-tool result or metadata interception;
+- cryptographically authenticated injector identity, authenticated MCP server identity beyond the local deterministic harness, or target-side delivery attestation;
+- automatic/adaptive red-team generation, mutation/fuzzing campaigns, or sandbox-escape execution infrastructure;
 - authenticated hostile-writer evidence, signed/MAC-authenticated reports, trusted timestamps, remote attestation, WORM retention, or transparency-log anchoring;
 - calibrated semantic/model graders or automatic perturbation generation.
 
@@ -322,9 +382,10 @@ New capabilities move out of this list only after implementation, deterministic 
 1. [Architecture](docs/ARCHITECTURE.md)
 2. [Evaluation Model](docs/EVALUATION_MODEL.md)
 3. [Adversarial Testing](docs/ADVERSARIAL_TESTING.md)
-4. [OpenAI Adapter](docs/OPENAI_ADAPTER.md)
-5. [Evidence & Replay](docs/EVIDENCE_AND_REPLAY.md)
-6. [Session Assurance Reports](docs/ASSURANCE_REPORTS.md)
-7. [Statistical Assurance](docs/STATISTICAL_ASSURANCE.md)
-8. [Security](docs/SECURITY.md)
-9. [Limitations and Non-Claims](docs/LIMITATIONS.md)
+4. [MCP Fault Laboratory](docs/MCP_LAB.md)
+5. [OpenAI Adapter](docs/OPENAI_ADAPTER.md)
+6. [Evidence & Replay](docs/EVIDENCE_AND_REPLAY.md)
+7. [Session Assurance Reports](docs/ASSURANCE_REPORTS.md)
+8. [Statistical Assurance](docs/STATISTICAL_ASSURANCE.md)
+9. [Security](docs/SECURITY.md)
+10. [Limitations and Non-Claims](docs/LIMITATIONS.md)
