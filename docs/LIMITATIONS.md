@@ -51,13 +51,17 @@ Those require separate environment-specific adapters/injectors at the actual enf
 
 ### Local `TOOL_RESULT` replacement is not hosted/MCP interception
 
-The current result mode targets one exact local SDK `FunctionTool`. On the first matching call the original function is deliberately not executed; exact canonical fixture JSON becomes the result. Later calls use copied original behavior.
+The current OpenAI result mode targets one exact local SDK `FunctionTool`. On the first matching call the original function is deliberately not executed; exact canonical fixture JSON becomes the result. Later calls use copied original behavior.
 
 It does not claim hosted/MCP/external-server interception, generic support for every SDK tool type, preservation of original first-call side effects, or execute-then-perturb semantics.
 
+The separate MCP fault laboratory exercises MCP protocol surfaces directly; it does not turn this OpenAI local-tool mode into MCP interception.
+
 ### Local `TOOL_METADATA` means description poisoning
 
-The metadata mode changes only copied `FunctionTool.description`. It does not mutate tool name, parameter schema, invocation callback, approval semantics, routing identity, hosted metadata, MCP discovery metadata, or external registries.
+The OpenAI metadata mode changes only copied `FunctionTool.description`. It does not mutate tool name, parameter schema, invocation callback, approval semantics, routing identity, hosted metadata, MCP discovery metadata, or external registries.
+
+MCP description poisoning exists only in the separate protocol laboratory's `tools/list` boundary.
 
 ### SDK session-history `MEMORY` is not production memory poisoning
 
@@ -77,6 +81,33 @@ The handoff mode appends exact canonical fixture JSON to cloned context for the 
 
 It does not choose a new destination, rewrite handoff routing metadata, poison every transfer, intercept remote/distributed agent fabrics, or attest provider-side consumption.
 
+### MCP fault laboratory is protocol evidence, not agent assurance
+
+The repository now includes a deterministic MCP fault laboratory using official `mcp==2.1.1`, a real in-process `MCPServer`, the official `Client`, and protocol revision `2026-07-28`.
+
+Current implemented fault families are narrow:
+
+- exact target-tool description poisoning observed through `tools/list`;
+- exact first-call target-tool result poisoning observed through `tools/call`;
+- model-visible first-call `ToolError` carrying the canonical payload inside the SDK-generated error envelope.
+
+Every probe uses a fresh server. Result/error faults require a benign second call, proving one-shot recovery. `MCPFaultReceipt` binds fault identity, protocol version, tool, injection point, controlled payload digest, exact observed-text digest, and a receipt root without duplicating raw fault content.
+
+That implementation does **not** establish:
+
+- an autonomous agent receiving or resisting the MCP fault;
+- OpenAI `ATTACK_DELIVERY` semantics for MCP;
+- remote Streamable HTTP, stdio, proxy, network, TLS, or DNS behavior;
+- MCP authorization issuer, scope, credential reuse, token-binding, or CIMD behavior;
+- cache poisoning/staleness/invalidation or disappearing/renamed tools;
+- malformed JSON-RPC, invalid schemas, schema drift, duplicate/out-of-order responses, or `Mcp-Method`/`Mcp-Name` routing faults;
+- malicious resources, resource templates, prompts, roots, elicitation, sampling, subscriptions, or Tasks extension behavior;
+- hosted third-party MCP server fidelity;
+- complete protocol-conformance certification;
+- target-side or remote delivery attestation.
+
+Protocol observation is therefore not promoted to agent `PASS`, `FAIL`, release `ACCEPT`, or any equivalent behavioral conclusion.
+
 ### Approval requests are not approvals
 
 SDK `ToolApprovalItem` observations normalize as `APPROVAL_REQUEST`, never `APPROVAL`. Privileged execution requires independent authorization evidence.
@@ -87,9 +118,9 @@ The current framework does not use a model-as-judge. Deterministic state and pol
 
 ### Delivery receipts are not target-side attestation
 
-A valid receipt proves consistency relative to the trusted evaluator's controlled observation. It is not independent cryptographic proof that an arbitrary remote target consumed the stimulus.
+A valid OpenAI attack receipt proves consistency relative to the trusted evaluator's controlled observation. An `MCPFaultReceipt` similarly proves consistency relative to the trusted official-client observation. Neither is independent cryptographic proof that an arbitrary remote target consumed the stimulus.
 
-`injector:<identity>` is a label, not authenticated signer identity. Receipt roots are SHA-256 integrity values, not signatures, MACs, trusted timestamps, or hardware attestation.
+Control-plane identities are labels/content identities, not authenticated signer identities. Receipt roots are SHA-256 integrity values, not signatures, MACs, trusted timestamps, or hardware attestation.
 
 ### Local persistence is not hostile-writer authentication
 
@@ -99,7 +130,7 @@ The repository does not claim signatures/MACs, key management, trusted timestamp
 
 ### Replay is historical regrading, not re-execution
 
-`EvidenceReplayAdapter` requires exact trial/subject/scenario identity and can reapply deterministic grading to recorded evidence. It does not rerun providers, tools, sessions, resources, handoffs, environment injectors, or external state readers and cannot establish fresh delivery.
+`EvidenceReplayAdapter` requires exact trial/subject/scenario identity and can reapply deterministic grading to recorded evidence. It does not rerun providers, tools, sessions, resources, handoffs, environment injectors, MCP protocol probes, or external state readers and cannot establish fresh delivery.
 
 ### Assurance-report validation is not signed attestation
 
@@ -121,20 +152,17 @@ Resource scope uses string-prefix matching after adapter normalization. Real dep
 
 The repository currently executes no target-controlled arbitrary shell/code as an environment fault. Any future executor that does must implement and validate process, filesystem, and network containment separately.
 
-### No MCP server laboratory yet
-
-The taxonomy contains MCP-relevant threats, but the repository does not yet provide executable malicious/faulting MCP servers, protocol-conformance coverage, task/authorization fault suites, or target-side MCP delivery attestation.
-
 ## Current verification checkpoint
 
-- deterministic suite: **177 passed, 11 deselected**;
-- branch coverage: **93.78%**;
-- strict mypy: **0 issues across 34 source files**;
+- deterministic core: **180 passed, 14 deselected**;
+- branch coverage: **93.21%**;
+- strict mypy: **0 issues across 37 source files**;
 - deterministic OpenAI SDK suite: **11/11 passed**;
+- deterministic MCP protocol suite: **3/3 passed**;
 - Python 3.11/3.13 quality, Ruff, formatter, Bandit, dependency audit, and package integrity: green.
 
 ## Why these boundaries matter
 
-Agent evaluation is unusually vulnerable to false confidence because outputs can look persuasive while surrounding state, authority, or evaluator preconditions are wrong. The same discipline applies to this framework: documentation, badges, hashes, attack labels, receipts, and traces are not substitutes for the control they describe.
+Agent evaluation is unusually vulnerable to false confidence because outputs can look persuasive while surrounding state, authority, evaluator preconditions, or protocol delivery are wrong. The same discipline applies to this framework: documentation, badges, hashes, attack labels, receipts, protocol observations, and traces are not substitutes for the control they describe.
 
 Capabilities move out of this document only after implementation, deterministic evidence, and documentation review make the stronger claim true.
