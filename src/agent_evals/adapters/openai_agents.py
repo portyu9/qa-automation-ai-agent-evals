@@ -13,12 +13,15 @@ from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import asdict, is_dataclass
 from time import perf_counter
 
-from agent_evals.adapters.base import AdapterResult
+from agent_evals.adapters.base import AdapterPreconditionError, AdapterResult
+from agent_evals.adversarial.cases import AttackChannel, extract_attack
+from agent_evals.adversarial.delivery import AttackDeliveryReceipt
 from agent_evals.contracts.models import EvaluationScenario, SubjectFingerprint
 from agent_evals.evidence.models import EvidenceEvent, EvidenceKind
 
 StateReader = Callable[[], Mapping[str, object] | Awaitable[Mapping[str, object]]]
 ResourceResolver = Callable[[str, str | None], str | None]
+RunnerInput = str | list[dict[str, str]]
 
 
 class OpenAIAgentsAdapter:
@@ -62,6 +65,7 @@ class OpenAIAgentsAdapter:
         except ImportError as exc:  # pragma: no cover
             raise RuntimeError("install the 'openai' extra to use OpenAIAgentsAdapter") from exc
 
+        runner_input, delivery_events = self._prepare_input(scenario)
         started = perf_counter()
         run_config = RunConfig(
             tracing_disabled=self._tracing_disabled,
@@ -72,25 +76,27 @@ class OpenAIAgentsAdapter:
         try:
             result = await Runner.run(
                 self._agent,
-                scenario.objective,
+                runner_input,
                 max_turns=scenario.authority.max_turns,
                 run_config=run_config,
             )
         except MaxTurnsExceeded:
             final_state = await self._read_state()
+            events = list(delivery_events)
+            events.append(
+                EvidenceEvent(
+                    sequence=len(events),
+                    kind=EvidenceKind.POLICY_VIOLATION,
+                    source="openai-agents:runner",
+                    payload={
+                        "reason": "turn budget exceeded",
+                        "max_turns": scenario.authority.max_turns,
+                    },
+                    critical=True,
+                )
+            )
             return AdapterResult(
-                events=(
-                    EvidenceEvent(
-                        sequence=0,
-                        kind=EvidenceKind.POLICY_VIOLATION,
-                        source="openai-agents:runner",
-                        payload={
-                            "reason": "turn budget exceeded",
-                            "max_turns": scenario.authority.max_turns,
-                        },
-                        critical=True,
-                    ),
-                ),
+                events=tuple(events),
                 final_state=final_state,
                 elapsed_ms=(perf_counter() - started) * 1000.0,
             )
@@ -101,23 +107,26 @@ class OpenAIAgentsAdapter:
             ToolOutputGuardrailTripwireTriggered,
         ) as exc:
             final_state = await self._read_state()
+            events = list(delivery_events)
+            events.append(
+                EvidenceEvent(
+                    sequence=len(events),
+                    kind=EvidenceKind.GUARDRAIL,
+                    source="openai-agents:guardrail",
+                    payload={
+                        "tripwire_triggered": True,
+                        "exception_type": type(exc).__name__,
+                    },
+                )
+            )
             return AdapterResult(
-                events=(
-                    EvidenceEvent(
-                        sequence=0,
-                        kind=EvidenceKind.GUARDRAIL,
-                        source="openai-agents:guardrail",
-                        payload={
-                            "tripwire_triggered": True,
-                            "exception_type": type(exc).__name__,
-                        },
-                    ),
-                ),
+                events=tuple(events),
                 final_state=final_state,
                 elapsed_ms=(perf_counter() - started) * 1000.0,
             )
 
-        events = self._normalize_items(result.new_items)
+        events = list(delivery_events)
+        events.extend(self._normalize_items(result.new_items, start_sequence=len(events)))
         events.extend(self._normalize_guardrails(result, start_sequence=len(events)))
         if result.final_output is not None:
             events.append(
@@ -140,13 +149,49 @@ class OpenAIAgentsAdapter:
             output_tokens=usage.output_tokens,
         )
 
+    @staticmethod
+    def _prepare_input(
+        scenario: EvaluationScenario,
+    ) -> tuple[RunnerInput, tuple[EvidenceEvent, ...]]:
+        attack = extract_attack(scenario)
+        if attack is None:
+            return scenario.objective, ()
+        if attack.channel is not AttackChannel.USER_INPUT:
+            raise AdapterPreconditionError(
+                code="unsupported_attack_channel",
+                reason=(
+                    "openai-agents adapter does not implement adversarial channel "
+                    f"{attack.channel.value!r}"
+                ),
+            )
+
+        injection_point = "openai-agents:Runner.run.input[1]"
+        receipt = AttackDeliveryReceipt.from_scenario(
+            scenario,
+            injection_point=injection_point,
+        )
+        event = receipt.to_event(
+            sequence=0,
+            source="injector:openai-agents:user-input",
+        )
+        runner_input: list[dict[str, str]] = [
+            {"role": "user", "content": scenario.objective},
+            {"role": "user", "content": attack.payload_json},
+        ]
+        return runner_input, (event,)
+
     async def _read_state(self) -> dict[str, object]:
         observed = self._state_reader()
         if inspect.isawaitable(observed):
             observed = await observed
         return dict(observed)
 
-    def _normalize_items(self, items: Sequence[object]) -> list[EvidenceEvent]:
+    def _normalize_items(
+        self,
+        items: Sequence[object],
+        *,
+        start_sequence: int = 0,
+    ) -> list[EvidenceEvent]:
         from agents.items import (
             HandoffOutputItem,
             ToolApprovalItem,
@@ -174,7 +219,7 @@ class OpenAIAgentsAdapter:
                         payload["resource"] = resource
                 events.append(
                     EvidenceEvent(
-                        sequence=len(events),
+                        sequence=start_sequence + len(events),
                         kind=EvidenceKind.TOOL_REQUEST,
                         source="openai-agents:new_items",
                         payload=_json_safe_mapping(payload),
@@ -183,7 +228,7 @@ class OpenAIAgentsAdapter:
             elif isinstance(item, ToolCallOutputItem):
                 events.append(
                     EvidenceEvent(
-                        sequence=len(events),
+                        sequence=start_sequence + len(events),
                         kind=EvidenceKind.TOOL_RESULT,
                         source="openai-agents:new_items",
                         payload={"call_id": item.call_id, "output": _json_safe(item.output)},
@@ -192,7 +237,7 @@ class OpenAIAgentsAdapter:
             elif isinstance(item, HandoffOutputItem):
                 events.append(
                     EvidenceEvent(
-                        sequence=len(events),
+                        sequence=start_sequence + len(events),
                         kind=EvidenceKind.HANDOFF,
                         source="openai-agents:new_items",
                         payload={
@@ -204,7 +249,7 @@ class OpenAIAgentsAdapter:
             elif isinstance(item, ToolApprovalItem):
                 events.append(
                     EvidenceEvent(
-                        sequence=len(events),
+                        sequence=start_sequence + len(events),
                         kind=EvidenceKind.APPROVAL_REQUEST,
                         source="openai-agents:new_items",
                         payload={
