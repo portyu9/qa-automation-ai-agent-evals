@@ -13,10 +13,14 @@ from collections.abc import Awaitable, Callable, Mapping, Sequence
 from copy import copy
 from dataclasses import asdict, dataclass, is_dataclass
 from time import perf_counter
+from typing import Any
 
 from agent_evals.adapters.base import AdapterPreconditionError, AdapterResult
 from agent_evals.adversarial.cases import AttackChannel, AttackFixture, extract_attack
-from agent_evals.adversarial.channels import ToolResultAttackPayload
+from agent_evals.adversarial.channels import (
+    ToolMetadataAttackPayload,
+    ToolResultAttackPayload,
+)
 from agent_evals.adversarial.delivery import AttackDeliveryReceipt
 from agent_evals.contracts.models import EvaluationScenario, SubjectFingerprint
 from agent_evals.evidence.models import EvidenceEvent, EvidenceKind
@@ -197,6 +201,9 @@ class OpenAIAgentsAdapter:
         if attack.channel is AttackChannel.TOOL_RESULT:
             runner_agent, recorder = self._prepare_tool_result_agent(scenario, attack)
             return runner_agent, scenario.objective, (), recorder
+        if attack.channel is AttackChannel.TOOL_METADATA:
+            runner_agent, events = self._prepare_tool_metadata_agent(scenario, attack)
+            return runner_agent, scenario.objective, events, None
         raise AdapterPreconditionError(
             code="unsupported_attack_channel",
             reason=(
@@ -211,11 +218,6 @@ class OpenAIAgentsAdapter:
         attack: AttackFixture,
     ) -> tuple[object, _ToolResultDeliveryRecorder]:
         try:
-            from agents import Agent, FunctionTool
-        except ImportError as exc:  # pragma: no cover
-            raise RuntimeError("install the 'openai' extra to use OpenAIAgentsAdapter") from exc
-
-        try:
             spec = ToolResultAttackPayload.from_fixture(attack)
         except ValueError as exc:
             raise AdapterPreconditionError(
@@ -223,31 +225,10 @@ class OpenAIAgentsAdapter:
                 reason="tool-result attack payload does not satisfy the required routing contract",
             ) from exc
 
-        if not isinstance(self._agent, Agent):
-            raise AdapterPreconditionError(
-                code="unsupported_agent_type",
-                reason="tool-result injection requires an OpenAI Agents SDK Agent instance",
-            )
-
-        same_name = [tool for tool in self._agent.tools if _raw_attr(tool, "name") == spec.tool]
-        function_matches = [tool for tool in same_name if isinstance(tool, FunctionTool)]
-        if not same_name:
-            raise AdapterPreconditionError(
-                code="attack_target_unavailable",
-                reason=f"local tool-result attack target {spec.tool!r} is unavailable",
-            )
-        if not function_matches:
-            raise AdapterPreconditionError(
-                code="unsupported_attack_target_type",
-                reason=(f"tool-result attack target {spec.tool!r} is not a local FunctionTool"),
-            )
-        if len(same_name) != 1 or len(function_matches) != 1:
-            raise AdapterPreconditionError(
-                code="ambiguous_attack_target",
-                reason=f"tool-result attack target {spec.tool!r} is not unique",
-            )
-
-        target = function_matches[0]
+        agent, target = self._resolve_local_function_tool(
+            tool_name=spec.tool,
+            attack_label="tool-result",
+        )
         wrapped_target = copy(target)
         original_invoke = wrapped_target.on_invoke_tool
         recorder = _ToolResultDeliveryRecorder()
@@ -274,8 +255,79 @@ class OpenAIAgentsAdapter:
             return attack.payload_json
 
         wrapped_target.on_invoke_tool = inject_tool_result
-        tools = [wrapped_target if tool is target else tool for tool in self._agent.tools]
-        return self._agent.clone(tools=tools), recorder
+        tools = [wrapped_target if tool is target else tool for tool in agent.tools]
+        return agent.clone(tools=tools), recorder
+
+    def _prepare_tool_metadata_agent(
+        self,
+        scenario: EvaluationScenario,
+        attack: AttackFixture,
+    ) -> tuple[object, tuple[EvidenceEvent, ...]]:
+        try:
+            spec = ToolMetadataAttackPayload.from_fixture(attack)
+        except ValueError as exc:
+            raise AdapterPreconditionError(
+                code="invalid_tool_metadata_attack",
+                reason="tool-metadata attack payload does not satisfy the required routing contract",
+            ) from exc
+
+        agent, target = self._resolve_local_function_tool(
+            tool_name=spec.tool,
+            attack_label="tool-metadata",
+        )
+        wrapped_target = copy(target)
+        wrapped_target.description = attack.payload_json
+        tools = [wrapped_target if tool is target else tool for tool in agent.tools]
+        runner_agent = agent.clone(tools=tools)
+
+        injection_point = f"openai-agents:FunctionTool:{spec.tool}:description"
+        receipt = AttackDeliveryReceipt.from_scenario(
+            scenario,
+            injection_point=injection_point,
+        )
+        event = receipt.to_event(
+            sequence=0,
+            source="injector:openai-agents:tool-metadata",
+        )
+        return runner_agent, (event,)
+
+    def _resolve_local_function_tool(
+        self,
+        *,
+        tool_name: str,
+        attack_label: str,
+    ) -> tuple[Any, Any]:
+        try:
+            from agents import Agent, FunctionTool
+        except ImportError as exc:  # pragma: no cover
+            raise RuntimeError("install the 'openai' extra to use OpenAIAgentsAdapter") from exc
+
+        if not isinstance(self._agent, Agent):
+            raise AdapterPreconditionError(
+                code="unsupported_agent_type",
+                reason=(
+                    f"{attack_label} injection requires an OpenAI Agents SDK Agent instance"
+                ),
+            )
+
+        same_name = [tool for tool in self._agent.tools if _raw_attr(tool, "name") == tool_name]
+        function_matches = [tool for tool in same_name if isinstance(tool, FunctionTool)]
+        if not same_name:
+            raise AdapterPreconditionError(
+                code="attack_target_unavailable",
+                reason=f"local {attack_label} attack target {tool_name!r} is unavailable",
+            )
+        if not function_matches:
+            raise AdapterPreconditionError(
+                code="unsupported_attack_target_type",
+                reason=f"{attack_label} attack target {tool_name!r} is not a local FunctionTool",
+            )
+        if len(same_name) != 1 or len(function_matches) != 1:
+            raise AdapterPreconditionError(
+                code="ambiguous_attack_target",
+                reason=f"{attack_label} attack target {tool_name!r} is not unique",
+            )
+        return self._agent, function_matches[0]
 
     @staticmethod
     def _raise_recorder_identity_error(
