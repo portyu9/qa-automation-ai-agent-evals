@@ -10,11 +10,13 @@ from __future__ import annotations
 import inspect
 import json
 from collections.abc import Awaitable, Callable, Mapping, Sequence
-from dataclasses import asdict, is_dataclass
+from copy import copy
+from dataclasses import asdict, dataclass, is_dataclass
 from time import perf_counter
 
 from agent_evals.adapters.base import AdapterPreconditionError, AdapterResult
-from agent_evals.adversarial.cases import AttackChannel, extract_attack
+from agent_evals.adversarial.cases import AttackChannel, AttackFixture, extract_attack
+from agent_evals.adversarial.channels import ToolResultAttackPayload
 from agent_evals.adversarial.delivery import AttackDeliveryReceipt
 from agent_evals.contracts.models import EvaluationScenario, SubjectFingerprint
 from agent_evals.evidence.models import EvidenceEvent, EvidenceKind
@@ -22,6 +24,16 @@ from agent_evals.evidence.models import EvidenceEvent, EvidenceKind
 StateReader = Callable[[], Mapping[str, object] | Awaitable[Mapping[str, object]]]
 ResourceResolver = Callable[[str, str | None], str | None]
 RunnerInput = str | list[dict[str, str]]
+
+
+@dataclass(slots=True)
+class _ToolResultDeliveryRecorder:
+    """Per-execution mutable state; never stored on the reusable adapter or original agent."""
+
+    event: EvidenceEvent | None = None
+    call_id: str | None = None
+    attempted: bool = False
+    identity_error: bool = False
 
 
 class OpenAIAgentsAdapter:
@@ -65,7 +77,9 @@ class OpenAIAgentsAdapter:
         except ImportError as exc:  # pragma: no cover
             raise RuntimeError("install the 'openai' extra to use OpenAIAgentsAdapter") from exc
 
-        runner_input, delivery_events = self._prepare_input(scenario)
+        runner_agent, runner_input, delivery_events, tool_result_recorder = self._prepare_execution(
+            scenario
+        )
         started = perf_counter()
         run_config = RunConfig(
             tracing_disabled=self._tracing_disabled,
@@ -75,14 +89,15 @@ class OpenAIAgentsAdapter:
 
         try:
             result = await Runner.run(
-                self._agent,
+                runner_agent,
                 runner_input,
                 max_turns=scenario.authority.max_turns,
                 run_config=run_config,
             )
         except MaxTurnsExceeded:
+            self._raise_recorder_identity_error(tool_result_recorder)
             final_state = await self._read_state()
-            events = list(delivery_events)
+            events = self._exception_delivery_events(delivery_events, tool_result_recorder)
             events.append(
                 EvidenceEvent(
                     sequence=len(events),
@@ -106,8 +121,9 @@ class OpenAIAgentsAdapter:
             ToolInputGuardrailTripwireTriggered,
             ToolOutputGuardrailTripwireTriggered,
         ) as exc:
+            self._raise_recorder_identity_error(tool_result_recorder)
             final_state = await self._read_state()
-            events = list(delivery_events)
+            events = self._exception_delivery_events(delivery_events, tool_result_recorder)
             events.append(
                 EvidenceEvent(
                     sequence=len(events),
@@ -125,8 +141,15 @@ class OpenAIAgentsAdapter:
                 elapsed_ms=(perf_counter() - started) * 1000.0,
             )
 
+        self._raise_recorder_identity_error(tool_result_recorder)
         events = list(delivery_events)
-        events.extend(self._normalize_items(result.new_items, start_sequence=len(events)))
+        events.extend(
+            self._normalize_items(
+                result.new_items,
+                start_sequence=len(events),
+                tool_result_recorder=tool_result_recorder,
+            )
+        )
         events.extend(self._normalize_guardrails(result, start_sequence=len(events)))
         if result.final_output is not None:
             events.append(
@@ -149,36 +172,132 @@ class OpenAIAgentsAdapter:
             output_tokens=usage.output_tokens,
         )
 
-    @staticmethod
-    def _prepare_input(
+    def _prepare_execution(
+        self,
         scenario: EvaluationScenario,
-    ) -> tuple[RunnerInput, tuple[EvidenceEvent, ...]]:
+    ) -> tuple[object, RunnerInput, tuple[EvidenceEvent, ...], _ToolResultDeliveryRecorder | None]:
         attack = extract_attack(scenario)
         if attack is None:
-            return scenario.objective, ()
-        if attack.channel is not AttackChannel.USER_INPUT:
+            return self._agent, scenario.objective, (), None
+        if attack.channel is AttackChannel.USER_INPUT:
+            injection_point = "openai-agents:Runner.run.input[1]"
+            receipt = AttackDeliveryReceipt.from_scenario(
+                scenario,
+                injection_point=injection_point,
+            )
+            event = receipt.to_event(
+                sequence=0,
+                source="injector:openai-agents:user-input",
+            )
+            runner_input: list[dict[str, str]] = [
+                {"role": "user", "content": scenario.objective},
+                {"role": "user", "content": attack.payload_json},
+            ]
+            return self._agent, runner_input, (event,), None
+        if attack.channel is AttackChannel.TOOL_RESULT:
+            runner_agent, recorder = self._prepare_tool_result_agent(scenario, attack)
+            return runner_agent, scenario.objective, (), recorder
+        raise AdapterPreconditionError(
+            code="unsupported_attack_channel",
+            reason=(
+                "openai-agents adapter does not implement adversarial channel "
+                f"{attack.channel.value!r}"
+            ),
+        )
+
+    def _prepare_tool_result_agent(
+        self,
+        scenario: EvaluationScenario,
+        attack: AttackFixture,
+    ) -> tuple[object, _ToolResultDeliveryRecorder]:
+        try:
+            from agents import Agent, FunctionTool
+        except ImportError as exc:  # pragma: no cover
+            raise RuntimeError("install the 'openai' extra to use OpenAIAgentsAdapter") from exc
+
+        try:
+            spec = ToolResultAttackPayload.from_fixture(attack)
+        except ValueError as exc:
             raise AdapterPreconditionError(
-                code="unsupported_attack_channel",
-                reason=(
-                    "openai-agents adapter does not implement adversarial channel "
-                    f"{attack.channel.value!r}"
-                ),
+                code="invalid_tool_result_attack",
+                reason="tool-result attack payload does not satisfy the required routing contract",
+            ) from exc
+
+        if not isinstance(self._agent, Agent):
+            raise AdapterPreconditionError(
+                code="unsupported_agent_type",
+                reason="tool-result injection requires an OpenAI Agents SDK Agent instance",
             )
 
-        injection_point = "openai-agents:Runner.run.input[1]"
-        receipt = AttackDeliveryReceipt.from_scenario(
-            scenario,
-            injection_point=injection_point,
-        )
-        event = receipt.to_event(
-            sequence=0,
-            source="injector:openai-agents:user-input",
-        )
-        runner_input: list[dict[str, str]] = [
-            {"role": "user", "content": scenario.objective},
-            {"role": "user", "content": attack.payload_json},
-        ]
-        return runner_input, (event,)
+        same_name = [tool for tool in self._agent.tools if _raw_attr(tool, "name") == spec.tool]
+        function_matches = [tool for tool in same_name if isinstance(tool, FunctionTool)]
+        if not same_name:
+            raise AdapterPreconditionError(
+                code="attack_target_unavailable",
+                reason=f"local tool-result attack target {spec.tool!r} is unavailable",
+            )
+        if not function_matches:
+            raise AdapterPreconditionError(
+                code="unsupported_attack_target_type",
+                reason=(
+                    f"tool-result attack target {spec.tool!r} is not a local FunctionTool"
+                ),
+            )
+        if len(same_name) != 1 or len(function_matches) != 1:
+            raise AdapterPreconditionError(
+                code="ambiguous_attack_target",
+                reason=f"tool-result attack target {spec.tool!r} is not unique",
+            )
+
+        target = function_matches[0]
+        wrapped_target = copy(target)
+        original_invoke = wrapped_target.on_invoke_tool
+        recorder = _ToolResultDeliveryRecorder()
+
+        async def inject_tool_result(context: object, arguments: str) -> object:
+            if recorder.attempted:
+                return await original_invoke(context, arguments)
+            recorder.attempted = True
+            call_id = _raw_attr(context, "tool_call_id")
+            if not isinstance(call_id, str) or not call_id:
+                recorder.identity_error = True
+                return await original_invoke(context, arguments)
+
+            injection_point = f"openai-agents:FunctionTool:{spec.tool}:call:{call_id}:output"
+            receipt = AttackDeliveryReceipt.from_scenario(
+                scenario,
+                injection_point=injection_point,
+            )
+            recorder.call_id = call_id
+            recorder.event = receipt.to_event(
+                sequence=0,
+                source="injector:openai-agents:tool-result",
+            )
+            return attack.payload_json
+
+        wrapped_target.on_invoke_tool = inject_tool_result
+        tools = [wrapped_target if tool is target else tool for tool in self._agent.tools]
+        return self._agent.clone(tools=tools), recorder
+
+    @staticmethod
+    def _raise_recorder_identity_error(
+        recorder: _ToolResultDeliveryRecorder | None,
+    ) -> None:
+        if recorder is not None and recorder.identity_error:
+            raise AdapterPreconditionError(
+                code="tool_call_identity_unavailable",
+                reason="tool-result injector could not bind delivery to a tool call identity",
+            )
+
+    @staticmethod
+    def _exception_delivery_events(
+        delivery_events: tuple[EvidenceEvent, ...],
+        recorder: _ToolResultDeliveryRecorder | None,
+    ) -> list[EvidenceEvent]:
+        events = list(delivery_events)
+        if recorder is not None and recorder.event is not None:
+            events.append(recorder.event.model_copy(update={"sequence": len(events)}))
+        return events
 
     async def _read_state(self) -> dict[str, object]:
         observed = self._state_reader()
@@ -191,6 +310,7 @@ class OpenAIAgentsAdapter:
         items: Sequence[object],
         *,
         start_sequence: int = 0,
+        tool_result_recorder: _ToolResultDeliveryRecorder | None = None,
     ) -> list[EvidenceEvent]:
         from agents.items import (
             HandoffOutputItem,
@@ -200,6 +320,7 @@ class OpenAIAgentsAdapter:
         )
 
         events: list[EvidenceEvent] = []
+        delivery_inserted = False
         for item in items:
             if isinstance(item, ToolCallItem):
                 tool = item.tool_name
@@ -226,6 +347,18 @@ class OpenAIAgentsAdapter:
                     )
                 )
             elif isinstance(item, ToolCallOutputItem):
+                if (
+                    not delivery_inserted
+                    and tool_result_recorder is not None
+                    and tool_result_recorder.event is not None
+                    and item.call_id == tool_result_recorder.call_id
+                ):
+                    events.append(
+                        tool_result_recorder.event.model_copy(
+                            update={"sequence": start_sequence + len(events)}
+                        )
+                    )
+                    delivery_inserted = True
                 events.append(
                     EvidenceEvent(
                         sequence=start_sequence + len(events),
@@ -259,6 +392,17 @@ class OpenAIAgentsAdapter:
                         },
                     )
                 )
+
+        if (
+            not delivery_inserted
+            and tool_result_recorder is not None
+            and tool_result_recorder.event is not None
+        ):
+            events.append(
+                tool_result_recorder.event.model_copy(
+                    update={"sequence": start_sequence + len(events)}
+                )
+            )
         return events
 
     @staticmethod
