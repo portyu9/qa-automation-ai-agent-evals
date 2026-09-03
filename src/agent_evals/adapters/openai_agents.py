@@ -18,6 +18,7 @@ from typing import Any
 from agent_evals.adapters.base import AdapterPreconditionError, AdapterResult
 from agent_evals.adversarial.cases import AttackChannel, AttackFixture, extract_attack
 from agent_evals.adversarial.channels import (
+    HandoffAttackPayload,
     MemoryAttackPayload,
     ToolMetadataAttackPayload,
     ToolResultAttackPayload,
@@ -33,12 +34,33 @@ RunnerInput = str | list[dict[str, str]]
 
 @dataclass(slots=True)
 class _ToolResultDeliveryRecorder:
-    """Per-execution mutable state; never stored on the reusable adapter or original agent."""
+    """Per-execution mutable state for one-shot local tool-result delivery."""
 
     event: EvidenceEvent | None = None
     call_id: str | None = None
     attempted: bool = False
     identity_error: bool = False
+
+
+@dataclass(slots=True)
+class _HandoffDeliveryRecorder:
+    """Per-execution state proving that the first SDK handoff filter actually ran."""
+
+    event: EvidenceEvent | None = None
+    attempted: bool = False
+
+
+@dataclass(frozen=True, slots=True)
+class _PreparedExecution:
+    """All provider-specific execution inputs prepared for exactly one trial."""
+
+    agent: object
+    runner_input: RunnerInput
+    delivery_events: tuple[EvidenceEvent, ...] = ()
+    tool_result_recorder: _ToolResultDeliveryRecorder | None = None
+    session: object | None = None
+    handoff_input_filter: Any | None = None
+    handoff_recorder: _HandoffDeliveryRecorder | None = None
 
 
 class _InjectedMemorySession:
@@ -110,32 +132,27 @@ class OpenAIAgentsAdapter:
         except ImportError as exc:  # pragma: no cover
             raise RuntimeError("install the 'openai' extra to use OpenAIAgentsAdapter") from exc
 
-        (
-            runner_agent,
-            runner_input,
-            delivery_events,
-            tool_result_recorder,
-            runner_session,
-        ) = self._prepare_execution(scenario)
+        prepared = self._prepare_execution(scenario)
         started = perf_counter()
         run_config = RunConfig(
             tracing_disabled=self._tracing_disabled,
             trace_include_sensitive_data=False,
             workflow_name=f"agent-eval:{scenario.scenario_id}",
+            handoff_input_filter=prepared.handoff_input_filter,
         )
 
         try:
             result = await Runner.run(
-                runner_agent,
-                runner_input,
+                prepared.agent,
+                prepared.runner_input,
                 max_turns=scenario.authority.max_turns,
                 run_config=run_config,
-                session=runner_session,
+                session=prepared.session,
             )
         except MaxTurnsExceeded:
-            self._raise_recorder_identity_error(tool_result_recorder)
+            self._raise_recorder_identity_error(prepared.tool_result_recorder)
             final_state = await self._read_state()
-            events = self._exception_delivery_events(delivery_events, tool_result_recorder)
+            events = self._exception_delivery_events(prepared)
             events.append(
                 EvidenceEvent(
                     sequence=len(events),
@@ -159,9 +176,9 @@ class OpenAIAgentsAdapter:
             ToolInputGuardrailTripwireTriggered,
             ToolOutputGuardrailTripwireTriggered,
         ) as exc:
-            self._raise_recorder_identity_error(tool_result_recorder)
+            self._raise_recorder_identity_error(prepared.tool_result_recorder)
             final_state = await self._read_state()
-            events = self._exception_delivery_events(delivery_events, tool_result_recorder)
+            events = self._exception_delivery_events(prepared)
             events.append(
                 EvidenceEvent(
                     sequence=len(events),
@@ -179,13 +196,14 @@ class OpenAIAgentsAdapter:
                 elapsed_ms=(perf_counter() - started) * 1000.0,
             )
 
-        self._raise_recorder_identity_error(tool_result_recorder)
-        events = list(delivery_events)
+        self._raise_recorder_identity_error(prepared.tool_result_recorder)
+        events = list(prepared.delivery_events)
         events.extend(
             self._normalize_items(
                 result.new_items,
                 start_sequence=len(events),
-                tool_result_recorder=tool_result_recorder,
+                tool_result_recorder=prepared.tool_result_recorder,
+                handoff_recorder=prepared.handoff_recorder,
             )
         )
         events.extend(self._normalize_guardrails(result, start_sequence=len(events)))
@@ -210,19 +228,10 @@ class OpenAIAgentsAdapter:
             output_tokens=usage.output_tokens,
         )
 
-    def _prepare_execution(
-        self,
-        scenario: EvaluationScenario,
-    ) -> tuple[
-        object,
-        RunnerInput,
-        tuple[EvidenceEvent, ...],
-        _ToolResultDeliveryRecorder | None,
-        object | None,
-    ]:
+    def _prepare_execution(self, scenario: EvaluationScenario) -> _PreparedExecution:
         attack = extract_attack(scenario)
         if attack is None:
-            return self._agent, scenario.objective, (), None, None
+            return _PreparedExecution(agent=self._agent, runner_input=scenario.objective)
         if attack.channel is AttackChannel.USER_INPUT:
             injection_point = "openai-agents:Runner.run.input[1]"
             receipt = AttackDeliveryReceipt.from_scenario(
@@ -237,16 +246,41 @@ class OpenAIAgentsAdapter:
                 {"role": "user", "content": scenario.objective},
                 {"role": "user", "content": attack.payload_json},
             ]
-            return self._agent, runner_input, (event,), None, None
+            return _PreparedExecution(
+                agent=self._agent,
+                runner_input=runner_input,
+                delivery_events=(event,),
+            )
         if attack.channel is AttackChannel.TOOL_RESULT:
             runner_agent, recorder = self._prepare_tool_result_agent(scenario, attack)
-            return runner_agent, scenario.objective, (), recorder, None
+            return _PreparedExecution(
+                agent=runner_agent,
+                runner_input=scenario.objective,
+                tool_result_recorder=recorder,
+            )
         if attack.channel is AttackChannel.TOOL_METADATA:
             runner_agent, events = self._prepare_tool_metadata_agent(scenario, attack)
-            return runner_agent, scenario.objective, events, None, None
+            return _PreparedExecution(
+                agent=runner_agent,
+                runner_input=scenario.objective,
+                delivery_events=events,
+            )
         if attack.channel is AttackChannel.MEMORY:
             runner_session, events = self._prepare_memory_session(scenario, attack)
-            return self._agent, scenario.objective, events, None, runner_session
+            return _PreparedExecution(
+                agent=self._agent,
+                runner_input=scenario.objective,
+                delivery_events=events,
+                session=runner_session,
+            )
+        if attack.channel is AttackChannel.HANDOFF:
+            handoff_filter, recorder = self._prepare_handoff_filter(scenario, attack)
+            return _PreparedExecution(
+                agent=self._agent,
+                runner_input=scenario.objective,
+                handoff_input_filter=handoff_filter,
+                handoff_recorder=recorder,
+            )
         raise AdapterPreconditionError(
             code="unsupported_attack_channel",
             reason=(
@@ -361,6 +395,63 @@ class OpenAIAgentsAdapter:
         )
         return session, (event,)
 
+    @staticmethod
+    def _prepare_handoff_filter(
+        scenario: EvaluationScenario,
+        attack: AttackFixture,
+    ) -> tuple[Any, _HandoffDeliveryRecorder]:
+        try:
+            HandoffAttackPayload.from_fixture(attack)
+        except ValueError as exc:
+            raise AdapterPreconditionError(
+                code="invalid_handoff_attack",
+                reason="handoff attack payload does not satisfy the context-transfer contract",
+            ) from exc
+
+        recorder = _HandoffDeliveryRecorder()
+
+        def inject_first_handoff_context(handoff_input_data: Any) -> Any:
+            if recorder.attempted:
+                return handoff_input_data
+
+            history = handoff_input_data.input_history
+            poison = {"role": "user", "content": attack.payload_json}
+            if isinstance(history, str):
+                injected_history = (
+                    {"role": "user", "content": history},
+                    poison,
+                )
+            elif isinstance(history, tuple):
+                injected_history = (*history, poison)
+            else:
+                raise AdapterPreconditionError(
+                    code="handoff_input_contract_unavailable",
+                    reason="handoff injector received an unsupported SDK input-history shape",
+                )
+
+            clone = getattr(handoff_input_data, "clone", None)
+            if not callable(clone):
+                raise AdapterPreconditionError(
+                    code="handoff_input_contract_unavailable",
+                    reason="handoff injector cannot clone the SDK handoff input contract",
+                )
+
+            injected = clone(input_history=injected_history)
+            receipt = AttackDeliveryReceipt.from_scenario(
+                scenario,
+                injection_point=(
+                    "openai-agents:RunConfig.handoff_input_filter:first:input_history[-1]"
+                ),
+            )
+            recorder.event = receipt.to_event(
+                sequence=0,
+                source="injector:openai-agents:handoff-context",
+            )
+            recorder.attempted = True
+            return injected
+
+        return inject_first_handoff_context, recorder
+
     def _resolve_local_function_tool(
         self,
         *,
@@ -408,13 +499,11 @@ class OpenAIAgentsAdapter:
             )
 
     @staticmethod
-    def _exception_delivery_events(
-        delivery_events: tuple[EvidenceEvent, ...],
-        recorder: _ToolResultDeliveryRecorder | None,
-    ) -> list[EvidenceEvent]:
-        events = list(delivery_events)
-        if recorder is not None and recorder.event is not None:
-            events.append(recorder.event.model_copy(update={"sequence": len(events)}))
+    def _exception_delivery_events(prepared: _PreparedExecution) -> list[EvidenceEvent]:
+        events = list(prepared.delivery_events)
+        for recorder in (prepared.tool_result_recorder, prepared.handoff_recorder):
+            if recorder is not None and recorder.event is not None:
+                events.append(recorder.event.model_copy(update={"sequence": len(events)}))
         return events
 
     async def _read_state(self) -> dict[str, object]:
@@ -429,6 +518,7 @@ class OpenAIAgentsAdapter:
         *,
         start_sequence: int = 0,
         tool_result_recorder: _ToolResultDeliveryRecorder | None = None,
+        handoff_recorder: _HandoffDeliveryRecorder | None = None,
     ) -> list[EvidenceEvent]:
         from agents.items import (
             HandoffOutputItem,
@@ -438,7 +528,8 @@ class OpenAIAgentsAdapter:
         )
 
         events: list[EvidenceEvent] = []
-        delivery_inserted = False
+        tool_delivery_inserted = False
+        handoff_delivery_inserted = False
         for item in items:
             if isinstance(item, ToolCallItem):
                 tool = item.tool_name
@@ -466,7 +557,7 @@ class OpenAIAgentsAdapter:
                 )
             elif isinstance(item, ToolCallOutputItem):
                 if (
-                    not delivery_inserted
+                    not tool_delivery_inserted
                     and tool_result_recorder is not None
                     and tool_result_recorder.event is not None
                     and item.call_id == tool_result_recorder.call_id
@@ -476,7 +567,7 @@ class OpenAIAgentsAdapter:
                             update={"sequence": start_sequence + len(events)}
                         )
                     )
-                    delivery_inserted = True
+                    tool_delivery_inserted = True
                 events.append(
                     EvidenceEvent(
                         sequence=start_sequence + len(events),
@@ -497,6 +588,17 @@ class OpenAIAgentsAdapter:
                         },
                     )
                 )
+                if (
+                    not handoff_delivery_inserted
+                    and handoff_recorder is not None
+                    and handoff_recorder.event is not None
+                ):
+                    events.append(
+                        handoff_recorder.event.model_copy(
+                            update={"sequence": start_sequence + len(events)}
+                        )
+                    )
+                    handoff_delivery_inserted = True
             elif isinstance(item, ToolApprovalItem):
                 events.append(
                     EvidenceEvent(
@@ -512,12 +614,22 @@ class OpenAIAgentsAdapter:
                 )
 
         if (
-            not delivery_inserted
+            not tool_delivery_inserted
             and tool_result_recorder is not None
             and tool_result_recorder.event is not None
         ):
             events.append(
                 tool_result_recorder.event.model_copy(
+                    update={"sequence": start_sequence + len(events)}
+                )
+            )
+        if (
+            not handoff_delivery_inserted
+            and handoff_recorder is not None
+            and handoff_recorder.event is not None
+        ):
+            events.append(
+                handoff_recorder.event.model_copy(
                     update={"sequence": start_sequence + len(events)}
                 )
             )
