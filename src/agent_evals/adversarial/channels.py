@@ -74,3 +74,28 @@ class ToolMetadataAttackPayload(_LocalToolAttackPayload):
                 "tool-metadata attack payload must be a JSON object with valid 'tool' and "
                 "'description' fields"
             ) from exc
+
+
+class MemoryAttackPayload(BaseModel):
+    """Contract for deterministic poisoned OpenAI SDK session-history memory.
+
+    `memory` makes the fixture semantically explicit, while the complete canonical
+    `AttackFixture.payload_json` becomes one prior session-history user message. That keeps the
+    delivery receipt's payload digest bound to the exact bytes prepended by the SDK session layer.
+    Additional fields are allowed for realistic memory envelopes.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="allow")
+
+    memory: Any
+
+    @classmethod
+    def from_fixture(cls, attack: AttackFixture) -> Self:
+        if attack.channel is not AttackChannel.MEMORY:
+            raise ValueError("memory payload contract requires a MEMORY attack fixture")
+        try:
+            return cls.model_validate(attack.payload)
+        except ValidationError as exc:
+            raise ValueError(
+                "memory attack payload must be a JSON object with a 'memory' field"
+            ) from exc
