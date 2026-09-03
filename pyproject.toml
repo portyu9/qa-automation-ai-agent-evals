@@ -33,6 +33,7 @@ dev = [
   "mypy>=1.14,<2",
   "pip-audit>=2.8,<3",
   "pytest>=9,<10",
+  "pytest-asyncio>=1,<2",
   "pytest-cov>=6,<8",
   "ruff==0.16.2",
 ]
@@ -57,6 +58,7 @@ markers = [
   "integration: deterministic integration tests",
   "live: tests requiring a live model/provider",
 ]
+asyncio_mode = "auto"
 
 [tool.coverage.run]
 branch = true

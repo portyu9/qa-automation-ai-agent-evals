@@ -8,14 +8,14 @@ from __future__ import annotations
 
 from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass
-from typing import TypeVar
+from typing import Generic, TypeVar
 
 T = TypeVar("T")
 FailurePredicate = Callable[[tuple[T, ...]], Awaitable[bool]]
 
 
 @dataclass(frozen=True, slots=True)
-class MinimizationResult[T]:
+class MinimizationResult(Generic[T]):
     original_size: int
     minimized: tuple[T, ...]
     evaluations: int
@@ -28,7 +28,7 @@ async def ddmin(
     *,
     max_evaluations: int = 1_000,
 ) -> MinimizationResult[T]:
-    """Return a 1-minimal-ish failing subsequence using classic delta debugging.
+    """Return a reduced failing subsequence using classic delta debugging.
 
     Order is preserved. The original input must reproduce the failure. A hard evaluation budget
     prevents a pathological oracle or expensive live agent from turning minimization into an

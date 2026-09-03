@@ -7,7 +7,6 @@ from dataclasses import replace
 
 from agent_evals.adapters.base import AdapterResult
 from agent_evals.contracts.models import EvaluationScenario, SubjectFingerprint
-from agent_evals.evidence.models import EvidenceEvent
 
 Script = Callable[[SubjectFingerprint, EvaluationScenario, str], AdapterResult]
 
@@ -29,5 +28,7 @@ class ScriptedAdapter:
         trial_id: str,
     ) -> AdapterResult:
         result = self._script(subject, scenario, trial_id)
-        normalized = tuple(replace(event, sequence=index) for index, event in enumerate(result.events))
+        normalized = tuple(
+            event.model_copy(update={"sequence": index}) for index, event in enumerate(result.events)
+        )
         return replace(result, events=normalized)
