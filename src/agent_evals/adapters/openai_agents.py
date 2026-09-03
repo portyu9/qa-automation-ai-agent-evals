@@ -629,9 +629,7 @@ class OpenAIAgentsAdapter:
             and handoff_recorder.event is not None
         ):
             events.append(
-                handoff_recorder.event.model_copy(
-                    update={"sequence": start_sequence + len(events)}
-                )
+                handoff_recorder.event.model_copy(update={"sequence": start_sequence + len(events)})
             )
         return events
 
