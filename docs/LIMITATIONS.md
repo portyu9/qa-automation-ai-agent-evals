@@ -89,9 +89,10 @@ Current implemented fault families are narrow:
 
 - exact target-tool description poisoning observed through `tools/list`;
 - exact first-call target-tool result poisoning observed through `tools/call`;
-- model-visible first-call `ToolError` carrying the canonical payload inside the SDK-generated error envelope.
+- model-visible first-call `ToolError` carrying the canonical payload inside the SDK-generated error envelope;
+- private `tools/list` stale discovery after server-side target removal, where a normal client call still returns the fresh cached listing and an explicit `cache_mode="refresh"` call proves the live listing no longer contains the target.
 
-Every probe uses a fresh server. Result/error faults require a benign second call, proving one-shot recovery. `MCPFaultReceipt` binds fault identity, protocol version, tool, injection point, controlled payload digest, exact observed-text digest, and a receipt root without duplicating raw fault content.
+Every probe uses a fresh server. Result/error faults require a benign second call, proving one-shot recovery. The stale-discovery probe additionally uses a fresh client cache and requires the complete initial-present → server-remove → cached-present → refreshed-absent relation before a receipt can exist. `MCPFaultReceipt` binds fault identity, protocol version, tool, injection point, controlled fault-material digest, exact canonical-observation digest, and a receipt root without duplicating raw fault content.
 
 That implementation does **not** establish:
 
@@ -99,7 +100,7 @@ That implementation does **not** establish:
 - OpenAI `ATTACK_DELIVERY` semantics for MCP;
 - remote Streamable HTTP, stdio, proxy, network, TLS, or DNS behavior;
 - MCP authorization issuer, scope, credential reuse, token-binding, or CIMD behavior;
-- cache poisoning/staleness/invalidation or disappearing/renamed tools;
+- public/cross-partition cache sharing, cache poisoning, custom/shared cache stores, notification invalidation, TTL-expiry behavior, cache races, renamed-tool discovery, or general cache correctness beyond the single tested private stale-after-removal relation;
 - malformed JSON-RPC, invalid schemas, schema drift, duplicate/out-of-order responses, or `Mcp-Method`/`Mcp-Name` routing faults;
 - malicious resources, resource templates, prompts, roots, elicitation, sampling, subscriptions, or Tasks extension behavior;
 - hosted third-party MCP server fidelity;
@@ -154,11 +155,11 @@ The repository currently executes no target-controlled arbitrary shell/code as a
 
 ## Current verification checkpoint
 
-- deterministic core: **180 passed, 14 deselected**;
-- branch coverage: **93.21%**;
+- deterministic core: **181 passed, 15 deselected**;
+- branch coverage: **93.14%**;
 - strict mypy: **0 issues across 37 source files**;
 - deterministic OpenAI SDK suite: **11/11 passed**;
-- deterministic MCP protocol suite: **3/3 passed**;
+- deterministic MCP protocol suite: **4/4 passed**;
 - Python 3.11/3.13 quality, Ruff, formatter, Bandit, dependency audit, and package integrity: green.
 
 ## Why these boundaries matter
