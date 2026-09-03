@@ -61,7 +61,7 @@ class SubjectFingerprint(BaseModel):
 
     @property
     def identity(self) -> str:
-        return _sha256_text(self.model_dump_json(exclude_none=True))
+        return _sha256_json(self.model_dump(mode="python", exclude_none=True))
 
 
 class AuthorityPolicy(BaseModel):
@@ -76,6 +76,20 @@ class AuthorityPolicy(BaseModel):
     max_turns: int = Field(default=16, ge=1, le=10_000)
     max_tool_calls: int = Field(default=32, ge=0, le=10_000)
     max_handoffs: int = Field(default=8, ge=0, le=1_000)
+
+    @field_validator("allowed_tools", "forbidden_tools", "approval_required_tools")
+    @classmethod
+    def reject_empty_tool_names(cls, value: frozenset[str]) -> frozenset[str]:
+        if any(not name.strip() for name in value):
+            raise ValueError("tool identities must be non-empty strings")
+        return value
+
+    @field_validator("allowed_resource_prefixes")
+    @classmethod
+    def canonicalize_resource_prefixes(cls, value: tuple[str, ...]) -> tuple[str, ...]:
+        if any(not prefix.strip() for prefix in value):
+            raise ValueError("resource prefixes must be non-empty strings")
+        return tuple(sorted(set(value)))
 
     @model_validator(mode="after")
     def validate_disjoint_tools(self) -> AuthorityPolicy:
@@ -118,6 +132,13 @@ class EvaluationScenario(BaseModel):
             raise ValueError("scenario state/outcomes must be finite JSON-compatible data") from exc
         return value
 
+    @field_validator("tags")
+    @classmethod
+    def reject_empty_tags(cls, value: frozenset[str]) -> frozenset[str]:
+        if any(not tag.strip() for tag in value):
+            raise ValueError("scenario tags must be non-empty strings")
+        return value
+
     @model_validator(mode="after")
     def reject_contradictory_outcomes(self) -> EvaluationScenario:
         conflicts = {
@@ -131,7 +152,7 @@ class EvaluationScenario(BaseModel):
 
     @property
     def identity(self) -> str:
-        return _sha256_text(self.model_dump_json(exclude_none=True))
+        return _sha256_json(self.model_dump(mode="python", exclude_none=True))
 
 
 def _sha256_text(value: str) -> str:
@@ -139,5 +160,24 @@ def _sha256_text(value: str) -> str:
 
 
 def _sha256_json(value: Any) -> str:
-    canonical = json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False)
+    canonical = json.dumps(
+        _canonicalize(value),
+        sort_keys=True,
+        separators=(",", ":"),
+        allow_nan=False,
+    )
     return _sha256_text(canonical)
+
+
+def _canonicalize(value: Any) -> Any:
+    """Convert supported contract material into deterministic JSON-compatible structure."""
+    if isinstance(value, BaseModel):
+        return _canonicalize(value.model_dump(mode="python", exclude_none=True))
+    if isinstance(value, dict):
+        return {str(key): _canonicalize(item) for key, item in value.items()}
+    if isinstance(value, (set, frozenset)):
+        normalized = [_canonicalize(item) for item in value]
+        return sorted(normalized, key=lambda item: json.dumps(item, sort_keys=True, separators=(",", ":"), allow_nan=False))
+    if isinstance(value, (list, tuple)):
+        return [_canonicalize(item) for item in value]
+    return value
