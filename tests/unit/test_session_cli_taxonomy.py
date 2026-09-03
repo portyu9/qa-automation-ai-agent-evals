@@ -72,7 +72,7 @@ async def test_session_runs_repeatable_trial_identity_and_reliability() -> None:
     assert evaluated.subject_identity == subject().identity
     assert evaluated.scenario_identity == scenario().identity
     assert tuple(trial.verdict for trial in evaluated.trials) == (TrialVerdict.PASS,) * 3
-    assert evaluated.reliability.successes == 3
+    assert evaluated.reliability.passes == 3
     assert evaluated.reliability.resolved_trials == 3
     assert evaluated.critical_violations == 0
 
