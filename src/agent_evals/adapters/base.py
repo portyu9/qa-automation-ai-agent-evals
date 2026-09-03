@@ -9,6 +9,24 @@ from agent_evals.contracts.models import EvaluationScenario, SubjectFingerprint
 from agent_evals.evidence.models import EvidenceEvent
 
 
+class AdapterPreconditionError(RuntimeError):
+    """A controlled evaluation prerequisite could not be satisfied by an adapter.
+
+    This is distinct from a provider/runtime failure. The code and reason are intended for durable
+    evaluation evidence, so callers must never place secrets, raw attack payloads, or provider
+    exception detail in either field.
+    """
+
+    def __init__(self, *, code: str, reason: str) -> None:
+        if not code or not code.replace("_", "").isalnum() or code.lower() != code:
+            raise ValueError("adapter precondition code must be lowercase alphanumeric/underscore")
+        if not reason or len(reason) > 512:
+            raise ValueError("adapter precondition reason must contain 1..512 characters")
+        self.code = code
+        self.reason = reason
+        super().__init__(reason)
+
+
 @dataclass(frozen=True, slots=True)
 class AdapterResult:
     """Observable result returned by an adapter after one isolated trial.
