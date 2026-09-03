@@ -6,7 +6,7 @@ This document is intentionally strict. The repository should never become more i
 
 ### No credentialed live-provider assurance yet
 
-A first-class OpenAI Agents SDK adapter is implemented against `openai-agents==0.22.0`, and CI exercises its real SDK runner/tool loop deterministically with `ScriptedModel` without API calls. The deterministic SDK tier verifies ordinary tool execution, concrete `USER_INPUT` injection, local-`FunctionTool` `TOOL_RESULT` replacement, isolation of the reusable original tool, and fail-closed handling of unsupported/missing adversarial boundaries.
+A first-class OpenAI Agents SDK adapter is implemented against `openai-agents==0.22.0`, and CI exercises its real SDK runner/tool loop deterministically with `ScriptedModel` without API calls. The deterministic SDK tier verifies ordinary tool execution, concrete `USER_INPUT` injection, local-`FunctionTool` `TOOL_RESULT` replacement, local-`FunctionTool` description-level `TOOL_METADATA` poisoning, reusable-tool isolation, and fail-closed handling of unsupported/missing adversarial boundaries.
 
 The repository does **not** claim live-model behavioral assurance, production-provider availability, model-specific safety performance, provider-side delivery attestation, or credentialed end-to-end coverage.
 
@@ -26,10 +26,11 @@ The repository provides content-addressed fixtures, deterministic scenario deriv
 
 For adversarial scenarios, `TrialRunner` requires exactly one internally valid delivery receipt before deterministic subject grading. Missing, duplicate, malformed, forged, or mismatched delivery evidence produces `BLOCKED` with no completed subject oracles rather than behavioral `FAIL`.
 
-`OpenAIAgentsAdapter` currently provides two concrete channel implementations:
+`OpenAIAgentsAdapter` currently provides three concrete channel implementations:
 
 - `USER_INPUT`: exact canonical fixture JSON is supplied as the second ordered SDK user message;
-- local-`FunctionTool` `TOOL_RESULT`: the first matching local function-tool result in a trial is replaced with exact canonical fixture JSON and bound to the exact SDK call ID.
+- local-`FunctionTool` `TOOL_RESULT`: the first matching local function-tool result in a trial is replaced with exact canonical fixture JSON and bound to the exact SDK call ID;
+- local-`FunctionTool` description-level `TOOL_METADATA`: a copied target tool's description is replaced with exact canonical fixture JSON before SDK execution while the original tool remains unchanged.
 
 Those controls establish **what attack is intended, what exact scenario is evaluated, and what delivery observation the trusted control plane recorded**. They do not provide universal injection or independent proof that an arbitrary external target consumed the stimulus.
 
@@ -37,11 +38,11 @@ Those controls establish **what attack is intended, what exact scenario is evalu
 
 The current `TOOL_RESULT` implementation is intentionally narrow.
 
-It requires an identity-bearing payload object with a valid `tool` + `result` routing contract. The complete canonical fixture JSON becomes the model-visible replacement output so the delivery receipt's payload digest binds the exact delivered bytes.
+It requires an identity-bearing payload object with a valid `tool` + `result` routing contract. The complete canonical fixture JSON becomes model-visible replacement output so the delivery receipt payload digest binds the exact delivered bytes.
 
 Per adversarial execution the adapter copies only the target SDK `FunctionTool`, wraps the copy, and clones the agent with a fresh tools list. The original agent/tool remain unchanged.
 
-On the first matching call, the original target function is deliberately **not executed**; its result is replaced by the canonical attack payload. Later matching calls in the same trial use the copied original behavior.
+On the first matching call, the original target function is deliberately **not executed**; its result is replaced by canonical attack JSON. Later matching calls in the same trial use copied original behavior.
 
 Therefore the repository does **not** claim:
 
@@ -57,9 +58,33 @@ A future mode that executes the original function and only mutates its return va
 
 If the configured target never executes, no receipt is emitted and the adversarial trial remains `BLOCKED`. A skipped attack is never treated as successful testing.
 
+### Local `TOOL_METADATA` means description poisoning, not universal metadata poisoning
+
+The current `TOOL_METADATA` implementation is also intentionally narrow.
+
+It requires an identity-bearing payload object with valid `tool` + `description` fields. The **complete canonical fixture JSON** becomes the copied local `FunctionTool.description`, so the delivery receipt payload digest binds the exact string visible at the tested SDK model-call tool boundary.
+
+Per adversarial execution the adapter uses the same fail-closed exact local-tool resolver as `TOOL_RESULT`, copies the target, changes only the copied description, and clones the agent with a fresh tool list. The original agent/tool remain unchanged.
+
+The repository therefore does **not** claim that this implementation mutates or tests:
+
+- tool names;
+- parameter JSON schemas;
+- invocation callbacks;
+- approval semantics;
+- tool routing identity;
+- hosted-tool metadata;
+- MCP tool/server discovery metadata;
+- external registry or remote tool-server metadata;
+- provider wire serialization;
+- remote hosted-model processing/preservation of the poisoned description;
+- target-side delivery attestation.
+
+Those are separate boundaries. In particular, schema poisoning and tool renaming can alter invocation/routing behavior and should not be silently folded into a description-poisoning test.
+
 ### Other attack channels remain unimplemented in the OpenAI adapter
 
-`tool_metadata`, `memory`, `resource`, `handoff`, and `environment` still require concrete controlled injectors at their real boundaries.
+`memory`, `resource`, `handoff`, and `environment` still require concrete controlled injectors at their real boundaries.
 
 The repository therefore does not yet claim production memory poisoning, external-resource injection, handoff poisoning, environment-fault delivery, complete channel coverage, or universal prompt-injection harnessing across all context sources.
 
@@ -73,7 +98,7 @@ See [Adversarial Testing](ADVERSARIAL_TESTING.md) and [OpenAI Adapter](OPENAI_AD
 
 The taxonomy and adversarial layers include MCP-relevant authorization/tool-poisoning concepts, but the repository does not yet provide executable MCP fault servers, malicious MCP metadata/result simulators, protocol conformance claims, MCP task/authorization fault coverage, or target-side MCP delivery attestation.
 
-The local `FunctionTool` result injector must not be described as MCP result injection.
+Neither local `FunctionTool` result replacement nor local `FunctionTool` description poisoning should be described as MCP injection.
 
 ### Local persistence is not trusted-writer attestation
 
@@ -97,7 +122,7 @@ Replay does **not** run the injector again, prove fresh delivery, prove current 
 
 Delivery-caused `BLOCKED` trials remain infrastructure uncertainty: they carry no completed deterministic oracle snapshots, are not behavioral failures, do not create critical oracle-violation counts, and can keep release `INCONCLUSIVE`.
 
-The report stores evidence roots rather than full `TrialEvidence`; full delivery/policy/outcome regrading requires the underlying evidence and replay path. Report roots are integrity hashes, not authenticated writer identity.
+The report stores evidence roots rather than full `TrialEvidence`; full delivery/policy/outcome regrading requires underlying evidence and the replay path. Report roots are integrity hashes, not authenticated writer identity.
 
 ### No formal non-inferiority test
 
@@ -114,6 +139,10 @@ Resource scope currently uses string-prefix matching over adapter-normalized res
 ### No sandbox isolation claim
 
 The repository currently executes no target-controlled shell or arbitrary target code. Future adapters that do so must implement and validate process/filesystem/network containment separately.
+
+## Current verification checkpoint
+
+The current source checkpoint is **155 passed, 6 deselected, 93.67% branch coverage**, strict mypy clean across **34 source files**, with **6/6** deterministic OpenAI SDK tests green. The channel-specific adversarial payload implementation is absent from the missing-coverage table.
 
 ## Why these boundaries matter
 
