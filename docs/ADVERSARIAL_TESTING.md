@@ -142,14 +142,7 @@ A fixture requires exact target `tool`, exact context `key`, and an `environment
 
 The adapter requires `run_context` to be `None` or a string-keyed `Mapping`, snapshots it into a read-only trial-local overlay, and uses task-local `ContextVar` activation during the **first matching local `FunctionTool` call only**.
 
-During that call, a value read through either:
-
-```text
-ctx.context["SERVICE_MODE"]
-ctx.context.get("SERVICE_MODE")
-```
-
-returns exact canonical `AttackFixture.payload_json`.
+During that call, a value read through either `ctx.context["SERVICE_MODE"]` or `ctx.context.get("SERVICE_MODE")` returns exact canonical `AttackFixture.payload_json`.
 
 The important distinction is **availability versus consumption**. Merely creating the overlay, calling the tool, or checking `"SERVICE_MODE" in ctx.context` is not delivery. A receipt is created only when subject code reads the targeted value.
 
@@ -164,6 +157,16 @@ If the tool executes but never reads the key, the attack remains unverified and 
 
 This is **local SDK application-context perturbation**, not process-wide `os.environ`, network/service chaos, filesystem/sandbox mutation, clock faults, secret-store manipulation, provider configuration changes, cloud/IAM fault injection, or production infrastructure attestation.
 
+## Relationship to the MCP fault laboratory
+
+The repository also has a real official-SDK MCP protocol fault laboratory. It is deliberately **not** folded into the OpenAI `AttackChannel` implementation above.
+
+`MCPFaultSpec` / `MCPFaultReceipt` currently prove exact trusted-client observations for `tools/list` description poisoning, first `tools/call` result poisoning, and the model-visible `ToolError` envelope under protocol `2026-07-28`.
+
+That protocol evidence does not establish that an autonomous agent consumed or resisted the MCP-delivered content. No MCP protocol receipt is converted into `ATTACK_DELIVERY`, agent `PASS`/`FAIL`, or release acceptance without a future explicit integration contract.
+
+See [MCP Fault Laboratory](MCP_LAB.md).
+
 ## Deterministic scenario derivation
 
 `AttackFixture.apply(base_scenario)` preserves base objective, exact `AuthorityPolicy`, required outcomes, forbidden outcomes, initial state, and existing tags while adding the reserved attack envelope.
@@ -172,26 +175,29 @@ This is **local SDK application-context perturbation**, not process-wide `os.env
 
 ## Replay and reporting
 
-Valid delivery receipts participate in ordered `TrialEvidence` and the evidence root. Historical replay revalidates recorded receipts but does not execute an injector again and cannot establish fresh delivery.
+Valid OpenAI delivery receipts participate in ordered `TrialEvidence` and the evidence root. Historical replay revalidates recorded receipts but does not execute an injector again and cannot establish fresh delivery.
 
 Delivery-caused `BLOCKED` attempts remain evaluator uncertainty through reliability and assurance reporting; they do not count as subject behavioral failures or critical subject-oracle violations. They can still make a release decision `INCONCLUSIVE` when evidence requirements are not met.
 
+MCP fault probes are not yet `TrialEvidence` and are therefore outside this replay/report derivation path.
+
 ## Current verified checkpoint
 
-The implemented layer now establishes all seven generic OpenAI adapter channel categories at the scoped boundaries above, including both positive and negative `ENVIRONMENT` consumption semantics.
+The implemented OpenAI adversarial layer establishes all seven generic adapter channel categories at the scoped boundaries above, including both positive and negative `ENVIRONMENT` consumption semantics. The separate MCP layer establishes three deterministic protocol-fault observations.
 
 Verified source baseline:
 
-- deterministic suite: **177 passed, 11 deselected**;
-- branch coverage: **93.78%**;
-- strict mypy: **0 issues across 34 source files**;
+- deterministic core: **180 passed, 14 deselected**;
+- branch coverage: **93.21%**;
+- strict mypy: **0 issues across 37 source files**;
 - deterministic OpenAI SDK suite: **11/11 passed**;
+- deterministic MCP protocol suite: **3/3 passed**;
 - Python 3.11/3.13 quality, Ruff, formatter, Bandit, dependency audit, and package integrity: green.
 
 ## Explicit non-claims
 
-Seven generic channel categories implemented does **not** mean seven universal production interceptors.
+Seven generic OpenAI channel categories implemented does **not** mean seven universal production interceptors. Three MCP protocol faults implemented does **not** mean complete MCP assurance.
 
-Production application memory/RAG, hosted File Search/vector stores, URL/document retrieval, hosted/MCP tool interception, schema poisoning, distributed handoff fabrics, process/network/filesystem/cloud environment faults, target-side delivery attestation, automatic/adaptive attack generation, mutation/fuzzing campaigns, MCP fault servers, sandbox-escape infrastructure, and credentialed live-provider red-team assurance remain separate implementation layers.
+Production application memory/RAG, hosted File Search/vector stores, URL/document retrieval, OpenAI hosted/MCP tool interception, schema poisoning, distributed handoff fabrics, process/network/filesystem/cloud environment faults, agent-through-MCP behavioral grading, remote MCP transport/auth/cache/resource/prompt/task fault families, complete MCP conformance certification, target-side delivery attestation, automatic/adaptive attack generation, mutation/fuzzing campaigns, sandbox-escape infrastructure, and credentialed live-provider red-team assurance remain separate implementation layers.
 
 [← Documentation hub](README.md)
