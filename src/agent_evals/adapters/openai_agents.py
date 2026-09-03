@@ -305,9 +305,7 @@ class OpenAIAgentsAdapter:
         if not isinstance(self._agent, Agent):
             raise AdapterPreconditionError(
                 code="unsupported_agent_type",
-                reason=(
-                    f"{attack_label} injection requires an OpenAI Agents SDK Agent instance"
-                ),
+                reason=(f"{attack_label} injection requires an OpenAI Agents SDK Agent instance"),
             )
 
         same_name = [tool for tool in self._agent.tools if _raw_attr(tool, "name") == tool_name]
