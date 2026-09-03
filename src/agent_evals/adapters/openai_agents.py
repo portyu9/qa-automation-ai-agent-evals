@@ -12,7 +12,6 @@ import json
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import asdict, is_dataclass
 from time import perf_counter
-from typing import Any
 
 from agent_evals.adapters.base import AdapterResult
 from agent_evals.contracts.models import EvaluationScenario, SubjectFingerprint
@@ -85,7 +84,10 @@ class OpenAIAgentsAdapter:
                         sequence=0,
                         kind=EvidenceKind.POLICY_VIOLATION,
                         source="openai-agents:runner",
-                        payload={"reason": "turn budget exceeded", "max_turns": scenario.authority.max_turns},
+                        payload={
+                            "reason": "turn budget exceeded",
+                            "max_turns": scenario.authority.max_turns,
+                        },
                         critical=True,
                     ),
                 ),
@@ -105,7 +107,10 @@ class OpenAIAgentsAdapter:
                         sequence=0,
                         kind=EvidenceKind.GUARDRAIL,
                         source="openai-agents:guardrail",
-                        payload={"tripwire_triggered": True, "exception_type": type(exc).__name__},
+                        payload={
+                            "tripwire_triggered": True,
+                            "exception_type": type(exc).__name__,
+                        },
                     ),
                 ),
                 final_state=final_state,
@@ -142,7 +147,12 @@ class OpenAIAgentsAdapter:
         return dict(observed)
 
     def _normalize_items(self, items: Sequence[object]) -> list[EvidenceEvent]:
-        from agents.items import HandoffOutputItem, ToolApprovalItem, ToolCallItem, ToolCallOutputItem
+        from agents.items import (
+            HandoffOutputItem,
+            ToolApprovalItem,
+            ToolCallItem,
+            ToolCallOutputItem,
+        )
 
         events: list[EvidenceEvent] = []
         for item in items:
@@ -151,24 +161,67 @@ class OpenAIAgentsAdapter:
                 arguments = _raw_attr(item.raw_item, "arguments")
                 payload: dict[str, object] = {
                     "tool": tool,
-                    "call_id": _raw_attr(item.raw_item, "call_id") or _raw_attr(item.raw_item, "id"),
+                    "call_id": _raw_attr(item.raw_item, "call_id")
+                    or _raw_attr(item.raw_item, "id"),
                     "arguments": arguments,
                 }
                 if isinstance(tool, str) and self._resource_resolver is not None:
-                    resource = self._resource_resolver(tool, arguments if isinstance(arguments, str) else None)
+                    resource = self._resource_resolver(
+                        tool,
+                        arguments if isinstance(arguments, str) else None,
+                    )
                     if resource is not None:
                         payload["resource"] = resource
-                events.append(EvidenceEvent(sequence=len(events), kind=EvidenceKind.TOOL_REQUEST, source="openai-agents:new_items", payload=_json_safe_mapping(payload)))
+                events.append(
+                    EvidenceEvent(
+                        sequence=len(events),
+                        kind=EvidenceKind.TOOL_REQUEST,
+                        source="openai-agents:new_items",
+                        payload=_json_safe_mapping(payload),
+                    )
+                )
             elif isinstance(item, ToolCallOutputItem):
-                events.append(EvidenceEvent(sequence=len(events), kind=EvidenceKind.TOOL_RESULT, source="openai-agents:new_items", payload={"call_id": item.call_id, "output": _json_safe(item.output)}))
+                events.append(
+                    EvidenceEvent(
+                        sequence=len(events),
+                        kind=EvidenceKind.TOOL_RESULT,
+                        source="openai-agents:new_items",
+                        payload={"call_id": item.call_id, "output": _json_safe(item.output)},
+                    )
+                )
             elif isinstance(item, HandoffOutputItem):
-                events.append(EvidenceEvent(sequence=len(events), kind=EvidenceKind.HANDOFF, source="openai-agents:new_items", payload={"source_agent": item.source_agent.name, "target_agent": item.target_agent.name}))
+                events.append(
+                    EvidenceEvent(
+                        sequence=len(events),
+                        kind=EvidenceKind.HANDOFF,
+                        source="openai-agents:new_items",
+                        payload={
+                            "source_agent": item.source_agent.name,
+                            "target_agent": item.target_agent.name,
+                        },
+                    )
+                )
             elif isinstance(item, ToolApprovalItem):
-                events.append(EvidenceEvent(sequence=len(events), kind=EvidenceKind.APPROVAL_REQUEST, source="openai-agents:new_items", payload={"tool": item.name, "call_id": item.call_id, "arguments": item.arguments}))
+                events.append(
+                    EvidenceEvent(
+                        sequence=len(events),
+                        kind=EvidenceKind.APPROVAL_REQUEST,
+                        source="openai-agents:new_items",
+                        payload={
+                            "tool": item.name,
+                            "call_id": item.call_id,
+                            "arguments": item.arguments,
+                        },
+                    )
+                )
         return events
 
     @staticmethod
-    def _normalize_guardrails(result: object, *, start_sequence: int) -> list[EvidenceEvent]:
+    def _normalize_guardrails(
+        result: object,
+        *,
+        start_sequence: int,
+    ) -> list[EvidenceEvent]:
         events: list[EvidenceEvent] = []
         groups = (
             ("input", getattr(result, "input_guardrail_results", ())),
@@ -184,7 +237,19 @@ class OpenAIAgentsAdapter:
                 name = get_name() if callable(get_name) else type(guardrail).__name__
                 triggered = bool(getattr(output, "tripwire_triggered", False))
                 behavior = getattr(output, "behavior", None)
-                events.append(EvidenceEvent(sequence=start_sequence + len(events), kind=EvidenceKind.GUARDRAIL, source="openai-agents:guardrail-result", payload={"boundary": boundary, "name": name, "triggered": triggered, "behavior": _json_safe(behavior)}))
+                events.append(
+                    EvidenceEvent(
+                        sequence=start_sequence + len(events),
+                        kind=EvidenceKind.GUARDRAIL,
+                        source="openai-agents:guardrail-result",
+                        payload={
+                            "boundary": boundary,
+                            "name": name,
+                            "triggered": triggered,
+                            "behavior": _json_safe(behavior),
+                        },
+                    )
+                )
         return events
 
 
@@ -202,7 +267,9 @@ def _json_safe(value: object) -> object:
     if value is None or isinstance(value, (str, int, bool)):
         return value
     if isinstance(value, float):
-        return value if value == value and value not in (float("inf"), float("-inf")) else repr(value)
+        if value == value and value not in (float("inf"), float("-inf")):
+            return value
+        return repr(value)
     if isinstance(value, Mapping):
         return {str(key): _json_safe(item) for key, item in value.items()}
     if isinstance(value, (list, tuple, set, frozenset)):

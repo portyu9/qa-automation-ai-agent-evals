@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from time import perf_counter
 
-from agent_evals.adapters.base import AgentAdapter, AdapterResult
+from agent_evals.adapters.base import AdapterResult, AgentAdapter
 from agent_evals.contracts.models import EvaluationScenario, SubjectFingerprint
 from agent_evals.evidence.models import EvidenceEvent, EvidenceKind, TrialEvidence, TrialVerdict
 from agent_evals.oracles.deterministic import OracleResult, OutcomeOracle, PolicyOracle
@@ -19,7 +19,10 @@ class EvaluatedTrial:
 
     @property
     def critical_violations(self) -> int:
-        return sum(result.critical and result.verdict is TrialVerdict.FAIL for result in self.oracle_results)
+        return sum(
+            result.critical and result.verdict is TrialVerdict.FAIL
+            for result in self.oracle_results
+        )
 
 
 class TrialRunner:
@@ -43,8 +46,12 @@ class TrialRunner:
     ) -> EvaluatedTrial:
         started = perf_counter()
         try:
-            result = await adapter.execute(subject=subject, scenario=scenario, trial_id=trial_id)
-        except Exception as exc:  # adapter boundary: convert provider failure into structured evidence
+            result = await adapter.execute(
+                subject=subject,
+                scenario=scenario,
+                trial_id=trial_id,
+            )
+        except Exception as exc:  # adapter boundary: provider failure becomes structured evidence
             elapsed_ms = (perf_counter() - started) * 1000.0
             event = EvidenceEvent(
                 sequence=0,
@@ -60,16 +67,29 @@ class TrialRunner:
                 events=(event,),
                 elapsed_ms=elapsed_ms,
             )
-            return EvaluatedTrial(evidence=evidence, oracle_results=(), verdict=TrialVerdict.BLOCKED)
+            return EvaluatedTrial(
+                evidence=evidence,
+                oracle_results=(),
+                verdict=TrialVerdict.BLOCKED,
+            )
 
-        evidence = self._to_evidence(result, subject=subject, scenario=scenario, trial_id=trial_id)
+        evidence = self._to_evidence(
+            result,
+            subject=subject,
+            scenario=scenario,
+            trial_id=trial_id,
+        )
         oracle_results = tuple(oracle.grade(scenario, evidence) for oracle in self._oracles)
         verdict = (
             TrialVerdict.FAIL
             if any(result.verdict is TrialVerdict.FAIL for result in oracle_results)
             else TrialVerdict.PASS
         )
-        return EvaluatedTrial(evidence=evidence, oracle_results=oracle_results, verdict=verdict)
+        return EvaluatedTrial(
+            evidence=evidence,
+            oracle_results=oracle_results,
+            verdict=verdict,
+        )
 
     @staticmethod
     def _to_evidence(

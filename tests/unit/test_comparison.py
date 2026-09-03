@@ -5,7 +5,6 @@ import pytest
 from agent_evals.evidence.models import TrialVerdict
 from agent_evals.statistics.comparison import ComparisonDecision, PairedComparison
 
-
 P = TrialVerdict.PASS
 F = TrialVerdict.FAIL
 

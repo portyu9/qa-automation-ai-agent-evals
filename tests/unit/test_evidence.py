@@ -5,7 +5,6 @@ from pydantic import ValidationError
 
 from agent_evals.evidence.models import EvidenceEvent, EvidenceKind, TrialEvidence
 
-
 IDENTITY = "a" * 64
 
 
@@ -15,12 +14,19 @@ def test_trial_rejects_reordered_or_gapped_evidence() -> None:
             trial_id="t-1",
             subject_identity=IDENTITY,
             scenario_identity=IDENTITY,
-            events=(EvidenceEvent(sequence=1, kind=EvidenceKind.OUTPUT, source="sut"),),
+            events=(
+                EvidenceEvent(sequence=1, kind=EvidenceKind.OUTPUT, source="sut"),
+            ),
         )
 
 
 def test_evidence_root_changes_when_terminal_state_changes() -> None:
-    event = EvidenceEvent(sequence=0, kind=EvidenceKind.OUTPUT, source="sut", payload={"value": "ok"})
+    event = EvidenceEvent(
+        sequence=0,
+        kind=EvidenceKind.OUTPUT,
+        source="sut",
+        payload={"value": "ok"},
+    )
     first = TrialEvidence(
         trial_id="t-1",
         subject_identity=IDENTITY,
