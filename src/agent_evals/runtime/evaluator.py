@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from time import perf_counter
 
-from agent_evals.adapters.base import AdapterResult, AgentAdapter
+from agent_evals.adapters.base import AdapterPreconditionError, AdapterResult, AgentAdapter
 from agent_evals.adversarial.delivery import AttackDeliveryError, verify_attack_delivery
 from agent_evals.contracts.models import EvaluationScenario, SubjectFingerprint
 from agent_evals.evidence.models import EvidenceEvent, EvidenceKind, TrialEvidence, TrialVerdict
@@ -51,6 +51,27 @@ class TrialRunner:
                 subject=subject,
                 scenario=scenario,
                 trial_id=trial_id,
+            )
+        except AdapterPreconditionError as exc:
+            elapsed_ms = (perf_counter() - started) * 1000.0
+            event = EvidenceEvent(
+                sequence=0,
+                kind=EvidenceKind.EVALUATION_ERROR,
+                source=f"adapter:{adapter.name}",
+                payload={"code": exc.code, "reason": exc.reason},
+                critical=True,
+            )
+            evidence = TrialEvidence(
+                trial_id=trial_id,
+                subject_identity=subject.identity,
+                scenario_identity=scenario.identity,
+                events=(event,),
+                elapsed_ms=elapsed_ms,
+            )
+            return EvaluatedTrial(
+                evidence=evidence,
+                oracle_results=(),
+                verdict=TrialVerdict.BLOCKED,
             )
         except Exception as exc:  # adapter boundary: provider failure becomes structured evidence
             elapsed_ms = (perf_counter() - started) * 1000.0
