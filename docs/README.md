@@ -6,9 +6,9 @@ This documentation is organized by the question a reviewer is trying to answer. 
 
 | Reviewer goal | Recommended path |
 |---|---|
-| Architecture / principal engineering | [Architecture](ARCHITECTURE.md) → [Evaluation Model](EVALUATION_MODEL.md) → [Statistical Assurance](STATISTICAL_ASSURANCE.md) → [Limitations](LIMITATIONS.md) |
-| QA / AI evaluation engineering | [Evaluation Model](EVALUATION_MODEL.md) → [Statistical Assurance](STATISTICAL_ASSURANCE.md) → [Architecture](ARCHITECTURE.md) |
-| Security / red team | [Security](SECURITY.md) → [Architecture](ARCHITECTURE.md) → [Limitations](LIMITATIONS.md) |
+| Architecture / principal engineering | [Architecture](ARCHITECTURE.md) → [Evaluation Model](EVALUATION_MODEL.md) → [Metamorphic Testing](METAMORPHIC_TESTING.md) → [Statistical Assurance](STATISTICAL_ASSURANCE.md) → [Limitations](LIMITATIONS.md) |
+| QA / AI evaluation engineering | [Evaluation Model](EVALUATION_MODEL.md) → [Metamorphic Testing](METAMORPHIC_TESTING.md) → [Statistical Assurance](STATISTICAL_ASSURANCE.md) → [Architecture](ARCHITECTURE.md) |
+| Security / red team | [Security](SECURITY.md) → [Metamorphic Testing](METAMORPHIC_TESTING.md) → [Architecture](ARCHITECTURE.md) → [Limitations](LIMITATIONS.md) |
 | Adoption / code review | [Architecture](ARCHITECTURE.md) → repository tests → [Limitations](LIMITATIONS.md) |
 
 ## Cross-cutting invariants
@@ -21,9 +21,10 @@ Model confidence           ≠ grading authority
 Single passing trial       ≠ reliability
 Raw percentage delta       ≠ statistically established change
 Exact trajectory mismatch  ≠ failure unless the trajectory is contractual
-Blocked execution          ≠ PASS
+Blocked execution          ≠ behavioral FAIL
 Inconclusive evidence      ≠ PASS
 Critical safety violation  ≠ compensable score loss
+Narrower-looking policy    ≠ proven authority reduction
 ```
 
 ## Current documentation set
@@ -32,6 +33,7 @@ Critical safety violation  ≠ compensable score loss
 |---|---|
 | [ARCHITECTURE.md](ARCHITECTURE.md) | Where do identity, evidence, grading, and release authority live? |
 | [EVALUATION_MODEL.md](EVALUATION_MODEL.md) | What exactly constitutes a task, trial, outcome, policy violation, and verdict? |
+| [METAMORPHIC_TESTING.md](METAMORPHIC_TESTING.md) | Which behavioral relations can be verified without brittle golden outputs? |
 | [STATISTICAL_ASSURANCE.md](STATISTICAL_ASSURANCE.md) | How is nondeterministic behavior quantified without overstating certainty? |
 | [SECURITY.md](SECURITY.md) | Which agentic threats are modeled and which controls are already deterministic? |
 | [LIMITATIONS.md](LIMITATIONS.md) | What does the repository deliberately not claim yet? |
