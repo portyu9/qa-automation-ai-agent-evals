@@ -281,9 +281,7 @@ class MCPRemoteAuthLab:
                     missing = await _protected_post(http, resource_url)
                     invalid = await _protected_post(http, resource_url, tokens["invalid"])
                     expired = await _protected_post(http, resource_url, tokens["expired"])
-                    wrong_issuer = await _protected_post(
-                        http, resource_url, tokens["wrong_issuer"]
-                    )
+                    wrong_issuer = await _protected_post(http, resource_url, tokens["wrong_issuer"])
                     wrong_resource = await _protected_post(
                         http, resource_url, tokens["wrong_resource"]
                     )
@@ -519,14 +517,17 @@ async def _authenticated_transport(url: str, token: str) -> AsyncIterator[Any]:
     import httpx2
     from mcp.client.streamable_http import streamable_http_client
 
-    async with httpx2.AsyncClient(
-        headers={"authorization": f"Bearer {token}"},
-        timeout=5.0,
-    ) as http, streamable_http_client(
-        url,
-        http_client=http,
-        terminate_on_close=False,
-    ) as streams:
+    async with (
+        httpx2.AsyncClient(
+            headers={"authorization": f"Bearer {token}"},
+            timeout=5.0,
+        ) as http,
+        streamable_http_client(
+            url,
+            http_client=http,
+            terminate_on_close=False,
+        ) as streams,
+    ):
         yield streams
 
 
