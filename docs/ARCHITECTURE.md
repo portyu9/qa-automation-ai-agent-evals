@@ -13,6 +13,7 @@ Trusted evaluation control plane
 ├── subject/scenario contracts
 ├── deterministic adversarial scenario derivation
 ├── controlled attack injector boundary
+│   └── OpenAI USER_INPUT injector (implemented)
 ├── attack-delivery receipt verifier
 ├── evidence normalization contract
 ├── local evidence-store verifier
@@ -79,7 +80,9 @@ Applying a fixture to a base `EvaluationScenario` creates a security scenario wh
 
 The attack envelope is a **delivery contract**, not proof of delivery. An adapter or controlled environment must inspect the declared channel and actually inject the stimulus at the relevant user/tool/metadata/memory/resource/handoff/environment boundary. When the original base is supplied, `extract_attack(..., expected_base_scenario=...)` rederives the complete scenario and detects drift outside the envelope.
 
-See [Adversarial Testing](ADVERSARIAL_TESTING.md).
+The OpenAI adapter currently closes one concrete path: `USER_INPUT`. It places the scenario objective and exact canonical attack payload into two ordered `Runner.run` user messages and emits the matching delivery receipt. Other channels remain unsupported by that adapter and fail before model execution.
+
+See [Adversarial Testing](ADVERSARIAL_TESTING.md) and [OpenAI Adapter](OPENAI_ADAPTER.md).
 
 ## Attack-delivery verification
 
@@ -159,6 +162,10 @@ The adapter does **not**:
 
 For adversarial scenarios, the adapter/evaluation environment additionally owns the concrete delivery mechanism for the declared attack channel. After successful controlled delivery it can emit an `AttackDeliveryReceipt`; merely seeing an attack envelope does not prove that a malicious tool result, memory record, MCP description, resource, or handoff was actually presented to the subject.
 
+`AdapterPreconditionError` is the explicit boundary for a controlled prerequisite that an adapter cannot satisfy. It carries only a bounded durable code/reason and is intentionally distinct from a provider/runtime exception. `TrialRunner` converts it to `EVALUATION_ERROR / BLOCKED` with no subject oracles. This lets an adapter fail closed for an unsupported attack channel without falsely attributing the problem to the provider or the agent.
+
+`OpenAIAgentsAdapter` currently implements `USER_INPUT` delivery. Its other adversarial channels precondition-block before `Runner.run` is invoked.
+
 The deterministic `ScriptedAdapter` exists to test the harness itself without provider credentials.
 
 ## Trial derivation
@@ -166,12 +173,13 @@ The deterministic `ScriptedAdapter` exists to test the harness itself without pr
 `TrialRunner` performs the following sequence:
 
 1. execute the adapter against one exact subject/scenario pair;
-2. convert provider/runtime exceptions into critical `RUNTIME_ERROR` evidence and `BLOCKED` without retaining raw exception detail;
-3. construct immutable `TrialEvidence`;
-4. for adversarial scenarios, verify exactly one matching attack-delivery receipt;
-5. if delivery verification fails, append critical `EVALUATION_ERROR`, return `BLOCKED`, and run no subject oracles;
-6. run deterministic policy and outcome oracles;
-7. derive `FAIL` if any deterministic oracle fails, otherwise `PASS`.
+2. convert an `AdapterPreconditionError` into critical `EVALUATION_ERROR` evidence and `BLOCKED` with no subject oracles;
+3. convert provider/runtime exceptions into critical `RUNTIME_ERROR` evidence and `BLOCKED` without retaining raw exception detail;
+4. construct immutable `TrialEvidence` when adapter execution returns normally;
+5. for adversarial scenarios, verify exactly one matching attack-delivery receipt;
+6. if delivery verification fails, append critical `EVALUATION_ERROR`, return `BLOCKED`, and run no subject oracles;
+7. run deterministic policy and outcome oracles;
+8. derive `FAIL` if any deterministic oracle fails, otherwise `PASS`.
 
 An adversarial scenario otherwise enters the same subject-grading path as every other scenario. There is no model-authored red-team score and no special rule that treats the absence of suspicious prose as safety evidence.
 
@@ -219,6 +227,6 @@ Trajectory assertions are appropriate when the path itself is part of correctnes
 
 ## Current boundary
 
-The core currently provides deterministic contracts, identity-bound adversarial fixtures/campaigns and scenario derivation, evidence-bound attack-delivery verification, identity-bound trial evidence, local integrity-verified evidence persistence, exact-identity historical replay, execution, state/policy oracles, metamorphic relations, repeated-trial statistics, self-validating session assurance reports, release gating, failure minimization, and a deterministic OpenAI Agents SDK integration tier.
+The core currently provides deterministic contracts, identity-bound adversarial fixtures/campaigns and scenario derivation, evidence-bound attack-delivery verification, one concrete OpenAI `USER_INPUT` injection path, identity-bound trial evidence, local integrity-verified evidence persistence, exact-identity historical replay, execution, state/policy oracles, metamorphic relations, repeated-trial statistics, self-validating session assurance reports, release gating, failure minimization, and a deterministic OpenAI Agents SDK integration tier.
 
-Credentialed live-provider assurance, universal concrete per-channel injectors, cryptographically authenticated injector identity, target-side delivery attestation, automatic/adaptive adversarial generation, hostile-writer authenticated evidence/report signing, remote attestation, immutable remote retention, MCP fault servers, calibrated semantic graders, and automatic perturbation generation remain separate implementation layers and are not represented as complete in this document.
+Credentialed live-provider assurance, concrete injectors for tool-result/tool-metadata/memory/resource/handoff/environment channels, cryptographically authenticated injector identity, target-side delivery attestation, automatic/adaptive adversarial generation, hostile-writer authenticated evidence/report signing, remote attestation, immutable remote retention, MCP fault servers, calibrated semantic graders, and automatic perturbation generation remain separate implementation layers and are not represented as complete in this document.
