@@ -4,7 +4,7 @@
 
 The framework evaluates an **agent system**, not a detached model response. The evaluated subject includes the provider/model configuration plus the application revision, instructions, tool schemas, authority policy, memory policy, and adapter version that together determine behavior.
 
-The design therefore starts with identity and evidence, then derives conclusions. It never starts with a score and work backward to justify it.
+The design therefore starts with identity and evidence, then derives conclusions. It never starts with a score and works backward to justify it.
 
 ## Trust model
 
@@ -12,6 +12,8 @@ The design therefore starts with identity and evidence, then derives conclusions
 Trusted evaluation control plane
 ├── subject/scenario contracts
 ├── evidence normalization contract
+├── local evidence-store verifier
+├── exact-identity replay boundary
 ├── deterministic policy oracle
 ├── deterministic outcome oracle
 ├── statistical calculations
@@ -22,9 +24,12 @@ Untrusted / evaluated subject
 
 External evidence sources
 └── provider responses, tool results, target systems, MCP servers, user simulators
+
+Persistence substrate
+└── filesystem bytes are reverified before becoming evidence again
 ```
 
-External content may become evidence. It does not become control-plane authority merely because the agent or provider returned it.
+External content may become evidence. It does not become control-plane authority merely because the agent or provider returned it. Persisted bytes likewise do not become trusted merely because they occupy a framework-shaped filename.
 
 ## Subject identity
 
@@ -76,9 +81,19 @@ Policy failure is marked critical.
 
 Every `EvidenceEvent` has an ordered sequence number, event kind, source, payload, timestamp, and critical flag. `TrialEvidence` requires the event stream to be contiguous from sequence zero.
 
-The trial computes an `evidence_root` by hash-chaining event digests in order and then binding the terminal state, final output, timing, token usage, and cost metadata into the final digest.
+The trial computes a domain-separated `evidence_root` that first binds `trial_id`, `subject_identity`, and `scenario_identity`, then hash-chains event digests in order, then binds terminal state, final output, timing, token usage, and cost metadata into the final digest.
 
-This is an integrity mechanism, not a digital signature. It detects accidental or unacknowledged content/order change; it does not establish publisher identity.
+This is an integrity mechanism, not a digital signature. It detects content/order/identity change relative to a trusted root; it does not establish publisher identity.
+
+## Persistence boundary
+
+`LocalEvidenceStore` persists one `TrialEvidence` as canonical payload bytes plus a strict manifest. The manifest binds the record key, exact trial/subject/scenario identity, payload byte length, payload SHA-256, and semantic `evidence_root`.
+
+The local filesystem is treated as a persistence substrate, not as an oracle. Reads revalidate file type, symlink constraints, size ceilings, manifest schema, record-key derivation, payload hash, evidence schema, evaluation identity, and evidence root before returning trusted evidence.
+
+Writes are immutable per record identity. A same-record writer lock prevents cooperative duplicate writers; no-clobber hard-link publication prevents a destination that appears during final publication from being silently overwritten. The payload is materialized before the manifest, making the manifest the commit marker. Partial records and stale locks fail closed and require explicit operator review.
+
+This mechanism does not authenticate a writer who can coherently replace both payload and manifest. See [Evidence Persistence and Replay](EVIDENCE_AND_REPLAY.md).
 
 ## Adapter boundary
 
@@ -99,12 +114,20 @@ The deterministic `ScriptedAdapter` exists to test the harness itself without pr
 `TrialRunner` performs the following sequence:
 
 1. execute the adapter against one exact subject/scenario pair;
-2. convert provider/runtime exceptions into critical `RUNTIME_ERROR` evidence and `BLOCKED`;
+2. convert provider/runtime exceptions into critical `RUNTIME_ERROR` evidence and `BLOCKED` without retaining raw exception detail;
 3. construct immutable `TrialEvidence`;
 4. run deterministic policy and outcome oracles;
 5. derive `FAIL` if any deterministic oracle fails, otherwise `PASS`.
 
 A future semantic/model grader may enrich quality measurement but will remain subordinate to deterministic safety and state authority.
+
+## Exact-identity replay
+
+`EvidenceReplayAdapter` is an adapter boundary for **historical regrading**, not agent re-execution. It refuses replay when the requested trial ID, subject identity, or scenario identity differs from the recorded evidence.
+
+A valid replay emits the historical observations unchanged so `TrialRunner` can apply the deterministic policy and outcome oracles again. For the same evidence model, exact-identity replay reproduces the original evidence root.
+
+Replay cannot establish current provider liveness, current external state, fresh side effects, or publisher identity.
 
 ## Repeated trials
 
@@ -126,4 +149,6 @@ Trajectory assertions are appropriate when the path itself is part of correctnes
 
 ## Current boundary
 
-The core currently provides deterministic contracts, evidence, execution, state/policy oracles, statistics, release gating, and minimization. Live-provider adapters, persistent evidence storage, MCP simulators, semantic graders, and metamorphic execution are future implementation layers and are not represented as complete in this document.
+The core currently provides deterministic contracts, identity-bound evidence, local integrity-verified evidence persistence, exact-identity replay, execution, state/policy oracles, metamorphic relations, statistics, release gating, failure minimization, and a deterministic OpenAI Agents SDK integration tier.
+
+Credentialed live-provider assurance, hostile-writer authenticated evidence, remote attestation, immutable remote retention, MCP fault servers, calibrated semantic graders, and automatic perturbation generation remain separate implementation layers and are not represented as complete in this document.

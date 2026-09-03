@@ -22,9 +22,21 @@ The framework does not currently use a model-as-judge. This is deliberate until 
 
 The security taxonomy includes MCP authorization/tool-poisoning concepts, but the repository does not yet provide executable MCP fault servers or protocol conformance claims.
 
-### No persistent evidence store
+### Local persistence is not trusted-writer attestation
 
-`TrialEvidence` has a hash-chain root but is currently an in-memory model. There is no durable append-only journal, signature, remote attestation, retention policy, or tamper-resistant artifact backend yet.
+`LocalEvidenceStore` now provides durable local record materialization with canonical payload bytes, a strict manifest, bounded regular-file reads, symlink rejection, payload hashing, identity derivation checks, semantic evidence-root verification, same-record writer locks, manifest-last commit semantics, and no-clobber publication.
+
+Those controls verify a local record **relative to its manifest and expected evaluation identity**. They do not establish who authored the record. An actor with arbitrary write access to the store root can replace payload and manifest coherently and recompute ordinary hashes.
+
+The repository therefore does **not** claim digital signatures, MAC-based writer authentication, trusted timestamps, remote attestation, WORM/object-lock storage, encryption at rest, key management, cross-host durability, transparency-log anchoring, or enforced retention/deletion policy.
+
+Filesystems that cannot provide the no-clobber hard-link publication primitive fail publication rather than silently falling back to overwrite semantics.
+
+### Replay is historical regrading, not re-execution
+
+`EvidenceReplayAdapter` requires the recorded trial ID, subject identity, and scenario identity to match the requested replay exactly. It can re-apply deterministic policy/outcome grading to historical observations and reproduce the evidence root for an unchanged evidence model.
+
+Replay does **not** prove current provider availability, reproduce stochastic agent behavior, re-run tools, establish that a historical side effect still exists, or authenticate the original publisher. Those claims require fresh execution or a stronger provenance system.
 
 ### No formal non-inferiority test
 
