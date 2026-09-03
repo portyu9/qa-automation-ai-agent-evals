@@ -26,6 +26,7 @@ dependencies = ["pydantic>=2.10,<3", "typer>=0.15,<1"]
 
 [project.optional-dependencies]
 openai = ["openai-agents==0.22.0"]
+mcp = ["mcp==2.1.1"]
 yaml = ["pyyaml>=6.0.3,<7"]
 dev = [
   "bandit>=1.8,<2",
@@ -53,11 +54,12 @@ packages = ["src/agent_evals"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
-addopts = "-q --strict-markers --disable-warnings -m 'not openai'"
+addopts = "-q --strict-markers --disable-warnings -m 'not openai and not mcp'"
 markers = [
   "integration: deterministic integration tests",
   "live: tests requiring a live model/provider",
   "openai: deterministic OpenAI Agents SDK adapter tests; no API calls",
+  "mcp: deterministic Model Context Protocol SDK tests; no network or provider calls",
 ]
 asyncio_mode = "auto"
 
@@ -86,7 +88,7 @@ packages = ["agent_evals"]
 warn_unused_ignores = true
 
 [[tool.mypy.overrides]]
-module = ["agents", "agents.*"]
+module = ["agents", "agents.*", "mcp", "mcp.*"]
 ignore_missing_imports = true
 
 [tool.bandit]
