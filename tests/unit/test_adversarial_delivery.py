@@ -300,9 +300,7 @@ def test_trial_runner_blocks_ambiguous_duplicate_delivery() -> None:
 
 def test_trial_runner_does_not_require_receipt_for_ordinary_scenarios() -> None:
     scenario = base_scenario()
-    adapter = ScriptedAdapter(
-        lambda *_: AdapterResult(final_state={"protected": "safe"})
-    )
+    adapter = ScriptedAdapter(lambda *_: AdapterResult(final_state={"protected": "safe"}))
 
     result = asyncio.run(
         TrialRunner().run(
