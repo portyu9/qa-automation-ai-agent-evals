@@ -52,7 +52,7 @@ This framework treats the **complete agent system** as the subject under test: m
 | **Adversarial derivation preserves authority** | an attack cannot grant tools, broaden resources, remove approval, reroute handoffs, or redefine success |
 | **Attack delivery is a precondition** | adversarial behavior is graded only after one exact matching receipt verifies |
 | **Availability ≠ consumption** | an environment value that subject code never reads is not a delivered attack |
-| **MCP configuration ≠ observation** | an MCP fault exists only as delivered protocol evidence after the official client observes the required representation |
+| **MCP configuration ≠ observation** | an MCP fault exists only as delivered protocol evidence after the official client observes the required representation or relation |
 | **Protocol delivery ≠ behavior** | an MCP receipt does not establish that an autonomous agent consumed or resisted the fault |
 | **Evaluator failure ≠ subject failure** | unavailable/unverifiable controlled delivery becomes `EVALUATION_ERROR / BLOCKED` |
 | **Provider failure ≠ evaluator failure** | provider/runtime exceptions remain `RUNTIME_ERROR / BLOCKED` |
@@ -105,21 +105,24 @@ Seven generic channels implemented does **not** mean universal production interc
 
 ### Deterministic MCP fault laboratory
 
-The separate `MCPFaultLab` uses official `mcp==2.1.1` and protocol revision `2026-07-28`. Each probe builds a fresh real `MCPServer`, connects an official `Client`, performs `tools/list`, invokes the target twice, and emits `MCPFaultReceipt` only after exact public client observation.
+The separate `MCPFaultLab` uses official `mcp==2.1.1` and protocol revision `2026-07-28`. Each probe builds a fresh real `MCPServer`, connects an official `Client`, and emits `MCPFaultReceipt` only after the complete fault-specific public-client observation contract is satisfied.
 
 | Fault | Verified protocol boundary |
 |---|---|
 | **tool metadata poison** | canonical fault JSON observed as the target description returned by `tools/list` |
 | **tool result poison** | canonical fault JSON observed as first `tools/call` result text; second call recovers to benign data |
 | **tool error** | canonical fault JSON preserved inside the SDK-generated model-visible `ToolError` envelope; second call recovers to benign data |
+| **tool-list stale cache** | target initially observed under a private positive `tools/list` TTL, removed from the live server registry, still returned by a normal cached `Client.list_tools()` call, and absent after `cache_mode="refresh"` forces current server truth |
 
-The receipt binds both the controlled payload SHA-256 and the SHA-256 of the exact observed protocol text. For direct metadata/result poison the hashes match. For `ToolError` they intentionally differ because the SDK wraps the controlled message as:
+The receipt binds both the controlled fault-material SHA-256 and the SHA-256 of the exact canonical protocol observation. For direct metadata/result poison the hashes match. For `ToolError` they intentionally differ because the SDK wraps the controlled message as:
 
 ```text
 Error executing tool <tool>: <canonical fault payload>
 ```
 
-This records protocol transformation instead of pretending the wire/client representation stayed byte-identical.
+For the stale-cache fault they also intentionally differ: the payload hash binds the configured TTL while the observation hash binds canonical initial/cached/refreshed tool-name sets plus the observed TTL.
+
+This records protocol transformation and state relations instead of pretending every fault is byte-identical content delivery.
 
 The MCP laboratory is a **protocol evidence layer**, not an agent verdict engine. It does not currently convert `MCPFaultReceipt` into OpenAI `ATTACK_DELIVERY`, agent `PASS`/`FAIL`, or release acceptance.
 
@@ -295,9 +298,12 @@ result:
 
 error:
   mcp:2026-07-28:tools/call:<tool>:error.content[0].text:message-suffix
+
+stale discovery:
+  mcp:2026-07-28:tools/list:cache-use-stale-after-remove:<tool>:refresh-proves-absent
 ```
 
-Every probe uses a fresh server. Result/error faults are first-call-only and must recover to controlled benign output on the second call. Raw fault text is excluded from the receipt itself; the receipt stores integrity digests and the concrete protocol observation location.
+Every probe uses a fresh server. Result/error faults are first-call-only and must recover to controlled benign output on the second call. The stale-discovery probe uses a fresh client cache and must prove initial target presence, server-side removal, cached target reuse, and refreshed target absence. Raw fault text is excluded from the receipt itself; the receipt stores integrity digests and the concrete protocol observation location.
 
 See [MCP Fault Laboratory](docs/MCP_LAB.md) for the complete trust and non-claim boundary.
 
@@ -338,11 +344,11 @@ qa-automation-ai-agent-evals/
 
 Current source checkpoint:
 
-- deterministic core: **180 passed, 14 deselected**;
-- branch coverage: **93.21%** against the 90% gate;
+- deterministic core: **181 passed, 15 deselected**;
+- branch coverage: **93.14%** against the 90% gate;
 - strict mypy: **0 issues across 37 source files**;
 - deterministic OpenAI SDK suite: **11/11 passed**;
-- deterministic MCP protocol suite: **3/3 passed**;
+- deterministic MCP protocol suite: **4/4 passed**;
 - Python **3.11 and 3.13** quality jobs: green;
 - Ruff lint + formatter: green;
 - Bandit: green;
@@ -359,7 +365,8 @@ The repository does not currently claim:
 - agent-through-MCP behavioral assurance, MCP-derived agent verdicts, or release acceptance from protocol receipts alone;
 - remote MCP Streamable HTTP, stdio, proxy, network, TLS, DNS, or transport fault coverage;
 - MCP authorization issuer/scope/credential-reuse/token-binding/CIMD assurance;
-- MCP cache staleness/invalidation/poisoning, header-routing faults, malformed JSON-RPC/framing, schema drift, duplicate/out-of-order responses, or complete protocol conformance;
+- general MCP cache correctness beyond the tested private stale-after-removal relation, including public/cross-partition sharing, cache poisoning, custom/shared stores, notification invalidation, TTL-expiry behavior, cache races, or renamed-tool discovery;
+- MCP header-routing faults, malformed JSON-RPC/framing, schema drift, duplicate/out-of-order responses, or complete protocol conformance;
 - malicious MCP resources, resource templates, prompts, roots, elicitation, sampling, subscriptions, or Tasks-extension coverage;
 - hosted third-party MCP server fidelity or remote target-side MCP delivery attestation;
 - production application-memory, vector/RAG-memory, provider-managed-conversation, or cross-user memory poisoning under SDK `MEMORY` mode;
