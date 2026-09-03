@@ -13,6 +13,7 @@ import os
 import re
 import stat
 import tempfile
+from contextlib import suppress
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
@@ -159,10 +160,8 @@ class LocalEvidenceStore:
             return manifest
         finally:
             os.close(lock_fd)
-            try:
+            with suppress(FileNotFoundError):
                 paths.lock.unlink()
-            except FileNotFoundError:
-                pass
 
     def read(self, record_key: str) -> StoredEvidence:
         _validate_record_key(record_key)
@@ -327,14 +326,29 @@ def _atomic_materialize(path: Path, content: bytes) -> None:
         fd = -1
         if path.is_symlink() or path.exists():
             raise EvidenceConflictError(f"evidence artifact appeared during write: {path.name}")
-        os.replace(temporary, path)
+        temporary.replace(path)
+        _fsync_directory(path.parent)
     finally:
         if fd >= 0:
             os.close(fd)
-        try:
+        with suppress(FileNotFoundError):
             temporary.unlink()
-        except FileNotFoundError:
-            pass
+
+
+def _fsync_directory(path: Path) -> None:
+    directory_flag = getattr(os, "O_DIRECTORY", 0)
+    if not directory_flag:
+        return
+    try:
+        fd = os.open(path, os.O_RDONLY | directory_flag)
+    except OSError as exc:
+        raise EvidenceStoreError(f"cannot open evidence directory for durability sync: {path}") from exc
+    try:
+        os.fsync(fd)
+    except OSError as exc:
+        raise EvidenceStoreError(f"cannot durability-sync evidence directory: {path}") from exc
+    finally:
+        os.close(fd)
 
 
 def _canonical_json_bytes(value: object) -> bytes:
