@@ -11,6 +11,7 @@ The design therefore starts with identity and evidence, then derives conclusions
 ```text
 Trusted evaluation control plane
 ├── subject/scenario contracts
+├── deterministic adversarial scenario derivation
 ├── evidence normalization contract
 ├── local evidence-store verifier
 ├── exact-identity replay boundary
@@ -23,14 +24,15 @@ Trusted evaluation control plane
 Untrusted / evaluated subject
 └── agent runtime + model + orchestration + tools + memory behavior
 
-External evidence sources
-└── provider responses, tool results, target systems, MCP servers, user simulators
+External evidence / attack-delivery sources
+└── provider responses, tool results, target systems, MCP servers, user simulators,
+    memory stores, controlled fault injectors
 
 Persistence substrate
 └── filesystem bytes are reverified before becoming evidence again
 ```
 
-External content may become evidence. It does not become control-plane authority merely because the agent or provider returned it. Persisted bytes likewise do not become trusted merely because they occupy a framework-shaped filename. Serialized report fields likewise do not become true merely because they carry a percentage, verdict, or release label.
+External content may become evidence or adversarial stimulus. It does not become control-plane authority merely because the agent, provider, tool, MCP server, or attack fixture returned it. Persisted bytes likewise do not become trusted merely because they occupy a framework-shaped filename. Serialized report fields likewise do not become true merely because they carry a percentage, verdict, or release label.
 
 ## Subject identity
 
@@ -63,6 +65,18 @@ An `EvaluationScenario` binds:
 
 Contradictory outcome requirements are rejected at model validation time.
 
+## Deterministic adversarial derivation
+
+`AttackFixture` turns one versioned threat stimulus into content-addressed test input. It binds a stable attack ID/revision, `ThreatClass`, declared `AttackChannel`, canonical finite JSON payload, and tags.
+
+Applying a fixture to a base `EvaluationScenario` creates a security scenario while preserving the base objective, exact `AuthorityPolicy`, required outcomes, forbidden outcomes, and deep-copied base state. The derived scenario adds only deterministic attack identity/revision/tag material and a reserved attack envelope containing the exact base-scenario identity and attack identity.
+
+`AdversarialCampaign` binds one exact base scenario to a canonical set of unique attacks. It normalizes attack order, binds the base identity at construction, and rechecks that identity before deriving scenarios so nested base-state drift fails closed.
+
+The attack envelope is a **delivery contract**, not proof of delivery. An adapter or controlled environment must inspect the declared channel and actually inject the stimulus at the relevant user/tool/metadata/memory/resource/handoff/environment boundary. When the original base is supplied, `extract_attack(..., expected_base_scenario=...)` rederives the complete scenario and detects drift outside the envelope.
+
+See [Adversarial Testing](ADVERSARIAL_TESTING.md).
+
 ## Authority is fail-closed
 
 `AuthorityPolicy` has explicit allowed and forbidden tools, approval-required tools, resource prefixes, and tool/handoff budgets. An unknown tool is not implicitly permitted. A resource outside all authorized prefixes is rejected. Approval-required tools must also be present in the allowlist.
@@ -77,6 +91,8 @@ The current policy oracle evaluates observable events and detects:
 - handoff budget excess.
 
 Policy failure is marked critical.
+
+Adversarial scenario derivation does not get a special authority path: the base authority contract is copied unchanged into the derived security scenario.
 
 ## Evidence model
 
@@ -108,6 +124,8 @@ The adapter does **not**:
 - grant release authority;
 - substitute final prose for state.
 
+For adversarial scenarios, the adapter/evaluation environment additionally owns the concrete delivery mechanism for the declared attack channel. Merely seeing an attack envelope does not prove that a malicious tool result, memory record, MCP description, resource, or handoff was actually presented to the subject.
+
 The deterministic `ScriptedAdapter` exists to test the harness itself without provider credentials.
 
 ## Trial derivation
@@ -120,6 +138,8 @@ The deterministic `ScriptedAdapter` exists to test the harness itself without pr
 4. run deterministic policy and outcome oracles;
 5. derive `FAIL` if any deterministic oracle fails, otherwise `PASS`.
 
+An adversarial scenario enters this same path. There is no model-authored red-team score and no special rule that treats the absence of suspicious prose as safety evidence.
+
 A future semantic/model grader may enrich quality measurement but will remain subordinate to deterministic safety and state authority.
 
 ## Exact-identity replay
@@ -128,7 +148,7 @@ A future semantic/model grader may enrich quality measurement but will remain su
 
 A valid replay emits the historical observations unchanged so `TrialRunner` can apply the deterministic policy and outcome oracles again. For the same evidence model, exact-identity replay reproduces the original evidence root.
 
-Replay cannot establish current provider liveness, current external state, fresh side effects, or publisher identity.
+Replay cannot establish current provider liveness, current external state, fresh side effects, current attack delivery, or publisher identity.
 
 ## Repeated trials
 
@@ -160,6 +180,6 @@ Trajectory assertions are appropriate when the path itself is part of correctnes
 
 ## Current boundary
 
-The core currently provides deterministic contracts, identity-bound evidence, local integrity-verified evidence persistence, exact-identity replay, execution, state/policy oracles, metamorphic relations, repeated-trial statistics, self-validating session assurance reports, release gating, failure minimization, and a deterministic OpenAI Agents SDK integration tier.
+The core currently provides deterministic contracts, identity-bound adversarial fixtures/campaigns and scenario derivation, identity-bound evidence, local integrity-verified evidence persistence, exact-identity replay, execution, state/policy oracles, metamorphic relations, repeated-trial statistics, self-validating session assurance reports, release gating, failure minimization, and a deterministic OpenAI Agents SDK integration tier.
 
-Credentialed live-provider assurance, hostile-writer authenticated evidence/report signing, remote attestation, immutable remote retention, MCP fault servers, calibrated semantic graders, and automatic perturbation generation remain separate implementation layers and are not represented as complete in this document.
+Credentialed live-provider assurance, universal per-channel attack injectors, automatic/adaptive adversarial generation, hostile-writer authenticated evidence/report signing, remote attestation, immutable remote retention, MCP fault servers, calibrated semantic graders, and automatic perturbation generation remain separate implementation layers and are not represented as complete in this document.
