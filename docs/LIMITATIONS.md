@@ -38,6 +38,14 @@ Filesystems that cannot provide the no-clobber hard-link publication primitive f
 
 Replay does **not** prove current provider availability, reproduce stochastic agent behavior, re-run tools, establish that a historical side effect still exists, or authenticate the original publisher. Those claims require fresh execution or a stronger provenance system.
 
+### Assurance-report validation is not oracle replay or signed attestation
+
+`AssuranceReport` now binds trial IDs, evidence roots, deterministic oracle snapshots, trial verdicts, reliability output, a frozen release policy, release-gate output, and a domain-separated report root. Construction and loading recompute resolved trial verdicts from oracle snapshots, reliability from trial verdicts, critical-violation counts from oracle snapshots, and the release-gate result from the frozen policy.
+
+That makes serialized session conclusions internally auditable; it does **not** make the report an independent source of per-trial truth. The report stores evidence roots rather than full `TrialEvidence`, so it cannot rerun policy/outcome oracles from the hash alone. Re-establishing oracle results requires loading the underlying evidence and using the replay path.
+
+The report root is also an ordinary integrity hash, not writer authentication. An actor who can coherently rewrite an unsigned report can recompute the report root and all derived fields. The repository therefore does not claim signed reports, authenticated release approvals, trusted timestamps, transparency-log anchoring, or non-repudiation.
+
 ### No formal non-inferiority test
 
 Paired comparison currently establishes significant directional improvement/regression using an exact McNemar/binomial test. Lack of significant regression is **not** claimed as formal non-inferiority.

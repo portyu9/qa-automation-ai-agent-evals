@@ -17,6 +17,7 @@ Trusted evaluation control plane
 ├── deterministic policy oracle
 ├── deterministic outcome oracle
 ├── statistical calculations
+├── session assurance-report verifier
 └── release gate
 
 Untrusted / evaluated subject
@@ -29,7 +30,7 @@ Persistence substrate
 └── filesystem bytes are reverified before becoming evidence again
 ```
 
-External content may become evidence. It does not become control-plane authority merely because the agent or provider returned it. Persisted bytes likewise do not become trusted merely because they occupy a framework-shaped filename.
+External content may become evidence. It does not become control-plane authority merely because the agent or provider returned it. Persisted bytes likewise do not become trusted merely because they occupy a framework-shaped filename. Serialized report fields likewise do not become true merely because they carry a percentage, verdict, or release label.
 
 ## Subject identity
 
@@ -133,6 +134,16 @@ Replay cannot establish current provider liveness, current external state, fresh
 
 `EvaluationSession` repeats isolated trials and builds a `ReliabilityReport`. Trial IDs bind scenario ID, revision, and an attempt index. Repeated execution is required because an agent's observed behavior is stochastic even when its configuration is fixed.
 
+## Session assurance artifacts
+
+`AssuranceReport` binds one exact session to its trial IDs, evidence roots, deterministic oracle snapshots, trial verdicts, reliability outputs, frozen release policy, release-gate result, and a domain-separated report root.
+
+The report is self-validating at the **session derivation** layer. On construction and load it verifies unique trial identities, resolved verdict/oracle consistency, blocked-trial semantics, reliability recomputation, critical-violation recomputation, release-gate recomputation, and report-root integrity.
+
+The report does not contain the entire underlying `TrialEvidence`, so it does not claim to rerun policy/outcome oracles from an evidence hash alone. Full per-trial historical regrading still flows through integrity-verified evidence retrieval and `EvidenceReplayAdapter`.
+
+This separation prevents a stored success percentage or release label from becoming authority merely because it was serialized. See [Session Assurance Reports](ASSURANCE_REPORTS.md).
+
 ## Release authority
 
 `ReleaseGate` consumes statistical evidence plus critical-violation counts.
@@ -149,6 +160,6 @@ Trajectory assertions are appropriate when the path itself is part of correctnes
 
 ## Current boundary
 
-The core currently provides deterministic contracts, identity-bound evidence, local integrity-verified evidence persistence, exact-identity replay, execution, state/policy oracles, metamorphic relations, statistics, release gating, failure minimization, and a deterministic OpenAI Agents SDK integration tier.
+The core currently provides deterministic contracts, identity-bound evidence, local integrity-verified evidence persistence, exact-identity replay, execution, state/policy oracles, metamorphic relations, repeated-trial statistics, self-validating session assurance reports, release gating, failure minimization, and a deterministic OpenAI Agents SDK integration tier.
 
-Credentialed live-provider assurance, hostile-writer authenticated evidence, remote attestation, immutable remote retention, MCP fault servers, calibrated semantic graders, and automatic perturbation generation remain separate implementation layers and are not represented as complete in this document.
+Credentialed live-provider assurance, hostile-writer authenticated evidence/report signing, remote attestation, immutable remote retention, MCP fault servers, calibrated semantic graders, and automatic perturbation generation remain separate implementation layers and are not represented as complete in this document.
