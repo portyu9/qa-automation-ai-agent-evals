@@ -5,7 +5,12 @@ import asyncio
 import pytest
 
 from agent_evals.adapters.base import AdapterPreconditionError, AdapterResult
-from agent_evals.contracts.models import AuthorityPolicy, EvaluationScenario, ScenarioKind, SubjectFingerprint
+from agent_evals.contracts.models import (
+    AuthorityPolicy,
+    EvaluationScenario,
+    ScenarioKind,
+    SubjectFingerprint,
+)
 from agent_evals.evidence.models import EvidenceKind, TrialVerdict
 from agent_evals.runtime.evaluator import TrialRunner
 
@@ -72,7 +77,7 @@ def test_adapter_precondition_error_rejects_invalid_codes(code: str) -> None:
 
 @pytest.mark.parametrize("reason", ["", "x" * 513])
 def test_adapter_precondition_error_rejects_missing_or_oversized_reason(reason: str) -> None:
-    with pytest.raises(ValueError, match="1..512"):
+    with pytest.raises(ValueError, match=r"1\.\.512"):
         AdapterPreconditionError(code="fixture_unavailable", reason=reason)
 
 
