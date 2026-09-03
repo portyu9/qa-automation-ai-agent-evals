@@ -12,7 +12,7 @@
 
 **A provider-neutral quality-engineering framework for evaluating autonomous agents by observable outcomes, side effects, authority boundaries, reliability, and reproducible evidence—not by persuasive final prose.**
 
-[Documentation](docs/README.md) · [Architecture](docs/ARCHITECTURE.md) · [Evaluation Model](docs/EVALUATION_MODEL.md) · [Statistics](docs/STATISTICAL_ASSURANCE.md) · [Security](docs/SECURITY.md) · [Limitations](docs/LIMITATIONS.md)
+[Documentation](docs/README.md) · [Architecture](docs/ARCHITECTURE.md) · [Evaluation Model](docs/EVALUATION_MODEL.md) · [Metamorphic Testing](docs/METAMORPHIC_TESTING.md) · [Statistics](docs/STATISTICAL_ASSURANCE.md) · [Security](docs/SECURITY.md) · [Limitations](docs/LIMITATIONS.md)
 
 </div>
 
@@ -35,7 +35,7 @@ Release gates decide.
 
 Agentic systems are more than model responses. They call tools, mutate external state, hand work to other agents, consume memory, cross trust boundaries, request approvals, retry failures, and adapt over multiple turns. An evaluation architecture that grades only the last message cannot reliably distinguish successful work from an agent that merely *said* the work succeeded.
 
-This framework treats the complete agent system as the subject under test: model, instructions, orchestration, tools, authority, memory policy, adapter, and application revision. Evidence is normalized at that boundary and terminal conclusions are derived outside the agent.
+This framework treats the complete agent system as the subject under test: model, instructions, orchestration, tools, authority, memory policy, adapter, and application revision. Provider-specific execution is normalized into evidence; terminal conclusions remain outside the agent and outside the provider SDK.
 
 ### Core invariants
 
@@ -44,34 +44,38 @@ This framework treats the complete agent system as the subject under test: model
 | **Outcome before rhetoric** | environment/backend state outranks the agent's claim about that state |
 | **Safety is non-compensatory** | a critical authorization violation cannot be averaged away by a high quality score |
 | **Unknown is not green** | blocked execution and insufficient evidence remain explicit terminal states |
+| **Bad ≠ unknown** | resolved behavioral regression is `REJECT`; unavailable evidence is `INCONCLUSIVE` |
 | **Creativity is allowed** | exact tool sequences are asserted only when the path itself is contractual or safety-critical |
-| **Identity is content-addressed** | results bind to the full evaluated subject, not only a model name |
-| **Nondeterminism is measured** | repeated trials produce uncertainty bounds and reliability metrics instead of one-shot certainty |
-| **Comparisons are paired** | candidate and baseline trial outcomes are compared using paired evidence, not unrelated headline percentages |
+| **Identity is canonical** | semantically equivalent set ordering cannot create different subject/scenario identities |
+| **Nondeterminism is measured** | repeated resolved trials produce uncertainty bounds instead of one-shot certainty |
+| **Comparisons are paired** | candidate/baseline comparison rejects unresolved evidence rather than coercing it into failure |
+| **Authority is multidimensional** | tool scope, approval scope, resource scope, and budgets are evaluated together |
 | **Failures must reproduce** | counterexample reduction accepts a shrink only when the smaller case still reproduces the failure |
 
 ---
 
 ## What is executable today
 
-The current foundation is intentionally deterministic and provider-neutral. It does not require API credentials.
+The core remains deterministic and credential-free. A first-class OpenAI Agents SDK adapter is also exercised with the SDK's deterministic `ScriptedModel`; credentialed live-model behavior is deliberately a separate future tier.
 
 | Surface | Implemented behavior |
 |---|---|
-| **Subject contract** | SHA-256 identity across provider/model, instructions, tools, policy, memory policy, adapter, and application revision |
+| **Subject contract** | canonical SHA-256 identity across provider/model, instructions, tools, policy, memory policy, adapter, and application revision |
 | **Scenario contract** | versioned objectives, initial state, required/forbidden outcomes, tags, and fail-closed authority |
-| **Evidence** | immutable ordered events plus a hash-chain root binding the event sequence and terminal state |
-| **Outcome oracle** | validates actual terminal state; agent text cannot satisfy state requirements |
-| **Policy oracle** | enforces tool allowlists, approval-before-use, resource scope, tool budgets, handoff budgets, and explicit violations |
-| **Runtime** | provider-neutral adapter execution with `PASS`, `FAIL`, and `BLOCKED` derivation |
-| **Reliability** | empirical success rate, Wilson confidence interval, `pass@k`, and `pass^k` |
-| **Differential evaluation** | exact paired McNemar/binomial comparison for baseline-versus-candidate outcomes |
-| **Release gate** | fail-closed thresholds with non-compensatory critical violations |
+| **Evidence** | immutable ordered events plus a hash-chain root binding trajectory and terminal state |
+| **Outcome oracle** | validates actual terminal state; missing keys remain distinct from legitimate `null` values |
+| **Policy oracle** | fail-closed tools/resources, call-bound one-shot approvals, persistent approval scope, turn/tool/handoff budgets, explicit violations |
+| **Runtime** | provider-neutral execution with `PASS`, `FAIL`, and `BLOCKED` derivation |
+| **OpenAI adapter** | current public Agents SDK result/tool/handoff/guardrail normalization with an independent terminal-state reader |
+| **Reliability** | resolved-trial success rate, Wilson confidence interval, `pass@k`, and `pass^k`; blocked/inconclusive attempts retained separately |
+| **Differential evaluation** | exact paired McNemar/binomial comparison over resolved baseline/candidate pairs |
+| **Release gate** | non-compensatory critical safety rules plus separate behavioral rejection and evidence-insufficiency semantics |
+| **Metamorphic assurance** | state-projection invariance and authority-monotonicity relations without golden prose |
 | **Failure minimization** | bounded deterministic delta debugging with replay-required reduction |
 | **Security taxonomy** | stable identifiers for major agentic failure and attack classes |
 | **Engineering controls** | strict typing, linting, tests, branch coverage, Bandit, dependency audit, package verification, pinned Actions, CODEOWNERS, Dependabot |
 
-Live-provider adapters, trace ingestion, MCP fault servers, metamorphic scenario generation, persistent artifact storage, and calibrated semantic graders are deliberately not represented here as completed functionality until their implementation and validation land.
+Credentialed live-provider suites, MCP fault servers, automatic perturbation generation, durable artifact storage, and calibrated semantic graders are not represented as completed functionality. [Limitations](docs/LIMITATIONS.md) is authoritative.
 
 ---
 
@@ -80,17 +84,18 @@ Live-provider adapters, trace ingestion, MCP fault servers, metamorphic scenario
 ```mermaid
 flowchart LR
     accTitle: Evidence-bound agent evaluation architecture
-    accDescr: An exact subject and versioned scenario are executed through a provider-neutral adapter. Observable events and terminal environment state become immutable evidence. Deterministic policy and outcome oracles derive trial truth. Repeated trials feed statistical assurance and a fail-closed release gate.
+    accDescr: An exact subject and versioned scenario are executed through a provider-neutral adapter. Observable events and independently read terminal state become immutable evidence. Deterministic policy and outcome oracles derive trial truth. Repeated trials feed statistical assurance and a fail-closed release gate.
 
-    S[Subject fingerprint]
-    C[Scenario contract]
+    S[Canonical subject identity]
+    C[Scenario + authority contract]
     A[Agent adapter]
     U[Agent system under test]
     E[Normalized evidence]
     P[Policy oracle]
     O[Outcome oracle]
     T[Trial verdict]
-    R[Reliability statistics]
+    M[Metamorphic relations]
+    R[Reliability + paired statistics]
     G[Release gate]
 
     S --> A
@@ -102,8 +107,10 @@ flowchart LR
     E --> O
     P --> T
     O --> T
+    T --> M
     T --> R
     R --> G
+    M --> G
 
     classDef contract fill:#ddf4ff,stroke:#0969da,color:#24292f,stroke-width:2px
     classDef sut fill:#ffebe9,stroke:#cf222e,color:#24292f,stroke-width:2px,stroke-dasharray:5 3
@@ -112,11 +119,11 @@ flowchart LR
 
     class S,C,A contract
     class U sut
-    class E,P,O,T,R evidence
+    class E,P,O,T,M,R evidence
     class G gate
 ```
 
-The adapter is deliberately narrow. Provider-specific execution may generate observations, but it cannot grade itself or grant itself release authority.
+The adapter is deliberately narrow. Provider-specific execution may generate observations, but it cannot grade itself, satisfy terminal state by assertion, or grant itself release authority.
 
 Deep dive: [Architecture](docs/ARCHITECTURE.md).
 
@@ -124,16 +131,22 @@ Deep dive: [Architecture](docs/ARCHITECTURE.md).
 
 ## Terminal semantics
 
-A trial does not collapse every failure into one boolean.
+A trial and a release decision answer different questions.
 
-| Verdict | Meaning |
+| Trial verdict | Meaning |
 |---|---|
 | `PASS` | required deterministic oracles closed successfully for the exact subject/scenario pair |
 | `FAIL` | observed evidence violated a deterministic requirement |
-| `BLOCKED` | the trial could not produce the evidence required for evaluation, such as a provider/runtime failure |
-| `INCONCLUSIVE` | reserved for higher-level assurance when available evidence is insufficient to support acceptance or rejection |
+| `BLOCKED` | execution could not produce the evidence required to judge behavior |
+| `INCONCLUSIVE` | reserved for higher-level assurance where available evidence cannot support a behavioral conclusion |
 
-A blocked provider is not a product defect. A small sample is not reliability. A confident model statement is not proof.
+| Release decision | Meaning |
+|---|---|
+| `ACCEPT` | behavioral, uncertainty, and critical-safety thresholds all closed |
+| `REJECT` | resolved evidence proves a behavioral/safety threshold is unacceptable |
+| `INCONCLUSIVE` | evidence is insufficient for promotion, including too few resolved trials or excessive blocked attempts |
+
+A blocked provider is not a product defect. It still prevents promotion when the release contract requires evidence.
 
 ---
 
@@ -189,16 +202,48 @@ scenario = EvaluationScenario(
 adapter = ScriptedAdapter(
     lambda *_: AdapterResult(
         events=(
-            EvidenceEvent(sequence=0, kind=EvidenceKind.APPROVAL, source="human", payload={"tool": "refund"}),
-            EvidenceEvent(sequence=1, kind=EvidenceKind.TOOL_REQUEST, source="agent", payload={"tool": "refund", "resource": "tenant/7/refunds"}),
+            EvidenceEvent(
+                sequence=0,
+                kind=EvidenceKind.APPROVAL,
+                source="human",
+                payload={"tool": "refund", "call_id": "call-1"},
+            ),
+            EvidenceEvent(
+                sequence=1,
+                kind=EvidenceKind.TOOL_REQUEST,
+                source="agent",
+                payload={
+                    "tool": "refund",
+                    "call_id": "call-1",
+                    "resource": "tenant/7/refunds",
+                },
+            ),
         ),
         final_state={"refund": {"status": "created"}},
     )
 )
 
-result = asyncio.run(TrialRunner().run(adapter, subject=subject, scenario=scenario, trial_id="example-1"))
+result = asyncio.run(
+    TrialRunner().run(adapter, subject=subject, scenario=scenario, trial_id="example-1")
+)
 assert result.verdict.value == "pass"
 ```
+
+A call-scoped approval is deliberately one-shot. Reusing `call-1` for a second privileged request without a new approval fails policy evaluation.
+
+---
+
+## OpenAI Agents SDK without provider-owned truth
+
+Install the optional integration with:
+
+```bash
+python -m pip install -e '.[dev,openai]'
+```
+
+`OpenAIAgentsAdapter` currently normalizes documented SDK surfaces including tool calls/results, handoffs, approval requests, guardrail results, final output, usage, and max-turn exhaustion. The adapter receives a separate `state_reader`; therefore `result.final_output == "done"` can never by itself prove the environment changed.
+
+The repository's SDK integration test uses `agents.testing.ScriptedModel`, so the real SDK orchestration loop is tested without an API key or network call. See [OpenAI Adapter](docs/OPENAI_ADAPTER.md) and [Limitations](docs/LIMITATIONS.md).
 
 ---
 
@@ -206,35 +251,48 @@ assert result.verdict.value == "pass"
 
 Agents often solve valid tasks through paths an evaluator author did not predict. A framework that requires one exact sequence can punish capability instead of detecting failure.
 
-This framework therefore separates **outcome requirements** from **trajectory invariants**:
-
 ```text
 "refund exists in backend"                 → outcome oracle
 "never call delete_customer"               → trajectory/policy invariant
-"approval must precede refund"             → temporal policy invariant
+"approval must precede exact refund call"  → temporal/call-bound policy invariant
 "use lookup_customer exactly once"         → usually too brittle unless contractual
 ```
 
-The path matters when authority, sequencing, or protocol makes it part of correctness. Otherwise the observable result should dominate.
+The path matters when authority, sequencing, or protocol makes it part of correctness. Otherwise observable state should dominate.
+
+---
+
+## Metamorphic assurance
+
+When an exact expected answer is inappropriate, test a relation instead.
+
+```text
+paraphrased request          → protected terminal state should remain invariant
+irrelevant context added     → protected decision should remain invariant
+permission removed           → effective authority must not increase
+resource scope narrowed      → resource authority must not broaden elsewhere
+```
+
+The implemented `StateProjectionInvariant` compares explicit tuple paths such as `("items", 0, "id")`, avoiding dotted-key ambiguity. `authority_does_not_expand()` checks tools, approval requirements, resource prefixes, turns, tool calls, and handoffs together.
+
+See [Metamorphic Testing](docs/METAMORPHIC_TESTING.md).
 
 ---
 
 ## Reliability instead of one-shot confidence
 
-For repeated trials, the framework reports both empirical behavior and uncertainty:
+Behavioral statistics are computed over **resolved** `PASS`/`FAIL` trials. `BLOCKED` and `INCONCLUSIVE` attempts are retained separately and can prevent release acceptance without being mislabeled as agent-quality failures.
 
 ```text
-success rate
+resolved success rate
 Wilson confidence interval
-pass@k   — probability of at least one success in k attempts
-pass^k   — probability all k attempts succeed under the empirical rate
+pass@k   — at least one success in k attempts under the empirical approximation
+pass^k   — all k attempts succeed under the empirical approximation
 ```
 
-`pass@k` and `pass^k` answer different operational questions. A research agent may benefit from multiple attempts; a customer-facing transactional agent may require consistency on every attempt.
+Candidate-versus-baseline comparison uses paired resolved outcomes and an exact McNemar/binomial test. If either side is blocked/inconclusive, comparison refuses to invent a binary outcome.
 
-Candidate-versus-baseline comparison uses paired trial outcomes and an exact McNemar/binomial test. If the data do not establish a directional change at the configured significance level, the result is `INCONCLUSIVE` rather than a fabricated improvement claim.
-
-Deep dive: [Statistical Assurance](docs/STATISTICAL_ASSURANCE.md).
+See [Statistical Assurance](docs/STATISTICAL_ASSURANCE.md).
 
 ---
 
@@ -253,6 +311,7 @@ qa-automation-ai-agent-evals/
 │       ├── contracts/
 │       ├── evidence/
 │       ├── gates/
+│       ├── metamorphic/
 │       ├── minimization/
 │       ├── oracles/
 │       ├── runtime/
@@ -267,18 +326,18 @@ qa-automation-ai-agent-evals/
 
 ## Assurance direction
 
-The architecture is designed to grow without moving terminal authority into a model grader. Planned implementation layers include:
+The architecture is designed to grow without moving terminal authority into a model grader. Remaining implementation layers include:
 
-- first-class OpenAI Agents SDK trace adapter and deterministic SDK testing integration;
-- provider-neutral live-agent adapter contract;
-- outcome/state environments and replayable fixtures;
-- metamorphic relations such as paraphrase invariance, authority monotonicity, tenant isolation, and idempotency;
-- adversarial scenario packs for prompt injection, tool poisoning, privilege escalation, exfiltration, memory poisoning, runaway loops, and false-success behavior;
-- MCP fault laboratory for malformed responses, poisoned metadata/results, authorization failures, schema drift, disappearing tools, long-running tasks, and credential-isolation tests;
-- calibrated semantic graders that remain subordinate to deterministic safety/state authority;
-- provenance-bound artifact manifests and reproducible evaluation reports.
+- credentialed live-provider suites kept separate from deterministic core CI;
+- deeper trace ingestion where trace data adds evidence without becoming authority;
+- replayable state environments and scenario fixtures;
+- provenance-bound automatic perturbation generation for paraphrase, tenant, memory, retry, and context relations;
+- adversarial packs for injection, tool poisoning, escalation, exfiltration, memory poisoning, runaway loops, and false success;
+- MCP fault laboratory for poisoned metadata/results, malformed responses, auth failures, schema drift, disappearing tools, tasks, and credential-isolation tests;
+- calibrated semantic graders subordinate to deterministic safety/state authority;
+- durable artifact manifests and reproducible evaluation reports.
 
-These are architectural commitments, not current-feature claims. The [Limitations](docs/LIMITATIONS.md) document is authoritative about present boundaries.
+These are architectural commitments, not current-feature claims. [Limitations](docs/LIMITATIONS.md) remains authoritative.
 
 ---
 
@@ -288,9 +347,11 @@ Start at the [documentation hub](docs/README.md). Recommended shortest review pa
 
 1. [Architecture](docs/ARCHITECTURE.md)
 2. [Evaluation Model](docs/EVALUATION_MODEL.md)
-3. [Statistical Assurance](docs/STATISTICAL_ASSURANCE.md)
-4. [Security](docs/SECURITY.md)
-5. [Limitations](docs/LIMITATIONS.md)
+3. [OpenAI Adapter](docs/OPENAI_ADAPTER.md)
+4. [Metamorphic Testing](docs/METAMORPHIC_TESTING.md)
+5. [Statistical Assurance](docs/STATISTICAL_ASSURANCE.md)
+6. [Security](docs/SECURITY.md)
+7. [Limitations](docs/LIMITATIONS.md)
 
 ---
 
