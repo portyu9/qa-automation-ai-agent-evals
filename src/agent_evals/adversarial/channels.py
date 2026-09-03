@@ -149,3 +149,40 @@ class HandoffAttackPayload(BaseModel):
             raise ValueError(
                 "handoff attack payload must be a JSON object with a 'handoff' field"
             ) from exc
+
+
+class EnvironmentAttackPayload(_LocalToolAttackPayload):
+    """Contract for one-shot trial-local SDK runtime-context perturbation.
+
+    `tool` selects one exact local SDK FunctionTool and `key` selects one exact application-context
+    key. `environment` makes the fixture semantically explicit, while the complete canonical
+    `AttackFixture.payload_json` becomes the value returned for that key only during the first
+    matching tool invocation. Delivery is not established until subject code actually reads the
+    key. V1 intentionally targets Mapping-compatible local SDK context rather than process-global
+    ``os.environ`` or arbitrary infrastructure state.
+    """
+
+    key: str = Field(min_length=1, max_length=256)
+    environment: Any
+
+    @field_validator("key")
+    @classmethod
+    def normalize_key(cls, value: str) -> str:
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("environment attack key must be non-empty")
+        if normalized != value:
+            raise ValueError("environment attack key must not contain surrounding whitespace")
+        return normalized
+
+    @classmethod
+    def from_fixture(cls, attack: AttackFixture) -> Self:
+        if attack.channel is not AttackChannel.ENVIRONMENT:
+            raise ValueError("environment payload contract requires an ENVIRONMENT attack fixture")
+        try:
+            return cls.model_validate(attack.payload)
+        except ValidationError as exc:
+            raise ValueError(
+                "environment attack payload must be a JSON object with valid 'tool', 'key', and "
+                "'environment' fields"
+            ) from exc
