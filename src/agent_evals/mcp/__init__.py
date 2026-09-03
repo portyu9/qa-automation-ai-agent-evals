@@ -10,6 +10,12 @@ from agent_evals.mcp.models import (
     MCPToolIdentityDriftProbeResult,
     MCPToolSchemaDriftProbeResult,
 )
+from agent_evals.mcp.remote_auth import (
+    MCPRemoteAuthLab,
+    MCPRemoteAuthPolicy,
+    MCPRemoteAuthProbeResult,
+    MCPRemoteAuthReceipt,
+)
 
 __all__ = [
     "MCPDiscoveryProbeResult",
@@ -18,6 +24,10 @@ __all__ = [
     "MCPFaultReceipt",
     "MCPFaultSpec",
     "MCPProbeResult",
+    "MCPRemoteAuthLab",
+    "MCPRemoteAuthPolicy",
+    "MCPRemoteAuthProbeResult",
+    "MCPRemoteAuthReceipt",
     "MCPToolIdentityDriftProbeResult",
     "MCPToolSchemaDriftProbeResult",
 ]

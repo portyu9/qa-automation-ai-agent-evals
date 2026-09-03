@@ -65,7 +65,9 @@ class MCPRemoteAuthPolicy(BaseModel):
             raise ValueError("MCP remote-auth required_scopes must not be empty")
         for scope in value:
             if not scope.strip() or scope != scope.strip():
-                raise ValueError("MCP remote-auth scopes must be non-empty without surrounding whitespace")
+                raise ValueError(
+                    "MCP remote-auth scopes must be non-empty without surrounding whitespace"
+                )
         if len(set(value)) != len(value):
             raise ValueError("MCP remote-auth required_scopes must not contain duplicates")
         return tuple(sorted(value))
@@ -74,7 +76,9 @@ class MCPRemoteAuthPolicy(BaseModel):
     @classmethod
     def validate_tool_name(cls, value: str) -> str:
         if not value.strip() or value != value.strip():
-            raise ValueError("MCP remote-auth tool_name must be non-empty without surrounding whitespace")
+            raise ValueError(
+                "MCP remote-auth tool_name must be non-empty without surrounding whitespace"
+            )
         return value
 
     @property
@@ -239,14 +243,18 @@ class MCPRemoteAuthLab:
         port = int(listener.getsockname()[1])
         resource_url = f"http://127.0.0.1:{port}{self._policy.resource_path}"
         verifier, tokens = _build_verifier(self._policy, resource_url)
+        auth_settings = AuthSettings(
+            issuer_url=self._policy.issuer_url,
+            resource_server_url=resource_url,
+            required_scopes=list(self._policy.required_scopes),
+        )
+        resource_server_url = auth_settings.resource_server_url
+        if resource_server_url is None:  # pragma: no cover - required by policy construction
+            raise RuntimeError("MCP remote-auth resource_server_url was unexpectedly absent")
         server = MCPServer(
             f"agent-evals-remote-auth:{self._policy.lab_id}",
             token_verifier=verifier,
-            auth=AuthSettings(
-                issuer_url=self._policy.issuer_url,
-                resource_server_url=resource_url,
-                required_scopes=list(self._policy.required_scopes),
-            ),
+            auth=auth_settings,
         )
 
         def protected_tool(message: str) -> str:
@@ -265,11 +273,7 @@ class MCPRemoteAuthLab:
             stateless_http=True,
             host="127.0.0.1",
         )
-        metadata_url = str(build_resource_metadata_url(AuthSettings(
-            issuer_url=self._policy.issuer_url,
-            resource_server_url=resource_url,
-            required_scopes=list(self._policy.required_scopes),
-        ).resource_server_url))
+        metadata_url = str(build_resource_metadata_url(resource_server_url))
 
         try:
             async with _serve_prebound(app, listener):
@@ -277,8 +281,12 @@ class MCPRemoteAuthLab:
                     missing = await _protected_post(http, resource_url)
                     invalid = await _protected_post(http, resource_url, tokens["invalid"])
                     expired = await _protected_post(http, resource_url, tokens["expired"])
-                    wrong_issuer = await _protected_post(http, resource_url, tokens["wrong_issuer"])
-                    wrong_resource = await _protected_post(http, resource_url, tokens["wrong_resource"])
+                    wrong_issuer = await _protected_post(
+                        http, resource_url, tokens["wrong_issuer"]
+                    )
+                    wrong_resource = await _protected_post(
+                        http, resource_url, tokens["wrong_resource"]
+                    )
                     insufficient = await _protected_post(
                         http, resource_url, tokens["insufficient_scope"]
                     )
@@ -308,9 +316,11 @@ class MCPRemoteAuthLab:
         metadata_authorization_servers = tuple(
             str(value) for value in metadata.get("authorization_servers", [])
         )
-        metadata_scopes_supported = tuple(sorted(str(value) for value in metadata.get("scopes_supported", [])))
+        metadata_scopes_supported = tuple(
+            sorted(str(value) for value in metadata.get("scopes_supported", []))
+        )
 
-        observation = {
+        observation: dict[str, Any] = {
             "expired_token_status": expired.status_code,
             "forbidden_www_authenticate": insufficient.headers.get("www-authenticate", ""),
             "insufficient_scope_status": insufficient.status_code,
@@ -393,9 +403,15 @@ class MCPRemoteAuthLab:
             return None
         unauthorized = str(observation["unauthorized_www_authenticate"])
         forbidden = str(observation["forbidden_www_authenticate"])
-        if 'error="invalid_token"' not in unauthorized or f'resource_metadata="{metadata_url}"' not in unauthorized:
+        if (
+            'error="invalid_token"' not in unauthorized
+            or f'resource_metadata="{metadata_url}"' not in unauthorized
+        ):
             return None
-        if 'error="insufficient_scope"' not in forbidden or f'resource_metadata="{metadata_url}"' not in forbidden:
+        if (
+            'error="insufficient_scope"' not in forbidden
+            or f'resource_metadata="{metadata_url}"' not in forbidden
+        ):
             return None
         return MCPRemoteAuthReceipt.create(
             policy=self._policy,
@@ -416,7 +432,12 @@ def _build_verifier(
     insufficient_scope = _token_value("insufficient-scope")
     records = {
         valid: _TokenRecord(policy.issuer_url, resource_url, policy.required_scopes),
-        expired: _TokenRecord(policy.issuer_url, resource_url, policy.required_scopes, expires_at=1),
+        expired: _TokenRecord(
+            policy.issuer_url,
+            resource_url,
+            policy.required_scopes,
+            expires_at=1,
+        ),
         wrong_issuer: _TokenRecord(
             "https://wrong-issuer.agent-evals.invalid",
             resource_url,
