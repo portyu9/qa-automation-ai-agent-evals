@@ -22,8 +22,8 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from agent_evals.evidence.models import TrialEvidence
 
-_MANIFEST_SCHEMA = "agent-evals-evidence-manifest/v1"
-_EVIDENCE_SCHEMA = "agent-evals/trial-evidence/v2"
+_MANIFEST_SCHEMA: Literal["agent-evals-evidence-manifest/v1"] = "agent-evals-evidence-manifest/v1"
+_EVIDENCE_SCHEMA: Literal["agent-evals/trial-evidence/v2"] = "agent-evals/trial-evidence/v2"
 _RECORD_KEY_RE = re.compile(r"^[0-9a-f]{64}$")
 
 
