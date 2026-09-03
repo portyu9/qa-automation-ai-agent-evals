@@ -12,14 +12,14 @@
 
 **A provider-neutral quality-engineering framework for evaluating autonomous agents by observable outcomes, side effects, authority boundaries, reliability, and reproducible evidence—not by persuasive final prose.**
 
-[Documentation](docs/README.md) · [Architecture](docs/ARCHITECTURE.md) · [Evaluation Model](docs/EVALUATION_MODEL.md) · [Evidence & Replay](docs/EVIDENCE_AND_REPLAY.md) · [Metamorphic Testing](docs/METAMORPHIC_TESTING.md) · [Statistics](docs/STATISTICAL_ASSURANCE.md) · [Security](docs/SECURITY.md) · [Limitations](docs/LIMITATIONS.md)
+[Documentation](docs/README.md) · [Architecture](docs/ARCHITECTURE.md) · [Evaluation Model](docs/EVALUATION_MODEL.md) · [Evidence & Replay](docs/EVIDENCE_AND_REPLAY.md) · [Session Reports](docs/ASSURANCE_REPORTS.md) · [Metamorphic Testing](docs/METAMORPHIC_TESTING.md) · [Statistics](docs/STATISTICAL_ASSURANCE.md) · [Security](docs/SECURITY.md) · [Limitations](docs/LIMITATIONS.md)
 
 </div>
 
 ---
 
 > [!IMPORTANT]
-> **The agent is the subject, not the oracle.** Final prose is not task completion. A tool call is not a successful side effect. A plausible trajectory is not policy compliance. A single passing trial is not reliability. Missing or inconclusive evidence is not PASS. A matching hash is not authenticated publisher identity. Evidence replay is not fresh execution.
+> **The agent is the subject, not the oracle.** Final prose is not task completion. A tool call is not a successful side effect. A plausible trajectory is not policy compliance. A single passing trial is not reliability. Missing or inconclusive evidence is not PASS. A matching hash is not authenticated publisher identity. Evidence replay is not fresh execution. A serialized gate result is not trusted without recomputation.
 
 ## Engineering thesis
 
@@ -32,6 +32,7 @@ Evidence persists.
 Replay regrades.
 Statistics quantify reliability.
 Release gates decide.
+Reports rederive.
 ```
 
 Agentic systems are more than model responses. They call tools, mutate external state, hand work to other agents, consume memory, cross trust boundaries, request approvals, retry failures, and adapt over multiple turns. An evaluation architecture that grades only the last message cannot reliably distinguish successful work from an agent that merely *said* the work succeeded.
@@ -51,6 +52,7 @@ This framework treats the complete agent system as the subject under test: model
 | **Evidence identity is bound** | trial, subject, scenario, ordered events, and terminal observations participate in the evidence root |
 | **Persistence is reverified** | stored bytes must pass schema, file-type, size, identity, payload-hash, and evidence-root checks before reuse |
 | **Replay preserves provenance** | historical evidence is regraded only under the same trial/subject/scenario identity; it is never presented as fresh execution |
+| **Session conclusions rederive** | resolved verdicts, reliability, critical violations, and gate outputs are recomputed when an assurance report is loaded |
 | **Nondeterminism is measured** | repeated resolved trials produce uncertainty bounds instead of one-shot certainty |
 | **Comparisons are paired** | candidate/baseline comparison rejects unresolved evidence rather than coercing it into failure |
 | **Authority is multidimensional** | tool scope, approval scope, resource scope, and budgets are evaluated together |
@@ -74,6 +76,7 @@ The core remains deterministic and credential-free. A first-class OpenAI Agents 
 | **Runtime** | provider-neutral execution with `PASS`, `FAIL`, and `BLOCKED` derivation; raw exception detail is not retained in durable evidence |
 | **OpenAI adapter** | current public Agents SDK result/tool/handoff/guardrail normalization with an independent terminal-state reader |
 | **Reliability** | resolved-trial success rate, Wilson confidence interval, `pass@k`, and `pass^k`; blocked/inconclusive attempts retained separately |
+| **Session assurance report** | binds evidence roots + deterministic oracle snapshots + trial verdicts + reliability + frozen release policy + gate output; revalidates derived conclusions and a domain-separated report root on every load |
 | **Differential evaluation** | exact paired McNemar/binomial comparison over resolved baseline/candidate pairs |
 | **Release gate** | non-compensatory critical safety rules plus separate behavioral rejection and evidence-insufficiency semantics |
 | **Metamorphic assurance** | state-projection invariance and authority-monotonicity relations without golden prose |
@@ -81,7 +84,7 @@ The core remains deterministic and credential-free. A first-class OpenAI Agents 
 | **Security taxonomy** | stable identifiers for major agentic failure and attack classes |
 | **Engineering controls** | strict typing, linting, tests, branch coverage, Bandit, dependency audit, package verification, pinned Actions, CODEOWNERS, Dependabot |
 
-Credentialed live-provider suites, MCP fault servers, automatic perturbation generation, authenticated hostile-writer evidence, remote attestation, and calibrated semantic graders are not represented as completed functionality. [Limitations](docs/LIMITATIONS.md) is authoritative.
+Credentialed live-provider suites, MCP fault servers, automatic perturbation generation, authenticated hostile-writer evidence or report signing, remote attestation, and calibrated semantic graders are not represented as completed functionality. [Limitations](docs/LIMITATIONS.md) is authoritative.
 
 ---
 
@@ -90,7 +93,7 @@ Credentialed live-provider suites, MCP fault servers, automatic perturbation gen
 ```mermaid
 flowchart LR
     accTitle: Evidence-bound agent evaluation architecture
-    accDescr: An exact subject and versioned scenario are executed through a provider-neutral adapter. Observable events and independently read terminal state become immutable evidence. Evidence may be persisted behind an integrity-verifying local store and later replayed only under the exact original trial, subject, and scenario identity. Deterministic policy and outcome oracles derive trial truth. Repeated trials feed statistical assurance and a fail-closed release gate.
+    accDescr: An exact subject and versioned scenario are executed through a provider-neutral adapter. Observable events and independently read terminal state become immutable evidence. Evidence may be persisted behind an integrity-verifying local store and later replayed only under the exact original trial, subject, and scenario identity. Deterministic policy and outcome oracles derive trial truth. Repeated trials feed statistical assurance and a fail-closed release gate. A self-validating session report binds the evidence roots and rederives serialized assurance conclusions without becoming new grading authority.
 
     S[Canonical subject identity]
     C[Scenario + authority contract]
@@ -105,6 +108,7 @@ flowchart LR
     M[Metamorphic relations]
     R[Reliability + paired statistics]
     G[Release gate]
+    Q[Self-validating session report]
 
     S --> A
     C --> A
@@ -123,6 +127,9 @@ flowchart LR
     T --> R
     R --> G
     M --> G
+    T --> Q
+    R --> Q
+    G --> Q
 
     classDef contract fill:#ddf4ff,stroke:#0969da,color:#24292f,stroke-width:2px
     classDef sut fill:#ffebe9,stroke:#cf222e,color:#24292f,stroke-width:2px,stroke-dasharray:5 3
@@ -131,13 +138,13 @@ flowchart LR
 
     class S,C,A contract
     class U sut
-    class E,D,Y,P,O,T,M,R evidence
+    class E,D,Y,P,O,T,M,R,Q evidence
     class G gate
 ```
 
-The adapter is deliberately narrow. Provider-specific execution may generate observations, but it cannot grade itself, satisfy terminal state by assertion, or grant itself release authority. Persistence and replay likewise preserve or re-present evidence; they do not create new grading authority.
+The adapter is deliberately narrow. Provider-specific execution may generate observations, but it cannot grade itself, satisfy terminal state by assertion, or grant itself release authority. Persistence, replay, and reporting likewise preserve, re-present, or rederive evidence-bound conclusions; they do not create new grading authority.
 
-Deep dives: [Architecture](docs/ARCHITECTURE.md) and [Evidence & Replay](docs/EVIDENCE_AND_REPLAY.md).
+Deep dives: [Architecture](docs/ARCHITECTURE.md), [Evidence & Replay](docs/EVIDENCE_AND_REPLAY.md), and [Session Reports](docs/ASSURANCE_REPORTS.md).
 
 ---
 
@@ -336,6 +343,26 @@ Candidate-versus-baseline comparison uses paired resolved outcomes and an exact 
 
 See [Statistical Assurance](docs/STATISTICAL_ASSURANCE.md).
 
+### Bind a session conclusion to its evidence roots
+
+```python
+from agent_evals.assurance import AssuranceReport
+from agent_evals.gates.release import ReleasePolicy
+
+policy = ReleasePolicy(
+    min_resolved_trials=20,
+    min_success_rate=0.95,
+    min_wilson_low=0.80,
+    max_critical_violations=0,
+)
+
+report = AssuranceReport.from_session(session_result, release_policy=policy)
+verified = AssuranceReport.model_validate_json(report.model_dump_json())
+assert verified.report_root == report.report_root
+```
+
+Loading the report rederives resolved trial verdicts from deterministic oracle snapshots, reliability from trial verdicts, critical-violation counts from oracle snapshots, and the gate result from the frozen policy. It does not rerun those oracles from an evidence hash; use persisted evidence + exact-identity replay for that. See [Session Reports](docs/ASSURANCE_REPORTS.md).
+
 ---
 
 ## Repository map
@@ -350,6 +377,7 @@ qa-automation-ai-agent-evals/
 ├── src/
 │   └── agent_evals/
 │       ├── adapters/
+│       ├── assurance/
 │       ├── contracts/
 │       ├── evidence/
 │       ├── gates/
@@ -377,7 +405,7 @@ The architecture is designed to grow without moving terminal authority into a mo
 - adversarial packs for injection, tool poisoning, escalation, exfiltration, memory poisoning, runaway loops, and false success;
 - MCP fault laboratory for poisoned metadata/results, malformed responses, auth failures, schema drift, disappearing tools, tasks, and credential-isolation tests;
 - calibrated semantic graders subordinate to deterministic safety/state authority;
-- signed or MAC-authenticated evidence, trusted timestamps, remote attestation, immutable remote retention, and reproducible evaluation reports where deployment requirements justify them.
+- signed or MAC-authenticated evidence and reports, trusted timestamps, remote attestation, immutable remote retention, and transparency-log anchoring where deployment requirements justify them.
 
 These are architectural commitments, not current-feature claims. [Limitations](docs/LIMITATIONS.md) remains authoritative.
 
@@ -390,11 +418,12 @@ Start at the [documentation hub](docs/README.md). Recommended shortest review pa
 1. [Architecture](docs/ARCHITECTURE.md)
 2. [Evaluation Model](docs/EVALUATION_MODEL.md)
 3. [Evidence & Replay](docs/EVIDENCE_AND_REPLAY.md)
-4. [OpenAI Adapter](docs/OPENAI_ADAPTER.md)
-5. [Metamorphic Testing](docs/METAMORPHIC_TESTING.md)
-6. [Statistical Assurance](docs/STATISTICAL_ASSURANCE.md)
-7. [Security](docs/SECURITY.md)
-8. [Limitations](docs/LIMITATIONS.md)
+4. [Session Assurance Reports](docs/ASSURANCE_REPORTS.md)
+5. [OpenAI Adapter](docs/OPENAI_ADAPTER.md)
+6. [Metamorphic Testing](docs/METAMORPHIC_TESTING.md)
+7. [Statistical Assurance](docs/STATISTICAL_ASSURANCE.md)
+8. [Security](docs/SECURITY.md)
+9. [Limitations](docs/LIMITATIONS.md)
 
 ---
 
