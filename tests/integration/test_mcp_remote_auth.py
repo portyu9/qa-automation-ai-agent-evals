@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+
 import pytest
 from pydantic import ValidationError
 
@@ -103,5 +105,13 @@ async def test_remote_auth_lab_enforces_bearer_scope_metadata_and_valid_mcp_call
     assert result.receipt.policy_identity == policy.identity
     assert result.receipt.protocol_version == result.protocol_version
     serialized = result.model_dump_json()
-    assert "Bearer " not in serialized
-    assert "agent-evals-mcp-auth:" not in serialized
+    for label in (
+        "valid",
+        "invalid",
+        "expired",
+        "wrong-issuer",
+        "wrong-resource",
+        "insufficient-scope",
+    ):
+        token = hashlib.sha256(f"agent-evals-mcp-auth:{label}".encode()).hexdigest()
+        assert token not in serialized

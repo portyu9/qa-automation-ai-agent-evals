@@ -522,13 +522,12 @@ async def _authenticated_transport(url: str, token: str) -> AsyncIterator[Any]:
     async with httpx2.AsyncClient(
         headers={"authorization": f"Bearer {token}"},
         timeout=5.0,
-    ) as http:
-        async with streamable_http_client(
-            url,
-            http_client=http,
-            terminate_on_close=False,
-        ) as streams:
-            yield streams
+    ) as http, streamable_http_client(
+        url,
+        http_client=http,
+        terminate_on_close=False,
+    ) as streams:
+        yield streams
 
 
 async def _protected_post(http: Any, resource_url: str, token: str | None = None) -> Any:
