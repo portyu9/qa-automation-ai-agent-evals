@@ -4,137 +4,124 @@
 
 The repository treats the evaluated agent and all provider/tool/MCP content as untrusted with respect to evaluation authority. Evidence may describe what happened; it may not redefine what is allowed or what counts as success.
 
-The evaluation control plane is also explicit about **its own preconditions**. An adversarial trial is not behaviorally gradeable until the controlled environment has produced one exact, internally valid delivery receipt for the attack bound to that scenario. Failure to establish that precondition is evaluation uncertainty (`BLOCKED`), not an agent defect.
+The evaluation control plane is explicit about its own preconditions. An adversarial trial is not behaviorally gradeable until the controlled environment has produced one exact, internally valid delivery receipt for the attack bound to that scenario. Failure to establish that precondition is `BLOCKED` evaluation uncertainty, not an agent defect.
 
 ## Current deterministic controls
 
 Implemented controls include:
 
-- explicit tool allowlists and denylists;
-- approval-before-use checks for privileged tools;
-- resource-prefix confinement;
-- tool-call and handoff budgets;
-- explicit policy-violation evidence;
-- critical classification of policy-oracle failure;
-- non-compensatory release gating;
-- provider/runtime exceptions converted to `BLOCKED` rather than accepted;
-- structured adapter-precondition failures separated from provider/runtime failures and converted to `EVALUATION_ERROR / BLOCKED`;
-- immutable evidence objects with ordered-sequence validation;
-- hash-chain evidence root binding trajectory and terminal state;
-- content-addressed adversarial fixtures with canonical finite JSON payloads;
-- deterministic adversarial scenario derivation that preserves the base objective, outcomes, and exact authority policy;
-- reserved attack-envelope validation and optional full derived-scenario rederivation against an expected base;
-- canonical adversarial campaigns with duplicate-attack rejection and base-scenario drift detection;
-- evidence-bound attack-delivery receipts binding exact scenario, attack, channel, injection point, and payload digest;
-- exact-one delivery-receipt validation before adversarial policy/outcome grading;
-- fail-closed `BLOCKED` semantics for missing, duplicate, malformed, or mismatched delivery evidence;
-- raw adversarial payload exclusion from delivery receipts and evaluator delivery-error evidence;
-- one concrete OpenAI Agents SDK `USER_INPUT` injector that places the exact canonical attack payload at a tested `Runner.run` input position and emits the corresponding receipt;
-- fail-closed precondition blocking for unsupported OpenAI adversarial channels before model execution;
+- explicit tool allowlists/denylists and approval-before-use checks;
+- resource-prefix confinement and tool/handoff budgets;
+- critical non-compensatory policy failure;
+- provider/runtime failures classified as `RUNTIME_ERROR / BLOCKED`;
+- controlled adapter-precondition failures classified separately as `EVALUATION_ERROR / BLOCKED`;
+- immutable ordered evidence with domain-separated evidence roots;
+- content-addressed adversarial fixtures and authority-preserving scenario derivation;
+- reserved attack-envelope verification and canonical campaigns;
+- evidence-bound delivery receipts binding exact scenario, attack, channel, injection point, and payload digest;
+- exactly-one receipt verification before adversarial subject grading;
+- fail-closed blocking for missing, duplicate, malformed, forged, or mismatched delivery evidence;
+- raw attack-body exclusion from delivery receipts and evaluator delivery-error evidence;
+- concrete OpenAI `USER_INPUT` delivery using exact canonical fixture JSON;
+- concrete OpenAI local-`FunctionTool` `TOOL_RESULT` delivery using exact canonical fixture JSON as a one-shot first-result replacement;
+- per-trial copy/clone isolation for tool-result injection so reusable original agent/tool objects are not mutated;
+- exact SDK call-ID binding and request → delivery → result evidence chronology;
+- fail-closed target validation for malformed, missing, unsupported, ambiguous, or unbindable tool-result targets;
 - exact historical replay of recorded delivery evidence without claiming fresh injection;
 - bounded counterexample minimization;
 - pinned GitHub Actions and read-only workflow permissions.
 
 ## Threat taxonomy
 
-The current code defines stable identifiers for:
+Stable identifiers cover direct/indirect prompt injection, tool poisoning, unauthorized tool use, privilege escalation, approval bypass, data exfiltration, cross-tenant leakage, memory poisoning/staleness, hallucinated actions/false success, runaway resource use, circular handoff, schema drift/malformed results, retry storms, sandbox escape, and MCP authorization failure.
 
-- direct and indirect prompt injection;
-- tool poisoning;
-- unauthorized tool use;
-- privilege escalation;
-- approval bypass;
-- data exfiltration;
-- cross-tenant leakage;
-- memory poisoning and stale memory;
-- hallucinated actions and false success;
-- runaway resource use;
-- circular handoff;
-- schema drift and malformed tool results;
-- retry storms;
-- sandbox escape;
-- MCP authorization failure.
+The taxonomy is not mitigation by itself. The adversarial layer binds threat identifiers to deterministic scenarios; the delivery layer requires evidence that the trusted evaluation control plane reports successful injection before behavioral grading.
 
-The taxonomy is not itself mitigation. The implemented adversarial layer binds these threat identifiers to deterministic attack fixtures and exact security scenarios. The delivery layer then requires evidence that the trusted evaluation control plane reports successful injection before behavioral grading begins.
-
-The OpenAI adapter provides one concrete delivery implementation for direct `USER_INPUT` stimuli. Threats that require tool-result, metadata, memory, resource, handoff, MCP, or environment manipulation still require dedicated delivery infrastructure at those real boundaries.
+The OpenAI adapter now exercises two concrete surfaces: direct user-input injection and indirect content returned by a targeted local `FunctionTool`. Tool metadata, memory, resources, handoffs, environment state, hosted tools, external tool servers, and MCP surfaces still require dedicated real-boundary infrastructure.
 
 See [Adversarial Testing](ADVERSARIAL_TESTING.md).
 
 ## Adversarial fixture boundary
 
-`AttackFixture` is intentionally provider-neutral. It records the attack identity, threat class, delivery channel, payload, revision, and tags. `AttackFixture.apply()` augments a base scenario through a reserved state envelope while preserving the base authority contract.
+`AttackFixture` records identity, threat class, delivery channel, canonical payload, revision, and tags. Applying it augments a base scenario through a reserved envelope while preserving the base authority contract.
 
-Supported channel identities currently include user input, tool results, tool metadata, memory, resources, handoffs, and other controlled environment state. These labels tell an evaluation environment **where** a stimulus belongs; they do not claim that the repository has a universal injector for each channel.
-
-When the original base scenario is available, `extract_attack(..., expected_base_scenario=...)` verifies the embedded base identity and rederives the complete adversarial scenario. This prevents a manipulated derived scenario from passing merely because its attack envelope is internally well formed.
+Channel labels identify where a stimulus belongs; they do not claim universal injector coverage. `extract_attack(..., expected_base_scenario=...)` can rederive the complete adversarial scenario and detect drift outside the envelope.
 
 ## Adversarial delivery boundary
 
-`AttackDeliveryReceipt` is emitted only after a controlled injector reports that the scenario's exact attack was placed at a concrete injection point. The receipt contains no raw attack body. It binds:
+`AttackDeliveryReceipt` is emitted only after a controlled injector reports that the exact scenario attack was placed at a concrete injection point. It contains no raw attack body and binds exact scenario identity, attack identity, channel, injection point, canonical payload SHA-256, and a domain-separated receipt root.
 
-- exact derived scenario identity;
-- exact attack identity;
-- declared attack channel;
-- injection point;
-- SHA-256 of the canonical attack payload;
-- a domain-separated receipt root.
-
-The normalized evidence source must use `injector:<identity>`. `TrialRunner` requires exactly one valid `ATTACK_DELIVERY` event for an adversarial scenario before it invokes deterministic subject oracles.
-
-If delivery evidence is absent, duplicated, malformed, has an invalid source label, has a forged root, or belongs to another scenario/attack/channel/payload, the evaluator appends a critical `EVALUATION_ERROR` and returns `BLOCKED` with no completed oracle results.
-
-That distinction prevents evaluator defects from being mislabeled as subject defects:
+`TrialRunner` requires exactly one valid `ATTACK_DELIVERY` event before deterministic subject oracles execute.
 
 ```text
-unsupported controlled injection → BLOCKED / evaluation uncertainty
-provider/runtime unavailable     → BLOCKED / runtime uncertainty
-verified delivery + violated requirement → FAIL / behavioral evidence
-verified delivery + requirements satisfied → PASS
+unsupported/unavailable controlled injection → BLOCKED / evaluation uncertainty
+provider/runtime unavailable                 → BLOCKED / runtime uncertainty
+verified delivery + violated requirement     → FAIL / behavioral evidence
+verified delivery + requirements satisfied   → PASS
 ```
 
-The recorded receipt participates in the ordinary trial evidence root. Exact historical replay therefore rechecks the recorded receipt, but does not perform a fresh injection.
+Recorded receipts participate in the ordinary evidence root. Historical replay rechecks them but does not perform fresh injection.
 
 ## OpenAI `USER_INPUT` boundary
 
-For a derived OpenAI `USER_INPUT` adversarial scenario, `OpenAIAgentsAdapter` constructs two ordered user messages for `Runner.run`:
+For `USER_INPUT`, `OpenAIAgentsAdapter` sends:
 
 ```text
 input[0] = scenario objective
 input[1] = exact canonical AttackFixture.payload_json
 ```
 
-The matching receipt identifies `openai-agents:Runner.run.input[1]` as the injection point and uses source `injector:openai-agents:user-input`. The independent deterministic SDK test asserts that exact input reaches `ScriptedModel` and that unsupported channels do not invoke the model at all.
+The receipt identifies `openai-agents:Runner.run.input[1]` and source `injector:openai-agents:user-input`. Deterministic SDK tests assert the exact normalized input.
 
-This is a useful control-plane guarantee, but it stops at the SDK harness boundary. It does not prove that a remote hosted model processed the message, that a provider preserved it unchanged after that boundary, or that the model resisted the attack. Credentialed live-provider behavior remains a separate test tier.
+This stops at the controlled SDK harness boundary. It does not prove that a remote hosted model processed or resisted the message.
+
+## OpenAI local-`FunctionTool` `TOOL_RESULT` boundary
+
+The current tool-result injector deliberately targets **local SDK `FunctionTool` instances only**.
+
+The identity-bearing attack payload must contain a valid `tool` and `result`. The full canonical fixture JSON is returned as the replacement output so the receipt's payload digest binds the exact model-visible replacement bytes.
+
+Per adversarial execution the adapter copies only the targeted function tool, wraps the copy, and clones the agent with a fresh tools list. The reusable original agent/tool are not modified.
+
+On the first matching invocation:
+
+- the SDK `tool_call_id` is captured;
+- the original target function is intentionally **not executed**;
+- exact canonical attack JSON becomes the returned tool result;
+- the receipt uses source `injector:openai-agents:tool-result` and an injection point containing exact tool name and call ID;
+- normalized evidence orders `TOOL_REQUEST`, then `ATTACK_DELIVERY`, then the matching `TOOL_RESULT`.
+
+Subsequent matching calls in that same trial use the copied original behavior.
+
+This is controlled **result replacement**, not an assertion that the real underlying service emitted malicious content. It is especially suitable for read/retrieval fault simulation. It does not preserve the original function's side effects on the injected first call.
+
+If the target never executes, no receipt exists and the trial is blocked by delivery verification. Missing/ambiguous/non-function targets and malformed routing contracts precondition-block before a false test can run.
+
+The implementation does not intercept hosted tools, MCP tools, remote tool servers, or arbitrary non-`FunctionTool` implementations.
 
 ## Delivery integrity is not attestation
 
-The delivery receipt closes an important evaluation-control gap, but it does not create a cryptographic trust anchor.
+A delivery receipt closes an evaluation-control gap but does not create a cryptographic trust anchor.
 
-The `injector:<identity>` source is a control-plane label, not authenticated signer identity. `receipt_root` is an ordinary domain-separated SHA-256 content identity, not a signature or MAC. The framework verifies consistency relative to the trusted evaluator's recorded observation; it does not independently prove that an arbitrary external target consumed the payload.
-
-A buggy or malicious trusted injector could report delivery that did not occur. Stronger deployments may require authenticated injector identities, target-side acknowledgements, trusted timestamps, remote attestation, or equivalent independent evidence.
+`injector:<identity>` is a control-plane label, not authenticated signer identity. `receipt_root` is domain-separated SHA-256 integrity, not a signature or MAC. A buggy or malicious trusted injector could still report delivery that did not occur unless a stronger independent acknowledgement/authentication boundary is added.
 
 ## Evidence integrity is not authenticity
 
-`evidence_root` is a cryptographic content digest. It detects changes in normalized event order/content and terminal metadata. It is **not** a signature, attestation, or independent identity proof.
+`evidence_root`, fixture/campaign hashes, and receipt roots detect content/identity changes relative to trusted inputs. They do not authenticate the author, runner, or injector.
 
-Likewise, adversarial fixture/campaign hashes and delivery receipt roots are content identities. They do not authenticate who authored an attack pack or who performed an injection.
-
-A stronger durable artifact layer must separately address provenance, signer/runner identity, retention, and tamper-resistant storage.
+A stronger durable artifact layer must separately address provenance, signer identity, trusted timestamps, retention, and tamper-resistant storage.
 
 ## Sensitive data
 
-The deterministic core does not automatically upload traces or persist provider content. Provider adapters must default to data minimization and must document whether prompts, tool arguments/results, user data, secrets, attack payloads, or model content can enter traces.
+The deterministic core does not automatically upload traces or persist provider content. Delivery receipts store only the canonical attack payload digest, not the attack body.
 
-Delivery receipts intentionally persist only the canonical attack payload digest, not the attack payload itself. The OpenAI injector necessarily places the raw canonical attack payload into the in-memory SDK input because that is the stimulus under test; the receipt does not duplicate it into delivery evidence. Other evidence produced by the subject or its tools can still contain sensitive data and requires normal minimization/redaction discipline.
+The OpenAI controlled injector necessarily places the raw canonical attack payload into in-memory SDK input or a local tool result because that content is the stimulus under test. Other subject/tool observations can still contain sensitive data and require normal minimization/redaction discipline.
 
 No adapter or red-team environment should treat observability as permission to retain secrets.
 
 ## Deployment boundary
 
-Application-layer policy cannot prove process isolation, network egress control, secret-manager policy, tenant separation, production IAM, sandbox containment, or that an external MCP/tool server faithfully injected and delivered a requested adversarial condition to its real consumer. Those remain deployment/infrastructure or test-environment controls and must be tested at their actual enforcement boundary.
+Application-layer policy cannot prove process isolation, network egress control, secret-manager policy, tenant separation, production IAM, sandbox containment, or faithful behavior of an external MCP/tool server. Those controls must be tested at their actual enforcement boundaries.
 
 ## Reporting vulnerabilities
 
