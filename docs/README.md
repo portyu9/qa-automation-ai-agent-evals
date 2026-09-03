@@ -20,6 +20,7 @@ Approval request           ≠ approval grant
 Provider availability      ≠ subject correctness
 Model confidence           ≠ grading authority
 Attack channel label       ≠ delivery evidence
+Environment availability   ≠ environment consumption
 Delivery receipt           ≠ target-side attestation
 Unverified delivery        ≠ behavioral FAIL
 Attack fixture hash        ≠ proof the subject resisted the attack
