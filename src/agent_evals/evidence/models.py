@@ -14,6 +14,7 @@ _EVIDENCE_ROOT_DOMAIN = b"agent-evals/trial-evidence/v2\0"
 
 
 class EvidenceKind(StrEnum):
+    ATTACK_DELIVERY = "attack_delivery"
     TOOL_REQUEST = "tool_request"
     TOOL_RESULT = "tool_result"
     HANDOFF = "handoff"
@@ -23,6 +24,7 @@ class EvidenceKind(StrEnum):
     STATE = "state"
     OUTPUT = "output"
     POLICY_VIOLATION = "policy_violation"
+    EVALUATION_ERROR = "evaluation_error"
     RUNTIME_ERROR = "runtime_error"
 
 
