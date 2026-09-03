@@ -100,5 +100,6 @@ def _exact_mcnemar_p_value(baseline_only: int, candidate_only: int) -> float:
     if discordant == 0:
         return 1.0
     tail = min(baseline_only, candidate_only)
-    probability = sum(comb(discordant, index) for index in range(tail + 1)) / (2**discordant)
+    favorable_mass = sum(comb(discordant, index) for index in range(tail + 1))
+    probability = float(favorable_mass) / float(2**discordant)
     return min(1.0, 2.0 * probability)
