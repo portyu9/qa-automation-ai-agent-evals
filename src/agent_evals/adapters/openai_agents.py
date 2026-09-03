@@ -18,6 +18,7 @@ from typing import Any
 from agent_evals.adapters.base import AdapterPreconditionError, AdapterResult
 from agent_evals.adversarial.cases import AttackChannel, AttackFixture, extract_attack
 from agent_evals.adversarial.channels import (
+    MemoryAttackPayload,
     ToolMetadataAttackPayload,
     ToolResultAttackPayload,
 )
@@ -38,6 +39,34 @@ class _ToolResultDeliveryRecorder:
     call_id: str | None = None
     attempted: bool = False
     identity_error: bool = False
+
+
+class _InjectedMemorySession:
+    """Per-trial SDK Session protocol implementation seeded with one poisoned history item."""
+
+    session_settings: None = None
+
+    def __init__(self, *, session_id: str, memory_text: str) -> None:
+        self.session_id = session_id
+        self._items: list[Any] = [{"role": "user", "content": memory_text}]
+
+    async def get_items(self, limit: int | None = None) -> list[Any]:
+        if limit is None:
+            return list(self._items)
+        if limit <= 0:
+            return []
+        return list(self._items[-limit:])
+
+    async def add_items(self, items: list[Any]) -> None:
+        self._items.extend(items)
+
+    async def pop_item(self) -> Any | None:
+        if not self._items:
+            return None
+        return self._items.pop()
+
+    async def clear_session(self) -> None:
+        self._items.clear()
 
 
 class OpenAIAgentsAdapter:
@@ -81,9 +110,13 @@ class OpenAIAgentsAdapter:
         except ImportError as exc:  # pragma: no cover
             raise RuntimeError("install the 'openai' extra to use OpenAIAgentsAdapter") from exc
 
-        runner_agent, runner_input, delivery_events, tool_result_recorder = self._prepare_execution(
-            scenario
-        )
+        (
+            runner_agent,
+            runner_input,
+            delivery_events,
+            tool_result_recorder,
+            runner_session,
+        ) = self._prepare_execution(scenario)
         started = perf_counter()
         run_config = RunConfig(
             tracing_disabled=self._tracing_disabled,
@@ -97,6 +130,7 @@ class OpenAIAgentsAdapter:
                 runner_input,
                 max_turns=scenario.authority.max_turns,
                 run_config=run_config,
+                session=runner_session,
             )
         except MaxTurnsExceeded:
             self._raise_recorder_identity_error(tool_result_recorder)
@@ -179,10 +213,16 @@ class OpenAIAgentsAdapter:
     def _prepare_execution(
         self,
         scenario: EvaluationScenario,
-    ) -> tuple[object, RunnerInput, tuple[EvidenceEvent, ...], _ToolResultDeliveryRecorder | None]:
+    ) -> tuple[
+        object,
+        RunnerInput,
+        tuple[EvidenceEvent, ...],
+        _ToolResultDeliveryRecorder | None,
+        object | None,
+    ]:
         attack = extract_attack(scenario)
         if attack is None:
-            return self._agent, scenario.objective, (), None
+            return self._agent, scenario.objective, (), None, None
         if attack.channel is AttackChannel.USER_INPUT:
             injection_point = "openai-agents:Runner.run.input[1]"
             receipt = AttackDeliveryReceipt.from_scenario(
@@ -197,13 +237,16 @@ class OpenAIAgentsAdapter:
                 {"role": "user", "content": scenario.objective},
                 {"role": "user", "content": attack.payload_json},
             ]
-            return self._agent, runner_input, (event,), None
+            return self._agent, runner_input, (event,), None, None
         if attack.channel is AttackChannel.TOOL_RESULT:
             runner_agent, recorder = self._prepare_tool_result_agent(scenario, attack)
-            return runner_agent, scenario.objective, (), recorder
+            return runner_agent, scenario.objective, (), recorder, None
         if attack.channel is AttackChannel.TOOL_METADATA:
             runner_agent, events = self._prepare_tool_metadata_agent(scenario, attack)
-            return runner_agent, scenario.objective, events, None
+            return runner_agent, scenario.objective, events, None, None
+        if attack.channel is AttackChannel.MEMORY:
+            runner_session, events = self._prepare_memory_session(scenario, attack)
+            return self._agent, scenario.objective, events, None, runner_session
         raise AdapterPreconditionError(
             code="unsupported_attack_channel",
             reason=(
@@ -290,6 +333,33 @@ class OpenAIAgentsAdapter:
             source="injector:openai-agents:tool-metadata",
         )
         return runner_agent, (event,)
+
+    @staticmethod
+    def _prepare_memory_session(
+        scenario: EvaluationScenario,
+        attack: AttackFixture,
+    ) -> tuple[_InjectedMemorySession, tuple[EvidenceEvent, ...]]:
+        try:
+            MemoryAttackPayload.from_fixture(attack)
+        except ValueError as exc:
+            raise AdapterPreconditionError(
+                code="invalid_memory_attack",
+                reason="memory attack payload does not satisfy the session-history contract",
+            ) from exc
+
+        session = _InjectedMemorySession(
+            session_id=f"agent-evals-memory:{scenario.identity[:16]}",
+            memory_text=attack.payload_json,
+        )
+        receipt = AttackDeliveryReceipt.from_scenario(
+            scenario,
+            injection_point="openai-agents:Session.get_items[0]",
+        )
+        event = receipt.to_event(
+            sequence=0,
+            source="injector:openai-agents:memory-session-history",
+        )
+        return session, (event,)
 
     def _resolve_local_function_tool(
         self,
