@@ -26,7 +26,11 @@ dependencies = ["pydantic>=2.10,<3", "typer>=0.15,<1"]
 
 [project.optional-dependencies]
 openai = ["openai-agents==0.22.0"]
-mcp = ["mcp==2.1.1"]
+mcp = [
+  "httpx2>=2.5.0,<3",
+  "mcp==2.1.1",
+  "uvicorn>=0.31.1,<1",
+]
 yaml = ["pyyaml>=6.0.3,<7"]
 dev = [
   "bandit>=1.8,<2",
@@ -93,7 +97,7 @@ packages = ["agent_evals"]
 warn_unused_ignores = true
 
 [[tool.mypy.overrides]]
-module = ["agents", "agents.*", "mcp", "mcp.*"]
+module = ["agents", "agents.*", "httpx2", "httpx2.*", "mcp", "mcp.*", "uvicorn", "uvicorn.*"]
 ignore_missing_imports = true
 
 [tool.bandit]
