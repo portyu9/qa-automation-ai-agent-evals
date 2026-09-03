@@ -1,9 +1,9 @@
 """Deterministic adversarial scenario fixtures and campaigns."""
 
 from agent_evals.adversarial.cases import (
+    AdversarialCampaign,
     AttackChannel,
     AttackFixture,
-    AdversarialCampaign,
     extract_attack,
 )
 
