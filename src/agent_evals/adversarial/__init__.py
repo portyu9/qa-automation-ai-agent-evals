@@ -6,7 +6,10 @@ from agent_evals.adversarial.cases import (
     AttackFixture,
     extract_attack,
 )
-from agent_evals.adversarial.channels import ToolResultAttackPayload
+from agent_evals.adversarial.channels import (
+    ToolMetadataAttackPayload,
+    ToolResultAttackPayload,
+)
 from agent_evals.adversarial.delivery import (
     AttackDeliveryError,
     AttackDeliveryReceipt,
@@ -19,6 +22,7 @@ __all__ = [
     "AttackDeliveryError",
     "AttackDeliveryReceipt",
     "AttackFixture",
+    "ToolMetadataAttackPayload",
     "ToolResultAttackPayload",
     "extract_attack",
     "verify_attack_delivery",
