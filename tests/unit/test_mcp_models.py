@@ -52,10 +52,11 @@ def test_mcp_fault_receipt_detects_tampered_integrity_material() -> None:
     )
     receipt = MCPFaultReceipt.create(
         fault=fault,
-        injection_point=(
-            "mcp:2026-07-28:tools/call:lookup_customer:result.content[0].text"
-        ),
+        injection_point="mcp:2026-07-28:tools/call:lookup_customer:result.content[0].text",
+        observed_text=fault.payload_json,
     )
+    assert receipt.payload_sha256 == receipt.observation_sha256
+
     tampered = receipt.model_dump(mode="json")
     tampered["tool_name"] = "different_tool"
 
