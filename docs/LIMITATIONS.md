@@ -4,9 +4,15 @@ This document is intentionally strict. The repository should never become more i
 
 ## Current non-claims
 
-### No live provider assurance yet
+### No credentialed live-provider assurance yet
 
-The current adapter is deterministic/scripted. The package exposes an optional OpenAI dependency group, but a production OpenAI Agents SDK adapter and live-model evaluation path have not yet landed.
+A first-class OpenAI Agents SDK adapter is implemented against `openai-agents==0.22.0`, and CI exercises its real SDK tool loop deterministically with `ScriptedModel` without API calls. The repository does **not** yet claim live-model behavioral assurance, production-provider availability, model-specific safety performance, or credentialed end-to-end coverage.
+
+The adapter also keeps terminal state observation outside the SDK result. This is intentional: provider output is execution evidence, not the state oracle.
+
+### Approval decisions are not inferred from approval requests
+
+The OpenAI adapter records SDK `ToolApprovalItem` objects as `APPROVAL_REQUEST` evidence. A request for approval is not an approval grant. Privileged execution therefore requires independently observed `APPROVAL` evidence, bound to the exact tool call unless an evaluation environment explicitly models persistent tool-level authorization.
 
 ### No semantic/model grader yet
 
@@ -26,18 +32,18 @@ Paired comparison currently establishes significant directional improvement/regr
 
 ### pass@k / pass^k are empirical approximations
 
-The current formulas use the observed per-trial success proportion and an independent-attempt interpretation. Correlated trials, adaptive sampling, or non-stationary agent behavior can violate that approximation.
+The current formulas use the observed success proportion among resolved `PASS`/`FAIL` trials and an independent-attempt interpretation. `BLOCKED` and `INCONCLUSIVE` attempts are retained separately and are never silently counted as behavioral failures. Correlated trials, adaptive sampling, or non-stationary agent behavior can still violate the independence approximation.
 
 ### Resource-prefix policy is lexical
 
-Resource scope currently uses string-prefix matching over normalized adapter evidence. Provider adapters must normalize resource identities canonically before relying on this control for domains where aliases, path traversal, case folding, URL normalization, or alternate identifiers could bypass a lexical prefix.
+Resource scope currently uses string-prefix matching over adapter-normalized resource identities. A configured scoped policy fails closed when a tool request lacks resource identity, but provider adapters must still canonicalize aliases, path traversal, case folding, URL forms, and alternate identifiers before lexical prefix comparison can represent the intended security boundary.
 
 ### No sandbox isolation claim
 
-The repository currently executes no target-controlled shell or code. If future adapters do so, process/filesystem/network containment must be implemented and validated separately.
+The repository currently executes no target-controlled shell or arbitrary target code. If future adapters do so, process/filesystem/network containment must be implemented and validated separately.
 
 ## Why these boundaries matter
 
-Agent evaluation is especially vulnerable to false confidence because the output often looks persuasive even when the surrounding state is wrong. The same discipline applies to the framework itself: documentation, badges, scores, and hashes are not substitutes for the actual control they describe.
+Agent evaluation is especially vulnerable to false confidence because output often looks persuasive even when surrounding state is wrong. The same discipline applies to the framework itself: documentation, badges, scores, hashes, and SDK traces are not substitutes for the control they describe.
 
 New capabilities should move out of this document only after implementation, tests, and review make the claim true.

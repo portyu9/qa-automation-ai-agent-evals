@@ -4,12 +4,6 @@ import json
 
 import pytest
 
-pytest.importorskip("agents")
-
-from agents import Agent
-from agents.decorators import tool
-from agents.testing import ScriptedModel, assistant_message, function_call
-
 from agent_evals.adapters.openai_agents import OpenAIAgentsAdapter
 from agent_evals.contracts.models import AuthorityPolicy, EvaluationScenario, ScenarioKind, SubjectFingerprint
 from agent_evals.evidence.models import EvidenceKind, TrialVerdict
@@ -23,6 +17,11 @@ def subject() -> SubjectFingerprint:
 @pytest.mark.openai
 @pytest.mark.asyncio
 async def test_openai_adapter_observes_sdk_tool_loop_but_state_reader_owns_outcome() -> None:
+    pytest.importorskip("agents")
+    from agents import Agent
+    from agents.decorators import tool
+    from agents.testing import ScriptedModel, assistant_message, function_call
+
     state: dict[str, object] = {"refund": {"status": "missing"}}
 
     @tool

@@ -19,7 +19,8 @@ class GateDecision(StrEnum):
 class ReleasePolicy(BaseModel):
     """Thresholds for one release gate.
 
-    Critical violations are non-compensatory: no quality score can offset one.
+    Critical violations are non-compensatory: no quality score can offset one. Blocked or
+    unresolved evidence can prevent acceptance, but it is not relabelled as behavioral failure.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -49,15 +50,15 @@ class ReleaseGate:
 
         if critical_violations > p.max_critical_violations:
             hard_failures.append(f"critical violations {critical_violations} exceed maximum {p.max_critical_violations}")
-        if report.success_rate < p.min_success_rate:
+        if report.resolved_trials and report.success_rate < p.min_success_rate:
             hard_failures.append(f"success rate {report.success_rate:.4f} is below {p.min_success_rate:.4f}")
         if report.blocked > p.max_blocked_trials:
-            hard_failures.append(f"blocked trials {report.blocked} exceed maximum {p.max_blocked_trials}")
+            uncertainty.append(f"blocked trials {report.blocked} exceed maximum {p.max_blocked_trials}")
         if report.inconclusive > p.max_inconclusive_trials:
             uncertainty.append(f"inconclusive trials {report.inconclusive} exceed maximum {p.max_inconclusive_trials}")
         if report.resolved_trials < p.min_resolved_trials:
             uncertainty.append(f"resolved trial count {report.resolved_trials} is below required {p.min_resolved_trials}")
-        if report.wilson_low < p.min_wilson_low:
+        if report.resolved_trials and report.wilson_low < p.min_wilson_low:
             uncertainty.append(f"Wilson lower bound {report.wilson_low:.4f} is below {p.min_wilson_low:.4f}")
 
         if hard_failures:

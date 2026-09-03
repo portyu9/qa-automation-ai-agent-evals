@@ -46,3 +46,11 @@ def test_blocked_attempts_do_not_satisfy_minimum_resolved_sample() -> None:
     report = ReliabilityReport.from_verdicts([TrialVerdict.PASS] + [TrialVerdict.BLOCKED] * 19)
     gate = ReleaseGate(ReleasePolicy(min_resolved_trials=20, min_success_rate=0.95, min_wilson_low=0.0, max_blocked_trials=20))
     assert gate.decide(report, critical_violations=0).decision is GateDecision.INCONCLUSIVE
+
+
+def test_fully_blocked_session_is_inconclusive_not_behavioral_reject() -> None:
+    report = ReliabilityReport.from_verdicts([TrialVerdict.BLOCKED] * 20)
+    gate = ReleaseGate(ReleasePolicy(min_resolved_trials=20, max_blocked_trials=0))
+    result = gate.decide(report, critical_violations=0)
+    assert result.decision is GateDecision.INCONCLUSIVE
+    assert any("blocked trials" in reason for reason in result.reasons)
