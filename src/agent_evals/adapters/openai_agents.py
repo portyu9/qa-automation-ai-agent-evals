@@ -9,7 +9,8 @@ from __future__ import annotations
 
 import inspect
 import json
-from collections.abc import Awaitable, Callable, Mapping, Sequence
+from collections.abc import Awaitable, Callable, Iterator, Mapping, Sequence
+from contextvars import ContextVar, Token
 from copy import copy
 from dataclasses import asdict, dataclass, is_dataclass
 from time import perf_counter
@@ -18,6 +19,7 @@ from typing import Any
 from agent_evals.adapters.base import AdapterPreconditionError, AdapterResult
 from agent_evals.adversarial.cases import AttackChannel, AttackFixture, extract_attack
 from agent_evals.adversarial.channels import (
+    EnvironmentAttackPayload,
     HandoffAttackPayload,
     MemoryAttackPayload,
     ResourceAttackPayload,
@@ -44,6 +46,16 @@ class _ToolResultDeliveryRecorder:
 
 
 @dataclass(slots=True)
+class _EnvironmentDeliveryRecorder:
+    """Per-execution state proving a targeted tool actually consumed injected runtime context."""
+
+    event: EvidenceEvent | None = None
+    call_id: str | None = None
+    attempted: bool = False
+    identity_error: bool = False
+
+
+@dataclass(slots=True)
 class _HandoffDeliveryRecorder:
     """Per-execution state proving that the first SDK handoff filter actually ran."""
 
@@ -60,6 +72,8 @@ class _PreparedExecution:
     delivery_events: tuple[EvidenceEvent, ...] = ()
     tool_result_recorder: _ToolResultDeliveryRecorder | None = None
     session: object | None = None
+    run_context: object | None = None
+    environment_recorder: _EnvironmentDeliveryRecorder | None = None
     handoff_input_filter: Any | None = None
     handoff_recorder: _HandoffDeliveryRecorder | None = None
 
@@ -92,6 +106,61 @@ class _InjectedMemorySession:
         self._items.clear()
 
 
+class _InjectedEnvironmentContext(Mapping[str, object]):
+    """Read-only per-trial context overlay whose injected value is task-local and call-scoped."""
+
+    def __init__(
+        self,
+        *,
+        base: Mapping[str, object],
+        key: str,
+        value: object,
+        on_read: Callable[[str], None],
+    ) -> None:
+        self._base = dict(base)
+        self._key = key
+        self._value = value
+        self._on_read = on_read
+        self._active_call_id: ContextVar[str | None] = ContextVar(
+            f"agent_evals_environment_{id(self)}",
+            default=None,
+        )
+
+    def activate(self, call_id: str) -> Token[str | None]:
+        return self._active_call_id.set(call_id)
+
+    def deactivate(self, token: Token[str | None]) -> None:
+        self._active_call_id.reset(token)
+
+    def __getitem__(self, key: str) -> object:
+        call_id = self._active_call_id.get()
+        if call_id is not None and key == self._key:
+            self._on_read(call_id)
+            return self._value
+        return self._base[key]
+
+    def __iter__(self) -> Iterator[str]:
+        yield from self._base
+        if self._active_call_id.get() is not None and self._key not in self._base:
+            yield self._key
+
+    def __len__(self) -> int:
+        if self._active_call_id.get() is not None and self._key not in self._base:
+            return len(self._base) + 1
+        return len(self._base)
+
+    def __contains__(self, key: object) -> bool:
+        if self._active_call_id.get() is not None and key == self._key:
+            return True
+        return key in self._base
+
+    def get(self, key: str, default: object = None) -> object:
+        try:
+            return self[key]
+        except KeyError:
+            return default
+
+
 class OpenAIAgentsAdapter:
     """Evaluate an OpenAI Agents SDK workflow without granting the SDK grading authority."""
 
@@ -101,11 +170,13 @@ class OpenAIAgentsAdapter:
         *,
         state_reader: StateReader,
         resource_resolver: ResourceResolver | None = None,
+        run_context: object | None = None,
         tracing_disabled: bool = True,
     ) -> None:
         self._agent = agent
         self._state_reader = state_reader
         self._resource_resolver = resource_resolver
+        self._run_context = run_context
         self._tracing_disabled = tracing_disabled
 
     @property
@@ -146,12 +217,13 @@ class OpenAIAgentsAdapter:
             result = await Runner.run(
                 prepared.agent,
                 prepared.runner_input,
+                context=prepared.run_context,
                 max_turns=scenario.authority.max_turns,
                 run_config=run_config,
                 session=prepared.session,
             )
         except MaxTurnsExceeded:
-            self._raise_recorder_identity_error(prepared.tool_result_recorder)
+            self._raise_recorder_identity_errors(prepared)
             final_state = await self._read_state()
             events = self._exception_delivery_events(prepared)
             events.append(
@@ -177,7 +249,7 @@ class OpenAIAgentsAdapter:
             ToolInputGuardrailTripwireTriggered,
             ToolOutputGuardrailTripwireTriggered,
         ) as exc:
-            self._raise_recorder_identity_error(prepared.tool_result_recorder)
+            self._raise_recorder_identity_errors(prepared)
             final_state = await self._read_state()
             events = self._exception_delivery_events(prepared)
             events.append(
@@ -197,13 +269,14 @@ class OpenAIAgentsAdapter:
                 elapsed_ms=(perf_counter() - started) * 1000.0,
             )
 
-        self._raise_recorder_identity_error(prepared.tool_result_recorder)
+        self._raise_recorder_identity_errors(prepared)
         events = list(prepared.delivery_events)
         events.extend(
             self._normalize_items(
                 result.new_items,
                 start_sequence=len(events),
                 tool_result_recorder=prepared.tool_result_recorder,
+                environment_recorder=prepared.environment_recorder,
                 handoff_recorder=prepared.handoff_recorder,
             )
         )
@@ -232,7 +305,11 @@ class OpenAIAgentsAdapter:
     def _prepare_execution(self, scenario: EvaluationScenario) -> _PreparedExecution:
         attack = extract_attack(scenario)
         if attack is None:
-            return _PreparedExecution(agent=self._agent, runner_input=scenario.objective)
+            return _PreparedExecution(
+                agent=self._agent,
+                runner_input=scenario.objective,
+                run_context=self._run_context,
+            )
         if attack.channel is AttackChannel.USER_INPUT:
             injection_point = "openai-agents:Runner.run.input[1]"
             receipt = AttackDeliveryReceipt.from_scenario(
@@ -251,6 +328,7 @@ class OpenAIAgentsAdapter:
                 agent=self._agent,
                 runner_input=runner_input,
                 delivery_events=(event,),
+                run_context=self._run_context,
             )
         if attack.channel is AttackChannel.TOOL_RESULT:
             runner_agent, recorder = self._prepare_tool_result_agent(scenario, attack)
@@ -258,6 +336,7 @@ class OpenAIAgentsAdapter:
                 agent=runner_agent,
                 runner_input=scenario.objective,
                 tool_result_recorder=recorder,
+                run_context=self._run_context,
             )
         if attack.channel is AttackChannel.TOOL_METADATA:
             runner_agent, events = self._prepare_tool_metadata_agent(scenario, attack)
@@ -265,6 +344,7 @@ class OpenAIAgentsAdapter:
                 agent=runner_agent,
                 runner_input=scenario.objective,
                 delivery_events=events,
+                run_context=self._run_context,
             )
         if attack.channel is AttackChannel.MEMORY:
             runner_session, events = self._prepare_memory_session(scenario, attack)
@@ -273,6 +353,7 @@ class OpenAIAgentsAdapter:
                 runner_input=scenario.objective,
                 delivery_events=events,
                 session=runner_session,
+                run_context=self._run_context,
             )
         if attack.channel is AttackChannel.RESOURCE:
             resource_input, events = self._prepare_resource_input(scenario, attack)
@@ -280,14 +361,24 @@ class OpenAIAgentsAdapter:
                 agent=self._agent,
                 runner_input=resource_input,
                 delivery_events=events,
+                run_context=self._run_context,
             )
         if attack.channel is AttackChannel.HANDOFF:
             handoff_filter, handoff_recorder = self._prepare_handoff_filter(scenario, attack)
             return _PreparedExecution(
                 agent=self._agent,
                 runner_input=scenario.objective,
+                run_context=self._run_context,
                 handoff_input_filter=handoff_filter,
                 handoff_recorder=handoff_recorder,
+            )
+        if attack.channel is AttackChannel.ENVIRONMENT:
+            runner_agent, run_context, recorder = self._prepare_environment_agent(scenario, attack)
+            return _PreparedExecution(
+                agent=runner_agent,
+                runner_input=scenario.objective,
+                run_context=run_context,
+                environment_recorder=recorder,
             )
         raise AdapterPreconditionError(
             code="unsupported_attack_channel",
@@ -496,6 +587,85 @@ class OpenAIAgentsAdapter:
 
         return inject_first_handoff_context, recorder
 
+    def _prepare_environment_agent(
+        self,
+        scenario: EvaluationScenario,
+        attack: AttackFixture,
+    ) -> tuple[object, _InjectedEnvironmentContext, _EnvironmentDeliveryRecorder]:
+        try:
+            spec = EnvironmentAttackPayload.from_fixture(attack)
+        except ValueError as exc:
+            raise AdapterPreconditionError(
+                code="invalid_environment_attack",
+                reason="environment attack payload does not satisfy the runtime-context contract",
+            ) from exc
+
+        if self._run_context is None:
+            base_context: Mapping[str, object] = {}
+        elif isinstance(self._run_context, Mapping):
+            if any(not isinstance(key, str) for key in self._run_context):
+                raise AdapterPreconditionError(
+                    code="unsupported_environment_context_type",
+                    reason="environment injection requires string-keyed Mapping runtime context",
+                )
+            base_context = self._run_context
+        else:
+            raise AdapterPreconditionError(
+                code="unsupported_environment_context_type",
+                reason="environment injection requires Mapping-compatible runtime context",
+            )
+
+        agent, target = self._resolve_local_function_tool(
+            tool_name=spec.tool,
+            attack_label="environment",
+        )
+        wrapped_target = copy(target)
+        original_invoke = wrapped_target.on_invoke_tool
+        recorder = _EnvironmentDeliveryRecorder()
+
+        def record_consumption(call_id: str) -> None:
+            if recorder.event is not None:
+                return
+            injection_point = (
+                f"openai-agents:FunctionTool:{spec.tool}:call:{call_id}:"
+                f"RunContextWrapper.context:{spec.key}"
+            )
+            receipt = AttackDeliveryReceipt.from_scenario(
+                scenario,
+                injection_point=injection_point,
+            )
+            recorder.call_id = call_id
+            recorder.event = receipt.to_event(
+                sequence=0,
+                source="injector:openai-agents:environment-runtime-context",
+            )
+
+        injected_context = _InjectedEnvironmentContext(
+            base=base_context,
+            key=spec.key,
+            value=attack.payload_json,
+            on_read=record_consumption,
+        )
+
+        async def inject_environment(context: object, arguments: str) -> object:
+            if recorder.attempted:
+                return await original_invoke(context, arguments)
+            recorder.attempted = True
+            call_id = _raw_attr(context, "tool_call_id")
+            if not isinstance(call_id, str) or not call_id:
+                recorder.identity_error = True
+                return await original_invoke(context, arguments)
+
+            token = injected_context.activate(call_id)
+            try:
+                return await original_invoke(context, arguments)
+            finally:
+                injected_context.deactivate(token)
+
+        wrapped_target.on_invoke_tool = inject_environment
+        tools = [wrapped_target if tool is target else tool for tool in agent.tools]
+        return agent.clone(tools=tools), injected_context, recorder
+
     def _resolve_local_function_tool(
         self,
         *,
@@ -533,19 +703,29 @@ class OpenAIAgentsAdapter:
         return self._agent, function_matches[0]
 
     @staticmethod
-    def _raise_recorder_identity_error(
-        recorder: _ToolResultDeliveryRecorder | None,
-    ) -> None:
-        if recorder is not None and recorder.identity_error:
+    def _raise_recorder_identity_errors(prepared: _PreparedExecution) -> None:
+        if (
+            prepared.tool_result_recorder is not None
+            and prepared.tool_result_recorder.identity_error
+        ):
             raise AdapterPreconditionError(
                 code="tool_call_identity_unavailable",
                 reason="tool-result injector could not bind delivery to a tool call identity",
+            )
+        if prepared.environment_recorder is not None and prepared.environment_recorder.identity_error:
+            raise AdapterPreconditionError(
+                code="environment_call_identity_unavailable",
+                reason="environment injector could not bind delivery to a tool call identity",
             )
 
     @staticmethod
     def _exception_delivery_events(prepared: _PreparedExecution) -> list[EvidenceEvent]:
         events = list(prepared.delivery_events)
-        for recorder in (prepared.tool_result_recorder, prepared.handoff_recorder):
+        for recorder in (
+            prepared.tool_result_recorder,
+            prepared.environment_recorder,
+            prepared.handoff_recorder,
+        ):
             if recorder is not None and recorder.event is not None:
                 events.append(recorder.event.model_copy(update={"sequence": len(events)}))
         return events
@@ -562,6 +742,7 @@ class OpenAIAgentsAdapter:
         *,
         start_sequence: int = 0,
         tool_result_recorder: _ToolResultDeliveryRecorder | None = None,
+        environment_recorder: _EnvironmentDeliveryRecorder | None = None,
         handoff_recorder: _HandoffDeliveryRecorder | None = None,
     ) -> list[EvidenceEvent]:
         from agents.items import (
@@ -573,6 +754,7 @@ class OpenAIAgentsAdapter:
 
         events: list[EvidenceEvent] = []
         tool_delivery_inserted = False
+        environment_delivery_inserted = False
         handoff_delivery_inserted = False
         for item in items:
             if isinstance(item, ToolCallItem):
@@ -612,6 +794,18 @@ class OpenAIAgentsAdapter:
                         )
                     )
                     tool_delivery_inserted = True
+                if (
+                    not environment_delivery_inserted
+                    and environment_recorder is not None
+                    and environment_recorder.event is not None
+                    and item.call_id == environment_recorder.call_id
+                ):
+                    events.append(
+                        environment_recorder.event.model_copy(
+                            update={"sequence": start_sequence + len(events)}
+                        )
+                    )
+                    environment_delivery_inserted = True
                 events.append(
                     EvidenceEvent(
                         sequence=start_sequence + len(events),
@@ -664,6 +858,16 @@ class OpenAIAgentsAdapter:
         ):
             events.append(
                 tool_result_recorder.event.model_copy(
+                    update={"sequence": start_sequence + len(events)}
+                )
+            )
+        if (
+            not environment_delivery_inserted
+            and environment_recorder is not None
+            and environment_recorder.event is not None
+        ):
+            events.append(
+                environment_recorder.event.model_copy(
                     update={"sequence": start_sequence + len(events)}
                 )
             )
