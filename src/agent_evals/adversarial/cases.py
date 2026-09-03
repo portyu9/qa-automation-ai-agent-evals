@@ -180,7 +180,29 @@ class AdversarialCampaign(BaseModel):
     campaign_id: str = Field(pattern=r"^[a-z0-9][a-z0-9._-]{2,127}$")
     revision: str = Field(min_length=1, max_length=128)
     base_scenario: EvaluationScenario
+    base_scenario_identity: str = Field(pattern=r"^[0-9a-f]{64}$")
     attacks: tuple[AttackFixture, ...] = Field(min_length=1, max_length=10_000)
+
+    @model_validator(mode="before")
+    @classmethod
+    def bind_base_scenario_identity(cls, data: Any) -> Any:
+        if not isinstance(data, dict):
+            return data
+        raw_base = data.get("base_scenario")
+        if raw_base is None:
+            return data
+        base = (
+            raw_base
+            if isinstance(raw_base, EvaluationScenario)
+            else EvaluationScenario.model_validate(raw_base)
+        )
+        identity = base.identity
+        supplied = data.get("base_scenario_identity")
+        if supplied is not None and supplied != identity:
+            raise ValueError("adversarial campaign base scenario identity does not match base")
+        normalized = dict(data)
+        normalized["base_scenario_identity"] = identity
+        return normalized
 
     @field_validator("attacks")
     @classmethod
@@ -205,12 +227,14 @@ class AdversarialCampaign(BaseModel):
                 "schema_version": self.schema_version,
                 "campaign_id": self.campaign_id,
                 "revision": self.revision,
-                "base_scenario_identity": self.base_scenario.identity,
+                "base_scenario_identity": self.base_scenario_identity,
                 "attack_identities": [attack.identity for attack in self.attacks],
             }
         )
 
     def scenarios(self) -> tuple[EvaluationScenario, ...]:
+        if self.base_scenario.identity != self.base_scenario_identity:
+            raise ValueError("adversarial campaign base scenario drifted after construction")
         return tuple(attack.apply(self.base_scenario) for attack in self.attacks)
 
 
