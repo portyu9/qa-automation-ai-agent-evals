@@ -6,7 +6,7 @@ This document is intentionally strict. The repository should never become more i
 
 ### No credentialed live-provider assurance yet
 
-A first-class OpenAI Agents SDK adapter is implemented against `openai-agents==0.22.0`, and CI exercises its real SDK runner/tool loop deterministically with `ScriptedModel` without API calls. The deterministic SDK tier verifies ordinary tool execution, concrete `USER_INPUT` injection, local-`FunctionTool` `TOOL_RESULT` replacement, local-`FunctionTool` description-level `TOOL_METADATA` poisoning, isolated SDK session-history `MEMORY` poisoning, reusable-subject isolation, and fail-closed handling of unsupported/missing adversarial boundaries.
+A first-class OpenAI Agents SDK adapter is implemented against `openai-agents==0.22.0`, and CI exercises its real SDK runner/tool/handoff loop deterministically with `ScriptedModel` without API calls. The deterministic SDK tier verifies ordinary tool execution, concrete `USER_INPUT` injection, local-`FunctionTool` `TOOL_RESULT` replacement, local-`FunctionTool` description-level `TOOL_METADATA` poisoning, isolated SDK session-history `MEMORY` poisoning, first-native-handoff context `HANDOFF` poisoning, reusable-subject isolation, and fail-closed handling of unsupported or unavailable adversarial boundaries.
 
 The repository does **not** claim live-model behavioral assurance, production-provider availability, model-specific safety performance, provider-side delivery attestation, or credentialed end-to-end coverage.
 
@@ -26,12 +26,13 @@ The repository provides content-addressed fixtures, deterministic scenario deriv
 
 For adversarial scenarios, `TrialRunner` requires exactly one internally valid delivery receipt before deterministic subject grading. Missing, duplicate, malformed, forged, or mismatched delivery evidence produces `BLOCKED` with no completed subject oracles rather than behavioral `FAIL`.
 
-`OpenAIAgentsAdapter` currently provides four concrete channel implementations:
+`OpenAIAgentsAdapter` currently provides five concrete channel implementations:
 
 - `USER_INPUT`: exact canonical fixture JSON is supplied as second ordered SDK user message;
 - local-`FunctionTool` `TOOL_RESULT`: first matching local function-tool result in a trial is replaced with exact canonical fixture JSON and bound to exact SDK call ID;
 - local-`FunctionTool` description-level `TOOL_METADATA`: copied target description is replaced with exact canonical fixture JSON before SDK execution while original tool remains unchanged;
-- SDK session-history `MEMORY`: a fresh per-trial `Session` protocol object returns exact canonical fixture JSON as one prior user item, which the SDK prepends before current input.
+- SDK session-history `MEMORY`: a fresh per-trial `Session` protocol object returns exact canonical fixture JSON as one prior user item, which the SDK prepends before current input;
+- native SDK `HANDOFF`: a fresh per-trial run-level handoff filter appends exact canonical fixture JSON to the first actual handoff context while preserving the SDK-selected destination agent.
 
 Those controls establish **what attack is intended, what exact scenario is evaluated, and what delivery observation the trusted control plane recorded**. They do not provide universal injection or independent proof that an arbitrary external target consumed the stimulus.
 
@@ -57,15 +58,15 @@ The repository therefore does **not** claim:
 
 A future mode that executes original function and only mutates return value must be a separate explicit contract because its safety and side-effect semantics differ.
 
-If configured target never executes, no receipt is emitted and adversarial trial remains `BLOCKED`. A skipped attack is never treated as successful testing.
+If the configured target never executes, no receipt is emitted and the adversarial trial remains `BLOCKED`. A skipped attack is never treated as successful testing.
 
 ### Local `TOOL_METADATA` means description poisoning, not universal metadata poisoning
 
 The current `TOOL_METADATA` implementation is intentionally narrow.
 
-It requires an identity-bearing payload object with valid `tool` + `description` fields. Complete canonical fixture JSON becomes copied local `FunctionTool.description`, so delivery receipt digest binds exact string visible at tested SDK model-call tool boundary.
+It requires an identity-bearing payload object with valid `tool` + `description` fields. Complete canonical fixture JSON becomes copied local `FunctionTool.description`, so delivery receipt digest binds the exact string visible at the tested SDK model-call tool boundary.
 
-Per adversarial execution the adapter uses same fail-closed exact local-tool resolver as `TOOL_RESULT`, copies target, changes only copied description, and clones agent with a fresh tools list. Original agent/tool remain unchanged.
+Per adversarial execution the adapter uses the same fail-closed exact local-tool resolver as `TOOL_RESULT`, copies the target, changes only copied description, and clones the agent with a fresh tools list. Original agent/tool remain unchanged.
 
 The repository therefore does **not** claim that this implementation mutates or tests:
 
@@ -85,7 +86,7 @@ Those are separate boundaries. Schema poisoning and tool renaming can alter invo
 
 ### SDK session-history `MEMORY` is not production memory poisoning
 
-The implemented `MEMORY` mode is also intentionally narrow.
+The implemented `MEMORY` mode is intentionally narrow.
 
 It validates an identity-bearing fixture with a required `memory` field and places the **complete canonical fixture JSON** into a fresh per-trial object implementing the OpenAI SDK `Session` protocol. The runner retrieves that prior item through `get_items` and prepends it before current run input.
 
@@ -105,11 +106,32 @@ The repository therefore does **not** claim that this implementation mutates, at
 
 A real application-memory adapter must target the actual retrieval/persistence boundary and independently verify isolation, tenant scope, lifecycle, and side effects. The SDK session-history mode must not be described as universal memory poisoning.
 
-### Other attack channels remain unimplemented in the OpenAI adapter
+### Native SDK `HANDOFF` is context poisoning, not rerouting or distributed-fabric interception
 
-`resource`, `handoff`, and `environment` still require concrete controlled injectors at their real boundaries.
+The implemented `HANDOFF` mode is intentionally narrow.
 
-The repository therefore does not yet claim external-resource injection, handoff poisoning, environment-fault delivery, complete channel coverage, or universal prompt-injection harnessing across all context sources.
+It validates an identity-bearing fixture with a required `handoff` field and installs a fresh per-trial `RunConfig.handoff_input_filter`. On the **first actual SDK handoff**, the filter appends complete canonical fixture JSON as one `user` context item in cloned `HandoffInputData` and returns that modified transfer to the same SDK-selected destination agent.
+
+The deterministic SDK test drives a real two-agent handoff, proves the receiving model sees the expected prior context plus exact poison, checks normalized `HANDOFF → ATTACK_DELIVERY` chronology, and then proves a later ordinary handoff receives no inherited poison.
+
+The repository therefore does **not** claim that this implementation:
+
+- chooses or changes the destination agent;
+- rewrites handoff tool identity or routing metadata;
+- modifies receiving-agent instructions, tools, or policy;
+- poisons every transfer in a multi-handoff chain;
+- intercepts handoffs performed by remote/distributed agent runtimes;
+- intercepts message buses, queues, RPC layers, or workflow engines between agents;
+- attests that a remote provider consumed the injected context;
+- proves correctness of arbitrary handoff implementations outside the tested OpenAI SDK boundary.
+
+If no handoff occurs—or the SDK does not invoke the configured run-level filter for that transfer—no delivery receipt is emitted. The adversarial trial therefore remains `BLOCKED` rather than claiming an attack ran.
+
+### Other OpenAI attack channels remain unimplemented
+
+`RESOURCE` and `ENVIRONMENT` still require concrete controlled injectors at their real boundaries.
+
+The repository therefore does not yet claim external-resource injection, environment-fault delivery, complete channel coverage, or universal prompt-injection harnessing across every context source.
 
 The `injector:<identity>` source is a label, not authenticated signer identity. Receipt roots are SHA-256 integrity, not signatures, MACs, trusted timestamps, hardware attestation, or non-repudiation. A buggy or malicious trusted injector could still lie without stronger independent acknowledgement/authentication.
 
@@ -121,7 +143,7 @@ See [Adversarial Testing](ADVERSARIAL_TESTING.md) and [OpenAI Adapter](OPENAI_AD
 
 The taxonomy and adversarial layers include MCP-relevant authorization/tool-poisoning concepts, but the repository does not yet provide executable MCP fault servers, malicious MCP metadata/result simulators, protocol-conformance claims, MCP task/authorization fault coverage, or target-side MCP delivery attestation.
 
-Local `FunctionTool` result replacement, local `FunctionTool` description poisoning, and SDK session-history poisoning must not be described as MCP injection.
+Local `FunctionTool` result replacement, local `FunctionTool` description poisoning, SDK session-history poisoning, and native SDK handoff-context poisoning must not be described as MCP injection.
 
 ### Local persistence is not trusted-writer attestation
 
@@ -131,13 +153,13 @@ These controls verify local records relative to manifests and expected evaluatio
 
 The repository therefore does **not** claim digital signatures, MAC-based writer authentication, trusted timestamps, remote attestation, WORM/object-lock storage, encryption at rest, key management, cross-host durability, transparency-log anchoring, or enforced retention/deletion policy.
 
-Filesystems that cannot provide no-clobber hard-link publication primitive fail publication rather than silently falling back to overwrite semantics.
+Filesystems that cannot provide the no-clobber hard-link publication primitive fail publication rather than silently falling back to overwrite semantics.
 
 ### Replay is historical regrading, not re-execution
 
-`EvidenceReplayAdapter` requires exact trial, subject, and scenario identity. It can re-apply delivery verification and deterministic subject grading to historical observations and reproduce evidence root for unchanged evidence model.
+`EvidenceReplayAdapter` requires exact trial, subject, and scenario identity. It can re-apply delivery verification and deterministic subject grading to historical observations and reproduce evidence root for an unchanged evidence model.
 
-Replay does **not** run injector again, prove fresh delivery, prove current provider availability, reproduce stochastic behavior, re-run tools, re-open a session, establish historical side effects still exist, or authenticate original publisher/injector.
+Replay does **not** run injector again, prove fresh delivery, prove current provider availability, reproduce stochastic behavior, re-run tools, re-open a session, re-run a handoff, establish historical side effects still exist, or authenticate the original publisher/injector.
 
 ### Assurance-report validation is not oracle replay or signed attestation
 
@@ -151,13 +173,13 @@ The report stores evidence roots rather than full `TrialEvidence`; full delivery
 
 Paired comparison currently establishes significant directional improvement/regression using an exact McNemar/binomial test. Lack of significant regression is **not** claimed as formal non-inferiority.
 
-### pass@k / pass^k are empirical approximations
+### `pass@k` / `pass^k` are empirical approximations
 
 Current formulas use observed success proportion among resolved `PASS`/`FAIL` trials and an independent-attempt interpretation. `BLOCKED` and `INCONCLUSIVE` attempts remain separate. Correlated trials, adaptive sampling, or non-stationary behavior can violate the independence approximation.
 
 ### Resource-prefix policy is lexical
 
-Resource scope currently uses string-prefix matching over adapter-normalized resource identities. Provider adapters must canonicalize aliases, path traversal, case folding, URL forms, and alternate identifiers before lexical prefix comparison can represent intended security boundary.
+Resource scope currently uses string-prefix matching over adapter-normalized resource identities. Provider adapters must canonicalize aliases, path traversal, case folding, URL forms, and alternate identifiers before lexical prefix comparison can represent the intended security boundary.
 
 ### No sandbox isolation claim
 
@@ -165,7 +187,7 @@ The repository currently executes no target-controlled shell or arbitrary target
 
 ## Current verification checkpoint
 
-The current source checkpoint is **159 passed, 7 deselected, 93.71% branch coverage**, strict mypy clean across **34 source files**, with **7/7** deterministic OpenAI SDK tests green. The channel-specific adversarial payload implementation is absent from the missing-coverage table.
+The current source checkpoint is **163 passed, 8 deselected, 93.76% branch coverage**, strict mypy clean across **34 source files**, with **8/8** deterministic OpenAI SDK tests green. The channel-specific adversarial payload implementation is absent from the missing-coverage table.
 
 ## Why these boundaries matter
 
