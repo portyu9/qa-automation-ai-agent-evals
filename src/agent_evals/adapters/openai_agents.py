@@ -431,9 +431,7 @@ class OpenAIAgentsAdapter:
         ]
         receipt = AttackDeliveryReceipt.from_scenario(
             scenario,
-            injection_point=(
-                "openai-agents:Runner.run.input[1].content[0]:input_file.file_data"
-            ),
+            injection_point=("openai-agents:Runner.run.input[1].content[0]:input_file.file_data"),
         )
         event = receipt.to_event(
             sequence=0,
