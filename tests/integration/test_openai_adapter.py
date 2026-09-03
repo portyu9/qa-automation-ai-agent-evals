@@ -130,7 +130,7 @@ async def test_openai_adapter_injects_exact_canonical_user_payload_and_emits_rec
     scenario = attack.apply(base)
 
     def respond(call: object) -> dict[str, object]:
-        model_call_input = getattr(call, "input")
+        model_call_input = call.input
         assert model_call_input == [
             {"content": base.objective, "role": "user"},
             {"content": attack.payload_json, "role": "user"},
@@ -206,4 +206,4 @@ async def test_openai_adapter_blocks_unsupported_attack_channel_before_model_exe
         "openai-agents adapter does not implement adversarial channel 'tool_result'"
     )
     assert attack.payload_json not in json.dumps(error.payload, sort_keys=True)
-    assert model.calls == []
+    assert not model.calls
