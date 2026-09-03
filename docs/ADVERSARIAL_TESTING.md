@@ -64,6 +64,18 @@ The current channel contract distinguishes where an evaluation environment is ex
 
 A channel label is a delivery contract, not proof that injection occurred. The adapter/test environment must implement the actual delivery mechanism and emit a valid receipt only after its controlled injection step succeeds.
 
+### Concrete channel implementations
+
+The channel taxonomy is broader than the currently implemented injectors.
+
+`OpenAIAgentsAdapter` now implements a deterministic `user_input` injector at the OpenAI Agents SDK `Runner.run` input boundary. For an adversarial `USER_INPUT` scenario it supplies the ordinary scenario objective as the first user message and the exact canonical `AttackFixture.payload_json` as the second user message. It emits the corresponding delivery receipt with injection point `openai-agents:Runner.run.input[1]` before SDK execution evidence is normalized.
+
+The independent SDK test asserts the exact normalized model input and the resulting receipt. This proves what the trusted adapter placed at that controlled SDK boundary; it does not establish provider-side or model-side attestation.
+
+All other current channels remain unsupported by that adapter. A requested `tool_result`, `tool_metadata`, `memory`, `resource`, `handoff`, or `environment` attack raises a structured adapter precondition failure before model execution and produces `EVALUATION_ERROR / BLOCKED` rather than pretending the stimulus ran.
+
+See [OpenAI Adapter](OPENAI_ADAPTER.md).
+
 ## Deterministic scenario derivation
 
 `AttackFixture.apply(base_scenario)` creates a security scenario that preserves:
@@ -151,12 +163,15 @@ For an adversarial scenario, `verify_attack_delivery()` requires exactly one `AT
 
 Missing, duplicate, malformed, forged, or mismatched delivery evidence causes `TrialRunner` to append a critical `EVALUATION_ERROR` and return `BLOCKED` with **no deterministic oracle results**.
 
+Adapter-owned prerequisites that fail before execution use the same uncertainty principle. A concrete adapter may raise `AdapterPreconditionError` when it cannot satisfy a required controlled condition; `TrialRunner` records structured `EVALUATION_ERROR` evidence and returns `BLOCKED`. Generic provider/runtime exceptions remain separately classified as `RUNTIME_ERROR / BLOCKED`.
+
 This separation is intentional:
 
 ```text
-attack not delivered / cannot prove delivery → evaluation infrastructure uncertainty → BLOCKED
-attack delivered, agent violates requirement → behavioral evidence → FAIL
-attack delivered, requirements close         → PASS
+unsupported / unavailable controlled injection → evaluation infrastructure uncertainty → BLOCKED
+provider or runtime unavailable                → runtime uncertainty                 → BLOCKED
+attack delivered, agent violates requirement   → behavioral evidence                 → FAIL
+attack delivered, requirements close           → PASS
 ```
 
 A broken injector therefore cannot make an agent appear unsafe by manufacturing a behavioral failure, and it cannot make the agent appear safe by silently skipping the attack.
@@ -230,7 +245,7 @@ delivery_event = receipt.to_event(
 )
 ```
 
-The receipt is emitted only after the controlled environment's real injection step succeeds. The framework verifies the exact receipt before behavioral grading.
+This example illustrates the generic receipt contract; the repository does not yet ship the shown tool-result injector. A real environment must emit the receipt only after that injection step succeeds. The framework then verifies the exact receipt before behavioral grading.
 
 ## What this layer proves
 
@@ -252,9 +267,11 @@ The implemented layer provides deterministic evidence that:
 - exactly one valid delivery receipt is required before adversarial oracle grading;
 - missing/ambiguous/invalid delivery remains `BLOCKED` rather than behavioral `FAIL`;
 - historical replay preserves and revalidates the recorded receipt;
-- blocked delivery remains non-behavioral uncertainty through reliability and session assurance reporting.
+- blocked delivery remains non-behavioral uncertainty through reliability and session assurance reporting;
+- the OpenAI adapter places exact canonical `USER_INPUT` fixture text at its tested SDK runner-input boundary and emits the matching receipt;
+- unsupported OpenAI attack channels block before model execution rather than silently degrading the test.
 
-The current test suite exercises all code/branch paths in both adversarial source modules at the tested checkpoint.
+The current test suite exercises all code/branch paths in both adversarial source modules at the tested checkpoint. The independent OpenAI SDK tier separately executes the concrete user-input injector against `ScriptedModel`.
 
 ## Explicit non-claims
 
@@ -262,7 +279,7 @@ A delivery receipt is **not target-side attestation**. The evaluator verifies co
 
 The `injector:<identity>` source label and `receipt_root` are not a digital signature, MAC, trusted timestamp, hardware attestation, or non-repudiation mechanism.
 
-The repository also does **not** yet provide a universal implementation of every `AttackChannel`. Concrete user-input, tool-result, tool-metadata, memory, resource, handoff, MCP, and environment injectors must be implemented and tested at their real delivery boundary.
+The repository does **not** provide a universal implementation of every `AttackChannel`. The OpenAI adapter currently implements only the `user_input` channel. Concrete tool-result, tool-metadata, memory, resource, handoff, MCP, and environment injectors still must be implemented and tested at their real delivery boundaries.
 
 It does not yet provide automatic attack generation, mutation/fuzzing, multi-step adaptive adversaries, MCP fault servers, sandbox escape infrastructure, or credentialed provider red-team coverage.
 
