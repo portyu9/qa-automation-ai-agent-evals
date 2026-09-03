@@ -133,9 +133,7 @@ class MCPFaultLab:
     async def probe_discovery_cache(self) -> MCPDiscoveryProbeResult:
         """Prove stale cached discovery after server-side tool removal, then refresh to truth."""
         if self._fault.kind is not MCPFaultKind.TOOL_LIST_STALE_CACHE:
-            raise ValueError(
-                "probe_discovery_cache() requires a TOOL_LIST_STALE_CACHE fault"
-            )
+            raise ValueError("probe_discovery_cache() requires a TOOL_LIST_STALE_CACHE fault")
         try:
             from mcp import Client
         except ImportError as exc:  # pragma: no cover - exercised by optional dependency boundary
