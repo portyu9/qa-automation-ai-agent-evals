@@ -14,7 +14,8 @@ Trusted evaluation control plane
 ├── deterministic adversarial scenario derivation
 ├── controlled attack injector boundary
 │   ├── OpenAI USER_INPUT injector
-│   └── OpenAI local FunctionTool TOOL_RESULT injector
+│   ├── OpenAI local FunctionTool TOOL_RESULT injector
+│   └── OpenAI local FunctionTool TOOL_METADATA description injector
 ├── attack-delivery receipt verifier
 ├── evidence normalization contract
 ├── local evidence-store verifier
@@ -56,12 +57,13 @@ An `EvaluationScenario` binds stable ID/revision, classification, objective, ini
 
 The attack envelope is a **delivery contract**, not proof of delivery. A controlled adapter/environment must perform the real injection at the declared user/tool/metadata/memory/resource/handoff/environment boundary. `extract_attack(..., expected_base_scenario=...)` can rederive the complete scenario and detect drift outside the envelope.
 
-`OpenAIAgentsAdapter` currently closes two concrete delivery paths:
+`OpenAIAgentsAdapter` currently closes three concrete delivery paths:
 
 - `USER_INPUT`: objective plus exact canonical fixture JSON are supplied as two ordered `Runner.run` user messages;
-- local-`FunctionTool` `TOOL_RESULT`: a per-trial copied target tool replaces the first matching invocation result with exact canonical fixture JSON and binds the receipt to the exact SDK call ID.
+- local-`FunctionTool` `TOOL_RESULT`: a per-trial copied target tool replaces the first matching invocation result with exact canonical fixture JSON and binds the receipt to the exact SDK call ID;
+- local-`FunctionTool` description-level `TOOL_METADATA`: a per-trial copied target has only its `description` replaced with exact canonical fixture JSON before the cloned agent enters `Runner.run`.
 
-The tool-result implementation does not mutate the reusable original agent/tool and does not claim hosted-tool, MCP, or arbitrary external-tool interception.
+Both local tool channels share the same fail-closed target resolver and leave the reusable original agent/tool unchanged. They do not claim hosted-tool, MCP, external registry, or arbitrary external-tool interception.
 
 See [Adversarial Testing](ADVERSARIAL_TESTING.md) and [OpenAI Adapter](OPENAI_ADAPTER.md).
 
@@ -74,7 +76,7 @@ The receipt excludes the raw adversarial payload. `receipt.to_event()` emits nor
 For an adversarial scenario, `TrialRunner` requires exactly one valid receipt before behavioral oracles execute. Missing, duplicate, malformed, forged, or mismatched delivery evidence causes critical `EVALUATION_ERROR` and `BLOCKED` with no completed subject-oracle results.
 
 ```text
-unverified attack delivery              → BLOCKED
+unverified attack delivery                → BLOCKED
 verified attack + deterministic violation → FAIL
 verified attack + deterministic closure   → PASS
 ```
@@ -107,6 +109,8 @@ TOOL_RESULT
 
 The receipt injection point includes the exact SDK tool call ID, and the normalized `TOOL_RESULT` contains the same canonical fixture JSON returned to the model loop.
 
+For local tool-metadata injection, the receipt is emitted before subject execution because the copied `FunctionTool.description` already equals the complete canonical fixture JSON before `Runner.run`. The independent SDK test then observes that exact description in the model-call tool snapshot.
+
 ## Persistence boundary
 
 `LocalEvidenceStore` persists canonical payload bytes plus a strict manifest binding record key, evaluation identities, byte length, payload SHA-256, and semantic evidence root.
@@ -121,24 +125,43 @@ This mechanism does not authenticate a writer who can coherently replace both pa
 
 For adversarial scenarios, the adapter/environment owns concrete delivery. `AdapterPreconditionError` is the explicit boundary for a controlled prerequisite it cannot satisfy. `TrialRunner` converts it to `EVALUATION_ERROR / BLOCKED` with no subject oracles; provider/runtime exceptions remain separately classified as `RUNTIME_ERROR / BLOCKED`.
 
-### OpenAI per-trial tool-result isolation
+### Shared OpenAI local-tool isolation
 
-For local `FunctionTool` `TOOL_RESULT` attacks, `OpenAIAgentsAdapter`:
+For local `FunctionTool` `TOOL_RESULT` and `TOOL_METADATA` attacks, `OpenAIAgentsAdapter` uses one target-resolution policy:
 
-1. validates the identity-bearing `tool` + `result` routing contract;
-2. resolves exactly one local SDK `FunctionTool` target;
-3. copies that target only;
-4. wraps the copied invocation callback;
-5. clones the agent with a fresh tools list;
-6. keeps delivery state in a per-execution recorder.
+1. validate the channel-specific identity-bearing payload contract;
+2. require an OpenAI SDK `Agent`;
+3. resolve exactly one local tool by fixture-bound name;
+4. require an SDK `FunctionTool`;
+5. copy the target;
+6. clone the agent with a fresh tools list;
+7. mutate only the per-trial copy for the requested attack boundary.
 
-The first matching call is replaced with exact canonical attack JSON and does not execute the original function. Later matching calls use the copied original behavior. The reusable original agent/tool remain untouched.
+The reusable original agent/tool remain untouched.
 
-If the target never runs, no receipt exists and delivery verification blocks the trial. If the target is missing, ambiguous, unsupported, malformed, or lacks safe call identity, the adapter precondition-blocks.
+### Tool-result specialization
 
-This is deliberate controlled fault simulation. It does not preserve original side effects on the injected call; an execute-then-perturb mode would be a separate contract.
+The copied invocation callback replaces the first matching call with exact canonical attack JSON and records a call-ID-bound receipt. The original function does not execute on that injected call; later matching calls use copied original behavior.
 
-`tool_metadata`, `memory`, `resource`, `handoff`, and `environment` remain unsupported by the OpenAI adapter.
+If the target never runs, no receipt exists and delivery verification blocks the trial. If the call identity cannot be bound safely, the adapter precondition-blocks.
+
+This is controlled result replacement and does not preserve original side effects on the injected call.
+
+### Tool-metadata specialization
+
+The copied target's `description` becomes exact canonical attack JSON before execution. Tool name, parameter schema, invocation callback, approval semantics, and routing identity remain unchanged.
+
+The injection point is:
+
+```text
+openai-agents:FunctionTool:<tool>:description
+```
+
+A receipt can be emitted immediately because the controlled copied metadata boundary has already been established. `ScriptedModel` observes the exact poisoned description, and a later ordinary run observes the original description.
+
+Keeping name/schema fixed isolates description poisoning from schema drift, routing manipulation, or discovery poisoning. Those require separate explicit contracts.
+
+`memory`, `resource`, `handoff`, and `environment` remain unsupported by the OpenAI adapter. Hosted/MCP/external result and metadata manipulation remain outside the local-tool boundary.
 
 The deterministic `ScriptedAdapter` exists to test the harness itself without provider credentials.
 
@@ -187,6 +210,8 @@ A trajectory is evidence, but not every trajectory difference is a defect. Exact
 
 ## Current boundary
 
-The core currently provides deterministic contracts, adversarial fixtures/campaigns, evidence-bound attack-delivery verification, concrete OpenAI `USER_INPUT` and local-`FunctionTool` `TOOL_RESULT` injection, identity-bound evidence, local integrity-verified persistence, exact-identity historical replay, deterministic state/policy oracles, metamorphic relations, repeated-trial statistics, assurance reports, release gating, failure minimization, and a deterministic OpenAI Agents SDK integration tier.
+The core currently provides deterministic contracts, adversarial fixtures/campaigns, evidence-bound attack-delivery verification, concrete OpenAI `USER_INPUT`, local-`FunctionTool` `TOOL_RESULT`, and local-`FunctionTool` description-level `TOOL_METADATA` injection, identity-bound evidence, local integrity-verified persistence, exact-identity historical replay, deterministic state/policy oracles, metamorphic relations, repeated-trial statistics, assurance reports, release gating, failure minimization, and a deterministic OpenAI Agents SDK integration tier.
 
-Credentialed live-provider assurance, tool-metadata/memory/resource/handoff/environment injectors, hosted/MCP tool-result interception, cryptographically authenticated injector identity, target-side delivery attestation, automatic/adaptive adversarial generation, hostile-writer authenticated evidence/report signing, remote attestation, immutable remote retention, MCP fault servers, calibrated semantic graders, and automatic perturbation generation remain separate implementation layers and are not represented as complete.
+The current source checkpoint is **155 passed, 6 deselected, 93.67% branch coverage**, strict mypy clean across **34 source files**, with **6/6** deterministic OpenAI SDK tests green.
+
+Credentialed live-provider assurance, memory/resource/handoff/environment injectors, tool-name/parameter-schema poisoning, hosted/MCP result or metadata interception, cryptographically authenticated injector identity, target-side delivery attestation, automatic/adaptive adversarial generation, hostile-writer authenticated evidence/report signing, remote attestation, immutable remote retention, MCP fault servers, calibrated semantic graders, and automatic perturbation generation remain separate implementation layers and are not represented as complete.
