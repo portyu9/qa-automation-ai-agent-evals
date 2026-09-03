@@ -101,6 +101,31 @@ class MemoryAttackPayload(BaseModel):
             ) from exc
 
 
+class ResourceAttackPayload(BaseModel):
+    """Contract for one inline JSON file resource supplied to the OpenAI SDK run input.
+
+    `resource` makes the fixture semantically explicit. The complete canonical
+    `AttackFixture.payload_json` becomes the `file_data` of one structured `input_file` content
+    item, so the delivery-receipt digest binds the exact resource bytes at the tested SDK input
+    boundary. V1 does not claim file-search, vector-store, URL-fetch, or hosted retrieval control.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="allow")
+
+    resource: Any
+
+    @classmethod
+    def from_fixture(cls, attack: AttackFixture) -> Self:
+        if attack.channel is not AttackChannel.RESOURCE:
+            raise ValueError("resource payload contract requires a RESOURCE attack fixture")
+        try:
+            return cls.model_validate(attack.payload)
+        except ValidationError as exc:
+            raise ValueError(
+                "resource attack payload must be a JSON object with a 'resource' field"
+            ) from exc
+
+
 class HandoffAttackPayload(BaseModel):
     """Contract for one-shot poisoning of context transferred across the first SDK handoff.
 
