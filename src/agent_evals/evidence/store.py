@@ -1,8 +1,8 @@
 """Integrity-checked local persistence for immutable trial evidence.
 
 The local store provides deterministic identity binding, bounded reads, exclusive same-record
-writers, atomic file replacement, and a manifest-last commit marker. It is an integrity mechanism,
-not a writer-authentication, signature, WORM, or remote-attestation mechanism.
+writers, atomic no-clobber publication, and a manifest-last commit marker. It is an integrity
+mechanism, not a writer-authentication, signature, WORM, or remote-attestation mechanism.
 """
 
 from __future__ import annotations
@@ -103,8 +103,8 @@ class LocalEvidenceStore:
         self._max_payload_bytes = max_payload_bytes
         self._max_manifest_bytes = max_manifest_bytes
         self._records = self._root / "records"
-        _ensure_owned_directory(self._root)
-        _ensure_owned_directory(self._records)
+        _ensure_store_directory(self._root)
+        _ensure_store_directory(self._records)
 
     @property
     def root(self) -> Path:
@@ -216,7 +216,7 @@ class LocalEvidenceStore:
         _validate_record_key(record_key)
         bucket = self._records / record_key[:2]
         if create_bucket:
-            _ensure_owned_directory(bucket)
+            _ensure_store_directory(bucket)
         elif bucket.is_symlink():
             raise EvidenceIntegrityError("evidence record bucket cannot be a symlink")
         return _RecordPaths(
@@ -270,7 +270,7 @@ def _validate_record_key(record_key: str) -> None:
         )
 
 
-def _ensure_owned_directory(path: Path) -> None:
+def _ensure_store_directory(path: Path) -> None:
     if path.is_symlink():
         raise EvidenceIntegrityError(f"evidence-store directory cannot be a symlink: {path}")
     path.mkdir(parents=True, exist_ok=True)
@@ -334,9 +334,18 @@ def _atomic_materialize(path: Path, content: bytes) -> None:
         os.fsync(fd)
         os.close(fd)
         fd = -1
-        if path.is_symlink() or path.exists():
-            raise EvidenceConflictError(f"evidence artifact appeared during write: {path.name}")
-        temporary.replace(path)
+        try:
+            path.hardlink_to(temporary)
+        except FileExistsError as exc:
+            raise EvidenceConflictError(
+                f"evidence artifact appeared during publication: {path.name}"
+            ) from exc
+        except OSError as exc:
+            raise EvidenceStoreError(
+                f"cannot atomically publish evidence artifact without clobbering: {path.name}"
+            ) from exc
+        _fsync_directory(path.parent)
+        temporary.unlink()
         _fsync_directory(path.parent)
     finally:
         if fd >= 0:
