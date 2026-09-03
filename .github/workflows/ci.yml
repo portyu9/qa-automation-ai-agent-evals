@@ -71,6 +71,7 @@ jobs:
           pytest -m openai
           tests/integration/test_openai_adapter.py
           tests/integration/test_openai_resource_adapter.py
+          tests/integration/test_openai_environment_adapter.py
 
   package:
     name: Package integrity
