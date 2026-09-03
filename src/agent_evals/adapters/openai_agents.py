@@ -20,6 +20,7 @@ from agent_evals.adversarial.cases import AttackChannel, AttackFixture, extract_
 from agent_evals.adversarial.channels import (
     HandoffAttackPayload,
     MemoryAttackPayload,
+    ResourceAttackPayload,
     ToolMetadataAttackPayload,
     ToolResultAttackPayload,
 )
@@ -29,7 +30,7 @@ from agent_evals.evidence.models import EvidenceEvent, EvidenceKind
 
 StateReader = Callable[[], Mapping[str, object] | Awaitable[Mapping[str, object]]]
 ResourceResolver = Callable[[str, str | None], str | None]
-RunnerInput = str | list[dict[str, str]]
+RunnerInput = str | list[dict[str, Any]]
 
 
 @dataclass(slots=True)
@@ -242,7 +243,7 @@ class OpenAIAgentsAdapter:
                 sequence=0,
                 source="injector:openai-agents:user-input",
             )
-            runner_input: list[dict[str, str]] = [
+            runner_input: list[dict[str, Any]] = [
                 {"role": "user", "content": scenario.objective},
                 {"role": "user", "content": attack.payload_json},
             ]
@@ -272,6 +273,13 @@ class OpenAIAgentsAdapter:
                 runner_input=scenario.objective,
                 delivery_events=events,
                 session=runner_session,
+            )
+        if attack.channel is AttackChannel.RESOURCE:
+            resource_input, events = self._prepare_resource_input(scenario, attack)
+            return _PreparedExecution(
+                agent=self._agent,
+                runner_input=resource_input,
+                delivery_events=events,
             )
         if attack.channel is AttackChannel.HANDOFF:
             handoff_filter, handoff_recorder = self._prepare_handoff_filter(scenario, attack)
@@ -394,6 +402,44 @@ class OpenAIAgentsAdapter:
             source="injector:openai-agents:memory-session-history",
         )
         return session, (event,)
+
+    @staticmethod
+    def _prepare_resource_input(
+        scenario: EvaluationScenario,
+        attack: AttackFixture,
+    ) -> tuple[list[dict[str, Any]], tuple[EvidenceEvent, ...]]:
+        try:
+            ResourceAttackPayload.from_fixture(attack)
+        except ValueError as exc:
+            raise AdapterPreconditionError(
+                code="invalid_resource_attack",
+                reason="resource attack payload does not satisfy the inline-file contract",
+            ) from exc
+
+        resource_input: list[dict[str, Any]] = [
+            {"role": "user", "content": scenario.objective},
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "input_file",
+                        "file_data": attack.payload_json,
+                        "filename": "agent-evals-resource.json",
+                    }
+                ],
+            },
+        ]
+        receipt = AttackDeliveryReceipt.from_scenario(
+            scenario,
+            injection_point=(
+                "openai-agents:Runner.run.input[1].content[0]:input_file.file_data"
+            ),
+        )
+        event = receipt.to_event(
+            sequence=0,
+            source="injector:openai-agents:resource-inline-file",
+        )
+        return resource_input, (event,)
 
     @staticmethod
     def _prepare_handoff_filter(
