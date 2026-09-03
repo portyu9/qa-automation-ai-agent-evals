@@ -47,11 +47,6 @@ class MCPFaultLab:
         call_count = 0
         server = MCPServer(f"agent-evals-mcp-lab:{fault.fault_id}")
 
-        @server.tool(
-            name=fault.tool_name,
-            description=description,
-            structured_output=False,
-        )
         def controlled_tool(query: str) -> str:
             """Return deterministic data while the lab controls the first-call fault boundary."""
             nonlocal call_count
@@ -63,6 +58,12 @@ class MCPFaultLab:
                     raise ToolError(fault.payload_json)
             return f"{_BENIGN_RESULT}:{query}"
 
+        server.add_tool(
+            controlled_tool,
+            name=fault.tool_name,
+            description=description,
+            structured_output=False,
+        )
         return server
 
     async def probe(self) -> MCPProbeResult:
