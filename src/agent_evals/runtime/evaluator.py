@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from time import perf_counter
 
 from agent_evals.adapters.base import AdapterResult, AgentAdapter
+from agent_evals.adversarial.delivery import AttackDeliveryError, verify_attack_delivery
 from agent_evals.contracts.models import EvaluationScenario, SubjectFingerprint
 from agent_evals.evidence.models import EvidenceEvent, EvidenceKind, TrialEvidence, TrialVerdict
 from agent_evals.oracles.deterministic import OracleResult, OutcomeOracle, PolicyOracle
@@ -28,9 +29,9 @@ class EvaluatedTrial:
 class TrialRunner:
     """Fail-closed trial executor.
 
-    Provider/runtime exceptions become BLOCKED evidence. Agent output cannot convert missing
-    execution evidence into PASS, and deterministic oracle failures always dominate semantic
-    quality scores that may be added by higher layers.
+    Provider/runtime exceptions and failed evaluation preconditions become BLOCKED evidence. Agent
+    output cannot convert missing execution evidence into PASS, and deterministic oracle failures
+    always dominate semantic quality scores that may be added by higher layers.
     """
 
     def __init__(self) -> None:
@@ -82,6 +83,19 @@ class TrialRunner:
             scenario=scenario,
             trial_id=trial_id,
         )
+        try:
+            verify_attack_delivery(scenario, evidence)
+        except AttackDeliveryError as exc:
+            return EvaluatedTrial(
+                evidence=self._append_evaluation_error(
+                    evidence,
+                    code="attack_delivery_unverified",
+                    reason=str(exc),
+                ),
+                oracle_results=(),
+                verdict=TrialVerdict.BLOCKED,
+            )
+
         oracle_results = tuple(oracle.grade(scenario, evidence) for oracle in self._oracles)
         verdict = (
             TrialVerdict.FAIL
@@ -113,4 +127,31 @@ class TrialRunner:
             input_tokens=result.input_tokens,
             output_tokens=result.output_tokens,
             estimated_cost_usd=result.estimated_cost_usd,
+        )
+
+    @staticmethod
+    def _append_evaluation_error(
+        evidence: TrialEvidence,
+        *,
+        code: str,
+        reason: str,
+    ) -> TrialEvidence:
+        event = EvidenceEvent(
+            sequence=len(evidence.events),
+            kind=EvidenceKind.EVALUATION_ERROR,
+            source="evaluator:attack-delivery",
+            payload={"code": code, "reason": reason},
+            critical=True,
+        )
+        return TrialEvidence(
+            trial_id=evidence.trial_id,
+            subject_identity=evidence.subject_identity,
+            scenario_identity=evidence.scenario_identity,
+            events=(*evidence.events, event),
+            final_state=evidence.final_state,
+            final_output=evidence.final_output,
+            elapsed_ms=evidence.elapsed_ms,
+            input_tokens=evidence.input_tokens,
+            output_tokens=evidence.output_tokens,
+            estimated_cost_usd=evidence.estimated_cost_usd,
         )
