@@ -9,6 +9,7 @@ from agent_evals.evidence.models import EvidenceEvent, EvidenceKind, TrialEviden
 from agent_evals.evidence.store import (
     EvidenceConflictError,
     EvidenceIntegrityError,
+    EvidenceStoreBusyError,
     EvidenceStoreResourceError,
     IncompleteEvidenceRecordError,
     LocalEvidenceStore,
@@ -78,13 +79,27 @@ def test_same_record_identity_cannot_be_rewritten_with_different_evidence(tmp_pa
         store.write(evidence(state={"status": "two"}))
 
 
-def test_tampered_payload_fails_integrity_verification(tmp_path: Path) -> None:
+def test_tampered_payload_length_fails_integrity_verification(tmp_path: Path) -> None:
     store = LocalEvidenceStore(tmp_path / "evidence")
     manifest = store.write(evidence())
     payload = next(store.root.rglob("*.evidence.json"))
     payload.write_bytes(b"{}")
 
-    with pytest.raises(EvidenceIntegrityError, match=r"length|hash"):
+    with pytest.raises(EvidenceIntegrityError, match="length"):
+        store.read(manifest.record_key)
+
+
+def test_same_length_payload_tampering_fails_hash_verification(tmp_path: Path) -> None:
+    store = LocalEvidenceStore(tmp_path / "evidence")
+    manifest = store.write(evidence())
+    payload = next(store.root.rglob("*.evidence.json"))
+    original = payload.read_bytes()
+    tampered = original.replace(b'"done"', b'"tone"')
+    assert len(tampered) == len(original)
+    assert tampered != original
+    payload.write_bytes(tampered)
+
+    with pytest.raises(EvidenceIntegrityError, match="hash"):
         store.read(manifest.record_key)
 
 
@@ -100,6 +115,28 @@ def test_tampered_manifest_identity_fails_verification(tmp_path: Path) -> None:
         store.read(manifest.record_key)
 
 
+def test_manifest_record_key_must_match_requested_record(tmp_path: Path) -> None:
+    store = LocalEvidenceStore(tmp_path / "evidence")
+    manifest = store.write(evidence())
+    path = next(store.root.rglob("*.manifest.json"))
+    content = json.loads(path.read_text(encoding="utf-8"))
+    content["record_key"] = "c" * 64
+    path.write_text(json.dumps(content), encoding="utf-8")
+
+    with pytest.raises(EvidenceIntegrityError, match="record key does not match"):
+        store.read(manifest.record_key)
+
+
+def test_malformed_manifest_is_not_treated_as_evidence(tmp_path: Path) -> None:
+    store = LocalEvidenceStore(tmp_path / "evidence")
+    manifest = store.write(evidence())
+    path = next(store.root.rglob("*.manifest.json"))
+    path.write_text("{}", encoding="utf-8")
+
+    with pytest.raises(EvidenceIntegrityError, match="manifest failed schema validation"):
+        store.read(manifest.record_key)
+
+
 def test_partial_record_is_explicitly_incomplete_and_not_repaired(tmp_path: Path) -> None:
     store = LocalEvidenceStore(tmp_path / "evidence")
     original = evidence()
@@ -112,10 +149,50 @@ def test_partial_record_is_explicitly_incomplete_and_not_repaired(tmp_path: Path
         store.write(original)
 
 
+@pytest.mark.parametrize(
+    ("max_payload_bytes", "max_manifest_bytes"),
+    [(0, 64), (64, 0)],
+)
+def test_resource_ceilings_must_be_positive(
+    tmp_path: Path,
+    max_payload_bytes: int,
+    max_manifest_bytes: int,
+) -> None:
+    with pytest.raises(ValueError, match="byte ceilings must be positive"):
+        LocalEvidenceStore(
+            tmp_path / "evidence",
+            max_payload_bytes=max_payload_bytes,
+            max_manifest_bytes=max_manifest_bytes,
+        )
+
+
 def test_payload_resource_ceiling_applies_before_persistence(tmp_path: Path) -> None:
     store = LocalEvidenceStore(tmp_path / "evidence", max_payload_bytes=64)
     with pytest.raises(EvidenceStoreResourceError, match="maximum"):
         store.write(evidence(state={"large": "x" * 512}))
+
+
+def test_manifest_resource_ceiling_applies_before_materialization(tmp_path: Path) -> None:
+    store = LocalEvidenceStore(tmp_path / "evidence", max_manifest_bytes=32)
+    with pytest.raises(EvidenceStoreResourceError, match="manifest.*maximum"):
+        store.write(evidence())
+    assert not tuple(store.root.rglob("*.evidence.json"))
+
+
+def test_existing_record_lock_fails_closed(tmp_path: Path) -> None:
+    store = LocalEvidenceStore(tmp_path / "evidence")
+    original = evidence()
+    manifest = store.write(original)
+    lock = (
+        store.root
+        / "records"
+        / manifest.record_key[:2]
+        / f"{manifest.record_key}.lock"
+    )
+    lock.write_text("operator-review-required", encoding="utf-8")
+
+    with pytest.raises(EvidenceStoreBusyError, match="stale locks require explicit operator review"):
+        store.write(original)
 
 
 def test_invalid_record_key_is_rejected_before_filesystem_lookup(tmp_path: Path) -> None:
@@ -135,6 +212,38 @@ def test_root_symlink_is_rejected_when_platform_supports_symlinks(tmp_path: Path
 
     with pytest.raises(EvidenceIntegrityError, match="cannot be a symlink"):
         LocalEvidenceStore(link)
+
+
+def test_record_bucket_symlink_is_rejected(tmp_path: Path) -> None:
+    store = LocalEvidenceStore(tmp_path / "evidence")
+    original = evidence()
+    key = evidence_record_key(original)
+    target = tmp_path / "bucket-target"
+    target.mkdir()
+    bucket = store.root / "records" / key[:2]
+    try:
+        bucket.symlink_to(target, target_is_directory=True)
+    except (OSError, NotImplementedError):
+        pytest.skip("symlinks unavailable on this platform")
+
+    with pytest.raises(EvidenceIntegrityError, match="bucket cannot be a symlink"):
+        store.read(key)
+
+
+def test_payload_symlink_is_rejected(tmp_path: Path) -> None:
+    store = LocalEvidenceStore(tmp_path / "evidence")
+    manifest = store.write(evidence())
+    payload = next(store.root.rglob("*.evidence.json"))
+    outside = tmp_path / "outside.json"
+    outside.write_text("{}", encoding="utf-8")
+    payload.unlink()
+    try:
+        payload.symlink_to(outside)
+    except (OSError, NotImplementedError):
+        pytest.skip("symlinks unavailable on this platform")
+
+    with pytest.raises(EvidenceIntegrityError, match="artifact cannot be a symlink"):
+        store.read(manifest.record_key)
 
 
 def test_record_key_changes_with_bound_evaluation_identity() -> None:
