@@ -1,4 +1,4 @@
-"""Self-validating session assurance reports bound to primitive trial evidence facts."""
+"""Self-validating session assurance reports bound to trial evidence and grading facts."""
 
 from __future__ import annotations
 
@@ -11,22 +11,74 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from agent_evals.evidence.models import TrialVerdict
 from agent_evals.gates.release import GateDecision, GateResult, ReleaseGate, ReleasePolicy
+from agent_evals.oracles.deterministic import OracleResult
 from agent_evals.runtime.session import EvaluationSessionResult
 from agent_evals.statistics.reliability import ReliabilityReport
 
 _REPORT_SCHEMA: Literal["agent-evals/assurance-report/v1"] = "agent-evals/assurance-report/v1"
 _REPORT_DOMAIN = b"agent-evals/assurance-report/v1\0"
+_RESOLVED_VERDICTS = frozenset({TrialVerdict.PASS, TrialVerdict.FAIL})
+
+
+class OracleSnapshot(BaseModel):
+    """Serialized deterministic oracle result used to rederive a resolved trial verdict."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    name: str = Field(min_length=1)
+    verdict: TrialVerdict
+    reasons: tuple[str, ...] = ()
+    critical: bool = False
+
+    @classmethod
+    def from_oracle(cls, result: OracleResult) -> Self:
+        return cls(
+            name=result.name,
+            verdict=result.verdict,
+            reasons=result.reasons,
+            critical=result.critical,
+        )
 
 
 class TrialAssuranceRecord(BaseModel):
-    """Primitive facts from one evaluated trial that are sufficient for session regrading."""
+    """Bound trial facts sufficient to rederive report-level assurance conclusions.
+
+    The evidence root identifies the exact trial evidence. Oracle snapshots preserve the grading
+    outputs used by the runtime. This model verifies their internal verdict relationship, but it
+    does not rerun an oracle from the evidence root alone.
+    """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     trial_id: str = Field(min_length=1)
     evidence_root: str = Field(pattern=r"^[0-9a-f]{64}$")
     verdict: TrialVerdict
-    critical_violations: int = Field(ge=0)
+    oracle_results: tuple[OracleSnapshot, ...] = ()
+
+    @property
+    def critical_violations(self) -> int:
+        return sum(
+            result.critical and result.verdict is TrialVerdict.FAIL
+            for result in self.oracle_results
+        )
+
+    @model_validator(mode="after")
+    def validate_trial_derivation(self) -> Self:
+        if self.verdict in _RESOLVED_VERDICTS:
+            if not self.oracle_results:
+                raise ValueError("resolved assurance trial requires deterministic oracle results")
+            if any(result.verdict not in _RESOLVED_VERDICTS for result in self.oracle_results):
+                raise ValueError("resolved assurance trial has a non-resolved oracle verdict")
+            expected = (
+                TrialVerdict.FAIL
+                if any(result.verdict is TrialVerdict.FAIL for result in self.oracle_results)
+                else TrialVerdict.PASS
+            )
+            if self.verdict is not expected:
+                raise ValueError("assurance trial verdict does not recompute from oracle results")
+        elif self.verdict is TrialVerdict.BLOCKED and self.oracle_results:
+            raise ValueError("blocked assurance trial cannot contain completed oracle results")
+        return self
 
 
 class ReliabilitySnapshot(BaseModel):
@@ -81,12 +133,13 @@ class GateSnapshot(BaseModel):
 class AssuranceReport(BaseModel):
     """Reproducible session report whose derived claims are verified on every load.
 
-    Trial verdicts, critical-violation counts, and evidence roots are the primitive report facts.
-    Reliability and release-gate fields are retained for review convenience but are never trusted:
-    validation recomputes both from the primitive trial facts and frozen release policy.
+    Evidence roots, runtime oracle snapshots, and terminal trial verdicts are the bound trial
+    facts. Resolved trial verdicts are rederived from their oracle snapshots. Reliability and
+    release-gate fields are then recomputed from those validated trial facts and the frozen policy.
 
     The report root detects unacknowledged content changes. It is not a signature, MAC, trusted
     timestamp, publisher identity, or proof that the referenced evidence was honestly produced.
+    Re-running deterministic oracles against the exact evidence requires the evidence/replay path.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -126,15 +179,16 @@ class AssuranceReport(BaseModel):
             if evidence.trial_id in trial_ids:
                 raise ValueError("session contains duplicate trial IDs")
             trial_ids.add(evidence.trial_id)
-            records.append(
-                TrialAssuranceRecord(
-                    trial_id=evidence.trial_id,
-                    evidence_root=evidence.evidence_root,
-                    verdict=trial.verdict,
-                    critical_violations=trial.critical_violations,
-                )
+            record = TrialAssuranceRecord(
+                trial_id=evidence.trial_id,
+                evidence_root=evidence.evidence_root,
+                verdict=trial.verdict,
+                oracle_results=tuple(
+                    OracleSnapshot.from_oracle(result) for result in trial.oracle_results
+                ),
             )
-            verdicts.append(trial.verdict)
+            records.append(record)
+            verdicts.append(record.verdict)
 
         recomputed_reliability = ReliabilityReport.from_verdicts(
             verdicts,
@@ -160,7 +214,16 @@ class AssuranceReport(BaseModel):
             "reliability": reliability.model_dump(mode="json"),
             "gate": gate.model_dump(mode="json"),
         }
-        return cls(**unsigned, report_root=_report_root(unsigned))
+        return cls(
+            schema_version=_REPORT_SCHEMA,
+            subject_identity=session.subject_identity,
+            scenario_identity=session.scenario_identity,
+            trials=tuple(records),
+            release_policy=release_policy,
+            reliability=reliability,
+            gate=gate,
+            report_root=_report_root(unsigned),
+        )
 
     @model_validator(mode="after")
     def validate_derived_claims(self) -> Self:
