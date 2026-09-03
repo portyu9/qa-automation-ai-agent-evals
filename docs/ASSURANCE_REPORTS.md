@@ -2,16 +2,16 @@
 
 ## Purpose
 
-`AssuranceReport` is a self-validating session-level artifact for review, CI handoff, and later audit. It binds the exact trial evidence roots used by one evaluation session to the deterministic grading outputs, reliability calculation, frozen release policy, and release-gate decision derived from that session.
+`AssuranceReport` is a self-validating session-level artifact for review, CI handoff, and later audit. It binds the `agent-evals/trial-evidence/v2` schema and exact trial evidence roots used by one evaluation session to the deterministic grading outputs, reliability calculation, frozen release policy, and release-gate decision derived from that session.
 
 The report is deliberately **not** another grading authority. It preserves conclusions and verifies their internal derivation whenever the artifact is loaded.
 
 ## Derivation chain
 
 ```text
-exact evidence root per trial
+bound TrialEvidence schema + exact evidence root per trial
         ↓ bound reference
-oracle result snapshots
+uniquely named oracle result snapshots
         ↓ recomputed for resolved trials
 trial PASS / FAIL
         ↓ recomputed
@@ -27,10 +27,12 @@ For each trial the report records:
 - `trial_id`;
 - exact `evidence_root`;
 - terminal trial verdict;
-- deterministic oracle snapshots: oracle name, verdict, reasons, and critical flag.
+- deterministic oracle snapshots: unique oracle name, verdict, reasons, and critical flag.
 
 At session level it records:
 
+- assurance-report schema version;
+- bound `TrialEvidence` schema version;
 - exact subject identity;
 - exact scenario identity;
 - the frozen `ReleasePolicy`;
@@ -38,28 +40,35 @@ At session level it records:
 - release-gate decision and reasons;
 - a domain-separated `report_root` over all report content except the root itself.
 
+Binding the evidence schema matters because an evidence root is meaningful only with the serialization and hashing semantics that define it. A future incompatible `TrialEvidence` format therefore cannot be silently interpreted as v2 evidence inside a v1 assurance report.
+
 ## What is recomputed on every load
 
 Pydantic model validation is not merely schema parsing. A loaded report must satisfy all of the following:
 
-1. trial IDs are unique;
-2. a resolved `PASS` or `FAIL` trial contains completed deterministic oracle results;
-3. a resolved trial verdict recomputes from those oracle snapshots;
-4. `BLOCKED` cannot carry completed oracle results;
-5. reliability recomputes from the validated trial verdicts using the recorded `k`;
-6. critical-violation count recomputes from failed critical oracle snapshots;
-7. the release-gate decision and reasons recompute from reliability, critical violations, and the frozen policy;
-8. the canonical report root matches the complete report content.
+1. the assurance-report schema and bound evidence schema are the supported versions;
+2. trial IDs are unique;
+3. deterministic oracle names are unique within each trial;
+4. a resolved `PASS` or `FAIL` trial contains completed deterministic oracle results;
+5. resolved oracle results themselves have resolved verdicts;
+6. a resolved trial verdict recomputes from those oracle snapshots;
+7. `BLOCKED` cannot carry completed oracle results;
+8. reliability recomputes from the validated trial verdicts using the recorded `k`;
+9. critical-violation count recomputes from failed critical oracle snapshots;
+10. the release-gate decision and reasons recompute from reliability, critical violations, and the frozen policy;
+11. the canonical report root matches the complete report content.
 
-A schema-valid JSON object that forges a success rate, Wilson interval, gate decision, gate reasons, critical flag, trial verdict, evidence root, policy threshold, or report root therefore fails validation unless all dependent fields are coherently changed as well.
+A schema-valid JSON object that forges a success rate, Wilson interval, gate decision, gate reasons, critical flag, trial verdict, evidence root, policy threshold, or report root therefore fails validation unless all dependent fields are coherently changed as well. Unsupported evidence-schema drift and duplicate oracle identities fail before report-level derivation is accepted.
 
 ## Generation from a session
 
 `AssuranceReport.from_session()` also verifies the in-memory session before creating an artifact:
 
+- at least one evaluated trial must exist;
 - every trial evidence envelope must match the session subject identity;
 - every trial evidence envelope must match the session scenario identity;
 - trial IDs must be unique;
+- deterministic oracle names must be unique within each resolved trial;
 - resolved trial verdicts must agree with their deterministic oracle results;
 - the session's `ReliabilityReport` must recompute from its trial verdicts.
 
@@ -82,18 +91,19 @@ serialized = report.model_dump_json(indent=2)
 
 # Parsing performs derivation checks again; it is not a passive JSON load.
 verified = AssuranceReport.model_validate_json(serialized)
+assert verified.evidence_schema == "agent-evals/trial-evidence/v2"
 assert verified.report_root == report.report_root
 ```
 
 ## Relationship to evidence persistence and replay
 
-An assurance report references each trial through its `evidence_root`; it does not duplicate the full event stream, terminal state, or persisted evidence payload.
+An assurance report references each trial through its `evidence_root` and explicitly binds the evidence schema that defines that root; it does not duplicate the full event stream, terminal state, or persisted evidence payload.
 
 That separation is intentional:
 
 - `LocalEvidenceStore` verifies and returns the actual persisted `TrialEvidence`;
 - `EvidenceReplayAdapter` can submit those historical observations through deterministic policy/outcome grading again under the exact original identity;
-- `AssuranceReport` verifies session-level derivation from its bound grading snapshots and evidence roots.
+- `AssuranceReport` verifies session-level derivation from its bound grading snapshots, evidence schema, and evidence roots.
 
 Therefore the report can answer, "Does this stored session conclusion internally follow from the trial verdict/oracle facts and policy it contains?" It cannot by itself answer, "Would the deterministic oracles produce those same oracle results if we load the underlying evidence again?" The latter requires evidence retrieval and replay.
 
