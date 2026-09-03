@@ -75,10 +75,11 @@ def release_policy() -> ReleasePolicy:
     )
 
 
-def test_report_binds_trial_roots_oracles_and_release_decision() -> None:
+def test_report_binds_trial_roots_oracles_schema_and_release_decision() -> None:
     session = session_result()
     report = AssuranceReport.from_session(session, release_policy=release_policy())
 
+    assert report.evidence_schema == "agent-evals/trial-evidence/v2"
     assert report.subject_identity == SUBJECT
     assert report.scenario_identity == SCENARIO
     assert tuple(record.trial_id for record in report.trials) == (
@@ -104,6 +105,44 @@ def test_report_json_round_trip_revalidates_all_derived_claims() -> None:
     loaded = AssuranceReport.model_validate_json(report.model_dump_json())
 
     assert loaded == report
+
+
+def test_evidence_schema_is_strictly_version_bound() -> None:
+    report = AssuranceReport.from_session(session_result(), release_policy=release_policy())
+    payload = report.model_dump(mode="json")
+    payload["evidence_schema"] = "agent-evals/trial-evidence/v3"
+
+    with pytest.raises(ValidationError, match="evidence_schema"):
+        AssuranceReport.model_validate(payload)
+
+
+def test_resolved_trial_requires_oracle_results() -> None:
+    report = AssuranceReport.from_session(session_result(), release_policy=release_policy())
+    payload = report.model_dump(mode="json")
+    payload["trials"][0]["oracle_results"] = []
+
+    with pytest.raises(ValidationError, match="requires deterministic oracle results"):
+        AssuranceReport.model_validate(payload)
+
+
+def test_resolved_trial_rejects_nonresolved_oracle_verdict() -> None:
+    report = AssuranceReport.from_session(session_result(), release_policy=release_policy())
+    payload = report.model_dump(mode="json")
+    payload["trials"][0]["oracle_results"][0]["verdict"] = TrialVerdict.BLOCKED.value
+
+    with pytest.raises(ValidationError, match="non-resolved oracle verdict"):
+        AssuranceReport.model_validate(payload)
+
+
+def test_duplicate_oracle_names_are_rejected() -> None:
+    report = AssuranceReport.from_session(session_result(), release_policy=release_policy())
+    payload = report.model_dump(mode="json")
+    payload["trials"][0]["oracle_results"].append(
+        deepcopy(payload["trials"][0]["oracle_results"][0])
+    )
+
+    with pytest.raises(ValidationError, match="oracle names must be unique"):
+        AssuranceReport.model_validate(payload)
 
 
 def test_forged_trial_verdict_is_rejected_from_oracle_snapshots() -> None:
@@ -189,6 +228,31 @@ def test_duplicate_trial_ids_are_rejected_on_load() -> None:
         AssuranceReport.model_validate(payload)
 
 
+def test_from_session_rejects_empty_session() -> None:
+    empty = EvaluationSessionResult(
+        subject_identity=SUBJECT,
+        scenario_identity=SCENARIO,
+        trials=(),
+        reliability=ReliabilityReport(
+            trials=0,
+            resolved_trials=0,
+            passes=0,
+            failures=0,
+            blocked=0,
+            inconclusive=0,
+            success_rate=0.0,
+            wilson_low=0.0,
+            wilson_high=1.0,
+            pass_at_k=0.0,
+            pass_power_k=0.0,
+            k=1,
+        ),
+    )
+
+    with pytest.raises(ValueError, match="at least one evaluated trial"):
+        AssuranceReport.from_session(empty, release_policy=release_policy())
+
+
 def test_from_session_rejects_stale_reliability() -> None:
     session = session_result()
     stale = EvaluationSessionResult(
@@ -205,7 +269,7 @@ def test_from_session_rejects_stale_reliability() -> None:
         AssuranceReport.from_session(stale, release_policy=release_policy())
 
 
-def test_from_session_rejects_trial_identity_mismatch() -> None:
+def test_from_session_rejects_trial_subject_identity_mismatch() -> None:
     session = session_result()
     mismatched_trial = evaluated_trial(
         "trial-0",
@@ -221,3 +285,40 @@ def test_from_session_rejects_trial_identity_mismatch() -> None:
 
     with pytest.raises(ValueError, match="subject identity does not match"):
         AssuranceReport.from_session(mismatched, release_policy=release_policy())
+
+
+def test_from_session_rejects_trial_scenario_identity_mismatch() -> None:
+    session = session_result()
+    mismatched_trial = evaluated_trial(
+        "trial-0",
+        TrialVerdict.PASS,
+        scenario_identity="d" * 64,
+    )
+    mismatched = EvaluationSessionResult(
+        subject_identity=session.subject_identity,
+        scenario_identity=session.scenario_identity,
+        trials=(mismatched_trial, *session.trials[1:]),
+        reliability=session.reliability,
+    )
+
+    with pytest.raises(ValueError, match="scenario identity does not match"):
+        AssuranceReport.from_session(mismatched, release_policy=release_policy())
+
+
+def test_from_session_rejects_duplicate_trial_ids() -> None:
+    first = evaluated_trial("trial-0", TrialVerdict.PASS)
+    duplicate = evaluated_trial("trial-0", TrialVerdict.FAIL, critical=True)
+    blocked = evaluated_trial("trial-2", TrialVerdict.BLOCKED)
+    trials = (first, duplicate, blocked)
+    duplicated = EvaluationSessionResult(
+        subject_identity=SUBJECT,
+        scenario_identity=SCENARIO,
+        trials=trials,
+        reliability=ReliabilityReport.from_verdicts(
+            tuple(trial.verdict for trial in trials),
+            k=2,
+        ),
+    )
+
+    with pytest.raises(ValueError, match="duplicate trial IDs"):
+        AssuranceReport.from_session(duplicated, release_policy=release_policy())
