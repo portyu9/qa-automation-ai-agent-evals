@@ -250,7 +250,9 @@ def extract_attack(
     envelope = _AttackEnvelope.model_validate(raw)
     if expected_base_scenario is not None:
         if envelope.base_scenario_identity != expected_base_scenario.identity:
-            raise ValueError("adversarial envelope base scenario identity does not match expected base")
+            raise ValueError(
+                "adversarial envelope base scenario identity does not match expected base"
+            )
         expected = envelope.attack.apply(expected_base_scenario)
         if expected.identity != scenario.identity:
             raise ValueError("adversarial scenario does not match deterministic attack derivation")
