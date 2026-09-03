@@ -235,6 +235,7 @@ def test_campaign_identity_and_scenario_order_ignore_input_order() -> None:
         attacks=(attack_b, attack_a),
     )
 
+    assert first.base_scenario_identity == base.identity
     assert first.identity == second.identity
     assert tuple(attack.attack_id for attack in first.attacks) == (
         "memory-poison",
@@ -243,6 +244,34 @@ def test_campaign_identity_and_scenario_order_ignore_input_order() -> None:
     assert tuple(scenario.identity for scenario in first.scenarios()) == tuple(
         scenario.identity for scenario in second.scenarios()
     )
+
+
+def test_campaign_rejects_supplied_wrong_base_identity() -> None:
+    with pytest.raises(ValidationError, match="base scenario identity does not match base"):
+        AdversarialCampaign(
+            campaign_id="wrong-base-binding",
+            revision="1",
+            base_scenario=base_scenario(),
+            base_scenario_identity="f" * 64,
+            attacks=(injection_attack(),),
+        )
+
+
+def test_campaign_identity_stays_bound_and_generation_rejects_base_drift() -> None:
+    base = base_scenario()
+    campaign = AdversarialCampaign(
+        campaign_id="drift-detection",
+        revision="1",
+        base_scenario=base,
+        attacks=(injection_attack(),),
+    )
+    identity = campaign.identity
+
+    campaign.base_scenario.initial_state["tenant"] = "9"
+
+    assert campaign.identity == identity
+    with pytest.raises(ValueError, match="base scenario drifted after construction"):
+        campaign.scenarios()
 
 
 def test_campaign_rejects_duplicate_attack_ids() -> None:
