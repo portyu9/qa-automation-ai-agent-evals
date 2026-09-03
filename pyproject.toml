@@ -26,7 +26,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-openai = ["openai-agents>=0.2,<1"]
+openai = ["openai-agents==0.22.0"]
 yaml = ["pyyaml>=6.0.3,<7"]
 dev = [
   "bandit>=1.8,<2",
@@ -53,10 +53,11 @@ packages = ["src/agent_evals"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
-addopts = "-q --strict-markers --disable-warnings"
+addopts = "-q --strict-markers --disable-warnings -m 'not openai'"
 markers = [
   "integration: deterministic integration tests",
   "live: tests requiring a live model/provider",
+  "openai: deterministic OpenAI Agents SDK adapter tests; no API calls",
 ]
 asyncio_mode = "auto"
 

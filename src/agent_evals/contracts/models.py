@@ -19,11 +19,7 @@ class ScenarioKind(StrEnum):
 
 
 class SubjectFingerprint(BaseModel):
-    """Content-addressed identity for the full agent system under evaluation.
-
-    A model identifier is intentionally insufficient. Agent behavior is a property of the
-    model *and* orchestration, instructions, tools, policy, memory, and application revision.
-    """
+    """Content-addressed identity for the full agent system under evaluation."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -65,8 +61,7 @@ class SubjectFingerprint(BaseModel):
 
     @property
     def identity(self) -> str:
-        payload = self.model_dump_json(exclude_none=True)
-        return _sha256_text(payload)
+        return _sha256_text(self.model_dump_json(exclude_none=True))
 
 
 class AuthorityPolicy(BaseModel):
@@ -78,6 +73,7 @@ class AuthorityPolicy(BaseModel):
     forbidden_tools: frozenset[str] = frozenset()
     approval_required_tools: frozenset[str] = frozenset()
     allowed_resource_prefixes: tuple[str, ...] = ()
+    max_turns: int = Field(default=16, ge=1, le=10_000)
     max_tool_calls: int = Field(default=32, ge=0, le=10_000)
     max_handoffs: int = Field(default=8, ge=0, le=1_000)
 
@@ -116,7 +112,10 @@ class EvaluationScenario(BaseModel):
     @field_validator("initial_state", "required_outcomes", "forbidden_outcomes")
     @classmethod
     def require_json_serializable(cls, value: dict[str, Any]) -> dict[str, Any]:
-        json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False)
+        try:
+            json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("scenario state/outcomes must be finite JSON-compatible data") from exc
         return value
 
     @model_validator(mode="after")

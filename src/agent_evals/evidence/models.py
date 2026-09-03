@@ -15,6 +15,7 @@ class EvidenceKind(StrEnum):
     TOOL_REQUEST = "tool_request"
     TOOL_RESULT = "tool_result"
     HANDOFF = "handoff"
+    APPROVAL_REQUEST = "approval_request"
     APPROVAL = "approval"
     GUARDRAIL = "guardrail"
     STATE = "state"
@@ -41,6 +42,14 @@ class EvidenceEvent(BaseModel):
     payload: dict[str, Any] = Field(default_factory=dict)
     observed_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     critical: bool = False
+
+    @model_validator(mode="after")
+    def validate_json_payload(self) -> EvidenceEvent:
+        try:
+            json.dumps(self.payload, sort_keys=True, separators=(",", ":"), allow_nan=False)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("evidence payload must be finite JSON-compatible data") from exc
+        return self
 
     @property
     def digest(self) -> str:
@@ -79,6 +88,10 @@ class TrialEvidence(BaseModel):
         actual = [event.sequence for event in self.events]
         if actual != expected:
             raise ValueError(f"event sequence must be contiguous from zero: expected {expected!r}, got {actual!r}")
+        try:
+            json.dumps(self.final_state, sort_keys=True, separators=(",", ":"), allow_nan=False)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("final_state must be finite JSON-compatible data") from exc
         return self
 
     @property
