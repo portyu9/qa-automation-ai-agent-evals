@@ -46,9 +46,7 @@ def recorded_evidence() -> TrialEvidence:
 
 
 @pytest.mark.asyncio
-async def test_replay_regrades_recorded_state_without_reusing_original_trial_identity(
-    tmp_path: Path,
-) -> None:
+async def test_replay_regrades_recorded_state_with_exact_evidence_identity(tmp_path: Path) -> None:
     store = LocalEvidenceStore(tmp_path / "evidence")
     original = recorded_evidence()
     manifest = store.write(original)
@@ -58,28 +56,33 @@ async def test_replay_regrades_recorded_state_without_reusing_original_trial_ide
         adapter,
         subject=subject(),
         scenario=scenario(),
-        trial_id="replay-trial",
+        trial_id=original.trial_id,
     )
 
     assert replayed.verdict is TrialVerdict.PASS
-    assert replayed.evidence.final_state == original.final_state
-    assert replayed.evidence.trial_id == "replay-trial"
-    assert replayed.evidence.evidence_root != original.evidence_root
+    assert replayed.evidence == original
+    assert replayed.evidence.evidence_root == original.evidence_root
 
 
 @pytest.mark.asyncio
-async def test_replay_refuses_subject_or_scenario_identity_drift() -> None:
+async def test_replay_refuses_trial_subject_or_scenario_identity_drift() -> None:
     adapter = EvidenceReplayAdapter(recorded_evidence())
 
+    with pytest.raises(ReplayIdentityError, match="trial identity"):
+        await adapter.execute(
+            subject=subject(),
+            scenario=scenario(),
+            trial_id="different-trial",
+        )
     with pytest.raises(ReplayIdentityError, match="subject identity"):
         await adapter.execute(
             subject=subject(model="different"),
             scenario=scenario(),
-            trial_id="replay",
+            trial_id="original-trial",
         )
     with pytest.raises(ReplayIdentityError, match="scenario identity"):
         await adapter.execute(
             subject=subject(),
             scenario=scenario(revision="2"),
-            trial_id="replay",
+            trial_id="original-trial",
         )

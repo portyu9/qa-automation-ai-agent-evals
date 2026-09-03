@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import hashlib
-
 import pytest
 
 from agent_evals.adapters.base import AdapterResult
@@ -82,7 +80,7 @@ async def test_runtime_pass_requires_policy_and_state_closure() -> None:
 
 
 @pytest.mark.asyncio
-async def test_runtime_exception_is_blocked_without_retaining_raw_exception_text() -> None:
+async def test_runtime_exception_is_blocked_without_retaining_exception_detail() -> None:
     secret_detail = "provider unavailable token=super-secret-value"
 
     def crash(
@@ -102,5 +100,7 @@ async def test_runtime_exception_is_blocked_without_retaining_raw_exception_text
     event = result.evidence.events[0]
     assert event.kind is EvidenceKind.RUNTIME_ERROR
     assert secret_detail not in str(event.payload)
-    assert event.payload["detail_present"] is True
-    assert event.payload["detail_sha256"] == hashlib.sha256(secret_detail.encode()).hexdigest()
+    assert event.payload == {
+        "exception_type": "RuntimeError",
+        "detail_retained": False,
+    }

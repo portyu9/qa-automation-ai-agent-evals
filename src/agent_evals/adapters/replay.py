@@ -13,7 +13,7 @@ from agent_evals.evidence.store import LocalEvidenceStore
 
 
 class ReplayIdentityError(ValueError):
-    """Recorded evidence belongs to a different subject or scenario contract."""
+    """Recorded evidence belongs to a different trial, subject, or scenario contract."""
 
 
 class EvidenceReplayAdapter:
@@ -35,7 +35,8 @@ class EvidenceReplayAdapter:
         scenario: EvaluationScenario,
         trial_id: str,
     ) -> AdapterResult:
-        del trial_id
+        if trial_id != self._evidence.trial_id:
+            raise ReplayIdentityError("recorded evidence trial identity does not match replay trial")
         if subject.identity != self._evidence.subject_identity:
             raise ReplayIdentityError("recorded evidence subject identity does not match replay subject")
         if scenario.identity != self._evidence.scenario_identity:
