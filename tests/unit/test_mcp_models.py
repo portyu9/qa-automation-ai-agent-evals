@@ -69,6 +69,84 @@ def test_mcp_stale_cache_fault_requires_one_bounded_integer_ttl() -> None:
             )
 
 
+def test_mcp_schema_drift_fault_binds_exact_v1_schema_contract() -> None:
+    valid = MCPFaultSpec.from_payload(
+        fault_id="schema-drift",
+        revision="1",
+        kind=MCPFaultKind.TOOL_SCHEMA_DRIFT,
+        tool_name="lookup_customer",
+        payload={
+            "ttl_ms": 60_000,
+            "initial_required": {"query": "string"},
+            "replacement_required": {
+                "customer_id": "integer",
+                "include_history": "boolean",
+            },
+        },
+    )
+    assert valid.payload["replacement_required"]["customer_id"] == "integer"
+
+    invalid_payloads = (
+        {
+            "ttl_ms": 0,
+            "initial_required": {"query": "string"},
+            "replacement_required": {
+                "customer_id": "integer",
+                "include_history": "boolean",
+            },
+        },
+        {
+            "ttl_ms": 60_000,
+            "initial_required": {"query": "integer"},
+            "replacement_required": {
+                "customer_id": "integer",
+                "include_history": "boolean",
+            },
+        },
+        {
+            "ttl_ms": 60_000,
+            "initial_required": {"query": "string"},
+            "replacement_required": {"customer_id": "integer"},
+        },
+    )
+    for index, payload in enumerate(invalid_payloads):
+        with pytest.raises(ValidationError):
+            MCPFaultSpec.from_payload(
+                fault_id=f"invalid-schema-drift-{index}",
+                revision="1",
+                kind=MCPFaultKind.TOOL_SCHEMA_DRIFT,
+                tool_name="lookup_customer",
+                payload=payload,
+            )
+
+
+def test_mcp_identity_drift_fault_requires_distinct_bounded_replacement_name() -> None:
+    valid = MCPFaultSpec.from_payload(
+        fault_id="identity-drift",
+        revision="1",
+        kind=MCPFaultKind.TOOL_IDENTITY_DRIFT,
+        tool_name="lookup_customer",
+        payload={"ttl_ms": 60_000, "replacement_tool_name": "lookup_account"},
+    )
+    assert valid.payload["replacement_tool_name"] == "lookup_account"
+
+    invalid_payloads = (
+        {"ttl_ms": 60_000, "replacement_tool_name": "lookup_customer"},
+        {"ttl_ms": 60_000, "replacement_tool_name": " lookup_account"},
+        {"ttl_ms": 60_000, "replacement_tool_name": ""},
+        {"ttl_ms": 60_000, "replacement_tool_name": 7},
+    )
+    for index, payload in enumerate(invalid_payloads):
+        with pytest.raises(ValidationError):
+            MCPFaultSpec.from_payload(
+                fault_id=f"invalid-identity-drift-{index}",
+                revision="1",
+                kind=MCPFaultKind.TOOL_IDENTITY_DRIFT,
+                tool_name="lookup_customer",
+                payload=payload,
+            )
+
+
 def test_mcp_fault_receipt_detects_tampered_integrity_material() -> None:
     fault = MCPFaultSpec.from_payload(
         fault_id="poisoned-tool-result",

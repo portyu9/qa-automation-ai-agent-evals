@@ -13,6 +13,11 @@ _FAULT_SCHEMA: Literal["agent-evals/mcp-fault/v1"] = "agent-evals/mcp-fault/v1"
 _RECEIPT_SCHEMA: Literal["agent-evals/mcp-fault-receipt/v1"] = "agent-evals/mcp-fault-receipt/v1"
 _PROTOCOL_VERSION = "2026-07-28"
 _MAX_CACHE_TTL_MS = 86_400_000
+_SCHEMA_DRIFT_INITIAL_REQUIRED = {"query": "string"}
+_SCHEMA_DRIFT_REPLACEMENT_REQUIRED = {
+    "customer_id": "integer",
+    "include_history": "boolean",
+}
 
 
 class MCPFaultKind(StrEnum):
@@ -22,6 +27,8 @@ class MCPFaultKind(StrEnum):
     TOOL_RESULT_POISON = "tool_result_poison"
     TOOL_ERROR = "tool_error"
     TOOL_LIST_STALE_CACHE = "tool_list_stale_cache"
+    TOOL_SCHEMA_DRIFT = "tool_schema_drift"
+    TOOL_IDENTITY_DRIFT = "tool_identity_drift"
 
 
 class MCPFaultSpec(BaseModel):
@@ -81,17 +88,50 @@ class MCPFaultSpec(BaseModel):
     @model_validator(mode="after")
     def validate_kind_payload(self) -> Self:
         if self.kind is MCPFaultKind.TOOL_LIST_STALE_CACHE:
-            payload = self.payload
-            if not isinstance(payload, dict) or set(payload) != {"ttl_ms"}:
+            payload = _object_payload(self.payload, "MCP stale-cache fault")
+            _require_exact_keys(payload, {"ttl_ms"}, "MCP stale-cache fault")
+            _bounded_ttl_ms(payload["ttl_ms"], "MCP stale-cache")
+        elif self.kind is MCPFaultKind.TOOL_SCHEMA_DRIFT:
+            payload = _object_payload(self.payload, "MCP schema-drift fault")
+            _require_exact_keys(
+                payload,
+                {"ttl_ms", "initial_required", "replacement_required"},
+                "MCP schema-drift fault",
+            )
+            _bounded_ttl_ms(payload["ttl_ms"], "MCP schema-drift")
+            if payload["initial_required"] != _SCHEMA_DRIFT_INITIAL_REQUIRED:
                 raise ValueError(
-                    "MCP stale-cache fault payload must contain exactly integer field 'ttl_ms'"
+                    "MCP schema-drift initial_required must bind the v1 query:string contract"
                 )
-            ttl_ms = payload["ttl_ms"]
-            if isinstance(ttl_ms, bool) or not isinstance(ttl_ms, int):
-                raise ValueError("MCP stale-cache ttl_ms must be an integer")
-            if ttl_ms <= 0 or ttl_ms > _MAX_CACHE_TTL_MS:
+            if payload["replacement_required"] != _SCHEMA_DRIFT_REPLACEMENT_REQUIRED:
                 raise ValueError(
-                    "MCP stale-cache ttl_ms must be between 1 and 86400000 milliseconds"
+                    "MCP schema-drift replacement_required must bind the v1 "
+                    "customer_id:integer/include_history:boolean contract"
+                )
+        elif self.kind is MCPFaultKind.TOOL_IDENTITY_DRIFT:
+            payload = _object_payload(self.payload, "MCP identity-drift fault")
+            _require_exact_keys(
+                payload,
+                {"ttl_ms", "replacement_tool_name"},
+                "MCP identity-drift fault",
+            )
+            _bounded_ttl_ms(payload["ttl_ms"], "MCP identity-drift")
+            replacement = payload["replacement_tool_name"]
+            if not isinstance(replacement, str):
+                raise ValueError("MCP identity-drift replacement_tool_name must be a string")
+            if not replacement.strip():
+                raise ValueError("MCP identity-drift replacement_tool_name must be non-empty")
+            if replacement != replacement.strip():
+                raise ValueError(
+                    "MCP identity-drift replacement_tool_name must not contain surrounding whitespace"
+                )
+            if len(replacement) > 128:
+                raise ValueError(
+                    "MCP identity-drift replacement_tool_name must be at most 128 characters"
+                )
+            if replacement == self.tool_name:
+                raise ValueError(
+                    "MCP identity-drift replacement_tool_name must differ from the original tool"
                 )
         return self
 
@@ -232,6 +272,78 @@ class MCPDiscoveryProbeResult(BaseModel):
             protocol_version=self.protocol_version,
         )
         return self
+
+
+class MCPToolSchemaDriftProbeResult(BaseModel):
+    """Public MCP observations spanning cached discovery, refresh, and call-time schema checks."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    fault_identity: str = Field(pattern=r"^[0-9a-f]{64}$")
+    protocol_version: str = Field(min_length=1, max_length=64)
+    initial_schema_json: str
+    cached_schema_json: str
+    refreshed_schema_json: str
+    stale_call_text: tuple[str, ...]
+    stale_call_is_error: bool
+    refreshed_call_text: tuple[str, ...]
+    refreshed_call_is_error: bool
+    receipt: MCPFaultReceipt | None = None
+
+    @model_validator(mode="after")
+    def verify_receipt_identity(self) -> Self:
+        _verify_probe_receipt(
+            receipt=self.receipt,
+            fault_identity=self.fault_identity,
+            protocol_version=self.protocol_version,
+        )
+        return self
+
+
+class MCPToolIdentityDriftProbeResult(BaseModel):
+    """Public MCP observations spanning cached discovery, rename, refresh, and call-time lookup."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    fault_identity: str = Field(pattern=r"^[0-9a-f]{64}$")
+    protocol_version: str = Field(min_length=1, max_length=64)
+    initial_tool_names: tuple[str, ...]
+    cached_tool_names: tuple[str, ...]
+    refreshed_tool_names: tuple[str, ...]
+    stale_call_text: tuple[str, ...]
+    stale_call_is_error: bool
+    replacement_call_text: tuple[str, ...]
+    replacement_call_is_error: bool
+    receipt: MCPFaultReceipt | None = None
+
+    @model_validator(mode="after")
+    def verify_receipt_identity(self) -> Self:
+        _verify_probe_receipt(
+            receipt=self.receipt,
+            fault_identity=self.fault_identity,
+            protocol_version=self.protocol_version,
+        )
+        return self
+
+
+def _object_payload(payload: Any, label: str) -> dict[str, Any]:
+    if not isinstance(payload, dict):
+        raise ValueError(f"{label} payload must be an object")
+    return payload
+
+
+def _require_exact_keys(payload: dict[str, Any], expected: set[str], label: str) -> None:
+    if set(payload) != expected:
+        expected_text = ", ".join(sorted(expected))
+        raise ValueError(f"{label} payload must contain exactly: {expected_text}")
+
+
+def _bounded_ttl_ms(value: Any, label: str) -> int:
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise ValueError(f"{label} ttl_ms must be an integer")
+    if value <= 0 or value > _MAX_CACHE_TTL_MS:
+        raise ValueError(f"{label} ttl_ms must be between 1 and 86400000 milliseconds")
+    return value
 
 
 def _verify_probe_receipt(

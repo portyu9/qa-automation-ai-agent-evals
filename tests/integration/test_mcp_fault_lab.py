@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 import pytest
 
 from agent_evals.mcp import MCPFaultKind, MCPFaultLab, MCPFaultSpec
@@ -101,6 +103,86 @@ async def test_mcp_lab_proves_stale_cached_tool_list_then_refreshes_to_server_tr
     assert result.receipt.injection_point == (
         "mcp:2026-07-28:tools/list:cache-use-stale-after-remove:"
         "lookup_customer:refresh-proves-absent"
+    )
+    assert result.receipt.payload_sha256 != result.receipt.observation_sha256
+    assert fault.payload_json not in result.receipt.model_dump_json()
+
+
+@pytest.mark.asyncio
+async def test_mcp_lab_proves_schema_drift_across_cache_refresh_and_call_validation() -> None:
+    fault = MCPFaultSpec.from_payload(
+        fault_id="mcp-schema-drift",
+        revision="1",
+        kind=MCPFaultKind.TOOL_SCHEMA_DRIFT,
+        tool_name="lookup_customer",
+        payload={
+            "ttl_ms": 60_000,
+            "initial_required": {"query": "string"},
+            "replacement_required": {
+                "customer_id": "integer",
+                "include_history": "boolean",
+            },
+        },
+    )
+
+    result = await MCPFaultLab(fault).probe_schema_drift()
+
+    initial = json.loads(result.initial_schema_json)
+    cached = json.loads(result.cached_schema_json)
+    refreshed = json.loads(result.refreshed_schema_json)
+
+    assert result.protocol_version == "2026-07-28"
+    assert initial == {
+        "property_types": {"query": "string"},
+        "required": ["query"],
+    }
+    assert cached == initial
+    assert refreshed == {
+        "property_types": {
+            "customer_id": "integer",
+            "include_history": "boolean",
+        },
+        "required": ["customer_id", "include_history"],
+    }
+    assert result.stale_call_is_error is True
+    assert result.stale_call_text
+    assert result.refreshed_call_is_error is False
+    assert result.refreshed_call_text == ("replacement:7:true",)
+    assert result.receipt is not None
+    assert result.receipt.kind is MCPFaultKind.TOOL_SCHEMA_DRIFT
+    assert result.receipt.injection_point == (
+        "mcp:2026-07-28:tools/list:schema-drift:lookup_customer:"
+        "cached-old:call-rejects-old:refresh-new"
+    )
+    assert result.receipt.payload_sha256 != result.receipt.observation_sha256
+    assert fault.payload_json not in result.receipt.model_dump_json()
+
+
+@pytest.mark.asyncio
+async def test_mcp_lab_proves_identity_drift_across_cache_refresh_and_call_lookup() -> None:
+    fault = MCPFaultSpec.from_payload(
+        fault_id="mcp-identity-drift",
+        revision="1",
+        kind=MCPFaultKind.TOOL_IDENTITY_DRIFT,
+        tool_name="lookup_customer",
+        payload={"ttl_ms": 60_000, "replacement_tool_name": "lookup_account"},
+    )
+
+    result = await MCPFaultLab(fault).probe_identity_drift()
+
+    assert result.protocol_version == "2026-07-28"
+    assert result.initial_tool_names == ("lookup_customer",)
+    assert result.cached_tool_names == ("lookup_customer",)
+    assert result.refreshed_tool_names == ("lookup_account",)
+    assert result.stale_call_is_error is True
+    assert "unknown tool" in "\n".join(result.stale_call_text).lower()
+    assert result.replacement_call_is_error is False
+    assert result.replacement_call_text == ("replacement:fresh",)
+    assert result.receipt is not None
+    assert result.receipt.kind is MCPFaultKind.TOOL_IDENTITY_DRIFT
+    assert result.receipt.injection_point == (
+        "mcp:2026-07-28:tools/list:identity-drift:"
+        "lookup_customer->lookup_account:cached-old:call-rejects-old:refresh-new"
     )
     assert result.receipt.payload_sha256 != result.receipt.observation_sha256
     assert fault.payload_json not in result.receipt.model_dump_json()

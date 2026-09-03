@@ -7,6 +7,8 @@ from agent_evals.mcp.models import (
     MCPFaultReceipt,
     MCPFaultSpec,
     MCPProbeResult,
+    MCPToolIdentityDriftProbeResult,
+    MCPToolSchemaDriftProbeResult,
 )
 
 __all__ = [
@@ -16,4 +18,6 @@ __all__ = [
     "MCPFaultReceipt",
     "MCPFaultSpec",
     "MCPProbeResult",
+    "MCPToolIdentityDriftProbeResult",
+    "MCPToolSchemaDriftProbeResult",
 ]
