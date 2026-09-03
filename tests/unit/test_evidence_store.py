@@ -174,7 +174,7 @@ def test_payload_resource_ceiling_applies_before_persistence(tmp_path: Path) -> 
 
 def test_manifest_resource_ceiling_applies_before_materialization(tmp_path: Path) -> None:
     store = LocalEvidenceStore(tmp_path / "evidence", max_manifest_bytes=32)
-    with pytest.raises(EvidenceStoreResourceError, match="manifest.*maximum"):
+    with pytest.raises(EvidenceStoreResourceError, match=r"manifest.*maximum"):
         store.write(evidence())
     assert not tuple(store.root.rglob("*.evidence.json"))
 
