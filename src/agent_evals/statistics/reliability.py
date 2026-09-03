@@ -11,6 +11,7 @@ from agent_evals.evidence.models import TrialVerdict
 @dataclass(frozen=True, slots=True)
 class ReliabilityReport:
     trials: int
+    resolved_trials: int
     passes: int
     failures: int
     blocked: int
@@ -40,11 +41,22 @@ class ReliabilityReport:
         failures = sum(verdict is TrialVerdict.FAIL for verdict in verdicts)
         blocked = sum(verdict is TrialVerdict.BLOCKED for verdict in verdicts)
         inconclusive = sum(verdict is TrialVerdict.INCONCLUSIVE for verdict in verdicts)
-        success_rate = passes / trials
-        low, high = _wilson_interval(passes, trials, confidence_z)
+        resolved_trials = passes + failures
+
+        if resolved_trials:
+            success_rate = passes / resolved_trials
+            low, high = _wilson_interval(passes, resolved_trials, confidence_z)
+            pass_at_k = 1.0 - (1.0 - success_rate) ** k
+            pass_power_k = success_rate**k
+        else:
+            success_rate = 0.0
+            low, high = 0.0, 1.0
+            pass_at_k = 0.0
+            pass_power_k = 0.0
 
         return cls(
             trials=trials,
+            resolved_trials=resolved_trials,
             passes=passes,
             failures=failures,
             blocked=blocked,
@@ -52,8 +64,8 @@ class ReliabilityReport:
             success_rate=success_rate,
             wilson_low=low,
             wilson_high=high,
-            pass_at_k=1.0 - (1.0 - success_rate) ** k,
-            pass_power_k=success_rate**k,
+            pass_at_k=pass_at_k,
+            pass_power_k=pass_power_k,
             k=k,
         )
 

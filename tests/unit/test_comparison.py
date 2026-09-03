@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import pytest
+
 from agent_evals.evidence.models import TrialVerdict
 from agent_evals.statistics.comparison import ComparisonDecision, PairedComparison
 
@@ -23,3 +25,8 @@ def test_paired_comparison_does_not_invent_significance() -> None:
     result = PairedComparison.compare(baseline, candidate)
     assert result.absolute_delta == 0.0
     assert result.decision is ComparisonDecision.INCONCLUSIVE
+
+
+def test_paired_comparison_rejects_unresolved_evidence() -> None:
+    with pytest.raises(ValueError, match="resolved PASS/FAIL"):
+        PairedComparison.compare([P, TrialVerdict.BLOCKED], [P, F])

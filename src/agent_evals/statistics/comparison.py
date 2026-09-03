@@ -21,7 +21,7 @@ class PairedComparison:
     both_pass: int
     baseline_only_pass: int
     candidate_only_pass: int
-    both_not_pass: int
+    both_fail: int
     baseline_success_rate: float
     candidate_success_rate: float
     absolute_delta: float
@@ -43,7 +43,17 @@ class PairedComparison:
         if not 0.0 < alpha < 1.0:
             raise ValueError("alpha must be between zero and one")
 
-        both_pass = baseline_only = candidate_only = both_not = 0
+        unresolved = {
+            TrialVerdict.BLOCKED,
+            TrialVerdict.INCONCLUSIVE,
+        }
+        if any(verdict in unresolved for verdict in (*baseline, *candidate)):
+            raise ValueError(
+                "paired behavioral comparison requires resolved PASS/FAIL outcomes; "
+                "BLOCKED or INCONCLUSIVE evidence must be resolved separately"
+            )
+
+        both_pass = baseline_only = candidate_only = both_fail = 0
         for baseline_verdict, candidate_verdict in zip(baseline, candidate, strict=True):
             baseline_pass = baseline_verdict is TrialVerdict.PASS
             candidate_pass = candidate_verdict is TrialVerdict.PASS
@@ -54,7 +64,7 @@ class PairedComparison:
             elif candidate_pass:
                 candidate_only += 1
             else:
-                both_not += 1
+                both_fail += 1
 
         pairs = len(baseline)
         baseline_rate = (both_pass + baseline_only) / pairs
@@ -73,7 +83,7 @@ class PairedComparison:
             both_pass=both_pass,
             baseline_only_pass=baseline_only,
             candidate_only_pass=candidate_only,
-            both_not_pass=both_not,
+            both_fail=both_fail,
             baseline_success_rate=baseline_rate,
             candidate_success_rate=candidate_rate,
             absolute_delta=candidate_rate - baseline_rate,

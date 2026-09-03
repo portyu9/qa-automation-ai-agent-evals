@@ -16,27 +16,18 @@ classifiers = [
   "Programming Language :: Python :: 3",
   "Programming Language :: Python :: 3 :: Only",
   "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
   "Topic :: Software Development :: Quality Assurance",
   "Topic :: Software Development :: Testing",
   "Typing :: Typed",
 ]
-dependencies = [
-  "pydantic>=2.10,<3",
-  "typer>=0.15,<1",
-]
+dependencies = ["pydantic>=2.10,<3", "typer>=0.15,<1"]
 
 [project.optional-dependencies]
 openai = ["openai-agents==0.22.0"]
 yaml = ["pyyaml>=6.0.3,<7"]
-dev = [
-  "bandit>=1.8,<2",
-  "mypy>=1.14,<2",
-  "pip-audit>=2.8,<3",
-  "pytest>=9,<10",
-  "pytest-asyncio>=1,<2",
-  "pytest-cov>=6,<8",
-  "ruff==0.16.2",
-]
+dev = ["bandit>=1.8,<2", "mypy>=1.14,<2", "pip-audit>=2.8,<3", "pytest>=9,<10", "pytest-asyncio>=1,<2", "pytest-cov>=6,<8", "ruff==0.16.2"]
 
 [project.scripts]
 agent-evals = "agent_evals.cli:app"
@@ -54,16 +45,13 @@ packages = ["src/agent_evals"]
 testpaths = ["tests"]
 pythonpath = ["src"]
 addopts = "-q --strict-markers --disable-warnings -m 'not openai'"
-markers = [
-  "integration: deterministic integration tests",
-  "live: tests requiring a live model/provider",
-  "openai: deterministic OpenAI Agents SDK adapter tests; no API calls",
-]
+markers = ["integration: deterministic integration tests", "live: tests requiring a live model/provider", "openai: deterministic OpenAI Agents SDK adapter tests; no API calls"]
 asyncio_mode = "auto"
 
 [tool.coverage.run]
 branch = true
 source = ["agent_evals"]
+omit = ["src/agent_evals/adapters/openai_agents.py"]
 
 [tool.coverage.report]
 fail_under = 90
@@ -83,6 +71,10 @@ python_version = "3.11"
 strict = true
 packages = ["agent_evals"]
 warn_unused_ignores = true
+
+[[tool.mypy.overrides]]
+module = ["agents", "agents.*"]
+ignore_missing_imports = true
 
 [tool.bandit]
 exclude_dirs = ["tests"]
