@@ -598,14 +598,14 @@ async def test_openai_adapter_blocks_missing_local_function_tool_target_before_m
 
 @pytest.mark.openai
 @pytest.mark.asyncio
-async def test_openai_adapter_blocks_unsupported_attack_channel_before_model_execution() -> None:
+async def test_openai_adapter_blocks_invalid_environment_attack_before_model_execution() -> None:
     pytest.importorskip("agents")
     from agents import Agent
     from agents.testing import ScriptedModel, assistant_message
 
     base = adversarial_base()
     attack = AttackFixture.from_payload(
-        attack_id="environment-injection",
+        attack_id="malformed-environment-injection",
         revision="1",
         threat=ThreatClass.SANDBOX_ESCAPE,
         channel=AttackChannel.ENVIRONMENT,
@@ -613,7 +613,7 @@ async def test_openai_adapter_blocks_unsupported_attack_channel_before_model_exe
     )
     scenario = attack.apply(base)
     model = ScriptedModel([[assistant_message("This step must not execute.")]])
-    agent = Agent(name="Unsupported attack agent", model=model)
+    agent = Agent(name="Malformed environment attack agent", model=model)
     adapter = OpenAIAgentsAdapter(
         agent,
         state_reader=lambda: {"protected": "safe"},
@@ -623,7 +623,7 @@ async def test_openai_adapter_blocks_unsupported_attack_channel_before_model_exe
         adapter,
         subject=subject(),
         scenario=scenario,
-        trial_id="openai-unsupported-channel",
+        trial_id="openai-invalid-environment-attack",
     )
 
     assert evaluated.verdict is TrialVerdict.BLOCKED
@@ -632,9 +632,9 @@ async def test_openai_adapter_blocks_unsupported_attack_channel_before_model_exe
     error = evaluated.evidence.events[0]
     assert error.kind is EvidenceKind.EVALUATION_ERROR
     assert error.source == "adapter:openai-agents"
-    assert error.payload["code"] == "unsupported_attack_channel"
+    assert error.payload["code"] == "invalid_environment_attack"
     assert error.payload["reason"] == (
-        "openai-agents adapter does not implement adversarial channel 'environment'"
+        "environment attack payload does not satisfy the runtime-context contract"
     )
     assert attack.payload_json not in json.dumps(error.payload, sort_keys=True)
     assert not model.calls
