@@ -187,7 +187,9 @@ class LocalEvidenceStore:
             scenario_identity=manifest.scenario_identity,
         )
         if expected_key != record_key:
-            raise EvidenceIntegrityError("manifest identity does not derive the requested record key")
+            raise EvidenceIntegrityError(
+                "manifest identity does not derive the requested record key"
+            )
         if manifest.payload_bytes != len(payload):
             raise EvidenceIntegrityError("manifest payload length does not match stored bytes")
         if manifest.payload_sha256 != hashlib.sha256(payload).hexdigest():
@@ -196,7 +198,9 @@ class LocalEvidenceStore:
         try:
             evidence = TrialEvidence.model_validate_json(payload)
         except ValidationError as exc:
-            raise EvidenceIntegrityError("stored evidence payload failed schema validation") from exc
+            raise EvidenceIntegrityError(
+                "stored evidence payload failed schema validation"
+            ) from exc
 
         if (
             evidence.trial_id != manifest.trial_id
@@ -261,7 +265,9 @@ def _record_key(*, trial_id: str, subject_identity: str, scenario_identity: str)
 
 def _validate_record_key(record_key: str) -> None:
     if _RECORD_KEY_RE.fullmatch(record_key) is None:
-        raise EvidenceIntegrityError("record key must be exactly 64 lowercase hexadecimal characters")
+        raise EvidenceIntegrityError(
+            "record key must be exactly 64 lowercase hexadecimal characters"
+        )
 
 
 def _ensure_owned_directory(path: Path) -> None:
@@ -303,7 +309,9 @@ def _safe_read_regular_file(path: Path, max_bytes: int) -> bytes:
         extra = os.read(fd, 1)
         data = b"".join(chunks)
         if remaining != 0 or extra or len(data) != metadata.st_size:
-            raise EvidenceIntegrityError(f"evidence artifact changed during bounded read: {path.name}")
+            raise EvidenceIntegrityError(
+                f"evidence artifact changed during bounded read: {path.name}"
+            )
         return data
     finally:
         os.close(fd)
@@ -319,7 +327,9 @@ def _atomic_materialize(path: Path, content: bytes) -> None:
         while offset < len(content):
             written = os.write(fd, content[offset:])
             if written <= 0:
-                raise EvidenceStoreError(f"short write while materializing evidence artifact: {path.name}")
+                raise EvidenceStoreError(
+                    f"short write while materializing evidence artifact: {path.name}"
+                )
             offset += written
         os.fsync(fd)
         os.close(fd)
@@ -342,7 +352,9 @@ def _fsync_directory(path: Path) -> None:
     try:
         fd = os.open(path, os.O_RDONLY | directory_flag)
     except OSError as exc:
-        raise EvidenceStoreError(f"cannot open evidence directory for durability sync: {path}") from exc
+        raise EvidenceStoreError(
+            f"cannot open evidence directory for durability sync: {path}"
+        ) from exc
     try:
         os.fsync(fd)
     except OSError as exc:

@@ -142,4 +142,7 @@ def test_record_key_changes_with_bound_evaluation_identity() -> None:
     second = first.model_copy(update={"subject_identity": "c" * 64})
     third = first.model_copy(update={"scenario_identity": "d" * 64})
 
-    assert len({evidence_record_key(first), evidence_record_key(second), evidence_record_key(third)}) == 3
+    assert (
+        len({evidence_record_key(first), evidence_record_key(second), evidence_record_key(third)})
+        == 3
+    )

@@ -36,11 +36,17 @@ class EvidenceReplayAdapter:
         trial_id: str,
     ) -> AdapterResult:
         if trial_id != self._evidence.trial_id:
-            raise ReplayIdentityError("recorded evidence trial identity does not match replay trial")
+            raise ReplayIdentityError(
+                "recorded evidence trial identity does not match replay trial"
+            )
         if subject.identity != self._evidence.subject_identity:
-            raise ReplayIdentityError("recorded evidence subject identity does not match replay subject")
+            raise ReplayIdentityError(
+                "recorded evidence subject identity does not match replay subject"
+            )
         if scenario.identity != self._evidence.scenario_identity:
-            raise ReplayIdentityError("recorded evidence scenario identity does not match replay scenario")
+            raise ReplayIdentityError(
+                "recorded evidence scenario identity does not match replay scenario"
+            )
         return AdapterResult(
             events=self._evidence.events,
             final_state=self._evidence.final_state,
