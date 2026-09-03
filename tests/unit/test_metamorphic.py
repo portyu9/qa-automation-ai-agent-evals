@@ -34,9 +34,7 @@ def trial(
 def test_state_projection_ignores_unconstrained_output_and_compares_selected_state() -> None:
     relation = StateProjectionInvariant(paths=(("account", "status"), ("items", 0, "id")))
     baseline = trial({"account": {"status": "active"}, "items": [{"id": 7}], "noise": "a"})
-    transformed = trial(
-        {"account": {"status": "active"}, "items": [{"id": 7}], "noise": "b"}
-    )
+    transformed = trial({"account": {"status": "active"}, "items": [{"id": 7}], "noise": "b"})
     assert relation.evaluate(baseline, transformed).decision is MetamorphicDecision.SATISFIED
 
 
