@@ -554,7 +554,9 @@ def _identity_replacement_tool_name(fault: MCPFaultSpec) -> str:
 def _exact_tool(tools: list[Any], name: str) -> Any:
     matching = [tool for tool in tools if tool.name == name]
     if len(matching) != 1:
-        raise RuntimeError(f"MCP fault laboratory expected exactly one advertised tool named {name!r}")
+        raise RuntimeError(
+            f"MCP fault laboratory expected exactly one advertised tool named {name!r}"
+        )
     return matching[0]
 
 
