@@ -129,6 +129,7 @@ class MCPFaultReceipt(BaseModel):
         observed_text: str,
         protocol_version: str = _PROTOCOL_VERSION,
     ) -> Self:
+        observation_sha256 = _sha256_text(observed_text)
         material = {
             "schema_version": _RECEIPT_SCHEMA,
             "fault_identity": fault.identity,
@@ -137,9 +138,18 @@ class MCPFaultReceipt(BaseModel):
             "tool_name": fault.tool_name,
             "injection_point": injection_point,
             "payload_sha256": fault.payload_sha256,
-            "observation_sha256": _sha256_text(observed_text),
+            "observation_sha256": observation_sha256,
         }
-        return cls(**material, receipt_root=_sha256_json(material))
+        return cls(
+            fault_identity=fault.identity,
+            kind=fault.kind,
+            protocol_version=protocol_version,
+            tool_name=fault.tool_name,
+            injection_point=injection_point,
+            payload_sha256=fault.payload_sha256,
+            observation_sha256=observation_sha256,
+            receipt_root=_sha256_json(material),
+        )
 
     @model_validator(mode="after")
     def verify_receipt_root(self) -> Self:
