@@ -138,9 +138,7 @@ def test_bridge_rejects_wrong_protocol_version() -> None:
     receipt = MCPFaultReceipt.create(
         fault=fault,
         protocol_version="2099-01-01",
-        injection_point=(
-            f"mcp:2099-01-01:tools/call:{fault.tool_name}:result.content[0].text"
-        ),
+        injection_point=(f"mcp:2099-01-01:tools/call:{fault.tool_name}:result.content[0].text"),
         observed_text=fault.payload_json,
     )
 

@@ -114,9 +114,7 @@ class MCPAgentToolResultReceipt(BaseModel):
             raise ValueError(
                 "agent observation digest does not match the verified MCP controlled payload"
             )
-        expected_root = _receipt_root(
-            self.model_dump(mode="json", exclude={"receipt_root"})
-        )
+        expected_root = _receipt_root(self.model_dump(mode="json", exclude={"receipt_root"}))
         if not hmac.compare_digest(expected_root, self.receipt_root):
             raise ValueError("MCP-to-agent tool-result receipt root does not match receipt content")
         return self
@@ -142,9 +140,7 @@ def _require_direct_tool_result_receipt(receipt: MCPFaultReceipt) -> None:
     if receipt.kind is not MCPFaultKind.TOOL_RESULT_POISON:
         raise ValueError("MCP-to-agent bridge requires a TOOL_RESULT_POISON protocol receipt")
     if receipt.protocol_version != _PROTOCOL_VERSION:
-        raise ValueError(
-            f"MCP-to-agent bridge requires protocol version {_PROTOCOL_VERSION}"
-        )
+        raise ValueError(f"MCP-to-agent bridge requires protocol version {_PROTOCOL_VERSION}")
     expected_point = (
         f"mcp:{_PROTOCOL_VERSION}:tools/call:{receipt.tool_name}:result.content[0].text"
     )
