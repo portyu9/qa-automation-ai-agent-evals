@@ -8,9 +8,9 @@ This document is intentionally strict. Repository claims must never become stron
 
 The OpenAI integration is pinned to `openai-agents==0.22.0`. CI exercises the real SDK runner/tool/handoff/context loop deterministically with `agents.testing.ScriptedModel` and no provider API call.
 
-The SDK tier covers all seven generic adversarial channel categories at scoped local/SDK boundaries. Three separate adapters also exercise exact OpenAI-agent → official-MCP-stdio paths: one `TOOL_RESULT_POISON` same-call bridge, one causal `TOOL_ERROR` → same-argument retry → benign recovery bridge, and one host-refreshed `TOOL_SCHEMA_DRIFT` adaptation bridge.
+The SDK tier covers all seven generic adversarial channel categories at scoped local/SDK boundaries. A separate `OpenAIAgentsHandoffAuthorityAdapter` exercises run-local native handoff authority attenuation, and three separate adapters exercise exact OpenAI-agent → official-MCP-stdio paths: one `TOOL_RESULT_POISON` same-call bridge, one causal `TOOL_ERROR` → same-argument retry → benign recovery bridge, and one host-refreshed `TOOL_SCHEMA_DRIFT` adaptation bridge.
 
-None of this establishes live-model quality, production-provider availability, provider-side delivery attestation, or credentialed end-to-end assurance.
+None of this establishes live-model quality, production-provider availability, provider-side delivery attestation, production IAM, or credentialed end-to-end assurance.
 
 Terminal application state remains independently observed; provider output is not the state oracle.
 
@@ -28,7 +28,7 @@ Terminal application state remains independently observed; provider output is no
 
 These are concrete implementations of a generic taxonomy, not assertions that every production system carrying a similarly named boundary is intercepted.
 
-The dedicated MCP adapters are separate integrations and do not widen these seven local/SDK mechanisms.
+The dedicated handoff-authority and MCP adapters are separate integrations and do not widen these seven local/SDK mechanisms.
 
 ### `ENVIRONMENT` means local SDK application context, not infrastructure chaos
 
@@ -69,6 +69,24 @@ It does not claim OpenAI hosted File Search, vector stores, embeddings, RAG retr
 The handoff mode appends exact canonical fixture JSON to cloned context for the first actual SDK handoff invoking the run-level filter. The SDK-selected destination remains unchanged.
 
 It does not choose a new destination, rewrite handoff routing metadata, poison every transfer, intercept remote/distributed agent fabrics, or attest provider-side consumption.
+
+### Native handoff authority is run-local evaluation assurance, not production IAM
+
+`OpenAIAgentsHandoffAuthorityAdapter` is a separate assurance adapter; it does not change the meaning of the generic `HANDOFF` adversarial channel above. When a scenario configures `root_agent` and directed `handoff_grants`, the adapter binds that configured root to the supplied SDK `Agent.name` before model execution and records public SDK run-item generating-agent names for normalized tool request/result/approval evidence. Native handoff evidence is accepted only when the run-item generating agent agrees with the SDK handoff source identity.
+
+`PolicyOracle`—not the SDK agent name, model output, or adapter—owns authorization. It advances active authority only after an observed source→target transition matches one explicit grant and that grant does not broaden the authority that actually reached its source agent. Delegated tools, resource prefixes, inherited-plus-stricter approval requirements, tool-call budgets, and handoff budgets are then graded against that path-local authority. A later grant that is independently inside root authority can still fail if it re-expands authority lost on an earlier hop.
+
+The executable boundary is intentionally narrower than production identity and access management:
+
+- SDK agent names are run-local evidence labels, not cryptographic principals, authenticated signer identities, or globally unique agent identities;
+- the framework does not attest that a provider, remote agent runtime, or external target enforced the scenario grant;
+- there is no cross-process or cross-host delegation token, capability credential, signed grant, distributed-agent-fabric attestation, or provider-side authorization proof;
+- the framework does not establish organization/user identity, tenant membership, workforce identity, cloud IAM, hosted routing assurance, or production policy synchronization;
+- the authority graph is evaluator-owned scenario configuration, not evidence that an independently administered production authorization system issued the same grant;
+- resource-prefix authority remains lexical after adapter normalization, so deployment-grade canonicalization of aliases, traversal, URLs, case, and alternate identifiers remains external;
+- the deterministic SDK tests use `agents.testing.ScriptedModel`; they do not establish live-model routing quality or provider availability.
+
+Missing or contradictory SDK provenance—such as a configured root that does not match the supplied agent, missing call attribution, or request/result ownership disagreement—blocks evaluation as `EVALUATION_ERROR / BLOCKED`. Once the required provenance exists, an observed unauthorized transition or delegated action is deterministic subject evidence and remains a critical policy `FAIL`; evaluator uncertainty is not rewritten as a product defect, and a product defect is not downgraded to uncertainty merely because the run involved multiple agents.
 
 ---
 
@@ -317,7 +335,7 @@ Audited merged implementation source checkpoint `d98f9ca1feb1179504cd2181295a739
 - Python **3.11 minimum / 3.14 latest** quality jobs, Ruff, formatter, Bandit, dependency audit, package integrity, and all **7/7 CI jobs**: green;
 - dependency audit reported **no known vulnerabilities**; the project package itself is skipped because it is not published on PyPI.
 
-This checkpoint remains the historical audited merged implementation baseline. Capabilities added after it, including ToolError recovery and host-refreshed schema-drift adaptation, are accepted only after their own exact-head CI, merge, and post-merge `main` verification; documentation does not retroactively relabel the older checkpoint.
+This checkpoint remains the historical audited merged implementation baseline. Capabilities added after it, including ToolError recovery, host-refreshed schema-drift adaptation, and native OpenAI handoff-authority attenuation, are accepted only after their own exact-head CI, merge, and post-merge `main` verification; documentation does not retroactively relabel the older checkpoint.
 
 ## Why these boundaries matter
 
