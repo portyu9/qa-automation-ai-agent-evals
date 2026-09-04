@@ -165,9 +165,10 @@ def test_semantic_judgment_round_trip_binds_exact_pre_semantic_root() -> None:
 
 def test_semantic_judgment_is_forbidden_without_scenario_rubric() -> None:
     rubric_scenario = _scenario(rubric=_rubric())
+    subject_evidence = _subject_evidence(rubric_scenario)
     recorded = append_semantic_judgment(
-        _subject_evidence(rubric_scenario),
-        _receipt(rubric_scenario, _subject_evidence(rubric_scenario)),
+        subject_evidence,
+        _receipt(rubric_scenario, subject_evidence),
     )
     deterministic_scenario = _scenario()
     rebound = TrialEvidence(
