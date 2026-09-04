@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This laboratory tests a different trust boundary from the in-process MCP fault laboratory: a **real loopback TCP Streamable HTTP resource server protected by bearer authorization**.
+This laboratory tests a different trust boundary from both the in-process MCP fault laboratory and the separated OAuth authorization-code laboratory: a **real loopback TCP Streamable HTTP resource server protected by bearer authorization**.
 
 It answers:
 
@@ -10,7 +10,7 @@ It answers:
 
 The implementation uses `mcp==2.1.1`, `httpx2`, Uvicorn, a pre-bound `127.0.0.1` TCP socket, `MCPServer.streamable_http_app()`, the official Streamable HTTP client transport, and protocol revision `2026-07-28`.
 
-It does not turn authorization evidence into an agent verdict.
+It does not turn authorization evidence into an agent verdict. It also does not itself prove authorization-code issuance, PKCE, registration, or introspection; those are exercised by the separate [MCP OAuth Flow Laboratory](MCP_OAUTH_FLOW.md).
 
 ## Trust and enforcement ownership
 
@@ -159,35 +159,40 @@ This is separate from:
 
 ```bash
 pytest -m mcp tests/integration/test_mcp_fault_lab.py
+pytest -m mcp_oauth tests/integration/test_mcp_oauth_flow.py
 ```
 
-The separation is architectural. In-process protocol semantics can pass while the TCP/auth boundary fails, or vice versa, without one result masking the other.
+The separation is architectural. In-process protocol semantics, resource-server enforcement, and OAuth-flow behavior can fail independently without one green result masking another.
 
 Current verified remote-auth checkpoint: **3/3 passed** over loopback TCP.
 
-## Relationship to the MCP fault laboratory
+## Relationship to the other MCP laboratories
 
 The [MCP Protocol Fault Laboratory](MCP_LAB.md) verifies controlled content and discovery-state faults with an in-process official client/server pair.
 
-This document verifies a loopback resource-server authentication/authorization boundary. Its evidence models are different:
+This document verifies the isolated loopback resource-server authentication/authorization boundary.
+
+The [MCP OAuth Flow Laboratory](MCP_OAUTH_FLOW.md) adds a separate authorization-server origin and official OAuth client path for protected-resource discovery, authorization-server metadata, compatibility Dynamic Client Registration, PKCE, RFC 9207 issuer validation, RFC 8707 resource binding, code exchange, authenticated token introspection, protected MCP use, and stored-authorization reuse.
+
+The evidence models remain different:
 
 ```text
 MCPFaultSpec          → MCPFaultReceipt
 MCPRemoteAuthPolicy   → MCPRemoteAuthReceipt
+MCPOAuthFlowPolicy    → MCPOAuthFlowReceipt
 ```
 
-Neither receipt is an OpenAI `AttackDeliveryReceipt`, `TrialEvidence`, agent verdict, or release decision.
+None is an OpenAI `AttackDeliveryReceipt`, `TrialEvidence`, agent verdict, or release decision.
 
-Keeping those identities separate prevents a successful auth challenge from being confused with schema-drift evidence, and prevents either protocol result from being confused with subject behavior.
+Keeping those identities separate prevents a successful resource-server challenge from being confused with an OAuth issuance proof, prevents either auth result from being confused with schema-drift evidence, and prevents any protocol result from being confused with subject behavior.
 
-## Explicit non-claims
+## Explicit non-claims for this laboratory
 
-The current remote authorization laboratory does **not** establish:
+`MCPRemoteAuthLab` itself does **not** establish:
 
-- a real authorization server issuing tokens;
-- OAuth authorization-code, PKCE, Dynamic Client Registration, CIMD, or SEP-990 identity-assertion flows;
-- real JWT signature/JWKS verification or production token introspection;
-- authorization-server compromise resistance;
+- OAuth authorization-code, PKCE, registration, token issuance, or token-introspection behavior—those are tested separately by `MCPOAuthFlowLab`;
+- a production or third-party authorization server / identity provider;
+- real JWT signature/JWKS verification or production token formats;
 - arbitrary issuer discovery or federation behavior;
 - DPoP, mTLS, certificate binding, proof-of-possession, or hardware-backed credentials;
 - credential rotation, refresh-token lifecycle, revocation, replay detection, or distributed token caches;
@@ -202,14 +207,15 @@ Those claims require tests at their actual enforcement boundaries.
 
 ## Verification checkpoint
 
-Repository source checkpoint associated with this layer:
+Source checkpoint `7132537c5041a7f2c828a7f3db3e5e52af020888`, CI run `33826363896`:
 
-- deterministic core: **183 passed, 20 deselected**;
-- branch coverage: **93.04%** against the 90% gate;
-- strict mypy: **0 issues across 38 source files**;
+- deterministic core: **183 passed, 23 deselected**;
+- branch coverage: **93.05%** against the 90% gate;
+- strict mypy: **0 issues across 40 source files**;
 - deterministic OpenAI SDK: **11/11 passed**;
 - deterministic MCP protocol: **6/6 passed**;
 - deterministic MCP remote auth: **3/3 passed**;
-- Python 3.11/3.13 quality, Ruff, formatter, Bandit, dependency audit, and package integrity: green.
+- deterministic MCP OAuth flow: **3/3 passed**;
+- Python 3.11/3.13 quality, Ruff, formatter, Bandit, dependency audit, package integrity, and all seven CI jobs: green.
 
-[← MCP Protocol Fault Laboratory](MCP_LAB.md) · [Documentation hub](README.md)
+[← MCP Protocol Fault Laboratory](MCP_LAB.md) · [MCP OAuth Flow Laboratory](MCP_OAUTH_FLOW.md) · [Documentation hub](README.md)
