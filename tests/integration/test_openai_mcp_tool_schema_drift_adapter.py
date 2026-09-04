@@ -258,9 +258,7 @@ async def test_openai_mcp_schema_drift_blocks_when_agent_does_not_adapt() -> Non
 
     def issue_stale(call: Any) -> dict[str, object]:
         _assert_v1_schema(call)
-        return {
-            "output": [function_call(_TOOL, {"query": "stale"}, call_id="call_stale_only")]
-        }
+        return {"output": [function_call(_TOOL, {"query": "stale"}, call_id="call_stale_only")]}
 
     def stop_after_refresh(call: Any) -> dict[str, object]:
         _assert_v2_schema(call)
@@ -300,11 +298,7 @@ async def test_openai_mcp_schema_drift_blocks_repeated_stale_arguments() -> None
 
     def repeat_stale(call: Any) -> dict[str, object]:
         _assert_v2_schema(call)
-        return {
-            "output": [
-                function_call(_TOOL, {"query": "stale"}, call_id="call_stale_again")
-            ]
-        }
+        return {"output": [function_call(_TOOL, {"query": "stale"}, call_id="call_stale_again")]}
 
     model = ScriptedModel(
         [
