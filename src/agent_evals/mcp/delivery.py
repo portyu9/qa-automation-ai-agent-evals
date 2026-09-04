@@ -16,6 +16,22 @@ _TOOL_RESULT_SOURCE = "bridge:mcp-agent:tool-result"
 _TOOL_ERROR_RECOVERY_SOURCE = "bridge:mcp-agent:tool-error-recovery"
 _TOOL_SCHEMA_DRIFT_SOURCE = "bridge:mcp-agent:tool-schema-drift"
 _TOOL_METADATA_SOURCE = "bridge:mcp-agent:tool-metadata"
+_METADATA_BEHAVIOR_KINDS = frozenset(
+    {
+        EvidenceKind.TOOL_REQUEST,
+        EvidenceKind.TOOL_RESULT,
+        EvidenceKind.HANDOFF,
+        EvidenceKind.APPROVAL_REQUEST,
+        EvidenceKind.APPROVAL,
+        EvidenceKind.APPROVAL_DECISION,
+        EvidenceKind.GUARDRAIL,
+        EvidenceKind.STATE,
+        EvidenceKind.OUTPUT,
+        EvidenceKind.POLICY_VIOLATION,
+        EvidenceKind.EVALUATION_ERROR,
+        EvidenceKind.RUNTIME_ERROR,
+    }
+)
 
 ProtocolDeliveryReceipt: TypeAlias = (
     MCPAgentToolResultReceipt
@@ -72,6 +88,27 @@ def verify_protocol_delivery(evidence: TrialEvidence) -> tuple[ProtocolDeliveryR
             raise ProtocolDeliveryError(
                 "protocol delivery receipt scenario identity does not match trial evidence"
             )
+        if event.source == _TOOL_METADATA_SOURCE:
+            _verify_metadata_delivery_chronology(evidence, delivery_sequence=event.sequence)
         receipts.append(receipt)
 
     return tuple(receipts)
+
+
+def _verify_metadata_delivery_chronology(
+    evidence: TrialEvidence,
+    *,
+    delivery_sequence: int,
+) -> None:
+    """Require metadata exposure to close before normalized model/agent behavior.
+
+    Leading ``ATTACK_DELIVERY`` evidence is allowed because user input, session memory, resources,
+    and local tool-description injections can be installed before the first model request. A valid
+    MCP metadata receipt proves that the target definition reached that first model boundary, so it
+    cannot truthfully appear after tool, handoff, approval, guardrail, output, or error evidence.
+    """
+    for event in evidence.events[:delivery_sequence]:
+        if event.kind in _METADATA_BEHAVIOR_KINDS:
+            raise ProtocolDeliveryError(
+                "MCP tool-metadata delivery appears after normalized behavioral evidence"
+            )
