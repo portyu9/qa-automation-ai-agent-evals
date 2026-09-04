@@ -75,14 +75,14 @@ class SemanticCriterionResult(BaseModel):
 
     criterion_id: str = Field(pattern=r"^[a-z0-9][a-z0-9._-]{1,63}$")
     decision: SemanticDecision
-    score: int | None = Field(default=None, ge=0, le=4)
+    score: int | None = Field(default=None, ge=0, le=4, strict=True)
 
     @model_validator(mode="after")
     def validate_score_shape(self) -> Self:
         if self.decision is SemanticDecision.ABSTAIN:
             if self.score is not None:
                 raise ValueError("abstaining semantic criterion must not carry a score")
-        elif self.score is None or isinstance(self.score, bool):
+        elif self.score is None:
             raise ValueError("resolved semantic criterion requires an integer score")
         return self
 
