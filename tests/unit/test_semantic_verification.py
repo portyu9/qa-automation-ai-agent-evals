@@ -89,11 +89,7 @@ def _calibration() -> SemanticCalibrationReceipt:
             rubric=_rubric(),
             candidate_output=f"candidate-{index}",
             expected=expected,
-            tags=(
-                frozenset({"judge-prompt-injection"})
-                if index == 4
-                else frozenset()
-            ),
+            tags=(frozenset({"judge-prompt-injection"}) if index == 4 else frozenset()),
         )
         for index, expected in enumerate(
             (
@@ -119,7 +115,9 @@ def _calibration() -> SemanticCalibrationReceipt:
     )
 
 
-def _subject_evidence(scenario: EvaluationScenario, *, output: str = "Grounded answer.") -> TrialEvidence:
+def _subject_evidence(
+    scenario: EvaluationScenario, *, output: str = "Grounded answer."
+) -> TrialEvidence:
     return TrialEvidence(
         trial_id="semantic-trial",
         subject_identity=_SUBJECT_IDENTITY,
@@ -165,7 +163,9 @@ def test_semantic_judgment_round_trip_binds_exact_pre_semantic_root() -> None:
     assert verified == receipt
     assert recorded.events[-1].kind is EvidenceKind.SEMANTIC_JUDGMENT
     assert recorded.events[-1].critical is False
-    assert evidence_before_semantic_judgment(recorded).evidence_root == subject_evidence.evidence_root
+    assert (
+        evidence_before_semantic_judgment(recorded).evidence_root == subject_evidence.evidence_root
+    )
 
 
 def test_semantic_judgment_is_forbidden_without_scenario_rubric() -> None:

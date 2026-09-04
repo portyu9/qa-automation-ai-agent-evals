@@ -184,9 +184,7 @@ class TrialRunner:
             )
 
         oracle_results = tuple(oracle.grade(scenario, evidence) for oracle in self._oracles)
-        deterministic_failed = any(
-            result.verdict is TrialVerdict.FAIL for result in oracle_results
-        )
+        deterministic_failed = any(result.verdict is TrialVerdict.FAIL for result in oracle_results)
 
         try:
             recorded_semantic = verify_semantic_judgment(scenario, evidence)

@@ -157,12 +157,18 @@ class SemanticCalibrationObservation(BaseModel):
             if self.failure_code is None:
                 raise ValueError("failed semantic calibration observation requires a failure code")
             if self.response_sha256 is not None:
-                raise ValueError("failed semantic calibration observation cannot carry a response digest")
+                raise ValueError(
+                    "failed semantic calibration observation cannot carry a response digest"
+                )
         else:
             if self.failure_code is not None:
-                raise ValueError("resolved semantic calibration observation cannot carry a failure code")
+                raise ValueError(
+                    "resolved semantic calibration observation cannot carry a failure code"
+                )
             if self.response_sha256 is None:
-                raise ValueError("resolved semantic calibration observation requires a response digest")
+                raise ValueError(
+                    "resolved semantic calibration observation requires a response digest"
+                )
         return self
 
 
