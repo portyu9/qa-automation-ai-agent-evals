@@ -1,20 +1,22 @@
 # Limitations and Non-Claims
 
-This document is intentionally strict. The repository should never become more impressive in prose than it is in executable evidence.
+This document is intentionally strict. Repository claims must never become stronger than the executable evidence supporting them.
 
 ## Current non-claims
 
 ### No credentialed live-provider assurance yet
 
-A first-class OpenAI Agents SDK adapter is pinned to `openai-agents==0.22.0`, and CI exercises the real SDK runner/tool/handoff/context loop deterministically with `agents.testing.ScriptedModel` and no provider API call.
+The OpenAI integration is pinned to `openai-agents==0.22.0`. CI exercises the real SDK runner/tool/handoff/context loop deterministically with `agents.testing.ScriptedModel` and no provider API call.
 
-The SDK tier covers all seven generic adversarial channel categories at scoped local/SDK boundaries. It does **not** establish live-model quality, production-provider availability, provider-side delivery attestation, or credentialed end-to-end assurance.
+The SDK tier covers all seven generic adversarial channel categories at scoped local/SDK boundaries. A separate adapter also exercises one exact OpenAI-agent → official-MCP-stdio `TOOL_RESULT_POISON` path.
+
+None of this establishes live-model quality, production-provider availability, provider-side delivery attestation, or credentialed end-to-end assurance.
 
 Terminal application state remains independently observed; provider output is not the state oracle.
 
 ### Seven generic channels do not mean universal interception
 
-`OpenAIAgentsAdapter` currently implements:
+`OpenAIAgentsAdapter` implements:
 
 - `USER_INPUT` as the second ordered SDK user message;
 - local `TOOL_RESULT` as first matching local `FunctionTool` result replacement;
@@ -26,29 +28,31 @@ Terminal application state remains independently observed; provider output is no
 
 These are concrete implementations of a generic taxonomy, not assertions that every production system carrying a similarly named boundary is intercepted.
 
+The dedicated `OpenAIAgentsMCPToolResultAdapter` is a separate integration and does not widen these seven local/SDK mechanisms.
+
 ### `ENVIRONMENT` means local SDK application context, not infrastructure chaos
 
 The implemented environment mode requires an identity-bearing payload with `tool`, `key`, and `environment`. Complete canonical `AttackFixture.payload_json` becomes the injected value.
 
-The adapter accepts only `None` or string-keyed `Mapping` runtime context for this mode. It snapshots base context into a read-only trial-local overlay and uses task-local `ContextVar` activation during the first matching local tool invocation.
+The adapter accepts only `None` or string-keyed `Mapping` runtime context. It snapshots base context into a read-only trial-local overlay and uses task-local activation during the first matching local tool invocation.
 
-Delivery is **consumption-bound**. The receipt is created only when subject code reads the targeted value through `ctx.context[key]` or `.get(key)`. Merely creating the overlay, executing the tool, or checking key membership does not prove delivery. A target tool that never reads the key leaves the adversarial trial `BLOCKED`.
+Delivery is **consumption-bound**. The receipt is created only when subject code reads the targeted value through `ctx.context[key]` or `.get(key)`. Merely creating the overlay, executing the tool, or checking key membership does not prove delivery.
 
-This mode does **not** claim process-global `os.environ` mutation; filesystem/browser/container/sandbox faults; network latency/partition/DNS/outage behavior; clocks; secret managers; provider deployment configuration; Kubernetes/cloud IAM/service-mesh/database chaos; arbitrary non-`Mapping` context; external-system consumption; or production chaos engineering.
+This mode does not claim process-global `os.environ` mutation; filesystem/browser/container/sandbox faults; network latency/partition/DNS/outage behavior; clocks; secret managers; provider deployment configuration; Kubernetes/cloud IAM/service-mesh/database chaos; arbitrary non-`Mapping` context; external-system consumption; or production chaos engineering.
 
-### Local `TOOL_RESULT` replacement is not hosted/MCP interception
+### Local `TOOL_RESULT` replacement remains local
 
-The current OpenAI result mode targets one exact local SDK `FunctionTool`. On the first matching call the original function is deliberately not executed; exact canonical fixture JSON becomes the result. Later calls use copied original behavior.
+The ordinary `OpenAIAgentsAdapter` result mode targets one exact local SDK `FunctionTool`. On the first matching call the original function is deliberately not executed; exact canonical fixture JSON becomes the result. Later calls use copied original behavior.
 
-It does not claim hosted/MCP/external-server interception, generic support for every SDK tool type, preservation of original first-call side effects, or execute-then-perturb semantics.
+That local injector still does not intercept hosted tools, MCP tools, or arbitrary external services.
 
-The separate MCP laboratories exercise protocol surfaces directly; they do not turn this OpenAI local-tool mode into MCP interception.
+MCP result delivery is now covered only by the **separate** controlled stdio bridge described below. The existence of that bridge must not be retroactively attributed to the local `FunctionTool` injector.
 
 ### Local `TOOL_METADATA` means OpenAI description poisoning only
 
-The OpenAI metadata mode changes only copied `FunctionTool.description`. It does not mutate OpenAI tool name, parameter schema, callback, approval semantics, routing identity, hosted metadata, or external registries.
+The OpenAI metadata mode changes only copied `FunctionTool.description`. It does not mutate tool name, parameter schema, callback, approval semantics, routing identity, hosted metadata, or external registries.
 
-MCP description poisoning, schema drift, and identity drift exist only in the separate MCP protocol laboratory and do not imply equivalent OpenAI adapter capability.
+MCP description poisoning, schema drift, and identity drift exist in the protocol laboratory. They are not currently bridged into agent-trial behavior.
 
 ### SDK session-history `MEMORY` is not production memory poisoning
 
@@ -60,122 +64,134 @@ The resource mode places exact canonical fixture JSON in one structured SDK `inp
 
 It does not claim OpenAI hosted File Search, vector stores, embeddings, RAG retrieval/ranking/chunking/filtering/citations, `file_id`, `file_url`, browser pages, databases, object stores, production document repositories, MCP resource servers, or provider-side file parsing/retention attestation.
 
-The separate `resource_resolver(tool_name, arguments)` callback is only a deterministic policy resource-identity normalizer.
-
 ### Native SDK `HANDOFF` is context poisoning, not rerouting
 
 The handoff mode appends exact canonical fixture JSON to cloned context for the first actual SDK handoff invoking the run-level filter. The SDK-selected destination remains unchanged.
 
 It does not choose a new destination, rewrite handoff routing metadata, poison every transfer, intercept remote/distributed agent fabrics, or attest provider-side consumption.
 
-## MCP protocol fault laboratory is protocol evidence, not agent assurance
+---
 
-The repository includes a deterministic MCP protocol fault laboratory using official `mcp==2.1.1`, a real in-process `MCPServer`, the official `Client`, and protocol revision `2026-07-28`.
+## MCP protocol laboratory remains protocol evidence by default
+
+`MCPFaultLab` uses official `mcp==2.1.1`, a real in-process `MCPServer`, the official `Client`, and protocol revision `2026-07-28`.
 
 Six exact fault families are implemented:
 
 - target-tool description poisoning through `tools/list`;
 - first-call target-tool result poisoning through `tools/call`;
 - model-visible first-call `ToolError` containing the canonical payload in the SDK-generated envelope;
-- private `tools/list` stale discovery after server-side target removal, closed only by initial-present → cached-present → refreshed-absent evidence;
-- tool-schema drift, closed only by initial old schema → cached old schema → old-argument call rejection under current server truth → refreshed new schema → successful new-schema call;
-- tool-identity drift, closed only by initial old name → cached old name → stale-name call rejection → refreshed replacement name → successful replacement call.
-
-Every probe uses a fresh server. Discovery-state probes use fresh client cache state. Result/error faults require benign recovery, while drift faults require successful operation after refresh.
+- private `tools/list` stale discovery after server-side target removal;
+- tool-schema drift across cached discovery, current call validation, refresh, and recovery;
+- tool-identity drift across cached discovery, stale lookup, refresh, and recovery.
 
 `MCPFaultReceipt` binds fault identity, protocol version, tool, observation point, controlled fault-material digest, exact canonical-observation digest, and a receipt root without duplicating raw fault content.
 
-That implementation does **not** establish:
+A raw `MCPFaultReceipt` does **not** establish agent consumption, resistance, correctness, `PASS`, `FAIL`, or release acceptance.
 
-- an autonomous agent receiving, interpreting, exploiting, or resisting the MCP condition;
-- OpenAI `ATTACK_DELIVERY` semantics for MCP;
-- public/cross-partition cache sharing, cache poisoning, custom/shared cache stores, notification invalidation, TTL-expiry races, or general cache correctness outside the exact implemented relations;
-- arbitrary schema migration beyond the bound v1 before/after schema pair;
-- arbitrary registry churn beyond the single bound replacement-name relation;
-- malformed JSON-RPC/framing, duplicate/out-of-order responses, or `Mcp-Method`/`Mcp-Name` routing faults;
-- malicious resources, resource templates, prompts, roots, elicitation, sampling, subscriptions, or Tasks-extension behavior;
-- hosted third-party MCP fidelity or complete protocol-conformance certification;
-- target-side delivery attestation.
+Five of the six fault families remain **protocol-only** with respect to agent behavior:
 
-Protocol observation is therefore not promoted to agent `PASS`, `FAIL`, release `ACCEPT`, or any equivalent behavioral conclusion.
+- `tool_metadata_poison`;
+- `tool_error`;
+- `tool_list_stale_cache`;
+- `tool_schema_drift`;
+- `tool_identity_drift`.
 
-See [MCP Protocol Fault Laboratory](MCP_LAB.md).
+The one exception is not an exception to the trust model; it is an explicit additional bridge contract for `tool_result_poison`.
+
+## Controlled MCP `TOOL_RESULT_POISON` → OpenAI agent bridge
+
+`OpenAIAgentsMCPToolResultAdapter` exercises one exact deterministic path through a fresh official MCP stdio server and the pinned OpenAI Agents SDK.
+
+The bridge requires:
+
+- a `TOOL_RESULT_POISON` fault only;
+- fresh `MCPServerStdio` process/session state per trial;
+- base Agent with no preconfigured MCP servers;
+- no local tool collision with the target;
+- unprefixed MCP target naming for unambiguous identity;
+- negotiated protocol `2026-07-28` from the connected MCP session;
+- exactly one behavioral target call;
+- one successful target text result creating a valid `MCPFaultReceipt`;
+- one exact normalized OpenAI target `TOOL_REQUEST` with stable call ID;
+- one exact matching `TOOL_RESULT`;
+- logical output equivalence across the protocol result and SDK model-visible tool result;
+- one `MCPAgentToolResultReceipt` binding scenario, protocol receipt, tool, call ID, and agent output;
+- `PROTOCOL_DELIVERY` ordered before the matching `TOOL_RESULT`;
+- same-argument benign recovery through the same still-connected MCP session **after** the agent run.
+
+The bridge therefore establishes a narrow evaluation precondition: the controlled MCP result and the result attributed to that exact agent tool call are the same evaluated delivery fact.
+
+It does **not** establish that the agent behaved safely merely because delivery closed. Policy and outcome oracles still decide behavioral PASS/FAIL.
+
+### The bridge is not generic MCP assurance
+
+The implemented bridge does not claim:
+
+- agent behavior for MCP metadata poison, `ToolError`, cache drift, schema drift, or identity drift;
+- arbitrary multi-call or retry plans;
+- multiple controlled MCP servers or parallel target calls;
+- OpenAI hosted MCP interception;
+- arbitrary third-party MCP servers;
+- remote/Internet MCP fidelity;
+- generic stdio transport correctness, subprocess isolation, or transport-chaos assurance beyond the exact deterministic fixture path;
+- TLS, DNS, proxy, gateway, load-balancer, service-mesh, latency, disconnect, retry, or packet-fault behavior;
+- production authorization or identity-provider behavior;
+- target-side cryptographic delivery attestation.
+
+The bridge test uses `agents.testing.ScriptedModel`. It does not make a live provider call.
+
+### Raw protocol receipt still is not a verdict
+
+The distinction is:
+
+```text
+MCPFaultReceipt only
+    = verified protocol observation
+
+MCPFaultReceipt
++ exact agent call identity
++ exact matching agent result
++ output equivalence
++ same-session recovery
+    = verified MCPAgentToolResultReceipt / PROTOCOL_DELIVERY
+
+verified PROTOCOL_DELIVERY
++ deterministic subject evidence
+    = eligible for policy/outcome grading
+```
+
+Protocol evidence is necessary for this path but never sufficient for behavioral conclusions by itself.
+
+---
 
 ## Loopback MCP resource-server authorization is not OAuth issuance assurance
 
-The repository includes `MCPRemoteAuthLab`, which binds a real `127.0.0.1` TCP socket, runs Uvicorn with an MCP Streamable HTTP app, exercises resource-server authorization, fetches RFC 9728 protected-resource metadata, and completes an authenticated MCP request through the official client transport.
+`MCPRemoteAuthLab` binds a real `127.0.0.1` TCP socket, runs Uvicorn with an MCP Streamable HTTP app, exercises resource-server authorization, fetches RFC 9728 protected-resource metadata, and completes an authenticated MCP request through the official client transport.
 
-The deterministic matrix covers:
+The deterministic matrix covers missing/unknown/expired/wrong-issuer/wrong-resource bearer rejection, missing-scope 403, and successful protected discovery/call for a valid scoped bearer.
 
-- missing token → 401;
-- unknown token → 401;
-- expired token → 401;
-- wrong issuer → deterministic verifier rejects → 401;
-- wrong resource → deterministic verifier rejects → 401;
-- authenticated token missing a required scope → MCP SDK authorization middleware returns 403;
-- valid scoped bearer → protected `tools/list` and `tools/call` succeed.
+Issuer/resource binding belongs to the deterministic `TokenVerifier`; bearer/expiry and required-scope handling are credited to the MCP SDK middleware.
 
-The laboratory deliberately separates control ownership: issuer/resource binding belongs to its deterministic `TokenVerifier`; bearer/expiry and required-scope handling belong to the MCP SDK middleware. RFC 9728 metadata is fetched over HTTP rather than inferred from configuration.
+`MCPRemoteAuthReceipt` binds the exact content-addressed policy and canonical observation. Deterministic bearer values are excluded from serialized result/receipt evidence.
 
-`MCPRemoteAuthReceipt` binds the exact content-addressed policy and complete canonical observation. Actual deterministic bearer values are excluded from serialized result/receipt evidence.
+This laboratory does not itself establish authorization-code/PKCE, client registration, token issuance, token introspection, agent behavior, or release acceptance.
 
-`MCPRemoteAuthLab` itself does **not** establish authorization-code/PKCE, client registration, token issuance, or token introspection. Those properties are exercised by the separate `MCPOAuthFlowLab` rather than retroactively attributed to this lower-level resource-server laboratory.
-
-It also does not establish:
-
-- real JWT signature/JWKS verification or production token formats;
-- issuer compromise resistance or arbitrary issuer federation/discovery;
-- DPoP, mTLS, certificate binding, hardware-backed keys, proof-of-possession, refresh/revocation lifecycle, or replay detection;
-- production credential rotation/storage or distributed token caches;
-- cross-service credential-reuse resistance beyond the exact deterministic resource binding tested by the fixture;
-- TLS, DNS, reverse proxies, load balancers, gateways, service meshes, cross-host routing, Internet transport, or hosted MCP fidelity;
-- malformed HTTP, disconnect, timeout, retry, rate-limit, packet, or transport-chaos coverage;
-- production IAM or authorization-server/IdP assurance;
-- agent behavior after auth success or rejection.
-
-Calling this boundary `streamable-http-loopback` is intentional. It must not be described as Internet or production remote-auth assurance.
-
-See [MCP Remote Authorization](MCP_REMOTE_AUTH.md).
+It also does not establish production JWT/JWKS verification, DPoP/mTLS, refresh/revocation, replay detection, Internet transport, hosted MCP fidelity, production IAM, or authorization-server/IdP assurance.
 
 ## Separated loopback MCP OAuth flow is not production identity assurance
 
-The repository now also includes `MCPOAuthFlowLab`, which uses the official MCP `OAuthClientProvider` and two independent pre-bound loopback origins for the authorization server and resource server.
+`MCPOAuthFlowLab` uses the official MCP `OAuthClientProvider` and independent loopback authorization-server/resource-server origins.
 
-The deterministic flow closes all of these observations before an `MCPOAuthFlowReceipt` exists:
+The deterministic flow closes RFC 9728 protected-resource discovery, authorization-server metadata, compatibility Dynamic Client Registration fallback, OAuth state, PKCE `S256`, exact RFC 9207 issuer validation, RFC 8707 resource binding, authorization-code exchange, opaque access-token issuance, authenticated HTTP introspection, fail-closed introspection policy, protected MCP use, and stored-authorization reuse on reconnect.
 
-- RFC 9728 protected-resource discovery;
-- authorization-server metadata discovery;
-- Dynamic Client Registration when no client record is stored, as a compatibility fallback;
-- OAuth `state`;
-- PKCE `S256`;
-- exact RFC 9207 authorization-response issuer validation;
-- RFC 8707 resource binding through authorization and token state;
-- authorization-code exchange and deterministic opaque access-token issuance;
-- authenticated HTTP token introspection from the separate resource-server origin;
-- fail-closed issuer/resource/scope/expiry/subject checks on introspection output;
-- protected MCP `tools/list` and `tools/call` through the introspection-backed resource server;
-- reconnect reuse without a second registration, authorization, or token exchange.
+The resource-server verifier does not directly consult the authorization server's in-memory token table. Authorization code, access token, and introspection secret are excluded from serialized evidence.
 
-The resource-server verifier does not directly consult the authorization server's in-memory token table. The authorization code, access token, and introspection secret are excluded from serialized probe/receipt evidence.
+This remains a deterministic loopback laboratory. It does not establish third-party/production IdP behavior, CIMD, enterprise-managed authorization, production JWT/JWKS/federation, DPoP/mTLS, refresh/revocation/replay lifecycle, browser consent/anti-phishing properties, production RFC 7662 interoperability, production IAM/tenant isolation, agent behavior after OAuth success/failure, or release acceptance from OAuth evidence alone.
 
-This is materially stronger than the lower-level resource-server matrix, but it remains a deterministic loopback laboratory. It does **not** establish:
+Dynamic Client Registration is compatibility fallback behavior, not the preferred modern enrollment claim.
 
-- a third-party or production authorization server / identity provider;
-- Client ID Metadata Documents (CIMD) enrollment;
-- Enterprise Managed Authorization or SEP-990 identity-assertion flows;
-- production JWT/JWKS signature verification, asymmetric token formats, key rotation, federation, or arbitrary IdP interoperability;
-- DPoP, mTLS, certificate binding, hardware-backed keys, or other proof-of-possession mechanisms;
-- refresh-token issuance/rotation, revocation propagation, replay detection, production credential rotation/storage, or distributed token caches;
-- production RFC 7662 interoperability beyond the exact deterministic authenticated introspection contract;
-- browser/user-consent UX, anti-phishing properties, or production authorization-server compromise resistance;
-- TLS, DNS, reverse proxies, load balancers, gateways, service meshes, cross-host routing, Internet transport, or hosted MCP fidelity;
-- production IAM, tenant-isolation, or organization-authorization semantics;
-- agent behavior after OAuth success or failure;
-- release acceptance from OAuth evidence alone.
-
-Dynamic Client Registration is intentionally described as **compatibility fallback**, not the preferred modern enrollment model. The repository does not implement CIMD.
-
-See [MCP OAuth Flow Laboratory](MCP_OAUTH_FLOW.md).
+---
 
 ### Approval requests are not approvals
 
@@ -183,17 +199,17 @@ SDK `ToolApprovalItem` observations normalize as `APPROVAL_REQUEST`, never `APPR
 
 ### No semantic/model grader yet
 
-The current framework does not use a model-as-judge. Deterministic state and policy authority remain primary. A future semantic grader requires calibration, provenance, explicit failure semantics, and non-overriding precedence relative to critical deterministic failures.
+The framework does not currently use a model-as-judge. Deterministic state and policy authority remain primary. A future semantic grader requires calibration, provenance, explicit failure semantics, and non-overriding precedence relative to critical deterministic failures.
 
 ### Delivery and protocol receipts are not target-side attestation
 
-A valid OpenAI attack receipt proves consistency relative to the trusted evaluator's controlled observation. `MCPFaultReceipt` proves consistency relative to the official-client protocol observation. `MCPRemoteAuthReceipt` proves consistency relative to the trusted loopback resource-server observation. `MCPOAuthFlowReceipt` proves consistency relative to the trusted two-origin loopback OAuth observation.
+A valid OpenAI attack receipt proves consistency relative to the trusted evaluator's controlled observation. `MCPFaultReceipt` proves consistency relative to a trusted protocol observation. `MCPAgentToolResultReceipt` proves consistency between one verified MCP result and one exact normalized OpenAI agent call/result boundary. `MCPRemoteAuthReceipt` and `MCPOAuthFlowReceipt` prove their respective deterministic loopback observations.
 
-None is independent cryptographic proof that an arbitrary remote target consumed content, a third-party production issuer minted a token correctly, or a deployed agent respected policy.
+None is independent cryptographic proof that an arbitrary remote target consumed content, a production issuer minted a token correctly, or a deployed agent respected policy.
 
 Control-plane identities are labels/content identities, not authenticated signer identities. Receipt roots are SHA-256 integrity values, not signatures, MACs, trusted timestamps, or hardware attestation.
 
-The public `MCPRemoteAuthProbeResult` and `MCPOAuthFlowProbeResult` envelopes are diagnostic result models, not persisted authenticated evidence envelopes. Their embedded receipt identities are validated, but independently changing an outer diagnostic field does not cryptographically re-bind that field to the receipt. Callers must not treat those outer fields as authenticated receipt content unless a future explicit persisted-envelope contract adds and verifies that binding.
+The public `MCPRemoteAuthProbeResult` and `MCPOAuthFlowProbeResult` envelopes are diagnostic result models, not persisted authenticated evidence envelopes. Their embedded receipt identities are validated, but independently changing an outer diagnostic field does not cryptographically re-bind that field to the receipt.
 
 ### Local persistence is not hostile-writer authentication
 
@@ -203,7 +219,7 @@ The repository does not claim signatures/MACs, key management, trusted timestamp
 
 ### Replay is historical regrading, not re-execution
 
-`EvidenceReplayAdapter` requires exact trial/subject/scenario identity and can reapply deterministic grading to recorded evidence. It does not rerun providers, tools, sessions, resources, handoffs, environment injectors, MCP protocol probes, resource-server auth probes, OAuth-flow probes, or external state readers and cannot establish fresh delivery or fresh authorization.
+`EvidenceReplayAdapter` requires exact trial/subject/scenario identity and can reapply deterministic grading to recorded evidence. It does not rerun providers, tools, sessions, resources, handoffs, environment injectors, the MCP stdio bridge, protocol probes, authorization probes, OAuth flows, or external state readers and cannot establish fresh delivery or fresh authorization.
 
 ### Assurance-report validation is not signed attestation
 
@@ -223,26 +239,28 @@ Resource scope uses string-prefix matching after adapter normalization. Real dep
 
 ### No sandbox-isolation claim
 
-The repository currently executes no target-controlled arbitrary shell/code as an environment fault. Any future executor that does must implement and validate process, filesystem, and network containment separately.
+The repository currently executes only controlled deterministic fixture subprocesses; it does not claim containment for arbitrary target-controlled code. Any future arbitrary-code executor must separately validate process, filesystem, and network isolation.
 
 ## Audited implementation checkpoint
 
-Audited implementation source checkpoint `ed0b1f9415e49b49a23c77c9372a5d09f70682fc`, CI run `33881346071`:
+Audited merged implementation source checkpoint `d98f9ca1feb1179504cd2181295a73936fd0ae6c`, CI run `33898508697`:
 
-- deterministic core: **330 passed, 23 deselected**;
-- branch coverage: **93.61%** against the 90% gate;
-- strict mypy: **0 issues across 40 source files**;
-- deterministic OpenAI SDK suite: **11/11 passed**;
+- deterministic core: **349 passed, 27 deselected**;
+- branch coverage: **93.79%** against the 90% gate;
+- strict mypy: **0 issues across 42 source files**;
+- deterministic OpenAI SDK suite, including controlled MCP stdio bridge coverage: **15/15 passed**;
 - deterministic MCP protocol suite: **6/6 passed**;
 - deterministic MCP remote-auth suite: **3/3 passed**;
 - deterministic MCP OAuth-flow suite: **3/3 passed**;
 - Python **3.11 minimum / 3.14 latest** quality jobs, Ruff, formatter, Bandit, dependency audit, package integrity, and all **7/7 CI jobs**: green;
 - dependency audit reported **no known vulnerabilities**; the project package itself is skipped because it is not published on PyPI.
 
-This checkpoint identifies the audited code revision before documentation-only synchronization. Documentation-only synchronization commits are validated separately by their own full PR CI and do not relabel the underlying implementation evidence.
+This checkpoint identifies the audited merged implementation revision before this documentation-only synchronization. The documentation change must pass its own full PR CI; it does not retroactively relabel implementation evidence.
 
 ## Why these boundaries matter
 
-Agent evaluation is unusually vulnerable to false confidence because outputs can look persuasive while surrounding state, authority, evaluator preconditions, protocol discovery, authorization boundaries, or identity-flow assumptions are wrong. The same discipline applies to this framework: documentation, badges, hashes, attack labels, receipts, protocol observations, HTTP statuses, OAuth responses, and traces are not substitutes for the control they describe.
+Agent evaluation is unusually vulnerable to false confidence because outputs can look persuasive while surrounding state, authority, evaluator preconditions, protocol discovery, authorization boundaries, identity-flow assumptions, or cross-domain correlation are wrong.
+
+The same discipline applies to this framework: documentation, badges, hashes, attack labels, protocol receipts, bridge receipts, HTTP statuses, OAuth responses, and traces are not substitutes for the exact control they describe.
 
 Capabilities move out of this document only after implementation, deterministic evidence, and documentation review make the stronger claim true.

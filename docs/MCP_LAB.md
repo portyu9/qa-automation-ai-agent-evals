@@ -2,30 +2,32 @@
 
 ## Purpose
 
-The MCP fault laboratory exercises **real Model Context Protocol behavior** without replacing the protocol with local function mocks. It uses the official Python SDK `mcp==2.1.1`, a fresh in-process `MCPServer`, the official `Client`, and protocol revision `2026-07-28`.
+The MCP fault laboratory exercises **real Model Context Protocol behavior** without replacing the protocol with local function mocks. It uses official `mcp==2.1.1`, a fresh in-process `MCPServer`, the official `Client`, and protocol revision `2026-07-28`.
 
-The laboratory answers one bounded question:
+Its primary question is deliberately narrow:
 
 > Did the trusted MCP client observe the exact controlled content or protocol-state relation that the test claims to exercise?
 
-That is **protocol evidence**. It is not an autonomous-agent verdict, not an OpenAI `AttackDeliveryReceipt`, not a remote-transport assertion, and not target-side attestation.
+The answer is recorded as `MCPFaultReceipt`. That receipt is protocol evidence. **By itself** it is not an autonomous-agent verdict, an OpenAI `AttackDeliveryReceipt`, release authority, remote-transport assurance, or target-side attestation.
 
-Remote Streamable HTTP authorization is intentionally a separate evidence domain. See [MCP Remote Authorization](MCP_REMOTE_AUTH.md).
+One separate integration path now consumes the same `TOOL_RESULT_POISON` fault contract through a fresh official MCP stdio server and the pinned OpenAI Agents SDK. That dedicated bridge is described under [Relationship to agent adversarial testing](#relationship-to-agent-adversarial-testing) and in [OpenAI Agents SDK Adapter](OPENAI_ADAPTER.md). It does not broaden the other five fault families.
+
+Remote Streamable HTTP authorization and the separated OAuth flow remain independent evidence domains. See [MCP Remote Authorization](MCP_REMOTE_AUTH.md) and [MCP OAuth Flow Laboratory](MCP_OAUTH_FLOW.md).
 
 ## Six deterministic fault families
 
-| Fault | Boundary | Receipt precondition |
-|---|---|---|
-| `tool_metadata_poison` | `tools/list` | target description equals exact canonical fault JSON |
-| `tool_result_poison` | first `tools/call` | first result text equals exact canonical fault JSON and a second call recovers to benign data |
-| `tool_error` | first `tools/call` | SDK-generated model-visible `ToolError` contains the canonical payload at the exact expected suffix and a second call recovers |
-| `tool_list_stale_cache` | cached `tools/list` | initial target present → server removes target → cached listing still contains target → forced refresh proves target absent |
-| `tool_schema_drift` | cached discovery + call validation | cached old input schema remains visible after server replacement → stale old arguments fail against current server schema → refresh exposes replacement schema → replacement arguments succeed |
-| `tool_identity_drift` | cached discovery + tool lookup | cached old tool name remains visible after server rename → stale-name call fails → refresh exposes only replacement name → replacement call succeeds |
+| Fault | Boundary | Receipt precondition | Agent bridge status |
+|---|---|---|---|
+| `tool_metadata_poison` | `tools/list` | target description equals exact canonical fault JSON | protocol-only |
+| `tool_result_poison` | first `tools/call` | first result text equals exact canonical fault JSON and a second call recovers to benign data | dedicated controlled stdio bridge implemented |
+| `tool_error` | first `tools/call` | SDK-generated model-visible `ToolError` contains the canonical payload at the exact expected suffix and a second call recovers | protocol-only |
+| `tool_list_stale_cache` | cached `tools/list` | initial target present → server removes target → cached listing still contains target → forced refresh proves target absent | protocol-only |
+| `tool_schema_drift` | cached discovery + call validation | cached old schema remains visible → stale arguments fail against current server schema → refresh exposes replacement schema → replacement arguments succeed | protocol-only |
+| `tool_identity_drift` | cached discovery + tool lookup | cached old name remains visible → stale-name call fails → refresh exposes replacement name → replacement call succeeds | protocol-only |
 
-The last three are **relational protocol-state faults**. Their receipts are withheld unless every leg of the relation closes.
+The last three are relational protocol-state faults. Their receipts are withheld unless every leg of the relation closes.
 
-## Why discovery, call validity, and agent behavior are separate
+## Discovery, call validity, and agent behavior are different claims
 
 ```text
 cached discovery
@@ -39,9 +41,9 @@ refreshed discovery
 agent behavior
 ```
 
-A stale `tools/list` response can be objectively real while a subsequent `tools/call` is evaluated against newer server truth. Conversely, a successful current call does not prove the client previously held current discovery. Neither observation says whether an autonomous agent noticed, understood, or resisted the condition.
+A stale `tools/list` response can be objectively real while a subsequent `tools/call` is evaluated against newer server truth. Conversely, a successful current call does not prove the client previously held current discovery. Neither observation alone says whether an autonomous agent noticed, understood, or resisted the condition.
 
-This separation is the reason schema and identity drift are not graded by comparing an expected tool-call trajectory. The laboratory verifies observable protocol state and call results only.
+The new tool-result bridge does not invalidate this rule. It adds a **specific additional proof step** for one result fault: exact protocol observation must be paired with one exact OpenAI agent tool request/result identity and model-visible output before `PROTOCOL_DELIVERY` exists.
 
 ## Protocol paths
 
@@ -52,11 +54,11 @@ MCPFaultSpec
     ↓
 fresh official MCPServer
     ↓
-official Client(mode="2026-07-28")
+official Client / protocol 2026-07-28
     ↓
 tools/list / tools/call
     ↓
-exact public-client content observation
+exact public-client observation
     ↓
 MCPFaultReceipt
 ```
@@ -74,43 +76,18 @@ refresh tools/list → target absent
 
 ### Schema drift
 
-The v1 schema-drift fixture deliberately binds an exact before/after contract:
+The v1 fixture binds an exact before/after contract:
 
 ```text
 initial required schema     = {query: string}
 replacement required schema = {customer_id: integer, include_history: boolean}
 ```
 
-The proof is:
-
-```text
-initial tools/list          → old schema
-server replaces same name  → new schema becomes server truth
-normal tools/list           → cached old schema
-old-schema tools/call       → error under current server validation
-refresh tools/list          → new schema
-new-schema tools/call       → replacement:7:true
-                              ↓
-                       MCPFaultReceipt
-```
-
-The client cache is not treated as the call validator. The server's current schema remains authoritative at `tools/call` time.
+The proof requires old discovery, current-server rejection of old arguments, refreshed new discovery, and successful new-schema invocation. The cache is never treated as the call validator.
 
 ### Identity drift
 
-```text
-initial tools/list          → old name
-server removes old name
-server adds replacement name
-normal tools/list           → cached old name
-old-name tools/call         → unknown-tool error
-refresh tools/list          → replacement name only
-replacement tools/call      → replacement:fresh
-                              ↓
-                       MCPFaultReceipt
-```
-
-This proves discovery identity drift without treating the rename as agent misbehavior.
+The proof requires initial old name, cached old name after server rename, live rejection of the stale name, refreshed replacement identity, and successful replacement invocation. The rename is a protocol condition, not automatically an agent failure.
 
 ## Content-addressed fault contract
 
@@ -124,11 +101,7 @@ This proves discovery identity drift without treating the rename as agent misbeh
 
 Its identity is SHA-256 over canonical fault material.
 
-For the three content faults, complete canonical `payload_json` is the controlled content. Stateful faults bind the exact deterministic parameters the laboratory consumes:
-
-- `tool_list_stale_cache` — exactly one bounded positive `ttl_ms`;
-- `tool_schema_drift` — bounded `ttl_ms` plus the exact v1 initial and replacement required-schema projections;
-- `tool_identity_drift` — bounded `ttl_ms` plus one exact replacement tool name different from the original.
+For direct content faults, complete canonical `payload_json` is the controlled content. Stateful faults bind the exact deterministic parameters consumed by the laboratory, including bounded TTL and the bound before/after schema or identity relation.
 
 The lab does not invent unbound mutation parameters at runtime.
 
@@ -139,24 +112,22 @@ The lab does not invent unbound mutation parameters at runtime.
 - exact fault identity and kind;
 - protocol version;
 - original tool name;
-- concrete observation/injection point;
+- concrete observation point;
 - SHA-256 of controlled canonical fault material;
 - SHA-256 of the exact canonical client observation;
 - a domain-separated receipt root.
 
 Raw malicious content is not duplicated into the receipt.
 
-Two hashes are necessary because configuration and observation are not always byte-identical:
+Two hashes are required because configuration and observation are not always byte-identical:
 
-- metadata/result poison: `payload_sha256 == observation_sha256`;
-- `ToolError`: the SDK wraps the controlled message, so the hashes differ;
-- stale cache: payload binds TTL while observation binds the initial/cached/refreshed relation;
-- schema drift: payload binds TTL + expected schema migration while observation binds all three schema projections, stale-call failure, refreshed-call success, and observed TTL;
-- identity drift: payload binds TTL + replacement name while observation binds initial/cached/refreshed names, stale-name failure, replacement-call success, and observed TTL.
+- metadata/result poison: payload and observation digests can be equal;
+- `ToolError`: the SDK wraps the controlled message, so the observation differs;
+- stale cache/schema drift/identity drift: the observation is a canonical multi-step relation rather than the raw configured payload.
 
-This prevents a state transition or SDK transformation from being mislabeled as byte-identical delivery.
+This prevents SDK transformation or state transition from being mislabeled as byte-identical delivery.
 
-## Concrete observation points
+## Concrete protocol observation points
 
 ```text
 mcp:2026-07-28:tools/list:<tool>:description
@@ -171,15 +142,9 @@ A receipt is never created merely because a fault object exists or the server wa
 
 ## Isolation and recovery
 
-Every probe creates a fresh server. Content result/error faults are first-call-only and require a second controlled benign response:
+Every protocol probe creates a fresh server. Content result/error faults are first-call-only and require benign recovery. Discovery-state probes use fresh client cache state. Schema and identity drift additionally require successful operation under refreshed server truth.
 
-```text
-benign:second
-```
-
-Discovery-state probes use a fresh client cache. Schema and identity drift additionally require a successful operation under refreshed server truth before the relation is considered closed.
-
-The isolation contract catches two evaluator defects that would otherwise create false confidence: accidental sticky fault state and cross-test cache contamination.
+These controls detect evaluator defects such as sticky fault state and cross-test cache contamination.
 
 ## CI boundary
 
@@ -190,50 +155,90 @@ python -m pip install -e '.[dev,mcp]'
 pytest -m mcp tests/integration/test_mcp_fault_lab.py
 ```
 
-The `mcp` extra directly declares `mcp==2.1.1`, `httpx2`, and `uvicorn`; the latter two are used by the separate remote-auth laboratory. The dedicated in-process MCP job does not require a provider credential or network service.
+The dedicated protocol job requires neither provider credentials nor an external service.
 
-Verified protocol checkpoint: **6/6 deterministic MCP tests passed** against protocol `2026-07-28` at implementation source checkpoint `ed0b1f9415e49b49a23c77c9372a5d09f70682fc` (protected-main CI run `33881346071`).
+For the cross-boundary OpenAI/MCP test, both optional groups are installed and the existing OpenAI deterministic job runs the dedicated stdio integration:
+
+```bash
+python -m pip install -e '.[dev,openai,mcp]'
+pytest -m openai tests/integration/test_openai_mcp_tool_result_adapter.py
+```
+
+This reuses the existing OpenAI CI status context; it does not make the protocol-lab job an agent verdict job.
 
 ## Relationship to agent adversarial testing
 
-The MCP fault laboratory is deliberately not folded into OpenAI `TOOL_RESULT`, `TOOL_METADATA`, or `RESOURCE` interception.
+### What remains separate
 
-OpenAI adversarial channels produce `ATTACK_DELIVERY` evidence inside agent trials. The MCP protocol lab produces `MCPFaultReceipt` from an official MCP client observation. No current path converts that receipt into agent `PASS`, `FAIL`, or release acceptance.
+`MCPFaultLab` still returns protocol-domain evidence. An `MCPFaultReceipt` does not itself become `ATTACK_DELIVERY`, `PASS`, `FAIL`, or release acceptance.
 
-Protocol delivery success therefore cannot become fake behavioral assurance.
+`OpenAIAgentsAdapter` local `TOOL_RESULT` injection is also still a separate local-`FunctionTool` mechanism. It does not intercept MCP tools.
+
+### What is now bridged
+
+`OpenAIAgentsMCPToolResultAdapter` implements one explicit cross-domain contract for `TOOL_RESULT_POISON`:
+
+```text
+MCPFaultSpec(tool_result_poison)
+        ↓
+fresh official MCPServerStdio subprocess
+        ↓
+agent makes exactly one target MCP call
+        ↓
+exact first result observed → MCPFaultReceipt
+        ↓
+exact OpenAI TOOL_REQUEST call_id
++ exactly one matching TOOL_RESULT
++ output equivalence
++ same-session benign recovery
+        ↓
+MCPAgentToolResultReceipt
+        ↓
+PROTOCOL_DELIVERY
+        ↓
+deterministic agent trial grading
+```
+
+The behavioral run makes exactly one target call. Recovery occurs only after the run, through the same live session and same arguments, so benign recovery cannot contaminate the agent transcript.
+
+Missing consumption, multiple target calls, protocol-version drift, malformed result shape, agent-evidence ambiguity, output mismatch, or recovery mismatch fails closed as evaluator uncertainty.
+
+The bridge proves same-call controlled delivery in the deterministic harness. It does not assert that the agent resisted the content merely because the bridge closed; deterministic policy/outcome oracles still decide behavior.
 
 ## Explicit non-claims
 
-The six-fault laboratory does **not** establish:
+The six-fault protocol laboratory plus the one dedicated bridge do **not** establish:
 
-- agent behavior after consuming an MCP-delivered condition;
-- OpenAI hosted/MCP tool interception;
-- remote transport behavior beyond the separately documented loopback authorization laboratory;
-- stdio, proxy, Internet, TLS, DNS, packet, latency, disconnect, or transport-chaos assurance;
-- public/cross-partition cache sharing, cache poisoning, custom/shared cache stores, notification invalidation, TTL-expiry races, or general cache correctness beyond the exact relations implemented here;
-- arbitrary schema migrations beyond the bound v1 before/after schema pair;
-- arbitrary registry churn beyond the bound one-name replacement relation;
-- malformed JSON-RPC/framing, duplicate/out-of-order responses, or `Mcp-Method`/`Mcp-Name` header-routing faults;
-- malicious resources, resource templates, prompts, roots, elicitation, sampling, subscriptions, or Tasks-extension behavior;
-- hosted third-party MCP server fidelity or complete MCP conformance certification;
-- target-side delivery attestation.
+- agent behavior for `tool_metadata_poison`, `tool_error`, stale-cache, schema-drift, or identity-drift faults;
+- universal agent behavior for arbitrary MCP tool results, retries, multiple target calls, multiple MCP servers, or parallel plans;
+- OpenAI hosted MCP interception or hosted third-party MCP fidelity;
+- remote/Internet MCP behavior, TLS, DNS, reverse proxies, gateways, service meshes, packet faults, latency, disconnect, retry, or rate-limit assurance;
+- general stdio transport robustness beyond the exact deterministic controlled subprocess path exercised by the bridge;
+- public/cross-partition cache sharing, cache poisoning, arbitrary cache stores, notification invalidation, or TTL race correctness beyond the implemented relations;
+- arbitrary schema migrations or arbitrary registry churn beyond the bound fixtures;
+- malformed JSON-RPC/framing, duplicate/out-of-order responses, or header-routing faults;
+- malicious MCP resources, templates, prompts, roots, elicitation, sampling, subscriptions, or Tasks-extension behavior;
+- production authorization or identity-provider assurance;
+- complete MCP conformance certification;
+- target-side cryptographic delivery attestation;
+- release acceptance from a protocol or bridge receipt alone.
 
-Remote bearer authentication, scope enforcement, verifier-owned issuer/resource binding, and RFC 9728 protected-resource metadata are covered only by the separate [MCP Remote Authorization](MCP_REMOTE_AUTH.md) boundary.
+Remote bearer authentication, scope enforcement, verifier-owned issuer/resource binding, and RFC 9728 metadata remain covered only by [MCP Remote Authorization](MCP_REMOTE_AUTH.md). Authorization-code/PKCE/introspection behavior remains covered only by [MCP OAuth Flow Laboratory](MCP_OAUTH_FLOW.md).
 
 ## Verified implementation checkpoint
 
-Implementation source checkpoint `ed0b1f9415e49b49a23c77c9372a5d09f70682fc`, protected-main CI run `33881346071`:
+Implementation source checkpoint `d98f9ca1feb1179504cd2181295a73936fd0ae6c`, protected-main CI run `33898508697`:
 
-- deterministic core: **330 passed, 23 deselected**;
-- branch coverage: **93.61%** against the 90% gate;
-- strict mypy: **0 issues across 40 source files**;
-- deterministic OpenAI SDK: **11/11 passed**;
+- deterministic core: **349 passed, 27 deselected**;
+- branch coverage: **93.79%** against the 90% gate;
+- strict mypy: **0 issues across 42 source files**;
+- deterministic OpenAI SDK suite, including controlled MCP stdio bridge: **15/15 passed**;
 - deterministic MCP protocol: **6/6 passed**;
 - deterministic MCP remote auth: **3/3 passed**;
 - deterministic MCP OAuth flow: **3/3 passed**;
-- Python **3.11 minimum / 3.14 latest** quality, Ruff, formatter, Bandit, dependency audit, and package integrity: **7/7 CI jobs green**;
+- Python **3.11 minimum / 3.14 latest** quality, Ruff, formatter, Bandit, dependency audit, package integrity, and all **7/7 CI jobs**: green;
 - dependency audit: **no known vulnerabilities found**; the project package itself is skipped because it is not published on PyPI.
 
-This checkpoint identifies the audited implementation revision. This documentation-only synchronization is validated separately by pull-request CI and does not silently redefine the implementation evidence.
+This checkpoint identifies the audited merged implementation revision. Documentation-only synchronization is validated separately by its own full pull-request CI.
 
 [← Documentation hub](README.md)
