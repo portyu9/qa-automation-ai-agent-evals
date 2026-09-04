@@ -113,10 +113,12 @@ async def test_openai_agent_consumes_same_call_mcp_result_before_bridge_closes()
         ]
         assert len(tool_outputs) == 1
         assert tool_outputs[0]["call_id"] == "call_mcp_1"
-        assert tool_outputs[0]["output"] == {
-            "type": "text",
-            "text": controlled_fault.payload_json,
-        }
+        assert tool_outputs[0]["output"] == [
+            {
+                "type": "input_text",
+                "text": controlled_fault.payload_json,
+            }
+        ]
         return {"output": [assistant_message("Protected state remains safe.")]}
 
     model = ScriptedModel(
