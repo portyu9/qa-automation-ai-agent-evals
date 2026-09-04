@@ -64,6 +64,65 @@ class SubjectFingerprint(BaseModel):
         return _sha256_json(self.model_dump(mode="python", exclude_none=True))
 
 
+class HandoffAuthorityGrant(BaseModel):
+    """Directed authority granted to one agent after one exact handoff transition.
+
+    A grant may preserve or reduce tool/resource/budget authority and may add approval
+    requirements. It never removes constraints inherited from the source authority.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    source_agent: str = Field(min_length=1, max_length=256)
+    target_agent: str = Field(min_length=1, max_length=256)
+    allowed_tools: frozenset[str] = frozenset()
+    allowed_resource_prefixes: tuple[str, ...] = ()
+    additional_approval_required_tools: frozenset[str] = frozenset()
+    max_tool_calls: int = Field(default=32, ge=0, le=10_000, strict=True)
+    max_handoffs: int = Field(default=8, ge=0, le=1_000, strict=True)
+
+    @field_validator("source_agent", "target_agent")
+    @classmethod
+    def validate_agent_identity(cls, value: str) -> str:
+        if value != value.strip():
+            raise ValueError("agent identities must not contain surrounding whitespace")
+        return value
+
+    @field_validator("allowed_tools", "additional_approval_required_tools")
+    @classmethod
+    def reject_empty_tool_names(cls, value: frozenset[str]) -> frozenset[str]:
+        if any(not name.strip() for name in value):
+            raise ValueError("tool identities must be non-empty strings")
+        return value
+
+    @field_validator("allowed_resource_prefixes")
+    @classmethod
+    def canonicalize_resource_prefixes(cls, value: tuple[str, ...]) -> tuple[str, ...]:
+        return _canonical_resource_prefixes(value)
+
+    @model_validator(mode="after")
+    def validate_grant(self) -> HandoffAuthorityGrant:
+        if self.source_agent == self.target_agent:
+            raise ValueError("handoff authority must transfer to a distinct target agent")
+        if not self.additional_approval_required_tools <= self.allowed_tools:
+            missing = self.additional_approval_required_tools - self.allowed_tools
+            raise ValueError(
+                "additional approval-required tools must also be delegated: "
+                f"{sorted(missing)!r}"
+            )
+        return self
+
+    @property
+    def transition(self) -> tuple[str, str]:
+        return (self.source_agent, self.target_agent)
+
+    def authorizes_tool(self, tool_name: str) -> bool:
+        return tool_name in self.allowed_tools
+
+    def authorizes_resource(self, resource: str) -> bool:
+        return any(resource.startswith(prefix) for prefix in self.allowed_resource_prefixes)
+
+
 class AuthorityPolicy(BaseModel):
     """Fail-closed authority granted to the evaluated agent for one scenario."""
 
@@ -76,6 +135,8 @@ class AuthorityPolicy(BaseModel):
     max_turns: int = Field(default=16, ge=1, le=10_000, strict=True)
     max_tool_calls: int = Field(default=32, ge=0, le=10_000, strict=True)
     max_handoffs: int = Field(default=8, ge=0, le=1_000, strict=True)
+    root_agent: str | None = Field(default=None, min_length=1, max_length=256)
+    handoff_grants: tuple[HandoffAuthorityGrant, ...] = ()
 
     @field_validator("allowed_tools", "forbidden_tools", "approval_required_tools")
     @classmethod
@@ -87,19 +148,93 @@ class AuthorityPolicy(BaseModel):
     @field_validator("allowed_resource_prefixes")
     @classmethod
     def canonicalize_resource_prefixes(cls, value: tuple[str, ...]) -> tuple[str, ...]:
-        if any(not prefix.strip() for prefix in value):
-            raise ValueError("resource prefixes must be non-empty strings")
-        return tuple(sorted(set(value)))
+        return _canonical_resource_prefixes(value)
+
+    @field_validator("root_agent")
+    @classmethod
+    def validate_root_agent(cls, value: str | None) -> str | None:
+        if value is not None and value != value.strip():
+            raise ValueError("root agent identity must not contain surrounding whitespace")
+        return value
+
+    @field_validator("handoff_grants")
+    @classmethod
+    def canonicalize_handoff_grants(
+        cls,
+        value: tuple[HandoffAuthorityGrant, ...],
+    ) -> tuple[HandoffAuthorityGrant, ...]:
+        return tuple(sorted(value, key=lambda grant: grant.transition))
 
     @model_validator(mode="after")
-    def validate_disjoint_tools(self) -> AuthorityPolicy:
+    def validate_authority(self) -> AuthorityPolicy:
         overlap = self.allowed_tools & self.forbidden_tools
         if overlap:
             raise ValueError(f"tools cannot be both allowed and forbidden: {sorted(overlap)!r}")
         if not self.approval_required_tools <= self.allowed_tools:
             missing = self.approval_required_tools - self.allowed_tools
             raise ValueError(f"approval-required tools must also be allowed: {sorted(missing)!r}")
+
+        if self.handoff_grants and self.root_agent is None:
+            raise ValueError("handoff authority grants require an exact root_agent identity")
+
+        transitions = [grant.transition for grant in self.handoff_grants]
+        if len(set(transitions)) != len(transitions):
+            raise ValueError("handoff authority transitions must be unique")
+
+        for grant in self.handoff_grants:
+            if not grant.allowed_tools <= self.allowed_tools:
+                widened = grant.allowed_tools - self.allowed_tools
+                raise ValueError(
+                    "handoff grant tools must remain within root authority: "
+                    f"{sorted(widened)!r}"
+                )
+            if grant.max_tool_calls > self.max_tool_calls:
+                raise ValueError("handoff grant tool budget cannot exceed root tool budget")
+            if grant.max_handoffs > self.max_handoffs:
+                raise ValueError("handoff grant handoff budget cannot exceed root handoff budget")
+            for prefix in grant.allowed_resource_prefixes:
+                if not self.authorizes_resource(prefix):
+                    raise ValueError(
+                        "handoff grant resource scope must remain within root resource authority: "
+                        f"{prefix!r}"
+                    )
+
+        if self.root_agent is not None and self.handoff_grants:
+            reachable = {self.root_agent}
+            pending = list(self.handoff_grants)
+            while pending:
+                progressed = False
+                remaining: list[HandoffAuthorityGrant] = []
+                for grant in pending:
+                    if grant.source_agent in reachable:
+                        reachable.add(grant.target_agent)
+                        progressed = True
+                    else:
+                        remaining.append(grant)
+                if not progressed:
+                    unreachable = sorted(
+                        f"{grant.source_agent}->{grant.target_agent}" for grant in remaining
+                    )
+                    raise ValueError(
+                        "handoff authority graph contains transitions unreachable from root_agent: "
+                        f"{unreachable!r}"
+                    )
+                pending = remaining
         return self
+
+    @property
+    def has_handoff_authority(self) -> bool:
+        return self.root_agent is not None or bool(self.handoff_grants)
+
+    def handoff_grant(
+        self,
+        source_agent: str,
+        target_agent: str,
+    ) -> HandoffAuthorityGrant | None:
+        for grant in self.handoff_grants:
+            if grant.source_agent == source_agent and grant.target_agent == target_agent:
+                return grant
+        return None
 
     def authorizes_tool(self, tool_name: str) -> bool:
         return tool_name in self.allowed_tools and tool_name not in self.forbidden_tools
@@ -155,6 +290,12 @@ class EvaluationScenario(BaseModel):
     @property
     def identity(self) -> str:
         return _sha256_json(self.model_dump(mode="python", exclude_none=True))
+
+
+def _canonical_resource_prefixes(value: tuple[str, ...]) -> tuple[str, ...]:
+    if any(not prefix.strip() for prefix in value):
+        raise ValueError("resource prefixes must be non-empty strings")
+    return tuple(sorted(set(value)))
 
 
 def _sha256_text(value: str) -> str:
