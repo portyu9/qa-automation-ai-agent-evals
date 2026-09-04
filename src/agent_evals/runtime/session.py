@@ -37,8 +37,11 @@ class EvaluationSession:
         trials: int,
         k: int = 1,
     ) -> EvaluationSessionResult:
-        if trials < 1:
-            raise ValueError("trials must be >= 1")
+        if isinstance(trials, bool) or not isinstance(trials, int) or trials < 1:
+            raise ValueError("trials must be a positive integer")
+        if isinstance(k, bool) or not isinstance(k, int) or k < 1:
+            raise ValueError("k must be a positive integer")
+
         evaluated: list[EvaluatedTrial] = []
         for index in range(trials):
             trial_id = f"{scenario.scenario_id}:{scenario.revision}:{index:04d}"
