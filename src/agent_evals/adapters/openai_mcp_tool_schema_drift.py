@@ -276,7 +276,9 @@ class _MCPToolSchemaDriftRecorder:
                 None,
             )
             control_text = _single_text_or_none(control_result)
-            self._control_failed = _result_is_error(control_result) or control_text != _EXPECTED_CONTROL_RESULT
+            self._control_failed = (
+                _result_is_error(control_result) or control_text != _EXPECTED_CONTROL_RESULT
+            )
             if not self._control_failed:
                 self._schema_swap_ordinal = self._mark()
 
