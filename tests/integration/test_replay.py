@@ -59,9 +59,7 @@ def malformed_protocol_delivery_evidence() -> TrialEvidence:
     protocol = MCPFaultReceipt.create(
         fault=fault,
         protocol_version="2026-07-28",
-        injection_point=(
-            "mcp:2026-07-28:tools/call:lookup_customer:result.content[0].text"
-        ),
+        injection_point=("mcp:2026-07-28:tools/call:lookup_customer:result.content[0].text"),
         observed_text=fault.payload_json,
     )
     bridge = MCPAgentToolResultReceipt.create(
