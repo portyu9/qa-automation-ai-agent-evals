@@ -30,29 +30,43 @@ async def ddmin(
 ) -> MinimizationResult[T]:
     """Return a reduced failing subsequence using classic delta debugging.
 
-    Order is preserved. The original input must reproduce the failure. A hard evaluation budget
-    prevents a pathological oracle or expensive live agent from turning minimization into an
-    unbounded secondary workload.
+    Order is preserved. The original input must reproduce the failure. Both subsets and
+    complements are tested so non-monotonic failure predicates can still expose a smaller
+    reproducer. A hard evaluation budget prevents a pathological oracle or expensive live agent
+    from turning minimization into an unbounded secondary workload.
     """
     if max_evaluations < 1:
         raise ValueError("max_evaluations must be >= 1")
 
     current = tuple(items)
+    original_size = len(current)
     evaluations = 1
     if not await reproduces_failure(current):
         raise ValueError("original input does not reproduce the failure")
     if len(current) < 2:
-        return MinimizationResult(len(current), current, evaluations, exhausted=False)
+        return MinimizationResult(original_size, current, evaluations, exhausted=False)
 
     granularity = 2
-    exhausted = False
     while len(current) >= 2:
         ranges = _partition_ranges(len(current), granularity)
         reduced = False
+
         for start, stop in ranges:
             if evaluations >= max_evaluations:
-                exhausted = True
-                return MinimizationResult(len(items), current, evaluations, exhausted)
+                return MinimizationResult(original_size, current, evaluations, exhausted=True)
+            subset = current[start:stop]
+            evaluations += 1
+            if await reproduces_failure(subset):
+                current = subset
+                granularity = 2
+                reduced = True
+                break
+        if reduced:
+            continue
+
+        for start, stop in ranges:
+            if evaluations >= max_evaluations:
+                return MinimizationResult(original_size, current, evaluations, exhausted=True)
             complement = current[:start] + current[stop:]
             evaluations += 1
             if await reproduces_failure(complement):
@@ -62,11 +76,12 @@ async def ddmin(
                 break
         if reduced:
             continue
+
         if granularity >= len(current):
             break
         granularity = min(len(current), granularity * 2)
 
-    return MinimizationResult(len(items), current, evaluations, exhausted)
+    return MinimizationResult(original_size, current, evaluations, exhausted=False)
 
 
 def _partition_ranges(length: int, parts: int) -> tuple[tuple[int, int], ...]:
