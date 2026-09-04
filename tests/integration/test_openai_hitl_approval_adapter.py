@@ -160,6 +160,7 @@ async def test_native_hitl_approve_resumes_exact_invocation_once() -> None:
     assert receipt.call_id == "call-refund-approve"
     assert receipt.resource == "tenant/7/refunds/42"
     assert receipt.authority_epoch == 0
+    assert len(receipt.authority_path_sha256) == 64
 
     request = next(
         event for event in evaluated.evidence.events if event.kind is EvidenceKind.TOOL_REQUEST
@@ -215,8 +216,7 @@ async def test_native_hitl_reject_prevents_protected_side_effect() -> None:
     assert evaluated.verdict is TrialVerdict.PASS, evaluated.evidence.model_dump(mode="json")
     assert state == {"refund_created": False, "refund_calls": 0}
     assert not any(
-        event.kind is EvidenceKind.TOOL_REQUEST
-        and event.payload.get("tool") == _TOOL
+        event.kind is EvidenceKind.TOOL_REQUEST and event.payload.get("tool") == _TOOL
         for event in evaluated.evidence.events
     )
     decision = next(
@@ -291,6 +291,7 @@ async def test_native_hitl_after_handoff_binds_specialist_and_authority_epoch() 
     receipt = parse_approval_intent_event(decision)
     assert receipt.agent == _SPECIALIST
     assert receipt.authority_epoch == 1
+    assert len(receipt.authority_path_sha256) == 64
     handoff_event = next(
         event for event in evaluated.evidence.events if event.kind is EvidenceKind.HANDOFF
     )
