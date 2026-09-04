@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
-from typing import Literal, Self
+from typing import Literal, Self, TypedDict
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -122,6 +122,17 @@ class SemanticCalibrationObservation(BaseModel):
         return self
 
 
+class _CalibrationMetrics(TypedDict):
+    total_cases: int
+    pass_cases: int
+    fail_cases: int
+    correct: int
+    false_passes: int
+    abstentions: int
+    accuracy: float
+    accepted: bool
+
+
 class SemanticCalibrationReceipt(BaseModel):
     """Integrity-bound calibration result for one exact judge profile and policy."""
 
@@ -186,7 +197,7 @@ class SemanticCalibrationReceipt(BaseModel):
 def _calibration_metrics(
     policy: SemanticCalibrationPolicy,
     observations: tuple[SemanticCalibrationObservation, ...],
-) -> dict[str, int | float | bool]:
+) -> _CalibrationMetrics:
     if not observations:
         raise ValueError("semantic calibration requires at least one observation")
     identities = [observation.case_identity for observation in observations]
