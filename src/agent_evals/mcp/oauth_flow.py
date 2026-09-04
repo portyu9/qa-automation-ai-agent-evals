@@ -234,7 +234,11 @@ class _AuthorizationServerProvider:
         self.registration_count += 1
 
     async def authorize(self, client: Any, params: Any) -> str:
-        from mcp.server.auth.provider import AuthorizeError, AuthorizationCode, construct_redirect_uri
+        from mcp.server.auth.provider import (
+            AuthorizationCode,
+            AuthorizeError,
+            construct_redirect_uri,
+        )
 
         client_id = getattr(client, "client_id", None)
         if not isinstance(client_id, str) or not client_id:
@@ -548,64 +552,65 @@ class MCPOAuthFlowLab:
         storage = _TokenStorage()
 
         try:
-            async with serve_prebound(as_app, as_listener), serve_prebound(rs_app, rs_listener):
-                async with (
-                    httpx2.AsyncClient(timeout=5.0) as bare_http,
-                    httpx2.AsyncClient(timeout=5.0) as metadata_http,
-                ):
-                    headless = _HeadlessOAuth(bare_http)
-                    oauth_auth = OAuthClientProvider(
-                        server_url=resource_url,
-                        client_metadata=OAuthClientMetadata(
-                            client_name=self._policy.client_name,
-                            redirect_uris=[AnyUrl(redirect_uri)],
-                            grant_types=["authorization_code"],
-                            response_types=["code"],
-                            scope=" ".join(self._policy.required_scopes),
-                        ),
-                        storage=storage,
-                        redirect_handler=headless.redirect_handler,
-                        callback_handler=headless.callback_handler,
-                    )
-                    async with httpx2.AsyncClient(
-                        auth=oauth_auth,
-                        timeout=5.0,
-                    ) as authed_http:
-                        async with _oauth_transport(resource_url, authed_http) as transport:
-                            async with Client(
-                                transport,
-                                mode=_PROTOCOL_VERSION,
-                                raise_exceptions=True,
-                            ) as client:
-                                listed = await client.list_tools(cache_mode="refresh")
-                                called = await client.call_tool(
-                                    self._policy.tool_name,
-                                    {"message": "hello"},
-                                )
-                                protocol_version = client.protocol_version
-                        counts_after_first = (
-                            provider.registration_count,
-                            provider.authorization_count,
-                            provider.token_exchange_count,
+            async with (
+                serve_prebound(as_app, as_listener),
+                serve_prebound(rs_app, rs_listener),
+                httpx2.AsyncClient(timeout=5.0) as bare_http,
+                httpx2.AsyncClient(timeout=5.0) as metadata_http,
+            ):
+                headless = _HeadlessOAuth(bare_http)
+                oauth_auth = OAuthClientProvider(
+                    server_url=resource_url,
+                    client_metadata=OAuthClientMetadata(
+                        client_name=self._policy.client_name,
+                        redirect_uris=[AnyUrl(redirect_uri)],
+                        grant_types=["authorization_code"],
+                        response_types=["code"],
+                        scope=" ".join(self._policy.required_scopes),
+                    ),
+                    storage=storage,
+                    redirect_handler=headless.redirect_handler,
+                    callback_handler=headless.callback_handler,
+                )
+                async with httpx2.AsyncClient(
+                    auth=oauth_auth,
+                    timeout=5.0,
+                ) as authed_http:
+                    first_transport = _oauth_transport(resource_url, authed_http)
+                    async with Client(
+                        first_transport,
+                        mode=_PROTOCOL_VERSION,
+                        raise_exceptions=True,
+                    ) as client:
+                        listed = await client.list_tools(cache_mode="refresh")
+                        called = await client.call_tool(
+                            self._policy.tool_name,
+                            {"message": "hello"},
                         )
-                        async with _oauth_transport(resource_url, authed_http) as transport:
-                            async with Client(
-                                transport,
-                                mode=_PROTOCOL_VERSION,
-                                raise_exceptions=True,
-                            ) as client:
-                                reconnected = await client.call_tool(
-                                    self._policy.tool_name,
-                                    {"message": "again"},
-                                )
-                    as_metadata_response = await metadata_http.get(
-                        f"{issuer_url}/.well-known/oauth-authorization-server"
+                        protocol_version = client.protocol_version
+                    counts_after_first = (
+                        provider.registration_count,
+                        provider.authorization_count,
+                        provider.token_exchange_count,
                     )
-                    as_metadata_response.raise_for_status()
-                    as_metadata = as_metadata_response.json()
-                    prm_response = await metadata_http.get(metadata_url)
-                    prm_response.raise_for_status()
-                    prm = prm_response.json()
+                    second_transport = _oauth_transport(resource_url, authed_http)
+                    async with Client(
+                        second_transport,
+                        mode=_PROTOCOL_VERSION,
+                        raise_exceptions=True,
+                    ) as client:
+                        reconnected = await client.call_tool(
+                            self._policy.tool_name,
+                            {"message": "again"},
+                        )
+                as_metadata_response = await metadata_http.get(
+                    f"{issuer_url}/.well-known/oauth-authorization-server"
+                )
+                as_metadata_response.raise_for_status()
+                as_metadata = as_metadata_response.json()
+                prm_response = await metadata_http.get(metadata_url)
+                prm_response.raise_for_status()
+                prm = prm_response.json()
         finally:
             if as_listener.fileno() != -1:
                 as_listener.close()
@@ -667,6 +672,7 @@ class MCPOAuthFlowLab:
             "valid_call_text": valid_call_text,
             "valid_tool_names": valid_tool_names,
         }
+        observation_json = _canonical_json(observation)
         receipt = self._receipt_for_observation(
             protocol_version=protocol_version,
             issuer_url=issuer_url,
@@ -683,7 +689,7 @@ class MCPOAuthFlowLab:
             counts_after_first=counts_after_first,
             counts_after_second=counts_after_second,
             introspection_count=provider.introspection_count,
-            observation_json=_canonical_json(observation),
+            observation_json=observation_json,
         )
         return MCPOAuthFlowProbeResult(
             policy_identity=self._policy.identity,
