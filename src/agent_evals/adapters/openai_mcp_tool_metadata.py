@@ -143,8 +143,7 @@ class _MCPToolMetadataRecorder:
                 fault=self._fault,
                 protocol_version=self._protocol_version,
                 injection_point=(
-                    f"mcp:{self._protocol_version}:tools/list:"
-                    f"{self._fault.tool_name}:description"
+                    f"mcp:{self._protocol_version}:tools/list:{self._fault.tool_name}:description"
                 ),
                 observed_text=description,
             )
@@ -224,8 +223,7 @@ def _clone_agent_with_controlled_server_and_observer(
         from agents.models.interface import Model
     except ImportError as exc:  # pragma: no cover
         raise RuntimeError(
-            "install both the 'openai' and 'mcp' extras to use "
-            "OpenAIAgentsMCPToolMetadataAdapter"
+            "install both the 'openai' and 'mcp' extras to use OpenAIAgentsMCPToolMetadataAdapter"
         ) from exc
 
     if not isinstance(agent, Agent):
@@ -369,8 +367,7 @@ def _new_stdio_server(params: Mapping[str, object]) -> Any:
         from agents.mcp import MCPServerStdio
     except ImportError as exc:  # pragma: no cover
         raise RuntimeError(
-            "install both the 'openai' and 'mcp' extras to use "
-            "OpenAIAgentsMCPToolMetadataAdapter"
+            "install both the 'openai' and 'mcp' extras to use OpenAIAgentsMCPToolMetadataAdapter"
         ) from exc
 
     return MCPServerStdio(
