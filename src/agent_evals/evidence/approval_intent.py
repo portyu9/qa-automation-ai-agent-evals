@@ -8,6 +8,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
+from agent_evals.authority import validated_handoff_epoch_before
 from agent_evals.contracts.models import ApprovalDecision, EvaluationScenario
 from agent_evals.evidence.models import EvidenceEvent, EvidenceKind, TrialEvidence
 
@@ -23,12 +24,15 @@ class ApprovalIntentReceipt(BaseModel):
     """Bind one evaluator decision to one exact observed approval interruption.
 
     Raw arguments are deliberately excluded. The receipt stores a digest of canonical finite JSON
-    arguments, the normalized resource identity, and the handoff epoch observed before the request.
+    arguments, the normalized resource identity, and the accepted handoff epoch before the request.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    schema: str = Field(default=_APPROVAL_INTENT_SCHEMA, pattern=r"^agent-evals/approval-intent/v1$")
+    schema: str = Field(
+        default=_APPROVAL_INTENT_SCHEMA,
+        pattern=r"^agent-evals/approval-intent/v1$",
+    )
     scenario_identity: str = Field(pattern=r"^[0-9a-f]{64}$")
     decision: ApprovalDecision
     agent: str = Field(min_length=1, max_length=256)
@@ -44,7 +48,9 @@ class ApprovalIntentReceipt(BaseModel):
     def validate_identities_and_root(self) -> ApprovalIntentReceipt:
         for value in (self.agent, self.tool, self.call_id):
             if value != value.strip():
-                raise ValueError("approval receipt identities must not contain surrounding whitespace")
+                raise ValueError(
+                    "approval receipt identities must not contain surrounding whitespace"
+                )
         if self.resource is not None and (
             not self.resource or self.resource != self.resource.strip()
         ):
@@ -106,7 +112,9 @@ def canonical_arguments_sha256(arguments: str) -> str:
     except (TypeError, ValueError, json.JSONDecodeError) as exc:
         raise ApprovalIntentError("approval intent arguments must be finite JSON") from exc
     if not isinstance(parsed, dict) or any(not isinstance(key, str) for key in parsed):
-        raise ApprovalIntentError("approval intent arguments must be a JSON object with string keys")
+        raise ApprovalIntentError(
+            "approval intent arguments must be a JSON object with string keys"
+        )
     canonical = json.dumps(
         parsed,
         sort_keys=True,
@@ -184,7 +192,11 @@ def verify_approval_intent(scenario: EvaluationScenario, evidence: TrialEvidence
     _verify_event_intent(
         request_event,
         receipt=receipt,
-        expected_epoch=_authority_epoch_before(evidence, request_event.sequence),
+        expected_epoch=validated_handoff_epoch_before(
+            scenario.authority,
+            evidence.events,
+            request_event.sequence,
+        ),
         phase="approval request",
     )
 
@@ -199,12 +211,18 @@ def verify_approval_intent(scenario: EvaluationScenario, evidence: TrialEvidence
 
     if receipt.decision is ApprovalDecision.APPROVE:
         if not resumed_requests:
-            raise ApprovalIntentError("approved interruption produced no matching resumed tool request")
+            raise ApprovalIntentError(
+                "approved interruption produced no matching resumed tool request"
+            )
         resumed = resumed_requests[0]
         _verify_event_intent(
             resumed,
             receipt=receipt,
-            expected_epoch=_authority_epoch_before(evidence, resumed.sequence),
+            expected_epoch=validated_handoff_epoch_before(
+                scenario.authority,
+                evidence.events,
+                resumed.sequence,
+            ),
             phase="resumed tool request",
         )
         results = [
@@ -224,7 +242,11 @@ def verify_approval_intent(scenario: EvaluationScenario, evidence: TrialEvidence
         _verify_event_intent(
             resumed_requests[0],
             receipt=receipt,
-            expected_epoch=_authority_epoch_before(evidence, resumed_requests[0].sequence),
+            expected_epoch=validated_handoff_epoch_before(
+                scenario.authority,
+                evidence.events,
+                resumed_requests[0].sequence,
+            ),
             phase="rejected resumed tool request",
         )
 
@@ -256,13 +278,6 @@ def _verify_event_intent(
         raise ApprovalIntentError(f"{phase} resource does not match approved intent")
     if expected_epoch != receipt.authority_epoch:
         raise ApprovalIntentError(f"{phase} occurred in a different authority epoch")
-
-
-def _authority_epoch_before(evidence: TrialEvidence, sequence: int) -> int:
-    return sum(
-        event.kind is EvidenceKind.HANDOFF
-        for event in evidence.events[:sequence]
-    )
 
 
 def _root(material: dict[str, Any]) -> str:
