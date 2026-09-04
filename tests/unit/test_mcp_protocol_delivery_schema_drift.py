@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from agent_evals.evidence.models import EvidenceEvent, EvidenceKind, TrialEvidence, TrialVerdict
+from agent_evals.evidence.models import EvidenceEvent, EvidenceKind, TrialEvidence
 from agent_evals.mcp.agent_schema_bridge import (
     MCPAgentToolSchemaDriftReceipt,
     create_schema_drift_protocol_receipt,
@@ -109,7 +109,6 @@ def evidence(payload: dict[str, object] | None = None) -> TrialEvidence:
         scenario_identity=_SCENARIO,
         events=(event,),
         final_state={},
-        verdict=TrialVerdict.PASS,
     )
 
 
