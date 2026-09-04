@@ -316,7 +316,9 @@ class EvaluationScenario(BaseModel):
         spec = self.approval_intent
         if spec is not None:
             if not self.authority.authorizes_tool(spec.tool):
-                raise ValueError("approval intent target tool must be inside root scenario authority")
+                raise ValueError(
+                    "approval intent target tool must be inside root scenario authority"
+                )
             if not _agent_path_requires_approval(self.authority, agent=spec.agent, tool=spec.tool):
                 raise ValueError(
                     "approval intent target must be approval-required on at least one configured "
