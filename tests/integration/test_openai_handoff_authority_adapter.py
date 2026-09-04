@@ -118,7 +118,9 @@ async def test_openai_handoff_authority_binds_specialist_tool_use_to_sdk_agent_i
     requests = [
         event for event in evaluated.evidence.events if event.kind is EvidenceKind.TOOL_REQUEST
     ]
-    results = [event for event in evaluated.evidence.events if event.kind is EvidenceKind.TOOL_RESULT]
+    results = [
+        event for event in evaluated.evidence.events if event.kind is EvidenceKind.TOOL_RESULT
+    ]
 
     assert len(handoffs) == 1
     assert handoffs[0].payload == {
@@ -285,7 +287,8 @@ async def test_legacy_openai_adapter_cannot_silently_satisfy_agent_bound_handoff
     policy_result = next(result for result in evaluated.oracle_results if result.name == "policy")
     assert policy_result.critical
     assert any(
-        "missing a non-empty generating-agent identity" in reason for reason in policy_result.reasons
+        "missing a non-empty generating-agent identity" in reason
+        for reason in policy_result.reasons
     )
     root_model.assert_complete()
     specialist_model.assert_complete()
