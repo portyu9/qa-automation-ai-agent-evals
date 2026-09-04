@@ -335,8 +335,11 @@ def _clone_agent_with_controlled_server(
 
 
 def _negotiated_protocol_version(server: object) -> str:
-    initialize_result = getattr(server, "server_initialize_result", None)
-    protocol_version = getattr(initialize_result, "protocol_version", None)
+    session = getattr(server, "session", None)
+    protocol_version = getattr(session, "protocol_version", None)
+    if not isinstance(protocol_version, str) or not protocol_version:
+        initialize_result = getattr(server, "server_initialize_result", None)
+        protocol_version = getattr(initialize_result, "protocol_version", None)
     if not isinstance(protocol_version, str) or not protocol_version:
         raise AdapterPreconditionError(
             code="mcp_protocol_version_unavailable",
