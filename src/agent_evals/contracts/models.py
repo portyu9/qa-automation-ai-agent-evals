@@ -18,6 +18,34 @@ class ScenarioKind(StrEnum):
     METAMORPHIC = "metamorphic"
 
 
+class ApprovalDecision(StrEnum):
+    """Evaluator-owned decision for one exact native approval interruption."""
+
+    APPROVE = "approve"
+    REJECT = "reject"
+
+
+class ApprovalIntentSpec(BaseModel):
+    """Scenario-bound target and decision for one exact approval interruption.
+
+    Runtime call identity, arguments, resource, and handoff epoch are intentionally absent here:
+    they are observations that must be bound by evidence rather than values the scenario invents.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    agent: str = Field(min_length=1, max_length=256)
+    tool: str = Field(min_length=1, max_length=256)
+    decision: ApprovalDecision
+
+    @field_validator("agent", "tool")
+    @classmethod
+    def validate_identity(cls, value: str) -> str:
+        if value != value.strip():
+            raise ValueError("approval intent identities must not contain surrounding whitespace")
+        return value
+
+
 class SubjectFingerprint(BaseModel):
     """Content-addressed identity for the full agent system under evaluation."""
 
@@ -252,6 +280,7 @@ class EvaluationScenario(BaseModel):
     objective: str = Field(min_length=1, max_length=20_000)
     initial_state: dict[str, Any] = Field(default_factory=dict)
     authority: AuthorityPolicy = Field(default_factory=AuthorityPolicy)
+    approval_intent: ApprovalIntentSpec | None = None
     required_outcomes: dict[str, Any] = Field(default_factory=dict)
     forbidden_outcomes: dict[str, Any] = Field(default_factory=dict)
     tags: frozenset[str] = frozenset()
@@ -273,7 +302,7 @@ class EvaluationScenario(BaseModel):
         return value
 
     @model_validator(mode="after")
-    def reject_contradictory_outcomes(self) -> EvaluationScenario:
+    def validate_scenario(self) -> EvaluationScenario:
         conflicts = {
             key
             for key, expected in self.required_outcomes.items()
@@ -283,11 +312,50 @@ class EvaluationScenario(BaseModel):
             raise ValueError(
                 f"outcomes cannot be simultaneously required and forbidden: {sorted(conflicts)!r}"
             )
+
+        spec = self.approval_intent
+        if spec is not None:
+            if not self.authority.authorizes_tool(spec.tool):
+                raise ValueError(
+                    "approval intent target tool must be inside root scenario authority"
+                )
+            if not _agent_path_requires_approval(self.authority, agent=spec.agent, tool=spec.tool):
+                raise ValueError(
+                    "approval intent target must be approval-required on at least one configured "
+                    "authority path to that agent"
+                )
         return self
 
     @property
     def identity(self) -> str:
         return _sha256_json(self.model_dump(mode="python", exclude_none=True))
+
+
+def _agent_path_requires_approval(policy: AuthorityPolicy, *, agent: str, tool: str) -> bool:
+    root_required = tool in policy.approval_required_tools
+    if not policy.has_handoff_authority:
+        return root_required
+    if policy.root_agent == agent:
+        return root_required
+    if policy.root_agent is None:
+        return False
+
+    pending: list[tuple[str, bool]] = [(policy.root_agent, root_required)]
+    visited: set[tuple[str, bool]] = set()
+    while pending:
+        source, required = pending.pop()
+        state = (source, required)
+        if state in visited:
+            continue
+        visited.add(state)
+        for grant in policy.handoff_grants:
+            if grant.source_agent != source or tool not in grant.allowed_tools:
+                continue
+            child_required = required or tool in grant.additional_approval_required_tools
+            if grant.target_agent == agent and child_required:
+                return True
+            pending.append((grant.target_agent, child_required))
+    return False
 
 
 def _canonical_resource_prefixes(value: tuple[str, ...]) -> tuple[str, ...]:

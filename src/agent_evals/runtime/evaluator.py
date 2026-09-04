@@ -10,6 +10,7 @@ from pydantic import ValidationError
 from agent_evals.adapters.base import AdapterPreconditionError, AdapterResult, AgentAdapter
 from agent_evals.adversarial.delivery import AttackDeliveryError, verify_attack_delivery
 from agent_evals.contracts.models import EvaluationScenario, SubjectFingerprint
+from agent_evals.evidence.approval_intent import ApprovalIntentError, verify_approval_intent
 from agent_evals.evidence.models import EvidenceEvent, EvidenceKind, TrialEvidence, TrialVerdict
 from agent_evals.mcp.delivery import ProtocolDeliveryError, verify_protocol_delivery
 from agent_evals.oracles.deterministic import OracleResult, OutcomeOracle, PolicyOracle
@@ -148,6 +149,20 @@ class TrialRunner:
                     evidence,
                     source="evaluator:protocol-delivery",
                     code="protocol_delivery_unverified",
+                    reason=str(exc),
+                ),
+                oracle_results=(),
+                verdict=TrialVerdict.BLOCKED,
+            )
+
+        try:
+            verify_approval_intent(scenario, evidence)
+        except ApprovalIntentError as exc:
+            return EvaluatedTrial(
+                evidence=self._append_evaluation_error(
+                    evidence,
+                    source="evaluator:approval-intent",
+                    code="approval_intent_unverified",
                     reason=str(exc),
                 ),
                 oracle_results=(),

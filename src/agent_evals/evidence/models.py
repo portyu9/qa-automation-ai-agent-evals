@@ -21,6 +21,7 @@ class EvidenceKind(StrEnum):
     HANDOFF = "handoff"
     APPROVAL_REQUEST = "approval_request"
     APPROVAL = "approval"
+    APPROVAL_DECISION = "approval_decision"
     GUARDRAIL = "guardrail"
     STATE = "state"
     OUTPUT = "output"

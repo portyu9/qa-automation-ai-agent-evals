@@ -1,15 +1,15 @@
 # ƳƤ AI Agent Evaluation & Assurance Framework — Documentation
 
-This documentation is organized by the question a reviewer is trying to answer. The framework keeps **subject identity**, **scenario/adversarial identity**, **evaluation-precondition evidence**, **MCP protocol-fault evidence**, **MCP→agent bridge evidence**, **MCP resource-server authorization evidence**, **MCP OAuth-flow evidence**, **subject evidence**, **deterministic authority**, **persistence integrity**, **session derivation**, and **statistical inference** separate. A statement from one domain never silently becomes proof in another.
+This documentation is organized by the question a reviewer is trying to answer. The framework keeps **subject identity**, **scenario/adversarial identity**, **approval-intent evidence**, **evaluation-precondition evidence**, **MCP protocol-fault evidence**, **MCP→agent bridge evidence**, **MCP resource-server authorization evidence**, **MCP OAuth-flow evidence**, **subject evidence**, **deterministic authority**, **persistence integrity**, **session derivation**, and **statistical inference** separate. A statement from one domain never silently becomes proof in another.
 
 ## Review paths
 
 | Reviewer goal | Recommended path |
 |---|---|
-| Architecture / principal engineering | [Architecture](ARCHITECTURE.md) → [Evaluation Model](EVALUATION_MODEL.md) → [Handoff Authority](HANDOFF_AUTHORITY.md) → [Adversarial Testing](ADVERSARIAL_TESTING.md) → [OpenAI Adapter](OPENAI_ADAPTER.md) → [MCP Fault Lab](MCP_LAB.md) → [MCP Remote Authorization](MCP_REMOTE_AUTH.md) → [MCP OAuth Flow](MCP_OAUTH_FLOW.md) → [Evidence & Replay](EVIDENCE_AND_REPLAY.md) → [Session Reports](ASSURANCE_REPORTS.md) → [Metamorphic Testing](METAMORPHIC_TESTING.md) → [Statistical Assurance](STATISTICAL_ASSURANCE.md) → [Limitations](LIMITATIONS.md) |
-| QA / AI evaluation engineering | [Evaluation Model](EVALUATION_MODEL.md) → [Handoff Authority](HANDOFF_AUTHORITY.md) → [Adversarial Testing](ADVERSARIAL_TESTING.md) → [OpenAI Adapter](OPENAI_ADAPTER.md) → [MCP Fault Lab](MCP_LAB.md) → [Evidence & Replay](EVIDENCE_AND_REPLAY.md) → [Session Reports](ASSURANCE_REPORTS.md) → [Metamorphic Testing](METAMORPHIC_TESTING.md) → [Statistical Assurance](STATISTICAL_ASSURANCE.md) → [Architecture](ARCHITECTURE.md) |
-| Security / red team | [Security](SECURITY.md) → [Handoff Authority](HANDOFF_AUTHORITY.md) → [Adversarial Testing](ADVERSARIAL_TESTING.md) → [MCP Fault Lab](MCP_LAB.md) → [OpenAI Adapter](OPENAI_ADAPTER.md) → [MCP Remote Authorization](MCP_REMOTE_AUTH.md) → [MCP OAuth Flow](MCP_OAUTH_FLOW.md) → [Evidence & Replay](EVIDENCE_AND_REPLAY.md) → [Limitations](LIMITATIONS.md) |
-| Adoption / code review | [Architecture](ARCHITECTURE.md) → [Handoff Authority](HANDOFF_AUTHORITY.md) → [OpenAI Adapter](OPENAI_ADAPTER.md) → [MCP Fault Lab](MCP_LAB.md) → repository tests → [Evidence & Replay](EVIDENCE_AND_REPLAY.md) → [Security](SECURITY.md) → [Limitations](LIMITATIONS.md) |
+| Architecture / principal engineering | [Architecture](ARCHITECTURE.md) → [Evaluation Model](EVALUATION_MODEL.md) → [Handoff Authority](HANDOFF_AUTHORITY.md) → [Native HITL Approval Intent](APPROVAL_INTENT.md) → [Adversarial Testing](ADVERSARIAL_TESTING.md) → [OpenAI Adapter](OPENAI_ADAPTER.md) → [MCP Fault Lab](MCP_LAB.md) → [MCP Remote Authorization](MCP_REMOTE_AUTH.md) → [MCP OAuth Flow](MCP_OAUTH_FLOW.md) → [Evidence & Replay](EVIDENCE_AND_REPLAY.md) → [Session Reports](ASSURANCE_REPORTS.md) → [Metamorphic Testing](METAMORPHIC_TESTING.md) → [Statistical Assurance](STATISTICAL_ASSURANCE.md) → [Limitations](LIMITATIONS.md) |
+| QA / AI evaluation engineering | [Evaluation Model](EVALUATION_MODEL.md) → [Handoff Authority](HANDOFF_AUTHORITY.md) → [Native HITL Approval Intent](APPROVAL_INTENT.md) → [Adversarial Testing](ADVERSARIAL_TESTING.md) → [OpenAI Adapter](OPENAI_ADAPTER.md) → [MCP Fault Lab](MCP_LAB.md) → [Evidence & Replay](EVIDENCE_AND_REPLAY.md) → [Session Reports](ASSURANCE_REPORTS.md) → [Metamorphic Testing](METAMORPHIC_TESTING.md) → [Statistical Assurance](STATISTICAL_ASSURANCE.md) → [Architecture](ARCHITECTURE.md) |
+| Security / red team | [Security](SECURITY.md) → [Handoff Authority](HANDOFF_AUTHORITY.md) → [Native HITL Approval Intent](APPROVAL_INTENT.md) → [Adversarial Testing](ADVERSARIAL_TESTING.md) → [MCP Fault Lab](MCP_LAB.md) → [OpenAI Adapter](OPENAI_ADAPTER.md) → [MCP Remote Authorization](MCP_REMOTE_AUTH.md) → [MCP OAuth Flow](MCP_OAUTH_FLOW.md) → [Evidence & Replay](EVIDENCE_AND_REPLAY.md) → [Limitations](LIMITATIONS.md) |
+| Adoption / code review | [Architecture](ARCHITECTURE.md) → [Handoff Authority](HANDOFF_AUTHORITY.md) → [Native HITL Approval Intent](APPROVAL_INTENT.md) → [OpenAI Adapter](OPENAI_ADAPTER.md) → [MCP Fault Lab](MCP_LAB.md) → repository tests → [Evidence & Replay](EVIDENCE_AND_REPLAY.md) → [Security](SECURITY.md) → [Limitations](LIMITATIONS.md) |
 
 ## Cross-cutting invariants
 
@@ -17,11 +17,15 @@ This documentation is organized by the question a reviewer is trying to answer. 
 Agent claim                 ≠ environment outcome
 Tool request                ≠ successful side effect
 Approval request            ≠ approval grant
+Approval decision receipt   ≠ human identity or external authorization
+Legacy approval             ≠ stronger native HITL approval decision
 Provider availability       ≠ subject correctness
 Model confidence            ≠ grading authority
 Attack channel label        ≠ delivery evidence
 Environment availability    ≠ environment consumption
 Handoff observation         ≠ delegated authority
+Raw handoff count           ≠ accepted authority epoch
+Same handoff depth          ≠ same authority path
 Root authority              ≠ child authority after handoff
 SDK agent name              ≠ cryptographic/global identity
 MCP fault configuration     ≠ MCP client observation
@@ -67,6 +71,27 @@ PolicyOracle
 
 No new handoff receipt is required because handoff and tool events already inhabit the same normalized subject-evidence domain. The specialized adapter supplies provenance; the scenario contract and deterministic oracle remain the authority.
 
+Native HITL approval introduces a different relation because a decision must bind a pending interruption to its exact continuation:
+
+```text
+ApprovalIntentSpec
+    = scenario-owned exact target + approve/reject intent
+
+ApprovalIntentReceipt
+    = integrity-bound relation over scenario, decision, agent, tool,
+      call identity, canonical argument digest, exact resource,
+      accepted authority epoch/path, and approval-request sequence
+
+APPROVAL_DECISION
+    = evaluator-owned evidence for that exact native interruption
+
+PolicyOracle
+    = still the deterministic authority engine; a decision cannot
+      legitimize an otherwise unauthorized pending action
+```
+
+The receipt binds accepted authority **path identity**, not just depth. Two valid handoff paths reaching the same agent at the same epoch remain different approval contexts. Legacy call-scoped or persistent `APPROVAL` evidence cannot substitute for `APPROVAL_DECISION` when `ApprovalIntentSpec` is configured.
+
 The MCP distinction is especially important:
 
 ```text
@@ -100,12 +125,13 @@ The schema-drift bridge is intentionally host-refreshed: the harness owns the li
 | [ARCHITECTURE.md](ARCHITECTURE.md) | Where do identity, adversarial derivation, protocol faults, the MCP→agent bridges, resource-server authorization, OAuth-flow assurance, evidence, grading, persistence, reporting, and release authority live? |
 | [EVALUATION_MODEL.md](EVALUATION_MODEL.md) | What exactly constitutes a task, trial, outcome, policy violation, and verdict? |
 | [HANDOFF_AUTHORITY.md](HANDOFF_AUTHORITY.md) | How are native OpenAI handoffs authorized as a scenario-bound directed graph, how is run-item agent provenance bound, and how is authority forced to attenuate across each observed hop? |
+| [APPROVAL_INTENT.md](APPROVAL_INTENT.md) | How is one native OpenAI HITL approve/reject decision bound to the exact pending invocation, accepted delegated-authority path, same-run continuation, and deterministic failure semantics? |
 | [ADVERSARIAL_TESTING.md](ADVERSARIAL_TESTING.md) | How are red-team stimuli made deterministic, how is delivery required before grading, and what does an adversarial receipt still not prove? |
-| [OPENAI_ADAPTER.md](OPENAI_ADAPTER.md) | How are OpenAI Agents SDK events normalized; how does the handoff-authority adapter bind run-local agent provenance; how do result, ToolError-recovery, and host-refreshed schema-drift stdio bridges close; and why does neither provider nor protocol become the oracle? |
+| [OPENAI_ADAPTER.md](OPENAI_ADAPTER.md) | How are OpenAI Agents SDK events normalized; how do handoff authority and exact native HITL approval bind run-local provenance; how do result, ToolError-recovery, and host-refreshed schema-drift stdio bridges close; and why does neither provider nor protocol become the oracle? |
 | [MCP_LAB.md](MCP_LAB.md) | How are six deterministic MCP faults observed, and which three exact fault families currently have explicit agent bridges? |
 | [MCP_REMOTE_AUTH.md](MCP_REMOTE_AUTH.md) | How is the isolated loopback Streamable HTTP resource-server bearer/scope/verifier boundary tested over real TCP? |
 | [MCP_OAUTH_FLOW.md](MCP_OAUTH_FLOW.md) | How does the separated two-origin loopback OAuth flow verify discovery, compatibility DCR, PKCE, exact issuer/resource binding, exchange, introspection, and protected MCP use? |
-| [EVIDENCE_AND_REPLAY.md](EVIDENCE_AND_REPLAY.md) | How are local evidence records committed, reverified, and replayed without overstating provenance, including semantic revalidation of persisted protocol-delivery receipts? |
+| [EVIDENCE_AND_REPLAY.md](EVIDENCE_AND_REPLAY.md) | How are local evidence records committed, reverified, and replayed without overstating provenance, including semantic revalidation of persisted protocol-delivery and approval-intent receipts? |
 | [ASSURANCE_REPORTS.md](ASSURANCE_REPORTS.md) | How are session conclusions bound and rederived without turning a serialized score or gate label into authority? |
 | [METAMORPHIC_TESTING.md](METAMORPHIC_TESTING.md) | Which behavioral relations can be verified without brittle golden outputs? |
 | [STATISTICAL_ASSURANCE.md](STATISTICAL_ASSURANCE.md) | How is nondeterministic behavior quantified without overstating certainty? |
@@ -119,6 +145,7 @@ Use the evidence contract that matches the boundary actually observed:
 | Observed boundary | Evidence contract | What it does **not** imply |
 |---|---|---|
 | native handoff path with delegated authority | `TrialEvidence` + exact scenario `AuthorityPolicy` / `HandoffAuthorityGrant` graph | cryptographic agent identity, provider-side enforcement, or distributed delegation |
+| native OpenAI HITL interruption and exact approve/reject continuation | `ApprovalIntentSpec` + `ApprovalIntentReceipt` / `APPROVAL_DECISION` + normalized continuation evidence | human identity, enterprise approval attestation, production IAM, or target-side authorization |
 | OpenAI local/SDK adversarial injection | `AttackDeliveryReceipt` | target-side attestation or automatic PASS |
 | standalone MCP fault observation | `MCPFaultReceipt` | agent consumption or behavior |
 | controlled MCP result correlated to exact OpenAI call | `MCPAgentToolResultReceipt` + `PROTOCOL_DELIVERY` | safe behavior or release acceptance |
@@ -129,11 +156,15 @@ Use the evidence contract that matches the boundary actually observed:
 | persisted agent trial | `TrialEvidence` | authenticated publisher identity |
 | rederived session/release artifact | `AssuranceReport` | signed attestation |
 
-The explicit bridges are important precisely because the framework refuses to infer cross-domain delivery from matching labels or similar payloads.
+The explicit relations are important precisely because the framework refuses to infer cross-domain truth from matching labels, similar payloads, or a decision event with insufficient invocation identity.
 
 ## Native handoff authority in one paragraph
 
 `OpenAIAgentsHandoffAuthorityAdapter` is a stronger, explicit OpenAI adapter boundary for scenarios that declare native handoff authority. It binds the configured root to the supplied SDK Agent before execution, uses public pinned-SDK run-item agent identity to attribute normalized tool request/result/approval-request evidence, verifies request/result ownership for each completed call, and checks handoff-item generating-agent identity against the SDK handoff source. The scenario-owned directed graph then drives `PolicyOracle`: every observed source→target transition must have one exact grant, child tools/resources/budgets may only stay equal or narrow, inherited approvals cannot be removed for retained tools, and a failed transition never advances the active agent. Agent names are run-local SDK evidence identities, not cryptographic or globally unique principals. See [Native Handoff Authority](HANDOFF_AUTHORITY.md).
+
+## Native HITL approval intent in one paragraph
+
+`OpenAIAgentsHITLApprovalAdapter` exercises the pinned SDK's real `ToolApprovalItem` → `RunState.approve(...)` / `RunState.reject(...)` → same-`RunState` resume path under `agents.testing.ScriptedModel`. `ApprovalIntentReceipt` binds the scenario decision to the exact run-local agent, tool, stable call ID, canonical finite-JSON argument digest, normalized resource, accepted authority epoch, exact accepted handoff-path hash, and approval-request sequence. Approval requires exactly one matching executable request/result after resume; clean rejection requires explicit matching rejection-result evidence and no protected executable request. If a rejected invocation nevertheless executes, that resolved evidence is preserved for critical policy `FAIL`. Legacy call-scoped and persistent approvals cannot downgrade the stronger requirement. See [Native HITL Approval Intent](APPROVAL_INTENT.md).
 
 ## MCP agent-bridge scope in one paragraph
 
@@ -153,6 +184,6 @@ Audited merged implementation source checkpoint `d98f9ca1feb1179504cd2181295a739
 - Python **3.11 minimum / 3.14 latest**, Ruff, formatter, Bandit, dependency audit, package integrity, and all **7/7 CI jobs**: green;
 - dependency audit reported **no known vulnerabilities**; the project package itself is skipped because it is not published on PyPI.
 
-This checkpoint remains a historical audited merged baseline. Capabilities added after it, including ToolError recovery, host-refreshed schema-drift adaptation, and native handoff-authority attenuation, are accepted only after their own exact-head CI, merge, and post-merge `main` verification; documentation does not retroactively relabel the older checkpoint.
+This checkpoint remains a historical audited merged baseline. Capabilities added after it, including ToolError recovery, host-refreshed schema-drift adaptation, native handoff-authority attenuation, and native HITL approval-intent binding, are accepted only after their own exact-head CI, merge, and post-merge `main` verification; documentation does not retroactively relabel the older checkpoint.
 
 [← Repository README](../README.md)
