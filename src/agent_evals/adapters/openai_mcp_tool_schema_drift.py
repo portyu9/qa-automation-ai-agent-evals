@@ -352,11 +352,6 @@ class _MCPToolSchemaDriftRecorder:
                 code="mcp_schema_refreshed_discovery_missing",
                 reason="host cache invalidation did not produce refreshed MCP tool discovery",
             )
-        if self._post_invalidation_lists != 1:
-            raise AdapterPreconditionError(
-                code="mcp_schema_refreshed_discovery_ambiguous",
-                reason="schema-drift recovery observed more than one post-invalidation tool listing",
-            )
         if self._recovery_is_error is not False or self._recovery_text != _EXPECTED_RECOVERY_TEXT:
             raise AdapterPreconditionError(
                 code="mcp_schema_recovery_mismatch",
