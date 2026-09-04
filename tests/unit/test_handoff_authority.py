@@ -96,8 +96,9 @@ def test_handoff_grants_are_canonicalized_for_stable_scenario_identity() -> None
 
     left = scenario(policy(second, first))
     right = scenario(policy(first, second))
+    canonical = tuple(sorted((first, second), key=lambda item: item.transition))
 
-    assert left.authority.handoff_grants == (first, second)
+    assert left.authority.handoff_grants == canonical
     assert left.identity == right.identity
 
 
@@ -363,7 +364,9 @@ def test_handoff_authority_requires_agent_identity_on_tool_requests() -> None:
 
     assert result.verdict is TrialVerdict.FAIL
     assert result.critical
-    assert any("missing a non-empty generating-agent identity" in reason for reason in result.reasons)
+    assert any(
+        "missing a non-empty generating-agent identity" in reason for reason in result.reasons
+    )
 
 
 def test_policy_without_handoff_graph_preserves_legacy_single_authority_semantics() -> None:
