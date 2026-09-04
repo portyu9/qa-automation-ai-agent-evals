@@ -38,14 +38,14 @@ class TrialVerdict(StrEnum):
 class EvidenceEvent(BaseModel):
     """One immutable observable event in an evaluation trial."""
 
-    model_config = ConfigDict(frozen=True, extra="forbid")
+    model_config = ConfigDict(frozen=True, extra="forbid", revalidate_instances="always")
 
-    sequence: int = Field(ge=0)
+    sequence: int = Field(ge=0, strict=True)
     kind: EvidenceKind
     source: str = Field(min_length=1)
     payload: dict[str, Any] = Field(default_factory=dict)
     observed_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
-    critical: bool = False
+    critical: bool = Field(default=False, strict=True)
 
     @model_validator(mode="after")
     def validate_json_payload(self) -> EvidenceEvent:
