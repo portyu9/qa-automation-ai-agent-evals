@@ -128,11 +128,11 @@ class PolicyOracle:
                         )
                         continue
                     tool_calls_by_agent[event_agent] = tool_calls_by_agent.get(event_agent, 0) + 1
-                    if tool_calls_by_agent[event_agent] > authority.max_tool_calls:
+                    if tool_calls_by_agent[event_agent] > active_authority.max_tool_calls:
                         reasons.append(
                             "delegated tool-call budget exceeded for agent "
                             f"{event_agent!r}: {tool_calls_by_agent[event_agent]} > "
-                            f"{authority.max_tool_calls}"
+                            f"{active_authority.max_tool_calls}"
                         )
 
                 tool = event.payload.get("tool")
