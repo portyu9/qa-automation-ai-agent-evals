@@ -450,37 +450,6 @@ This baseline identifies the audited implementation revision. This documentation
 
 ---
 
-## Explicit non-claims
-
-The repository does not currently claim:
-
-- credentialed live-provider behavioral assurance or production-provider reliability;
-- agent-through-MCP behavioral assurance, MCP-derived agent verdicts, or release acceptance from protocol receipts alone;
-- Internet-hosted or third-party MCP fidelity, stdio/proxy/gateway/TLS/DNS/service-mesh transport assurance, or transport-chaos coverage;
-- third-party/production authorization-server or identity-provider assurance;
-- production JWT/JWKS signature verification, arbitrary token formats, key rotation, federation, or IdP compromise resistance;
-- Client ID Metadata Documents, Enterprise Managed Authorization, or SEP-990 identity-assertion flow assurance;
-- DPoP, mTLS, certificate/token binding, hardware-backed keys, refresh-token rotation, revocation propagation, replay detection, production credential storage, or distributed credential caches;
-- production RFC 7662 interoperability beyond the deterministic authenticated loopback introspection contract;
-- cross-service credential-reuse resistance beyond the exact deterministic resource-binding fixtures;
-- general MCP cache correctness beyond tested stale-removal, schema-drift, and identity-drift relations, including public/cross-partition sharing, cache poisoning, custom/shared stores, notification invalidation, TTL-expiry races, or distributed caches;
-- arbitrary MCP schema migrations or arbitrary registry churn beyond the exact bound drift fixtures;
-- MCP header-routing faults, malformed JSON-RPC/framing, duplicate/out-of-order responses, or complete protocol conformance;
-- malicious MCP resources, resource templates, prompts, roots, elicitation, sampling, subscriptions, or Tasks-extension coverage;
-- hosted third-party MCP delivery attestation or remote target-side MCP attestation;
-- production application-memory, vector/RAG-memory, provider-managed-conversation, or cross-user memory poisoning under SDK `MEMORY` mode;
-- hosted File Search/vector-store/RAG, `file_id`, `file_url`, external document/database/web, or MCP-resource interception under inline-file `RESOURCE` mode;
-- destination rerouting, every-hop poisoning, or distributed/remote handoff interception under native `HANDOFF` mode;
-- process-global environment variables, network/service faults, filesystem/sandbox state, clock faults, secrets, cloud/IAM, or production infrastructure chaos under local runtime-context `ENVIRONMENT` mode;
-- OpenAI tool-name or parameter-schema poisoning under description-level `TOOL_METADATA` mode;
-- OpenAI hosted/MCP/external-tool result or metadata interception;
-- cryptographically authenticated injector identity, authenticated hostile-writer evidence, signed/MAC-authenticated reports, trusted timestamps, remote attestation, WORM retention, or transparency-log anchoring;
-- automatic/adaptive red-team generation, mutation/fuzzing campaigns, sandbox-escape execution infrastructure, calibrated semantic/model graders, or automatic perturbation generation.
-
-New capabilities move out of this list only after implementation, deterministic tests, and documentation review make the stronger claim true.
-
----
-
 ## Documentation review path
 
 1. [Architecture](docs/ARCHITECTURE.md)
