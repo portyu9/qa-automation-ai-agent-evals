@@ -21,21 +21,30 @@ def error_fault() -> MCPFaultSpec:
     )
 
 
-def protocol_receipt(fault: MCPFaultSpec) -> MCPFaultReceipt:
-    observed = f"Error executing tool {fault.tool_name}: {fault.payload_json}"
+def error_text(fault: MCPFaultSpec) -> str:
+    return f"Error executing tool {fault.tool_name}: {fault.payload_json}"
+
+
+def protocol_receipt(
+    fault: MCPFaultSpec,
+    *,
+    protocol_version: str = "2026-07-28",
+    injection_point: str | None = None,
+) -> MCPFaultReceipt:
     return MCPFaultReceipt.create(
         fault=fault,
-        protocol_version="2026-07-28",
+        protocol_version=protocol_version,
         injection_point=(
-            f"mcp:2026-07-28:tools/call:{fault.tool_name}:error.content[0].text:message-suffix"
+            injection_point
+            or f"mcp:{protocol_version}:tools/call:{fault.tool_name}:"
+            "error.content[0].text:message-suffix"
         ),
-        observed_text=observed,
+        observed_text=error_text(fault),
     )
 
 
 def create_receipt() -> MCPAgentToolErrorRecoveryReceipt:
     fault = error_fault()
-    error_text = f"Error executing tool {fault.tool_name}: {fault.payload_json}"
     return MCPAgentToolErrorRecoveryReceipt.create(
         scenario_identity="a" * 64,
         fault=fault,
@@ -45,7 +54,7 @@ def create_receipt() -> MCPAgentToolErrorRecoveryReceipt:
         retry_call_id="call_retry",
         error_arguments={"customer_id": "7"},
         retry_arguments={"customer_id": "7"},
-        agent_error_output={"type": "text", "text": error_text},
+        agent_error_output={"type": "text", "text": error_text(fault)},
         expected_recovery_text="benign",
         agent_recovery_output={"type": "text", "text": "benign"},
     )
@@ -63,7 +72,6 @@ def test_error_recovery_receipt_binds_relation_without_raw_controlled_content() 
 
 def test_error_recovery_receipt_rejects_changed_retry_arguments() -> None:
     fault = error_fault()
-    error_text = f"Error executing tool {fault.tool_name}: {fault.payload_json}"
 
     with pytest.raises(ValueError, match="retry arguments"):
         MCPAgentToolErrorRecoveryReceipt.create(
@@ -75,7 +83,105 @@ def test_error_recovery_receipt_rejects_changed_retry_arguments() -> None:
             retry_call_id="call_retry",
             error_arguments={"customer_id": "7"},
             retry_arguments={"customer_id": "8"},
-            agent_error_output={"type": "text", "text": error_text},
+            agent_error_output={"type": "text", "text": error_text(fault)},
+            expected_recovery_text="benign",
+            agent_recovery_output={"type": "text", "text": "benign"},
+        )
+
+
+def test_error_recovery_receipt_rejects_reused_call_identity() -> None:
+    fault = error_fault()
+
+    with pytest.raises(ValueError, match="distinct OpenAI call IDs"):
+        MCPAgentToolErrorRecoveryReceipt.create(
+            scenario_identity="a" * 64,
+            fault=fault,
+            protocol_receipt=protocol_receipt(fault),
+            agent_tool_name=_TOOL,
+            error_call_id="call_same",
+            retry_call_id="call_same",
+            error_arguments={"customer_id": "7"},
+            retry_arguments={"customer_id": "7"},
+            agent_error_output={"type": "text", "text": error_text(fault)},
+            expected_recovery_text="benign",
+            agent_recovery_output={"type": "text", "text": "benign"},
+        )
+
+
+def test_error_recovery_receipt_rejects_agent_error_observation_mismatch() -> None:
+    fault = error_fault()
+
+    with pytest.raises(ValueError, match="agent-observed MCP ToolError"):
+        MCPAgentToolErrorRecoveryReceipt.create(
+            scenario_identity="a" * 64,
+            fault=fault,
+            protocol_receipt=protocol_receipt(fault),
+            agent_tool_name=_TOOL,
+            error_call_id="call_error",
+            retry_call_id="call_retry",
+            error_arguments={"customer_id": "7"},
+            retry_arguments={"customer_id": "7"},
+            agent_error_output={"type": "text", "text": "different error"},
+            expected_recovery_text="benign",
+            agent_recovery_output={"type": "text", "text": "benign"},
+        )
+
+
+def test_error_recovery_receipt_rejects_agent_recovery_observation_mismatch() -> None:
+    fault = error_fault()
+
+    with pytest.raises(ValueError, match="agent-observed MCP recovery"):
+        MCPAgentToolErrorRecoveryReceipt.create(
+            scenario_identity="a" * 64,
+            fault=fault,
+            protocol_receipt=protocol_receipt(fault),
+            agent_tool_name=_TOOL,
+            error_call_id="call_error",
+            retry_call_id="call_retry",
+            error_arguments={"customer_id": "7"},
+            retry_arguments={"customer_id": "7"},
+            agent_error_output={"type": "text", "text": error_text(fault)},
+            expected_recovery_text="benign",
+            agent_recovery_output={"type": "text", "text": "different recovery"},
+        )
+
+
+def test_error_recovery_receipt_rejects_wrong_protocol_version() -> None:
+    fault = error_fault()
+
+    with pytest.raises(ValueError, match="protocol version 2026-07-28"):
+        MCPAgentToolErrorRecoveryReceipt.create(
+            scenario_identity="a" * 64,
+            fault=fault,
+            protocol_receipt=protocol_receipt(fault, protocol_version="2026-01-01"),
+            agent_tool_name=_TOOL,
+            error_call_id="call_error",
+            retry_call_id="call_retry",
+            error_arguments={"customer_id": "7"},
+            retry_arguments={"customer_id": "7"},
+            agent_error_output={"type": "text", "text": error_text(fault)},
+            expected_recovery_text="benign",
+            agent_recovery_output={"type": "text", "text": "benign"},
+        )
+
+
+def test_error_recovery_receipt_rejects_wrong_protocol_observation_point() -> None:
+    fault = error_fault()
+
+    with pytest.raises(ValueError, match="unexpected observation boundary"):
+        MCPAgentToolErrorRecoveryReceipt.create(
+            scenario_identity="a" * 64,
+            fault=fault,
+            protocol_receipt=protocol_receipt(
+                fault,
+                injection_point=f"mcp:2026-07-28:tools/call:{_TOOL}:result.content[0].text",
+            ),
+            agent_tool_name=_TOOL,
+            error_call_id="call_error",
+            retry_call_id="call_retry",
+            error_arguments={"customer_id": "7"},
+            retry_arguments={"customer_id": "7"},
+            agent_error_output={"type": "text", "text": error_text(fault)},
             expected_recovery_text="benign",
             agent_recovery_output={"type": "text", "text": "benign"},
         )
@@ -110,6 +216,30 @@ def test_error_recovery_receipt_rejects_wrong_protocol_fault_kind() -> None:
             expected_recovery_text="benign",
             agent_recovery_output={"type": "text", "text": "benign"},
         )
+
+
+def test_error_recovery_receipt_rejects_tampered_argument_digest() -> None:
+    tampered = create_receipt().model_dump(mode="json")
+    tampered["retry_arguments_sha256"] = "b" * 64
+
+    with pytest.raises(ValidationError, match="argument digests"):
+        MCPAgentToolErrorRecoveryReceipt.model_validate(tampered)
+
+
+def test_error_recovery_receipt_rejects_tampered_error_observation_digest() -> None:
+    tampered = create_receipt().model_dump(mode="json")
+    tampered["agent_error_observation_sha256"] = "b" * 64
+
+    with pytest.raises(ValidationError, match="error digest"):
+        MCPAgentToolErrorRecoveryReceipt.model_validate(tampered)
+
+
+def test_error_recovery_receipt_rejects_tampered_recovery_observation_digest() -> None:
+    tampered = create_receipt().model_dump(mode="json")
+    tampered["agent_recovery_observation_sha256"] = "b" * 64
+
+    with pytest.raises(ValidationError, match="recovery digest"):
+        MCPAgentToolErrorRecoveryReceipt.model_validate(tampered)
 
 
 def test_error_recovery_receipt_rejects_tampered_root() -> None:
