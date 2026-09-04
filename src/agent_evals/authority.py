@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 from collections.abc import Sequence
 from dataclasses import dataclass
 
 from agent_evals.contracts.models import AuthorityPolicy, HandoffAuthorityGrant
 from agent_evals.evidence.models import EvidenceEvent, EvidenceKind
+
+_HANDOFF_PATH_DOMAIN = b"agent-evals/handoff-authority-path/v1\0"
 
 
 @dataclass(frozen=True, slots=True)
@@ -38,18 +42,41 @@ class EffectiveAuthority:
 
 @dataclass(frozen=True, slots=True)
 class HandoffPathState:
-    """Active run-local agent, effective authority, and accepted transition epoch."""
+    """Active run-local agent, effective authority, and exact accepted transition path."""
 
+    root_agent: str | None
     active_agent: str | None
     authority: EffectiveAuthority
-    epoch: int = 0
+    transitions: tuple[tuple[str, str], ...] = ()
 
     @classmethod
     def from_policy(cls, policy: AuthorityPolicy) -> HandoffPathState:
         return cls(
+            root_agent=policy.root_agent if policy.has_handoff_authority else None,
             active_agent=policy.root_agent if policy.has_handoff_authority else None,
             authority=EffectiveAuthority.from_root(policy),
         )
+
+    @property
+    def epoch(self) -> int:
+        return len(self.transitions)
+
+    @property
+    def path_sha256(self) -> str:
+        material = {
+            "root_agent": self.root_agent,
+            "transitions": [
+                {"source_agent": source, "target_agent": target}
+                for source, target in self.transitions
+            ],
+        }
+        canonical = json.dumps(
+            material,
+            sort_keys=True,
+            separators=(",", ":"),
+            allow_nan=False,
+        ).encode("utf-8")
+        return hashlib.sha256(_HANDOFF_PATH_DOMAIN + canonical).hexdigest()
 
 
 def event_agent_identity(value: object) -> str | None:
@@ -69,7 +96,7 @@ def advance_handoff(
     Budget violations are intentionally not handled here. ``PolicyOracle`` records those as
     non-compensatory failures while still following the observed valid source→target transition.
     Malformed identities, non-active sources, missing grants, or authority re-expansion never
-    advance the state or epoch.
+    advance the state, epoch, or path identity.
     """
     if event.kind is not EvidenceKind.HANDOFF:
         raise ValueError("advance_handoff requires HANDOFF evidence")
@@ -109,12 +136,30 @@ def advance_handoff(
 
     return (
         HandoffPathState(
+            root_agent=state.root_agent,
             active_agent=target_agent,
             authority=child_authority,
-            epoch=state.epoch + 1,
+            transitions=(*state.transitions, (source_agent, target_agent)),
         ),
         (),
     )
+
+
+def validated_handoff_state_before(
+    policy: AuthorityPolicy,
+    events: Sequence[EvidenceEvent],
+    sequence: int,
+) -> HandoffPathState:
+    """Replay accepted authority transitions before one evidence sequence."""
+    state = HandoffPathState.from_policy(policy)
+    if not policy.has_handoff_authority:
+        return state
+
+    for event in events[:sequence]:
+        if event.kind is not EvidenceKind.HANDOFF:
+            continue
+        state, _ = advance_handoff(policy, state, event)
+    return state
 
 
 def validated_handoff_epoch_before(
@@ -122,20 +167,8 @@ def validated_handoff_epoch_before(
     events: Sequence[EvidenceEvent],
     sequence: int,
 ) -> int:
-    """Replay accepted authority transitions before one evidence sequence.
-
-    The epoch is not a raw count of handoff-shaped events. Only transitions that would advance
-    active authority under the same graph and attenuation semantics used by ``PolicyOracle`` count.
-    """
-    state = HandoffPathState.from_policy(policy)
-    if not policy.has_handoff_authority:
-        return 0
-
-    for event in events[:sequence]:
-        if event.kind is not EvidenceKind.HANDOFF:
-            continue
-        state, _ = advance_handoff(policy, state, event)
-    return state.epoch
+    """Return accepted transition depth, never a raw count of handoff-shaped events."""
+    return validated_handoff_state_before(policy, events, sequence).epoch
 
 
 def attenuate_authority(
