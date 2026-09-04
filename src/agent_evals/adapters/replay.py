@@ -6,14 +6,17 @@ or environment and therefore cannot establish fresh liveness or side-effect evid
 
 from __future__ import annotations
 
-from agent_evals.adapters.base import AdapterResult
+from agent_evals.adapters.base import AdapterPreconditionError, AdapterResult
 from agent_evals.contracts.models import EvaluationScenario, SubjectFingerprint
 from agent_evals.evidence.models import TrialEvidence
 from agent_evals.evidence.store import LocalEvidenceStore
 
 
-class ReplayIdentityError(ValueError):
+class ReplayIdentityError(AdapterPreconditionError):
     """Recorded evidence belongs to a different trial, subject, or scenario contract."""
+
+    def __init__(self, reason: str) -> None:
+        super().__init__(code="replay_identity_mismatch", reason=reason)
 
 
 class EvidenceReplayAdapter:
