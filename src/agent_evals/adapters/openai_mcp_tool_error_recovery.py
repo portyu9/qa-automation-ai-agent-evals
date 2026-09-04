@@ -280,6 +280,20 @@ def _attach_verified_recovery_bridge(
             )
         results.append(matching[0])
 
+    if not (
+        requests[0].sequence
+        < results[0].sequence
+        < requests[1].sequence
+        < results[1].sequence
+    ):
+        raise AdapterPreconditionError(
+            code="mcp_error_retry_causality_unverified",
+            reason=(
+                "normalized agent evidence does not prove that the recovery call was issued only "
+                "after the controlled ToolError became model-visible"
+            ),
+        )
+
     bridge = MCPAgentToolErrorRecoveryReceipt.create(
         scenario_identity=scenario.identity,
         fault=fault,
