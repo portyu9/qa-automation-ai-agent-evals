@@ -10,7 +10,7 @@ from typing import Any, cast
 from agent_evals.adapters.base import AdapterPreconditionError, AdapterResult
 from agent_evals.adapters.openai_agents import OpenAIAgentsAdapter, ResourceResolver, StateReader
 from agent_evals.contracts.models import EvaluationScenario, SubjectFingerprint
-from agent_evals.evidence.models import EvidenceEvent
+from agent_evals.evidence.models import EvidenceEvent, EvidenceKind
 from agent_evals.mcp.agent_metadata_bridge import MCPAgentToolMetadataReceipt
 from agent_evals.mcp.models import MCPFaultKind, MCPFaultReceipt, MCPFaultSpec
 
@@ -93,11 +93,15 @@ class OpenAIAgentsMCPToolMetadataAdapter:
             )
 
             bridge = recorder.require_bridge(scenario_identity=scenario.identity)
-            events: list[EvidenceEvent] = [bridge.to_event(sequence=0)]
-            events.extend(
-                event.model_copy(update={"sequence": index})
-                for index, event in enumerate(delegated.events, start=1)
-            )
+            events: list[EvidenceEvent] = []
+            inserted = False
+            for event in delegated.events:
+                if not inserted and event.kind is not EvidenceKind.ATTACK_DELIVERY:
+                    events.append(bridge.to_event(sequence=len(events)))
+                    inserted = True
+                events.append(event.model_copy(update={"sequence": len(events)}))
+            if not inserted:
+                events.append(bridge.to_event(sequence=len(events)))
             return replace(delegated, events=tuple(events))
         finally:
             await server.cleanup()
