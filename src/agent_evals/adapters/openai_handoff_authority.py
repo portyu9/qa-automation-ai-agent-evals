@@ -34,24 +34,26 @@ class OpenAIAgentsHandoffAuthorityAdapter(OpenAIAgentsAdapter):
         scenario: EvaluationScenario,
         trial_id: str,
     ) -> AdapterResult:
-        if scenario.authority.has_handoff_authority:
-            expected_root = scenario.authority.root_agent
-            observed_root = _required_identity(
-                getattr(self._agent, "name", None),
-                phase="root agent",
-            )
-            if observed_root != expected_root:
-                raise AdapterPreconditionError(
-                    code="handoff_root_agent_mismatch",
-                    reason=(
-                        "configured handoff root_agent does not match the supplied OpenAI SDK Agent"
-                    ),
-                )
+        self._validate_root_agent(scenario)
         return await super().execute(
             subject=subject,
             scenario=scenario,
             trial_id=trial_id,
         )
+
+    def _validate_root_agent(self, scenario: EvaluationScenario) -> None:
+        if not scenario.authority.has_handoff_authority:
+            return
+        expected_root = scenario.authority.root_agent
+        observed_root = _required_identity(
+            getattr(self._agent, "name", None),
+            phase="root agent",
+        )
+        if observed_root != expected_root:
+            raise AdapterPreconditionError(
+                code="handoff_root_agent_mismatch",
+                reason="configured handoff root_agent does not match the supplied OpenAI SDK Agent",
+            )
 
     def _normalize_items(
         self,
