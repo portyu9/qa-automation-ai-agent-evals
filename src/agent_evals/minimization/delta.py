@@ -35,8 +35,8 @@ async def ddmin(
     reproducer. A hard evaluation budget prevents a pathological oracle or expensive live agent
     from turning minimization into an unbounded secondary workload.
     """
-    if max_evaluations < 1:
-        raise ValueError("max_evaluations must be >= 1")
+    if not _is_positive_evaluation_budget(max_evaluations):
+        raise ValueError("max_evaluations must be a positive integer")
 
     current = tuple(items)
     original_size = len(current)
@@ -82,6 +82,10 @@ async def ddmin(
         granularity = min(len(current), granularity * 2)
 
     return MinimizationResult(original_size, current, evaluations, exhausted=False)
+
+
+def _is_positive_evaluation_budget(value: object) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool) and value > 0
 
 
 def _partition_ranges(length: int, parts: int) -> tuple[tuple[int, int], ...]:
