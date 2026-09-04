@@ -97,8 +97,10 @@ class LocalEvidenceStore:
         max_payload_bytes: int = 8 * 1024 * 1024,
         max_manifest_bytes: int = 64 * 1024,
     ) -> None:
-        if max_payload_bytes < 1 or max_manifest_bytes < 1:
-            raise ValueError("evidence-store byte ceilings must be positive")
+        if not _is_positive_byte_ceiling(max_payload_bytes) or not _is_positive_byte_ceiling(
+            max_manifest_bytes
+        ):
+            raise ValueError("evidence-store byte ceilings must be positive integers")
         self._root = Path(root)
         self._max_payload_bytes = max_payload_bytes
         self._max_manifest_bytes = max_manifest_bytes
@@ -250,6 +252,10 @@ class _RecordPaths:
     payload: Path
     manifest: Path
     lock: Path
+
+
+def _is_positive_byte_ceiling(value: object) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool) and value > 0
 
 
 def _record_key(*, trial_id: str, subject_identity: str, scenario_identity: str) -> str:
