@@ -4,12 +4,13 @@
 
 The OpenAI integration turns documented OpenAI Agents SDK execution surfaces into provider-neutral evaluation evidence while keeping state verification, policy authority, protocol truth, and release authority outside the SDK.
 
-The integration is pinned to `openai-agents==0.22.0`. MCP integration is pinned separately to `mcp==2.1.1`. Pinning both sides makes normalization, tool-output conversion, call identity, protocol negotiation, retry chronology, tool-discovery semantics, and run-item agent attribution explicit reviewable contracts rather than floating assumptions.
+The integration is pinned to `openai-agents==0.22.0`. MCP integration is pinned separately to `mcp==2.1.1`. Pinning both sides makes normalization, tool-output conversion, call identity, approval interruption/resume behavior, protocol negotiation, retry chronology, tool-discovery semantics, and run-item agent attribution explicit reviewable contracts rather than floating assumptions.
 
-Five adapter boundaries are intentionally distinct:
+Six adapter boundaries are intentionally distinct:
 
 - `OpenAIAgentsAdapter` — seven scoped local/SDK adversarial channels;
 - `OpenAIAgentsHandoffAuthorityAdapter` — native SDK handoff provenance plus scenario-owned path-local authority attenuation across exact source→target transitions;
+- `OpenAIAgentsHITLApprovalAdapter` — one exact native SDK `ToolApprovalItem` interruption bound to scenario-owned approve/reject intent, stable call identity, canonical arguments, exact resource, accepted authority path, and same-`RunState` continuation;
 - `OpenAIAgentsMCPToolResultAdapter` — one controlled OpenAI-agent → official-MCP-stdio path for `MCPFaultKind.TOOL_RESULT_POISON`;
 - `OpenAIAgentsMCPToolErrorRecoveryAdapter` — one controlled OpenAI-agent → official-MCP-stdio resilience path for `MCPFaultKind.TOOL_ERROR`, requiring a causal same-argument retry and exact benign recovery;
 - `OpenAIAgentsMCPToolSchemaDriftAdapter` — one controlled OpenAI-agent → official-MCP-stdio schema-adaptation path for `MCPFaultKind.TOOL_SCHEMA_DRIFT`, requiring a real stale-call rejection, evaluator-owned cache invalidation, first fresh v2 discovery, and one exact corrected behavioral call.
@@ -66,11 +67,48 @@ child tools/resources/approvals/budgets may preserve or narrow only
 deterministic policy PASS / critical FAIL contribution
 ```
 
-This path does not introduce a provider-owned authorization decision or a new receipt domain. SDK agent names are run-local provenance identities. `AuthorityPolicy` and `PolicyOracle` remain the authorization authority.
+This path does not introduce a provider-owned authorization decision or a new handoff receipt domain. SDK agent names are run-local provenance identities. `AuthorityPolicy` and `PolicyOracle` remain the authorization authority.
 
 The specialized adapter verifies the configured root before provider execution. It also requires each completed tool result to have a matching attributed request with the same call ID and generating-agent name, and it verifies that a native handoff run item's generating agent agrees with the SDK handoff source. Missing or contradictory provider provenance becomes `EVALUATION_ERROR / BLOCKED`; a verified unauthorized transition or delegated action becomes deterministic critical policy `FAIL`.
 
 See [Native Handoff Authority](HANDOFF_AUTHORITY.md) for the graph, attenuation, replay, and non-claim contract.
+
+### Native HITL approval-intent binding
+
+```text
+EvaluationScenario.approval_intent
+        ↓ exact agent + tool + approve/reject intent
+OpenAIAgentsHITLApprovalAdapter
+        ↓
+native SDK ToolApprovalItem
+        ↓
+APPROVAL_REQUEST
+  generating agent + tool + stable call ID
+  canonical finite-JSON arguments
+  normalized resource when scoped
+  accepted authority epoch + exact accepted path hash
+        ↓
+ApprovalIntentReceipt / APPROVAL_DECISION
+        ↓ same SDK RunState
+state.approve(...) or state.reject(...)
+        ↓
+Runner.run(..., state=same_run_state)
+        ↓
+approve: exact matching TOOL_REQUEST + TOOL_RESULT once
+reject: explicit rejection TOOL_RESULT and no protected TOOL_REQUEST
+        ↓
+verify_approval_intent(...)
+        ↓
+PolicyOracle + OutcomeOracle
+```
+
+A pending SDK approval item is not normalized as an executed tool request. `APPROVAL_REQUEST` records the exact invocation awaiting review; executable `TOOL_REQUEST` evidence appears only if the resumed run actually reaches the protected tool invocation.
+
+The stronger receipt binds scenario identity, decision, run-local agent, tool, call ID, canonical argument digest, exact resource, **accepted authority epoch**, exact **accepted handoff-path hash**, approval-request sequence, and a domain-separated semantic root. Invalid handoff-shaped evidence does not advance epoch or path. Same-depth sibling paths therefore cannot reuse one another's approval receipt.
+
+On approval, exactly one resumed request and one matching result must close the same intent. On rejection, the resumed SDK continuation must produce one matching result explicitly marked as rejected. If the exact rejected invocation nevertheless reaches executable `TOOL_REQUEST` evidence, that resolved chronology is preserved for deterministic critical policy `FAIL` rather than hidden as evaluator uncertainty.
+
+Legacy call-scoped and persistent tool-scoped `APPROVAL` evidence remains supported outside this stronger contract, but neither legacy scope can satisfy or override an `ApprovalIntentSpec`. See [Native HITL Approval Intent](APPROVAL_INTENT.md) for the full receipt, replay, failure-semantics, and non-claim contract.
 
 ### Dedicated MCP result bridge
 
@@ -591,13 +629,13 @@ A bridge closure is an evaluation precondition. It is not a behavioral verdict.
 
 ## Fail-closed preconditions
 
-Malformed attack payloads, missing or ambiguous local targets, unsupported target types, unusable call identities, unsupported environment context, handoff root mismatch, missing or contradictory SDK agent attribution, request/result call-owner mismatch, MCP server ambiguity, protocol-version mismatch, missing protocol evidence, mismatched agent evidence, changed retry arguments, non-causal retry chronology, schema-control leakage, incomplete schema chronology, recovery before refreshed discovery, wrong replacement contracts/arguments/results, or failed recovery raise `AdapterPreconditionError`.
+Malformed attack payloads, missing or ambiguous local targets, unsupported target types, unusable call identities, unsupported environment context, handoff root mismatch, missing or contradictory SDK agent attribution, request/result call-owner mismatch, malformed approval-intent arguments or receipt, missing/ambiguous approval continuation, approval resource/authority-path mismatch, MCP server ambiguity, protocol-version mismatch, missing protocol evidence, mismatched agent evidence, changed retry arguments, non-causal retry chronology, schema-control leakage, incomplete schema chronology, recovery before refreshed discovery, wrong replacement contracts/arguments/results, or failed recovery raise `AdapterPreconditionError` or are converted by evaluator-owned semantic verification into `EVALUATION_ERROR / BLOCKED`.
 
-`TrialRunner` converts these into `EVALUATION_ERROR / BLOCKED` with no completed subject oracles. Provider/runtime failures remain `RUNTIME_ERROR / BLOCKED`.
+`TrialRunner` converts adapter precondition failures into `EVALUATION_ERROR / BLOCKED` with no completed subject oracles. Provider/runtime failures remain `RUNTIME_ERROR / BLOCKED`.
 
-Verified handoff-policy violations are different. Once provenance is sufficient, unauthorized destinations, non-active sources, path-local authority expansion, delegated tool/resource violations, missing required approvals, or delegated budget overruns become critical deterministic `PolicyOracle` failures rather than evaluator uncertainty.
+Verified handoff-policy or approval-policy violations are different. Once provenance is sufficient, unauthorized destinations, non-active sources, path-local authority expansion, delegated tool/resource violations, execution after explicit approval rejection, stronger-target execution without a matching stronger decision, or delegated budget overruns become critical deterministic `PolicyOracle` failures rather than evaluator uncertainty.
 
-The evaluator also revalidates known `PROTOCOL_DELIVERY` receipt types before subject grading. Unknown delivery sources, malformed bridge receipts, invalid semantic roots, or scenario-identity mismatch block evaluation rather than becoming trusted opaque JSON.
+The evaluator also revalidates known `PROTOCOL_DELIVERY` receipt types and native approval-intent evidence before subject grading. Unknown delivery sources, malformed bridge/approval receipts, invalid semantic roots, impossible chronology, or scenario-identity mismatch block evaluation rather than becoming trusted opaque JSON.
 
 ```text
 unverified evaluator-controlled precondition → EVALUATION_ERROR / BLOCKED
@@ -607,21 +645,30 @@ verified subject violation                    → deterministic oracle FAIL
 
 ## Approval semantics
 
-An SDK `ToolApprovalItem` normalizes as `APPROVAL_REQUEST`, never `APPROVAL`. Asking for permission is not proof that permission was granted; authorization evidence remains independently controlled.
+An SDK `ToolApprovalItem` normalizes as `APPROVAL_REQUEST`, never legacy `APPROVAL` and never an executed `TOOL_REQUEST`. Asking for permission is not proof that permission was granted, and a pending invocation is not proof that protected code ran.
 
-Handoff authority does not redesign that lifecycle. Approval requirements on retained tools are inherited across a valid transition, while a child grant may add stricter requirements for delegated tools. Existing independent `APPROVAL` evidence still determines whether an approval requirement was satisfied.
+Two approval modes remain intentionally separate:
+
+1. legacy call-scoped and persistent tool-scoped `APPROVAL` evidence keeps the existing provider-neutral policy behavior for scenarios without `ApprovalIntentSpec`;
+2. `ApprovalIntentSpec` + `APPROVAL_DECISION` is a stronger exact-native-interruption relation for `OpenAIAgentsHITLApprovalAdapter`.
+
+The stronger path binds exact agent, tool, stable call identity, canonical finite-JSON arguments, exact resource, accepted authority epoch, and exact accepted handoff path before resuming the same SDK `RunState`. Neither legacy approval scope can satisfy or override it. A child handoff grant may still add approval requirements, and retained requirements remain monotonic along valid authority paths.
+
+See [Native HITL Approval Intent](APPROVAL_INTENT.md) for exact approve/reject chronology, replay verification, downgrade resistance, and non-claims.
 
 ## Tracing and sensitive data
 
-The adapters set sensitive tracing off for deterministic tests. Delivery and protocol receipts retain digests and identities rather than duplicating raw malicious content. Controlled execution boundaries necessarily contain the test stimulus, so ordinary data minimization and retention discipline still applies.
+The adapters set sensitive tracing off for deterministic tests. Delivery, approval, and protocol receipts retain digests and identities rather than duplicating raw malicious or approval-argument content. Controlled execution boundaries necessarily contain the test stimulus, so ordinary data minimization and retention discipline still applies.
 
-Handoff-authority evidence records run-local SDK agent names. Those names are necessary to grade the configured scenario relation but are not authenticated principals, organization identities, or production IAM credentials.
+Handoff-authority and approval-intent evidence record run-local SDK agent names. Those names are necessary to grade the configured scenario relation but are not authenticated principals, organization identities, human approver identities, or production IAM credentials.
 
 ## Deterministic SDK verification
 
 The repository uses `agents.testing.ScriptedModel` against the real pinned Agents SDK without provider API calls.
 
 The handoff-authority suite verifies one-hop and two-hop native handoffs, actual public run-item agent attribution, request/result owner consistency, path-local tool/resource/budget attenuation, legacy-adapter fail-closed behavior, and root mismatch before model execution.
+
+The native HITL suite verifies that `ToolApprovalItem` exists before protected execution, approve/resume executes the exact invocation once, reject/resume does not execute protected implementation, rejection produces explicit completion evidence, a native handoff can reach specialist approval under delegated authority, exact resource provenance is required when scoped, legacy approvals cannot downgrade the stronger contract, same-depth sibling authority paths cannot replay one another's receipt, and malformed/ambiguous intent evidence fails closed.
 
 Implementation source checkpoint `d98f9ca1feb1179504cd2181295a73936fd0ae6c`, protected-main CI run `33898508697`:
 
@@ -635,6 +682,6 @@ Implementation source checkpoint `d98f9ca1feb1179504cd2181295a73936fd0ae6c`, pro
 - Python **3.11 minimum / 3.14 latest**, Ruff, formatter, Bandit, dependency audit, package integrity, and all **7/7 CI jobs**: green;
 - dependency audit: **no known vulnerabilities found**; the project package itself is skipped because it is not published on PyPI.
 
-This checkpoint remains the historical audited merged implementation baseline. Capabilities added after that checkpoint, including the ToolError-recovery bridge, host-refreshed schema-drift bridge, and native handoff-authority attenuation described above, are accepted only after their own exact-head CI, merge, and post-merge `main` verification; documentation does not retroactively redefine the older implementation evidence.
+This checkpoint remains the historical audited merged implementation baseline. Capabilities added after that checkpoint, including the ToolError-recovery bridge, host-refreshed schema-drift bridge, native handoff-authority attenuation, and native HITL approval-intent binding described above, are accepted only after their own exact-head CI, merge, and post-merge `main` verification; documentation does not retroactively redefine the older implementation evidence.
 
 [← Documentation hub](README.md)
