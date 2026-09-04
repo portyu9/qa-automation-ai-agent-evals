@@ -211,10 +211,10 @@ MCP fault and remote-auth probes are not `TrialEvidence` and are therefore outsi
 
 The implemented OpenAI adversarial layer establishes all seven generic adapter channel categories at the scoped boundaries above, including positive and negative `ENVIRONMENT` consumption semantics. The separate MCP protocol layer establishes six deterministic fault observations/relations, the loopback HTTP layer establishes three remote-auth contract tests, and the separated OAuth layer establishes three OAuth-flow contract tests.
 
-Implementation source checkpoint `3c33770a7be8089c1ec68f5dec26fcf76e8dc871`, CI run `33870616736`:
+Implementation source checkpoint `ed0b1f9415e49b49a23c77c9372a5d09f70682fc`, protected-main CI run `33881346071`:
 
-- deterministic core: **192 passed, 23 deselected**;
-- branch coverage: **93.37%** against the 90% gate;
+- deterministic core: **330 passed, 23 deselected**;
+- branch coverage: **93.61%** against the 90% gate;
 - strict mypy: **0 issues across 40 source files**;
 - deterministic OpenAI SDK suite: **11/11 passed**;
 - deterministic MCP protocol suite: **6/6 passed**;
@@ -223,7 +223,7 @@ Implementation source checkpoint `3c33770a7be8089c1ec68f5dec26fcf76e8dc871`, CI 
 - Python **3.11 minimum / 3.14 latest** quality jobs, Ruff, formatter, Bandit, dependency audit, and package integrity: **7/7 CI jobs green**;
 - dependency audit: **no known vulnerabilities found**; the project package itself is skipped because it is not published on PyPI.
 
-This checkpoint identifies the audited implementation revision. Documentation-only commits after that revision do not silently redefine the source evidence; their own CI status is recorded in the pull-request history.
+This checkpoint identifies the audited implementation revision. This documentation-only synchronization is validated separately by pull-request CI and does not silently redefine the implementation evidence.
 
 ## Explicit non-claims
 

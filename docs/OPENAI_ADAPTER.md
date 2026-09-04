@@ -237,10 +237,10 @@ The repository uses `agents.testing.ScriptedModel` against the real Agents SDK r
 - a targeted environment tool that executes without reading the injected key and therefore remains `BLOCKED`;
 - missing/malformed controlled prerequisites blocking before behavioral grading.
 
-Implementation source checkpoint `3c33770a7be8089c1ec68f5dec26fcf76e8dc871`, CI run `33870616736`:
+Implementation source checkpoint `ed0b1f9415e49b49a23c77c9372a5d09f70682fc`, protected-main CI run `33881346071`:
 
-- deterministic core: **192 passed, 23 deselected**;
-- branch coverage: **93.37%** against the 90% gate;
+- deterministic core: **330 passed, 23 deselected**;
+- branch coverage: **93.61%** against the 90% gate;
 - strict mypy: **0 issues across 40 source files**;
 - independent OpenAI SDK suite: **11/11 passed**;
 - independent MCP protocol suite: **6/6 passed**;
@@ -249,6 +249,6 @@ Implementation source checkpoint `3c33770a7be8089c1ec68f5dec26fcf76e8dc871`, CI 
 - Python **3.11 minimum / 3.14 latest** quality jobs, Ruff, formatter, Bandit, dependency audit, and package integrity: **7/7 CI jobs green**;
 - dependency audit: **no known vulnerabilities found**; the project package itself is skipped because it is not published on PyPI.
 
-This checkpoint identifies the audited implementation revision. Documentation-only closeout commits are validated separately by PR CI.
+This checkpoint identifies the audited implementation revision. This documentation-only synchronization is validated separately by pull-request CI and does not silently redefine the implementation evidence.
 
 The additional MCP suites do not broaden this adapter's claim. These OpenAI tests establish controlled SDK-harness behavior; they do not establish live-model quality, provider reliability, production deployment safety, target-side delivery attestation, OpenAI hosted/MCP interception, production memory/retrieval assurance, distributed-agent-fabric interception, external infrastructure fault coverage, or production identity-provider assurance.

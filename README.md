@@ -430,10 +430,10 @@ qa-automation-ai-agent-evals/
 
 ## Verified implementation baseline
 
-Implementation source checkpoint `3c33770a7be8089c1ec68f5dec26fcf76e8dc871`, CI run `33870616736`:
+Implementation source checkpoint `ed0b1f9415e49b49a23c77c9372a5d09f70682fc`, protected-main CI run `33881346071`:
 
-- deterministic core: **192 passed, 23 deselected**;
-- branch coverage: **93.37%** against the 90% gate;
+- deterministic core: **330 passed, 23 deselected**;
+- branch coverage: **93.61%** against the 90% gate;
 - strict mypy: **0 issues across 40 source files**;
 - deterministic OpenAI SDK suite: **11/11 passed**;
 - deterministic MCP protocol suite: **6/6 passed**;
@@ -446,7 +446,7 @@ Implementation source checkpoint `3c33770a7be8089c1ec68f5dec26fcf76e8dc871`, CI 
 - package integrity: green;
 - all **7/7 CI jobs**: green.
 
-This baseline identifies the audited implementation revision. Documentation-only closeout commits are validated separately by pull-request CI and do not silently redefine the implementation evidence.
+This baseline identifies the audited implementation revision. This documentation-only synchronization is validated separately by pull-request CI and does not silently redefine the implementation evidence.
 
 ---
 
