@@ -6,11 +6,11 @@ This document is intentionally strict. Repository claims must never become stron
 
 ### No credentialed live-provider assurance yet
 
-The OpenAI integration is pinned to `openai-agents==0.22.0`. CI exercises the real SDK runner/tool/handoff/context loop deterministically with `agents.testing.ScriptedModel` and no provider API call.
+The OpenAI integration is pinned to `openai-agents==0.22.0`. CI exercises the real SDK runner/tool/handoff/approval/context loop deterministically with `agents.testing.ScriptedModel` and no provider API call.
 
-The SDK tier covers all seven generic adversarial channel categories at scoped local/SDK boundaries. A separate `OpenAIAgentsHandoffAuthorityAdapter` exercises run-local native handoff authority attenuation, and three separate adapters exercise exact OpenAI-agent → official-MCP-stdio paths: one `TOOL_RESULT_POISON` same-call bridge, one causal `TOOL_ERROR` → same-argument retry → benign recovery bridge, and one host-refreshed `TOOL_SCHEMA_DRIFT` adaptation bridge.
+The SDK tier covers all seven generic adversarial channel categories at scoped local/SDK boundaries. A separate `OpenAIAgentsHandoffAuthorityAdapter` exercises run-local native handoff authority attenuation. `OpenAIAgentsHITLApprovalAdapter` exercises one exact native `ToolApprovalItem` → evaluator decision → same-`RunState` continuation relation. Three additional adapters exercise exact OpenAI-agent → official-MCP-stdio paths: one `TOOL_RESULT_POISON` same-call bridge, one causal `TOOL_ERROR` → same-argument retry → benign recovery bridge, and one host-refreshed `TOOL_SCHEMA_DRIFT` adaptation bridge.
 
-None of this establishes live-model quality, production-provider availability, provider-side delivery attestation, production IAM, or credentialed end-to-end assurance.
+None of this establishes live-model quality, production-provider availability, provider-side delivery attestation, authenticated human approval, production IAM, or credentialed end-to-end assurance.
 
 Terminal application state remains independently observed; provider output is not the state oracle.
 
@@ -28,7 +28,7 @@ Terminal application state remains independently observed; provider output is no
 
 These are concrete implementations of a generic taxonomy, not assertions that every production system carrying a similarly named boundary is intercepted.
 
-The dedicated handoff-authority and MCP adapters are separate integrations and do not widen these seven local/SDK mechanisms.
+The dedicated handoff-authority, native-HITL, and MCP adapters are separate integrations and do not widen these seven local/SDK mechanisms.
 
 ### `ENVIRONMENT` means local SDK application context, not infrastructure chaos
 
@@ -87,6 +87,33 @@ The executable boundary is intentionally narrower than production identity and a
 - the deterministic SDK tests use `agents.testing.ScriptedModel`; they do not establish live-model routing quality or provider availability.
 
 Missing or contradictory SDK provenance—such as a configured root that does not match the supplied agent, missing call attribution, or request/result ownership disagreement—blocks evaluation as `EVALUATION_ERROR / BLOCKED`. Once the required provenance exists, an observed unauthorized transition or delegated action is deterministic subject evidence and remains a critical policy `FAIL`; evaluator uncertainty is not rewritten as a product defect, and a product defect is not downgraded to uncertainty merely because the run involved multiple agents.
+
+### Native HITL approval intent is exact evaluator evidence, not human authentication
+
+`OpenAIAgentsHITLApprovalAdapter` is a separate stronger approval-assurance boundary. It does not change the meaning of legacy call-scoped or persistent tool-scoped `APPROVAL` evidence for scenarios that do not configure `ApprovalIntentSpec`.
+
+For the stronger path, the pinned SDK must expose one real `ToolApprovalItem` interruption before protected implementation execution. The framework normalizes that interruption as `APPROVAL_REQUEST`, binds the scenario-owned approve/reject intent to the exact run-local generating agent, tool, stable call ID, canonical finite JSON argument digest, normalized resource when scoped, accepted handoff-authority epoch, exact accepted handoff-path hash, and approval-request sequence, and emits one integrity-bound `APPROVAL_DECISION` receipt. The same SDK `RunState` is then resumed through `state.approve(...)` or `state.reject(...)`.
+
+On approval, the verifier requires exactly one matching executable `TOOL_REQUEST` and exactly one matching non-rejection `TOOL_RESULT` after resume. On clean rejection, it requires explicit matching post-decision rejection-result evidence and no protected executable request. If the exact rejected invocation nevertheless reaches `TOOL_REQUEST`, that resolved chronology is preserved so deterministic policy grading can record execution-after-rejection as critical `FAIL` rather than evaluator uncertainty.
+
+The stronger receipt is deliberately path-aware. Authority epoch is derived only from semantically accepted handoffs, not from a raw count of handoff-shaped events. The receipt also binds a domain-separated hash of the exact accepted handoff path, so different valid sibling paths that reach the same named agent at the same depth cannot reuse one another's approval.
+
+Legacy approval evidence cannot silently downgrade this relation: neither a prior persistent tool approval nor a legacy call-scoped approval satisfies or overrides an `ApprovalIntentSpec` target.
+
+This executable boundary still does **not** establish:
+
+- the identity, presence, intent, competence, employment status, or authenticity of a real human approver;
+- signatures, MACs, trusted timestamps, non-repudiation, hardware-backed approval, or external workflow attestation;
+- enterprise approval routing, separation-of-duties policy, quorum/multi-party approval, escalation, expiry, revocation, or delegation semantics;
+- production IAM/RBAC/ABAC, organization or tenant identity, workforce identity, or provider-side authorization enforcement;
+- hosted approval UI correctness, anti-clickjacking/phishing properties, accessibility, or operator-session integrity;
+- cross-process, cross-host, durable-queue, database-backed, or distributed resume safety;
+- exactly-once distributed side effects merely because the controlled local SDK invocation executed once;
+- live-model quality, provider availability, or arbitrary orchestration-framework HITL behavior;
+- arbitrary hosted-tool or MCP approval behavior;
+- proof that an external target enforced the evaluator's approval decision.
+
+`ApprovalIntentReceipt.root_sha256` is an integrity value over evaluator-owned evidence, not an authenticated approver signature. The narrow claim remains historical and local to the controlled pinned-SDK relation: the exact interruption observed by the evaluator is the exact invocation whose approve/reject continuation is then verified.
 
 ---
 
@@ -273,19 +300,23 @@ Dynamic Client Registration is compatibility fallback behavior, not the preferre
 
 ---
 
-### Approval requests are not approvals
+### Approval requests are not approvals; stronger decisions are still evaluator evidence
 
-SDK `ToolApprovalItem` observations normalize as `APPROVAL_REQUEST`, never `APPROVAL`. Privileged execution requires independent authorization evidence.
+SDK `ToolApprovalItem` observations normalize as `APPROVAL_REQUEST`, never legacy `APPROVAL` and never executable `TOOL_REQUEST`. Asking for permission is not proof that permission was granted, and a pending invocation is not proof that protected implementation code ran.
+
+Legacy provider-neutral call-scoped and persistent tool-scoped `APPROVAL` evidence remains supported. Separately, when a scenario configures `ApprovalIntentSpec`, only its exact integrity-bound `APPROVAL_DECISION` relation can satisfy the stronger native HITL requirement. Neither legacy approval scope can substitute for or override it.
+
+Even a valid `ApprovalIntentReceipt` remains evaluator-owned evidence. It is not an authenticated human signature, production IAM decision, external workflow attestation, or proof that a remote target enforced the approval.
 
 ### No semantic/model grader yet
 
 The framework does not currently use a model-as-judge. Deterministic state and policy authority remain primary. A future semantic grader requires calibration, provenance, explicit failure semantics, and non-overriding precedence relative to critical deterministic failures.
 
-### Delivery and protocol receipts are not target-side attestation
+### Delivery, approval, and protocol receipts are not target-side attestation
 
-A valid OpenAI attack receipt proves consistency relative to the trusted evaluator's controlled observation. `MCPFaultReceipt` proves consistency relative to a trusted protocol observation. `MCPAgentToolResultReceipt` proves consistency between one verified MCP result and one exact normalized OpenAI agent call/result boundary. `MCPAgentToolErrorRecoveryReceipt` proves consistency across one verified ToolError observation and one exact normalized causal retry/recovery relation. `MCPAgentToolSchemaDriftReceipt` proves consistency across one verified schema-drift protocol relation and one exact normalized host-refreshed agent adaptation relation. `MCPRemoteAuthReceipt` and `MCPOAuthFlowReceipt` prove their respective deterministic loopback observations.
+A valid OpenAI attack receipt proves consistency relative to the trusted evaluator's controlled observation. `ApprovalIntentReceipt` proves consistency between one scenario-owned decision and one exact recorded native approval interruption/continuation relation. `MCPFaultReceipt` proves consistency relative to a trusted protocol observation. `MCPAgentToolResultReceipt` proves consistency between one verified MCP result and one exact normalized OpenAI agent call/result boundary. `MCPAgentToolErrorRecoveryReceipt` proves consistency across one verified ToolError observation and one exact normalized causal retry/recovery relation. `MCPAgentToolSchemaDriftReceipt` proves consistency across one verified schema-drift protocol relation and one exact normalized host-refreshed agent adaptation relation. `MCPRemoteAuthReceipt` and `MCPOAuthFlowReceipt` prove their respective deterministic loopback observations.
 
-None is independent cryptographic proof that an arbitrary remote target consumed content, a production issuer minted a token correctly, or a deployed agent respected policy.
+None is independent cryptographic proof that a real human approved an invocation, an arbitrary remote target consumed content, a production issuer minted a token correctly, or a deployed agent respected policy.
 
 Control-plane identities are labels/content identities, not authenticated signer identities. Receipt roots are SHA-256 integrity values, not signatures, MACs, trusted timestamps, or hardware attestation.
 
@@ -299,7 +330,9 @@ The repository does not claim signatures/MACs, key management, trusted timestamp
 
 ### Replay is historical regrading, not re-execution
 
-`EvidenceReplayAdapter` requires exact trial/subject/scenario identity and can reapply deterministic grading to recorded evidence. It does not rerun providers, tools, sessions, resources, handoffs, environment injectors, any of the MCP stdio bridges, protocol probes, authorization probes, OAuth flows, or external state readers and cannot establish fresh delivery or fresh authorization. Persisted `PROTOCOL_DELIVERY` receipts are semantically revalidated; replay does not recreate the protocol relation that originally produced them.
+`EvidenceReplayAdapter` requires exact trial/subject/scenario identity and can reapply deterministic grading to recorded evidence. It does not rerun providers, tools, sessions, resources, handoffs, approval interruptions/human review, environment injectors, any of the MCP stdio bridges, protocol probes, authorization probes, OAuth flows, or external state readers and cannot establish fresh delivery or fresh authorization.
+
+Persisted `APPROVAL_DECISION` evidence is semantically revalidated against its exact request, decision, continuation, scenario identity, canonical argument/resource identity, and accepted authority epoch/path. Persisted `PROTOCOL_DELIVERY` receipts are likewise semantically revalidated. Replay does not recreate the SDK/protocol relation that originally produced either receipt family.
 
 ### Assurance-report validation is not signed attestation
 
@@ -335,12 +368,12 @@ Audited merged implementation source checkpoint `d98f9ca1feb1179504cd2181295a739
 - Python **3.11 minimum / 3.14 latest** quality jobs, Ruff, formatter, Bandit, dependency audit, package integrity, and all **7/7 CI jobs**: green;
 - dependency audit reported **no known vulnerabilities**; the project package itself is skipped because it is not published on PyPI.
 
-This checkpoint remains the historical audited merged implementation baseline. Capabilities added after it, including ToolError recovery, host-refreshed schema-drift adaptation, and native OpenAI handoff-authority attenuation, are accepted only after their own exact-head CI, merge, and post-merge `main` verification; documentation does not retroactively relabel the older checkpoint.
+This checkpoint remains the historical audited merged implementation baseline. Capabilities added after it, including ToolError recovery, host-refreshed schema-drift adaptation, native OpenAI handoff-authority attenuation, and native HITL approval-intent binding, are accepted only after their own exact-head CI, merge, and post-merge `main` verification; documentation does not retroactively relabel the older checkpoint.
 
 ## Why these boundaries matter
 
-Agent evaluation is unusually vulnerable to false confidence because outputs can look persuasive while surrounding state, authority, evaluator preconditions, protocol discovery, authorization boundaries, identity-flow assumptions, or cross-domain correlation are wrong.
+Agent evaluation is unusually vulnerable to false confidence because outputs can look persuasive while surrounding state, authority, evaluator preconditions, approval provenance, protocol discovery, authorization boundaries, identity-flow assumptions, or cross-domain correlation are wrong.
 
-The same discipline applies to this framework: documentation, badges, hashes, attack labels, protocol receipts, bridge receipts, HTTP statuses, OAuth responses, and traces are not substitutes for the exact control they describe.
+The same discipline applies to this framework: documentation, badges, hashes, approval decisions, attack labels, protocol receipts, bridge receipts, HTTP statuses, OAuth responses, and traces are not substitutes for the exact control they describe.
 
 Capabilities move out of this document only after implementation, deterministic evidence, and documentation review make the stronger claim true.
