@@ -332,10 +332,10 @@ Repeated trials feed `ReliabilityReport`; resolved behavior remains separate fro
 
 The framework currently provides deterministic contracts, content-addressed adversarial scenarios, evidence-bound OpenAI delivery verification across seven scoped channel categories, a six-fault official-SDK MCP protocol laboratory, a separate real-loopback resource-server authorization laboratory, a separate two-origin loopback OAuth authorization-code/PKCE/introspection laboratory, integrity-verified local persistence, exact historical replay, deterministic policy/outcome oracles, metamorphic relations, repeated-trial statistics, assurance reports, release gating, failure minimization, and credential-free deterministic SDK tiers.
 
-Implementation source checkpoint `3c33770a7be8089c1ec68f5dec26fcf76e8dc871`, CI run `33870616736`:
+Implementation source checkpoint `ed0b1f9415e49b49a23c77c9372a5d09f70682fc`, protected-main CI run `33881346071`:
 
-- deterministic core: **192 passed, 23 deselected**;
-- branch coverage: **93.37%** against the 90% gate;
+- deterministic core: **330 passed, 23 deselected**;
+- branch coverage: **93.61%** against the 90% gate;
 - strict mypy: **0 issues across 40 source files**;
 - deterministic OpenAI SDK: **11/11 passed**;
 - deterministic MCP protocol: **6/6 passed**;
@@ -344,6 +344,6 @@ Implementation source checkpoint `3c33770a7be8089c1ec68f5dec26fcf76e8dc871`, CI 
 - Python **3.11 minimum / 3.14 latest** quality jobs, Ruff, formatter, Bandit, dependency audit, package integrity, and all **7/7 CI jobs**: green;
 - dependency audit: no known vulnerabilities found; the project package itself is skipped because it is not published on PyPI.
 
-This source checkpoint remains the audited implementation identity while documentation-only closeout commits are applied. Their CI evidence is recorded in the pull-request history rather than changing the implementation identity after every prose-only commit.
+This checkpoint identifies the audited implementation revision. This documentation-only synchronization is validated separately by pull-request CI and does not silently redefine the implementation evidence.
 
 Still outside the executable claim boundary are credentialed live-provider assurance, agent-through-MCP behavioral grading, Internet/hosted MCP fidelity, stdio/proxy/TLS/DNS/transport-chaos faults, third-party/production IdP assurance, production JWT/JWKS/federation, CIMD/enterprise-managed authorization/SEP-990, DPoP/mTLS, refresh/revocation/replay lifecycle, public/shared-cache behavior beyond the exact implemented relations, arbitrary schema/registry mutations, MCP resource/prompt/task fault families, full MCP conformance certification, production application-memory/RAG injection, OpenAI hosted/MCP interception, distributed handoff-fabric injection, process/network/filesystem/cloud environment chaos, target-side delivery attestation, authenticated hostile-writer evidence/report signing, automatic adversarial generation, calibrated semantic graders, and production deployment attestation.
