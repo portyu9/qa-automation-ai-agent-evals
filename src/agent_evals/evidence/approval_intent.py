@@ -4,11 +4,12 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
-from agent_evals.authority import validated_handoff_epoch_before
+from agent_evals.authority import HandoffPathState, validated_handoff_state_before
 from agent_evals.contracts.models import ApprovalDecision, EvaluationScenario
 from agent_evals.evidence.models import EvidenceEvent, EvidenceKind, TrialEvidence
 
@@ -24,7 +25,7 @@ class ApprovalIntentReceipt(BaseModel):
     """Bind one evaluator decision to one exact observed approval interruption.
 
     Raw arguments are deliberately excluded. The receipt stores a digest of canonical finite JSON
-    arguments, the normalized resource identity, and the accepted handoff epoch before the request.
+    arguments, the normalized resource identity, and the exact accepted delegated-authority path.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -41,6 +42,7 @@ class ApprovalIntentReceipt(BaseModel):
     arguments_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     resource: str | None = None
     authority_epoch: int = Field(ge=0, strict=True)
+    authority_path_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     approval_request_sequence: int = Field(ge=0, strict=True)
     root_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
 
@@ -70,6 +72,7 @@ class ApprovalIntentReceipt(BaseModel):
         arguments: str,
         resource: str | None,
         authority_epoch: int,
+        authority_path_sha256: str,
         approval_request_sequence: int,
     ) -> ApprovalIntentReceipt:
         spec = scenario.approval_intent
@@ -86,6 +89,7 @@ class ApprovalIntentReceipt(BaseModel):
             "arguments_sha256": arguments_sha256,
             "resource": resource,
             "authority_epoch": authority_epoch,
+            "authority_path_sha256": authority_path_sha256,
             "approval_request_sequence": approval_request_sequence,
         }
         return cls(**material, root_sha256=_root(material))
@@ -104,13 +108,18 @@ class ApprovalIntentReceipt(BaseModel):
 
 
 def canonical_arguments_sha256(arguments: str) -> str:
-    """Hash one finite JSON object by semantic content rather than source formatting."""
+    """Hash one finite unambiguous JSON object by semantic content, not source formatting."""
     if not isinstance(arguments, str) or not arguments:
         raise ApprovalIntentError("approval intent requires non-empty string arguments")
     try:
-        parsed = json.loads(arguments, parse_constant=_reject_json_constant)
+        parsed = json.loads(
+            arguments,
+            parse_constant=_reject_json_constant,
+            object_pairs_hook=_object_without_duplicate_keys,
+        )
+        _require_finite_json(parsed)
     except (TypeError, ValueError, json.JSONDecodeError) as exc:
-        raise ApprovalIntentError("approval intent arguments must be finite JSON") from exc
+        raise ApprovalIntentError("approval intent arguments must be finite unambiguous JSON") from exc
     if not isinstance(parsed, dict) or any(not isinstance(key, str) for key in parsed):
         raise ApprovalIntentError(
             "approval intent arguments must be a JSON object with string keys"
@@ -189,14 +198,15 @@ def verify_approval_intent(scenario: EvaluationScenario, evidence: TrialEvidence
     request_event = evidence.events[receipt.approval_request_sequence]
     if request_event.kind is not EvidenceKind.APPROVAL_REQUEST:
         raise ApprovalIntentError("approval receipt does not reference an approval-request event")
+    request_state = validated_handoff_state_before(
+        scenario.authority,
+        evidence.events,
+        request_event.sequence,
+    )
     _verify_event_intent(
         request_event,
         receipt=receipt,
-        expected_epoch=validated_handoff_epoch_before(
-            scenario.authority,
-            evidence.events,
-            request_event.sequence,
-        ),
+        expected_state=request_state,
         phase="approval request",
     )
 
@@ -223,14 +233,15 @@ def verify_approval_intent(scenario: EvaluationScenario, evidence: TrialEvidence
                 "approved interruption produced no matching resumed tool request"
             )
         resumed = resumed_requests[0]
+        resumed_state = validated_handoff_state_before(
+            scenario.authority,
+            evidence.events,
+            resumed.sequence,
+        )
         _verify_event_intent(
             resumed,
             receipt=receipt,
-            expected_epoch=validated_handoff_epoch_before(
-                scenario.authority,
-                evidence.events,
-                resumed.sequence,
-            ),
+            expected_state=resumed_state,
             phase="resumed tool request",
         )
         if len(matching_results) != 1:
@@ -247,14 +258,15 @@ def verify_approval_intent(scenario: EvaluationScenario, evidence: TrialEvidence
         # subject violation. Its intent must still match the rejected request so PolicyOracle can
         # grade the bypass rather than having evaluator uncertainty mask it.
         resumed = resumed_requests[0]
+        resumed_state = validated_handoff_state_before(
+            scenario.authority,
+            evidence.events,
+            resumed.sequence,
+        )
         _verify_event_intent(
             resumed,
             receipt=receipt,
-            expected_epoch=validated_handoff_epoch_before(
-                scenario.authority,
-                evidence.events,
-                resumed.sequence,
-            ),
+            expected_state=resumed_state,
             phase="rejected resumed tool request",
         )
         if len(matching_results) != 1:
@@ -278,7 +290,7 @@ def _verify_event_intent(
     event: EvidenceEvent,
     *,
     receipt: ApprovalIntentReceipt,
-    expected_epoch: int,
+    expected_state: HandoffPathState,
     phase: str,
 ) -> None:
     if event.payload.get("agent") != receipt.agent:
@@ -299,8 +311,10 @@ def _verify_event_intent(
         raise ApprovalIntentError(f"{phase} resource identity is malformed")
     if resource != receipt.resource:
         raise ApprovalIntentError(f"{phase} resource does not match approved intent")
-    if expected_epoch != receipt.authority_epoch:
+    if expected_state.epoch != receipt.authority_epoch:
         raise ApprovalIntentError(f"{phase} occurred in a different authority epoch")
+    if expected_state.path_sha256 != receipt.authority_path_sha256:
+        raise ApprovalIntentError(f"{phase} occurred on a different authority path")
 
 
 def _verify_result_identity(
@@ -323,6 +337,26 @@ def _root(material: dict[str, Any]) -> str:
         allow_nan=False,
     ).encode("utf-8")
     return hashlib.sha256(_APPROVAL_INTENT_DOMAIN + canonical).hexdigest()
+
+
+def _object_without_duplicate_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    result: dict[str, Any] = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError(f"duplicate JSON object key: {key!r}")
+        result[key] = value
+    return result
+
+
+def _require_finite_json(value: Any) -> None:
+    if isinstance(value, float) and not math.isfinite(value):
+        raise ValueError("non-finite JSON number is not allowed")
+    if isinstance(value, dict):
+        for item in value.values():
+            _require_finite_json(item)
+    elif isinstance(value, list):
+        for item in value:
+            _require_finite_json(item)
 
 
 def _reject_json_constant(value: str) -> None:
