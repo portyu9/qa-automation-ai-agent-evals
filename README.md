@@ -79,9 +79,9 @@ The deterministic core requires no model credentials. The executable surface is 
 1. **Provider-neutral core** — contracts, evidence, persistence, replay, deterministic oracles, statistics, metamorphic assurance, reporting, minimization, and release gates.
 2. **OpenAI Agents SDK tier** — the real SDK runner exercised with `agents.testing.ScriptedModel`, with no provider API call, across seven scoped local/SDK adversarial channels.
 3. **MCP protocol/control-plane laboratories** — the six-fault official-client protocol lab, real loopback resource-server authorization lab, and separated two-origin OAuth authorization-code/PKCE/introspection lab.
-4. **OpenAI↔MCP delivery bridges** — two deliberately narrow official-stdio paths: one `TOOL_RESULT_POISON` result bridge and one causal `TOOL_ERROR` → same-argument retry → benign recovery bridge, each with its own integrity-bound receipt and ordered `PROTOCOL_DELIVERY` evidence.
+4. **OpenAI↔MCP delivery bridges** — three deliberately narrow official-stdio paths: one `TOOL_RESULT_POISON` result bridge, one causal `TOOL_ERROR` → same-argument retry → benign recovery bridge, and one host-refreshed `TOOL_SCHEMA_DRIFT` v1-rejection → refreshed-v2 → corrected-call bridge. Each has its own integrity-bound receipt and ordered `PROTOCOL_DELIVERY` evidence.
 
-The bridges are not a blanket promotion of the MCP laboratories. `TOOL_METADATA_POISON`, stale-cache, schema-drift, and identity-drift remain protocol-only with respect to agent behavior, and the remote-auth/OAuth receipts remain separate control-plane evidence.
+The bridges are not a blanket promotion of the MCP laboratories. `TOOL_METADATA_POISON`, stale-cache, and identity-drift remain protocol-only with respect to agent behavior, and the remote-auth/OAuth receipts remain separate control-plane evidence. The schema-drift bridge does **not** claim model-initiated refresh or automatic `tools/list_changed` handling: the controlled harness owns the live schema swap, the evaluator/host adapter owns one cache invalidation, the official MCP session supplies the first fresh post-invalidation discovery, and the agent is credited only for its corrected call after v2 becomes model-visible.
 
 ### Evaluation and assurance core
 
@@ -200,7 +200,41 @@ deterministic policy/outcome oracles
 
 The two OpenAI call IDs must be stable and distinct. The normalized chronology must satisfy `request₁ < result₁ < request₂ < result₂`; two calls pre-issued before the error result are not credited as a retry. Missing retry, extra target calls, changed arguments, ambiguous identities, protocol drift, malformed evidence, wrong error representation, wrong recovery, or non-causal ordering fails closed as `EVALUATION_ERROR / BLOCKED`.
 
-Neither bridge establishes safe behavior merely because delivery closes. Neither generalizes to MCP metadata poison, cache drift, schema drift, identity drift, hosted MCP, remote/Internet MCP, live-provider behavior, generic retry policies, authorization, or target-side attestation. A raw `MCPFaultReceipt` still does not create a trial verdict by itself.
+#### `TOOL_SCHEMA_DRIFT`: host-refreshed contract adaptation
+
+`OpenAIAgentsMCPToolSchemaDriftAdapter` closes a third, intentionally narrower relation: the model first receives the bound v1 tool contract and selects a v1-shaped call; the controlled harness then swaps the live MCP target to v2 before that call reaches real MCP validation; the stale v1 arguments are rejected; the host invalidates its cached tool list once; the next fresh discovery exposes v2; and only then may a distinct corrected v2-shaped agent call qualify as adaptation.
+
+```text
+model receives v1 tools/list contract
+        ↓
+TOOL_REQUEST(stale_call_id; v1 arguments)
+        ↓
+evaluator-only hidden server-side schema swap
+        ↓ same live MCP session
+real v2 validation rejects stale v1 arguments
+        ↓
+TOOL_RESULT(stale_call_id; exact model-visible rejection)
+        ↓
+host invalidates MCP tool cache once
+        ↓
+first fresh post-invalidation tools/list exposes v2
+        ↓
+model receives v2 contract + stale rejection
+        ↓
+TOOL_REQUEST(recovery_call_id; exact bound v2 arguments)
+        ↓ same live MCP session
+TOOL_RESULT(recovery_call_id; exact replacement result)
+        ↓
+MCPAgentToolSchemaDriftReceipt
+        ↓
+PROTOCOL_DELIVERY
+        ↓
+deterministic policy/outcome oracles
+```
+
+The receipt binds the initial/cached/refreshed schema digests, stale/recovery argument digests, protocol and model-visible rejection/recovery observations, distinct OpenAI call IDs, and the strict chronology `initial-list < swap < stale-call < cache-invalidation < refreshed-list < recovery-call`. The evaluator control tool is filtered from the model-visible tool set. Later SDK turns may reuse the already-refreshed v2 cache; the assurance claim is one host invalidation and the first fresh v2 discovery before recovery, not “exactly one later `list_tools()` call.” Missing or extra target calls, recovery before refreshed discovery, wrong schemas/arguments/results, protocol drift, receipt tampering, or ambiguous evidence fails closed.
+
+None of these three bridges establishes safe behavior merely because delivery closes. They do not generalize to MCP metadata poison, generic stale-cache behavior, identity drift, arbitrary JSON Schema migrations, tool rename semantics, hosted MCP, remote/Internet MCP, live-provider behavior, generic retry/backoff/idempotency, authorization, or target-side attestation. The schema-drift path specifically does not claim model-initiated refresh or automatic `tools/list_changed` handling. A raw `MCPFaultReceipt` still does not create a trial verdict by itself.
 
 ### Loopback MCP resource-server authorization laboratory
 
@@ -234,7 +268,7 @@ The authorization code, access token, and introspection secret are not serialize
 ```mermaid
 flowchart LR
     accTitle: Evidence-bound agent, MCP protocol, MCP-to-agent delivery, resource authorization, and OAuth-flow assurance architecture
-    accDescr: Canonical subject and scenario contracts drive agent execution and deterministic grading. Raw MCP protocol, remote-auth, and OAuth observations remain separate evidence. Two controlled MCP stdio paths cross into agent evidence only after exact bridge verification.
+    accDescr: Canonical subject and scenario contracts drive agent execution and deterministic grading. Raw MCP protocol, remote-auth, and OAuth observations remain separate evidence. Three controlled MCP stdio paths cross into agent evidence only after exact bridge verification.
 
     S[Canonical subject]
     C[Scenario + authority]
@@ -278,7 +312,7 @@ flowchart LR
     OP --> OR
 ```
 
-The controlled `TOOL_RESULT_POISON` and `TOOL_ERROR` stdio paths can cross `MR → B → BR → E`, each through its own receipt contract. The other four MCP fault families and both authorization laboratories terminate in their own evidence domains.
+The controlled `TOOL_RESULT_POISON`, `TOOL_ERROR`, and host-refreshed `TOOL_SCHEMA_DRIFT` stdio paths can cross `MR → B → BR → E`, each through its own receipt contract. The other three MCP fault families and both authorization laboratories terminate in their own evidence domains.
 
 ## Trial and release semantics
 
@@ -306,7 +340,7 @@ agent-evals doctor
 pytest
 ```
 
-Deterministic OpenAI SDK integration, including both controlled MCP stdio bridges:
+Deterministic OpenAI SDK integration, including all three controlled MCP stdio bridges:
 
 ```bash
 python -m pip install -e '.[dev,openai,mcp]'
@@ -315,7 +349,9 @@ pytest -m openai \
   tests/integration/test_openai_resource_adapter.py \
   tests/integration/test_openai_environment_adapter.py \
   tests/integration/test_openai_mcp_tool_result_adapter.py \
-  tests/integration/test_openai_mcp_tool_error_recovery_adapter.py
+  tests/integration/test_openai_mcp_tool_error_recovery_adapter.py \
+  tests/integration/test_openai_mcp_tool_schema_drift_adapter.py \
+  tests/integration/test_openai_mcp_tool_schema_drift_contract.py
 ```
 
 Deterministic MCP protocol laboratory:
@@ -402,6 +438,25 @@ MCPAgentToolErrorRecoveryReceipt
 PROTOCOL_DELIVERY
 ```
 
+### MCP→agent `TOOL_SCHEMA_DRIFT` adaptation
+
+```text
+MCPFaultReceipt
+    + v1 initial/cached schema digests
+    + real stale-call rejection after hidden live v2 swap
+    + one host cache invalidation
+    + first fresh post-invalidation v2 schema digest
+    + exact model-visible rejection
+    + distinct stale/recovery OpenAI call IDs
+    + exact bound v1/v2 argument digests
+    + exact same-session replacement result
+    + initial-list < swap < stale-call < invalidation < refreshed-list < recovery-call
+        ↓
+MCPAgentToolSchemaDriftReceipt
+        ↓
+PROTOCOL_DELIVERY
+```
+
 ### MCP resource-server authorization
 
 ```text
@@ -484,7 +539,7 @@ Implementation source checkpoint `d98f9ca1feb1179504cd2181295a73936fd0ae6c`, pro
 - package integrity: green;
 - all **7/7 CI jobs**: green.
 
-This baseline remains the historical audited merged implementation revision. The ToolError-recovery capability described above is accepted only after its own exact-head CI, merge, and post-merge `main` verification; documentation does not retroactively relabel the older checkpoint.
+This baseline remains the historical audited merged implementation revision. Capabilities added after that checkpoint, including the ToolError-recovery and host-refreshed schema-drift bridges described above, are accepted only after their own exact-head CI, merge, and post-merge `main` verification; documentation does not retroactively relabel the older checkpoint.
 
 ---
 
