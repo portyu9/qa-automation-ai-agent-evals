@@ -101,9 +101,9 @@ Protocol observation is therefore not promoted to agent `PASS`, `FAIL`, release 
 
 See [MCP Protocol Fault Laboratory](MCP_LAB.md).
 
-## Loopback MCP remote authorization is not production identity assurance
+## Loopback MCP resource-server authorization is not OAuth issuance assurance
 
-The repository also includes a separate `MCPRemoteAuthLab` that binds a real `127.0.0.1` TCP socket, runs Uvicorn with an MCP Streamable HTTP app, exercises HTTP authorization, fetches RFC 9728 protected-resource metadata, and completes an authenticated MCP request through the official client transport.
+The repository includes `MCPRemoteAuthLab`, which binds a real `127.0.0.1` TCP socket, runs Uvicorn with an MCP Streamable HTTP app, exercises resource-server authorization, fetches RFC 9728 protected-resource metadata, and completes an authenticated MCP request through the official client transport.
 
 The deterministic matrix covers:
 
@@ -119,12 +119,12 @@ The laboratory deliberately separates control ownership: issuer/resource binding
 
 `MCPRemoteAuthReceipt` binds the exact content-addressed policy and complete canonical observation. Actual deterministic bearer values are excluded from serialized result/receipt evidence.
 
-This implementation does **not** establish:
+`MCPRemoteAuthLab` itself does **not** establish authorization-code/PKCE, client registration, token issuance, or token introspection. Those properties are exercised by the separate `MCPOAuthFlowLab` rather than retroactively attributed to this lower-level resource-server laboratory.
 
-- a real authorization server issuing access tokens;
-- authorization-code/PKCE, Dynamic Client Registration, CIMD, SEP-990, or other complete OAuth flow assurance;
-- real JWT signature/JWKS verification, token introspection, federation, or production IdP behavior;
-- issuer compromise resistance or arbitrary issuer-discovery semantics;
+It also does not establish:
+
+- real JWT signature/JWKS verification or production token formats;
+- issuer compromise resistance or arbitrary issuer federation/discovery;
 - DPoP, mTLS, certificate binding, hardware-backed keys, proof-of-possession, refresh/revocation lifecycle, or replay detection;
 - production credential rotation/storage or distributed token caches;
 - cross-service credential-reuse resistance beyond the exact deterministic resource binding tested by the fixture;
@@ -137,6 +137,46 @@ Calling this boundary `streamable-http-loopback` is intentional. It must not be 
 
 See [MCP Remote Authorization](MCP_REMOTE_AUTH.md).
 
+## Separated loopback MCP OAuth flow is not production identity assurance
+
+The repository now also includes `MCPOAuthFlowLab`, which uses the official MCP `OAuthClientProvider` and two independent pre-bound loopback origins for the authorization server and resource server.
+
+The deterministic flow closes all of these observations before an `MCPOAuthFlowReceipt` exists:
+
+- RFC 9728 protected-resource discovery;
+- authorization-server metadata discovery;
+- Dynamic Client Registration when no client record is stored, as a compatibility fallback;
+- OAuth `state`;
+- PKCE `S256`;
+- exact RFC 9207 authorization-response issuer validation;
+- RFC 8707 resource binding through authorization and token state;
+- authorization-code exchange and deterministic opaque access-token issuance;
+- authenticated HTTP token introspection from the separate resource-server origin;
+- fail-closed issuer/resource/scope/expiry/subject checks on introspection output;
+- protected MCP `tools/list` and `tools/call` through the introspection-backed resource server;
+- reconnect reuse without a second registration, authorization, or token exchange.
+
+The resource-server verifier does not directly consult the authorization server's in-memory token table. The authorization code, access token, and introspection secret are excluded from serialized probe/receipt evidence.
+
+This is materially stronger than the lower-level resource-server matrix, but it remains a deterministic loopback laboratory. It does **not** establish:
+
+- a third-party or production authorization server / identity provider;
+- Client ID Metadata Documents (CIMD) enrollment;
+- Enterprise Managed Authorization or SEP-990 identity-assertion flows;
+- production JWT/JWKS signature verification, asymmetric token formats, key rotation, federation, or arbitrary IdP interoperability;
+- DPoP, mTLS, certificate binding, hardware-backed keys, or other proof-of-possession mechanisms;
+- refresh-token issuance/rotation, revocation propagation, replay detection, production credential rotation/storage, or distributed token caches;
+- production RFC 7662 interoperability beyond the exact deterministic authenticated introspection contract;
+- browser/user-consent UX, anti-phishing properties, or production authorization-server compromise resistance;
+- TLS, DNS, reverse proxies, load balancers, gateways, service meshes, cross-host routing, Internet transport, or hosted MCP fidelity;
+- production IAM, tenant-isolation, or organization-authorization semantics;
+- agent behavior after OAuth success or failure;
+- release acceptance from OAuth evidence alone.
+
+Dynamic Client Registration is intentionally described as **compatibility fallback**, not the preferred modern enrollment model. The repository does not implement CIMD.
+
+See [MCP OAuth Flow Laboratory](MCP_OAUTH_FLOW.md).
+
 ### Approval requests are not approvals
 
 SDK `ToolApprovalItem` observations normalize as `APPROVAL_REQUEST`, never `APPROVAL`. Privileged execution requires independent authorization evidence.
@@ -145,11 +185,11 @@ SDK `ToolApprovalItem` observations normalize as `APPROVAL_REQUEST`, never `APPR
 
 The current framework does not use a model-as-judge. Deterministic state and policy authority remain primary. A future semantic grader requires calibration, provenance, explicit failure semantics, and non-overriding precedence relative to critical deterministic failures.
 
-### Delivery receipts are not target-side attestation
+### Delivery and protocol receipts are not target-side attestation
 
-A valid OpenAI attack receipt proves consistency relative to the trusted evaluator's controlled observation. `MCPFaultReceipt` proves consistency relative to the official-client protocol observation. `MCPRemoteAuthReceipt` proves consistency relative to the trusted loopback HTTP/MCP observation.
+A valid OpenAI attack receipt proves consistency relative to the trusted evaluator's controlled observation. `MCPFaultReceipt` proves consistency relative to the official-client protocol observation. `MCPRemoteAuthReceipt` proves consistency relative to the trusted loopback resource-server observation. `MCPOAuthFlowReceipt` proves consistency relative to the trusted two-origin loopback OAuth observation.
 
-None is independent cryptographic proof that an arbitrary remote target consumed content, a production issuer minted a token correctly, or a deployed agent respected policy.
+None is independent cryptographic proof that an arbitrary remote target consumed content, a third-party production issuer minted a token correctly, or a deployed agent respected policy.
 
 Control-plane identities are labels/content identities, not authenticated signer identities. Receipt roots are SHA-256 integrity values, not signatures, MACs, trusted timestamps, or hardware attestation.
 
@@ -161,7 +201,7 @@ The repository does not claim signatures/MACs, key management, trusted timestamp
 
 ### Replay is historical regrading, not re-execution
 
-`EvidenceReplayAdapter` requires exact trial/subject/scenario identity and can reapply deterministic grading to recorded evidence. It does not rerun providers, tools, sessions, resources, handoffs, environment injectors, MCP protocol probes, remote-auth probes, or external state readers and cannot establish fresh delivery.
+`EvidenceReplayAdapter` requires exact trial/subject/scenario identity and can reapply deterministic grading to recorded evidence. It does not rerun providers, tools, sessions, resources, handoffs, environment injectors, MCP protocol probes, resource-server auth probes, OAuth-flow probes, or external state readers and cannot establish fresh delivery or fresh authorization.
 
 ### Assurance-report validation is not signed attestation
 
@@ -185,16 +225,20 @@ The repository currently executes no target-controlled arbitrary shell/code as a
 
 ## Current verification checkpoint
 
-- deterministic core: **183 passed, 20 deselected**;
-- branch coverage: **93.04%**;
-- strict mypy: **0 issues across 38 source files**;
+Source checkpoint `7132537c5041a7f2c828a7f3db3e5e52af020888`, CI run `33826363896`:
+
+- deterministic core: **183 passed, 23 deselected**;
+- branch coverage: **93.05%**;
+- strict mypy: **0 issues across 40 source files**;
 - deterministic OpenAI SDK suite: **11/11 passed**;
 - deterministic MCP protocol suite: **6/6 passed**;
 - deterministic MCP remote-auth suite: **3/3 passed**;
-- Python 3.11/3.13 quality, Ruff, formatter, Bandit, dependency audit, and package integrity: green.
+- deterministic MCP OAuth-flow suite: **3/3 passed**;
+- Python 3.11/3.13 quality, Ruff, formatter, Bandit, dependency audit, package integrity, and all seven CI jobs: green;
+- dependency audit reported no known vulnerabilities; the project package itself is skipped because it is not published on PyPI.
 
 ## Why these boundaries matter
 
-Agent evaluation is unusually vulnerable to false confidence because outputs can look persuasive while surrounding state, authority, evaluator preconditions, protocol discovery, or authorization boundaries are wrong. The same discipline applies to this framework: documentation, badges, hashes, attack labels, receipts, protocol observations, HTTP statuses, and traces are not substitutes for the control they describe.
+Agent evaluation is unusually vulnerable to false confidence because outputs can look persuasive while surrounding state, authority, evaluator preconditions, protocol discovery, authorization boundaries, or identity-flow assumptions are wrong. The same discipline applies to this framework: documentation, badges, hashes, attack labels, receipts, protocol observations, HTTP statuses, OAuth responses, and traces are not substitutes for the control they describe.
 
 Capabilities move out of this document only after implementation, deterministic evidence, and documentation review make the stronger claim true.
