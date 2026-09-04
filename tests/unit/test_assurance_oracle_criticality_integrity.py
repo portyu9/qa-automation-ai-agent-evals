@@ -61,16 +61,22 @@ def test_oracle_snapshot_rejects_coercible_criticality_surrogates(invalid: objec
 
 
 def test_oracle_snapshot_accepts_actual_booleans() -> None:
-    assert OracleSnapshot(
-        name="policy",
-        verdict=TrialVerdict.FAIL,
-        critical=True,
-    ).critical is True
-    assert OracleSnapshot(
-        name="outcome",
-        verdict=TrialVerdict.PASS,
-        critical=False,
-    ).critical is False
+    assert (
+        OracleSnapshot(
+            name="policy",
+            verdict=TrialVerdict.FAIL,
+            critical=True,
+        ).critical
+        is True
+    )
+    assert (
+        OracleSnapshot(
+            name="outcome",
+            verdict=TrialVerdict.PASS,
+            critical=False,
+        ).critical
+        is False
+    )
 
 
 def test_report_preserves_critical_violation_gate_semantics() -> None:
