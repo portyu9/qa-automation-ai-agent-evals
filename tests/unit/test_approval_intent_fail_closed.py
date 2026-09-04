@@ -192,7 +192,9 @@ def test_receipt_creation_and_shape_fail_closed() -> None:
         parse_approval_intent_event(event(0, EvidenceKind.OUTPUT, output="x"))
     with pytest.raises(ApprovalIntentError, match="exactly one receipt"):
         parse_approval_intent_event(
-            event(0, EvidenceKind.APPROVAL_DECISION, receipt=valid.model_dump(mode="json"), extra=True)
+            event(
+                0, EvidenceKind.APPROVAL_DECISION, receipt=valid.model_dump(mode="json"), extra=True
+            )
         )
 
 
