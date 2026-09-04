@@ -391,6 +391,8 @@ MCPRemoteAuthPolicy    → MCPRemoteAuthReceipt
 MCPOAuthFlowPolicy     → MCPOAuthFlowReceipt
 ```
 
+The public remote-auth and OAuth probe-result envelopes are diagnostic models. Their embedded receipt identities are validated, but independently modified outer diagnostic fields are not cryptographically re-bound to those receipts.
+
 See [MCP Protocol Fault Laboratory](docs/MCP_LAB.md), [MCP Remote Authorization](docs/MCP_REMOTE_AUTH.md), and [MCP OAuth Flow Laboratory](docs/MCP_OAUTH_FLOW.md) for full trust/non-claim boundaries.
 
 ---
@@ -426,23 +428,25 @@ qa-automation-ai-agent-evals/
 
 ---
 
-## Verified quality baseline
+## Verified implementation baseline
 
-Source checkpoint `7132537c5041a7f2c828a7f3db3e5e52af020888`, CI run `33826363896`:
+Implementation source checkpoint `3c33770a7be8089c1ec68f5dec26fcf76e8dc871`, CI run `33870616736`:
 
-- deterministic core: **183 passed, 23 deselected**;
-- branch coverage: **93.05%** against the 90% gate;
+- deterministic core: **192 passed, 23 deselected**;
+- branch coverage: **93.37%** against the 90% gate;
 - strict mypy: **0 issues across 40 source files**;
 - deterministic OpenAI SDK suite: **11/11 passed**;
 - deterministic MCP protocol suite: **6/6 passed**;
 - deterministic MCP remote-auth suite: **3/3 passed**;
 - deterministic MCP OAuth-flow suite: **3/3 passed**;
-- Python **3.11 and 3.13** quality jobs: green;
+- Python **3.11 minimum / 3.14 latest** quality jobs: green;
 - Ruff lint + formatter: green;
 - Bandit: green;
 - dependency audit: **no known vulnerabilities found**; the project package itself is skipped because it is not published on PyPI;
 - package integrity: green;
 - all **7/7 CI jobs**: green.
+
+This baseline identifies the audited implementation revision. Documentation-only closeout commits are validated separately by pull-request CI and do not silently redefine the implementation evidence.
 
 ---
 
