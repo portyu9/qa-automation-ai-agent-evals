@@ -42,7 +42,9 @@ class SemanticCriterionSpec(BaseModel):
     @classmethod
     def reject_surrounding_whitespace(cls, value: str) -> str:
         if value != value.strip():
-            raise ValueError("semantic criterion description must not contain surrounding whitespace")
+            raise ValueError(
+                "semantic criterion description must not contain surrounding whitespace"
+            )
         return value
 
 

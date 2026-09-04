@@ -287,7 +287,9 @@ def test_calibration_accepts_balanced_exact_observations_and_tracks_false_pass_s
     assert rejected.accepted is False
 
 
-def test_calibration_abstention_and_insufficient_support_fail_policy_without_becoming_false_pass() -> None:
+def test_calibration_abstention_and_insufficient_support_fail_policy_without_becoming_false_pass() -> (
+    None
+):
     fail_case = calibration_case("semantic.abstain", SemanticDecision.FAIL, "Ambiguous output.")
     observation = SemanticCalibrationObservation.from_case_response(fail_case, abstain_response())
     rejected = SemanticCalibrationReceipt.create(

@@ -244,4 +244,6 @@ def _canonical_json_bytes(value: object) -> bytes:
             allow_nan=False,
         ).encode("utf-8")
     except (TypeError, ValueError) as exc:
-        raise ValueError("semantic calibration material must be finite JSON-compatible data") from exc
+        raise ValueError(
+            "semantic calibration material must be finite JSON-compatible data"
+        ) from exc
