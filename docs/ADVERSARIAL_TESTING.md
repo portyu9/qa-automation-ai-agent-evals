@@ -207,19 +207,23 @@ Delivery-caused `BLOCKED` attempts remain evaluator uncertainty through reliabil
 
 MCP fault and remote-auth probes are not `TrialEvidence` and are therefore outside this replay/report derivation path.
 
-## Current verified checkpoint
+## Verified implementation checkpoint
 
-The implemented OpenAI adversarial layer establishes all seven generic adapter channel categories at the scoped boundaries above, including positive and negative `ENVIRONMENT` consumption semantics. The separate MCP protocol layer establishes six deterministic fault observations/relations, and the separate loopback HTTP layer establishes three remote-auth contract tests.
+The implemented OpenAI adversarial layer establishes all seven generic adapter channel categories at the scoped boundaries above, including positive and negative `ENVIRONMENT` consumption semantics. The separate MCP protocol layer establishes six deterministic fault observations/relations, the loopback HTTP layer establishes three remote-auth contract tests, and the separated OAuth layer establishes three OAuth-flow contract tests.
 
-Verified source baseline:
+Implementation source checkpoint `3c33770a7be8089c1ec68f5dec26fcf76e8dc871`, CI run `33870616736`:
 
-- deterministic core: **183 passed, 20 deselected**;
-- branch coverage: **93.04%**;
-- strict mypy: **0 issues across 38 source files**;
+- deterministic core: **192 passed, 23 deselected**;
+- branch coverage: **93.37%** against the 90% gate;
+- strict mypy: **0 issues across 40 source files**;
 - deterministic OpenAI SDK suite: **11/11 passed**;
 - deterministic MCP protocol suite: **6/6 passed**;
 - deterministic MCP remote-auth suite: **3/3 passed**;
-- Python 3.11/3.13 quality, Ruff, formatter, Bandit, dependency audit, and package integrity: green.
+- deterministic MCP OAuth-flow suite: **3/3 passed**;
+- Python **3.11 minimum / 3.14 latest** quality jobs, Ruff, formatter, Bandit, dependency audit, and package integrity: **7/7 CI jobs green**;
+- dependency audit: **no known vulnerabilities found**; the project package itself is skipped because it is not published on PyPI.
+
+This checkpoint identifies the audited implementation revision. Documentation-only commits after that revision do not silently redefine the source evidence; their own CI status is recorded in the pull-request history.
 
 ## Explicit non-claims
 
