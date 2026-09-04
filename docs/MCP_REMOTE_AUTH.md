@@ -133,6 +133,8 @@ The canonical observation includes status results, challenge headers, metadata v
 
 A receipt is emitted only when the complete matrix closes. A single correct 401, a correct metadata document, or one successful authorized call is not enough.
 
+The surrounding `MCPRemoteAuthProbeResult` is a diagnostic result model, not a persisted authenticated evidence envelope. The embedded receipt validates its own policy/protocol/observation identity, but independently changing an outer diagnostic field does not cryptographically re-bind that field to the receipt.
+
 ## Credential handling
 
 The deterministic token values exist only to exercise the resource-server boundary. The result and receipt do not serialize those token values.
@@ -164,7 +166,7 @@ pytest -m mcp_oauth tests/integration/test_mcp_oauth_flow.py
 
 The separation is architectural. In-process protocol semantics, resource-server enforcement, and OAuth-flow behavior can fail independently without one green result masking another.
 
-Current verified remote-auth checkpoint: **3/3 passed** over loopback TCP.
+Verified remote-auth checkpoint: **3/3 passed** over loopback TCP at implementation source checkpoint `3c33770a7be8089c1ec68f5dec26fcf76e8dc871` (CI run `33870616736`).
 
 ## Relationship to the other MCP laboratories
 
@@ -205,17 +207,20 @@ Keeping those identities separate prevents a successful resource-server challeng
 
 Those claims require tests at their actual enforcement boundaries.
 
-## Verification checkpoint
+## Verified implementation checkpoint
 
-Source checkpoint `7132537c5041a7f2c828a7f3db3e5e52af020888`, CI run `33826363896`:
+Implementation source checkpoint `3c33770a7be8089c1ec68f5dec26fcf76e8dc871`, CI run `33870616736`:
 
-- deterministic core: **183 passed, 23 deselected**;
-- branch coverage: **93.05%** against the 90% gate;
+- deterministic core: **192 passed, 23 deselected**;
+- branch coverage: **93.37%** against the 90% gate;
 - strict mypy: **0 issues across 40 source files**;
 - deterministic OpenAI SDK: **11/11 passed**;
 - deterministic MCP protocol: **6/6 passed**;
 - deterministic MCP remote auth: **3/3 passed**;
 - deterministic MCP OAuth flow: **3/3 passed**;
-- Python 3.11/3.13 quality, Ruff, formatter, Bandit, dependency audit, package integrity, and all seven CI jobs: green.
+- Python **3.11 minimum / 3.14 latest** quality, Ruff, formatter, Bandit, dependency audit, package integrity, and all **7/7 CI jobs**: green;
+- dependency audit: **no known vulnerabilities found**; the project package itself is skipped because it is not published on PyPI.
+
+Documentation-only closeout commits are validated separately by PR CI and do not silently redefine this implementation checkpoint.
 
 [← MCP Protocol Fault Laboratory](MCP_LAB.md) · [MCP OAuth Flow Laboratory](MCP_OAUTH_FLOW.md) · [Documentation hub](README.md)
