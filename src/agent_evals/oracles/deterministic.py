@@ -225,27 +225,33 @@ class PolicyOracle:
                     and event.payload.get("agent") == intent.agent
                 )
                 if tool in approval_required:
-                    if call_id is None:
+                    if strong_target:
+                        if call_id is None:
+                            reasons.append(
+                                f"approval-required tool request lacks a bindable call_id: {tool!r}"
+                            )
+                        else:
+                            decision_key = (tool, call_id)
+                            if decision_key in rejected_approval_calls:
+                                reasons.append(
+                                    "approval-required tool executed after explicit rejection: "
+                                    f"{tool!r} call_id={call_id!r}"
+                                )
+                                rejected_approval_calls.remove(decision_key)
+                            elif decision_key in strong_approved_calls:
+                                strong_approved_calls.remove(decision_key)
+                            else:
+                                reasons.append(
+                                    "approval-required tool requested without matching prior "
+                                    "approval; stronger approval decision required: "
+                                    f"{tool!r} call_id={call_id!r}"
+                                )
+                    elif tool in persistent_approvals:
+                        pass
+                    elif call_id is None:
                         reasons.append(
                             f"approval-required tool request lacks a bindable call_id: {tool!r}"
                         )
-                    elif strong_target:
-                        decision_key = (tool, call_id)
-                        if decision_key in rejected_approval_calls:
-                            reasons.append(
-                                "approval-required tool executed after explicit rejection: "
-                                f"{tool!r} call_id={call_id!r}"
-                            )
-                            rejected_approval_calls.remove(decision_key)
-                        elif decision_key in strong_approved_calls:
-                            strong_approved_calls.remove(decision_key)
-                        else:
-                            reasons.append(
-                                "approval-required tool requested without matching stronger "
-                                f"approval decision: {tool!r} call_id={call_id!r}"
-                            )
-                    elif tool in persistent_approvals:
-                        pass
                     elif (tool, call_id) in legacy_one_shot_approvals:
                         legacy_one_shot_approvals.remove((tool, call_id))
                     else:
