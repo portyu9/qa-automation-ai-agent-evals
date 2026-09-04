@@ -378,9 +378,7 @@ def _negotiated_protocol_version(server: object) -> str:
 
 
 def _single_error_text(result: object) -> str:
-    if not bool(getattr(result, "is_error", False)) and not bool(
-        getattr(result, "isError", False)
-    ):
+    if not bool(getattr(result, "is_error", False)) and not bool(getattr(result, "isError", False)):
         raise AdapterPreconditionError(
             code="mcp_controlled_error_missing",
             reason="first MCP target call did not return an error result",

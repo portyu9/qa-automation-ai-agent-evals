@@ -31,9 +31,7 @@ class MCPAgentToolErrorRecoveryReceipt(BaseModel):
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    schema_version: Literal[
-        "agent-evals/mcp-agent-tool-error-recovery-receipt/v1"
-    ] = _BRIDGE_SCHEMA
+    schema_version: Literal["agent-evals/mcp-agent-tool-error-recovery-receipt/v1"] = _BRIDGE_SCHEMA
     scenario_identity: str = Field(pattern=r"^[0-9a-f]{64}$")
     protocol_receipt: MCPFaultReceipt
     agent_tool_name: str = Field(min_length=1, max_length=128)
@@ -208,7 +206,9 @@ def _require_tool_error_receipt(
         receipt.observation_sha256,
         _sha256_text(expected_error),
     ):
-        raise ValueError("MCP ToolError protocol observation does not match controlled fault envelope")
+        raise ValueError(
+            "MCP ToolError protocol observation does not match controlled fault envelope"
+        )
 
 
 def _require_tool_error_receipt_shape(receipt: MCPFaultReceipt) -> None:

@@ -27,8 +27,7 @@ def protocol_receipt(fault: MCPFaultSpec) -> MCPFaultReceipt:
         fault=fault,
         protocol_version="2026-07-28",
         injection_point=(
-            f"mcp:2026-07-28:tools/call:{fault.tool_name}:"
-            "error.content[0].text:message-suffix"
+            f"mcp:2026-07-28:tools/call:{fault.tool_name}:error.content[0].text:message-suffix"
         ),
         observed_text=observed,
     )
