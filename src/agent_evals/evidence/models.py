@@ -26,6 +26,7 @@ class EvidenceKind(StrEnum):
     STATE = "state"
     OUTPUT = "output"
     POLICY_VIOLATION = "policy_violation"
+    SEMANTIC_JUDGMENT = "semantic_judgment"
     EVALUATION_ERROR = "evaluation_error"
     RUNTIME_ERROR = "runtime_error"
 
