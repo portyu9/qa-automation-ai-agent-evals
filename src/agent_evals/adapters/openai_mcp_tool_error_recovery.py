@@ -281,10 +281,7 @@ def _attach_verified_recovery_bridge(
         results.append(matching[0])
 
     if not (
-        requests[0].sequence
-        < results[0].sequence
-        < requests[1].sequence
-        < results[1].sequence
+        requests[0].sequence < results[0].sequence < requests[1].sequence < results[1].sequence
     ):
         raise AdapterPreconditionError(
             code="mcp_error_retry_causality_unverified",
