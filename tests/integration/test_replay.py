@@ -6,7 +6,7 @@ import pytest
 
 from agent_evals.adapters.replay import EvidenceReplayAdapter, ReplayIdentityError
 from agent_evals.contracts.models import EvaluationScenario, ScenarioKind, SubjectFingerprint
-from agent_evals.evidence.models import TrialEvidence, TrialVerdict
+from agent_evals.evidence.models import EvidenceKind, TrialEvidence, TrialVerdict
 from agent_evals.evidence.store import LocalEvidenceStore
 from agent_evals.runtime.evaluator import TrialRunner
 
@@ -86,3 +86,22 @@ async def test_replay_refuses_trial_subject_or_scenario_identity_drift() -> None
             scenario=scenario(revision="2"),
             trial_id="original-trial",
         )
+
+
+@pytest.mark.asyncio
+async def test_replay_identity_drift_is_evaluation_error_not_runtime_failure() -> None:
+    result = await TrialRunner().run(
+        EvidenceReplayAdapter(recorded_evidence()),
+        subject=subject(model="different"),
+        scenario=scenario(),
+        trial_id="original-trial",
+    )
+
+    assert result.verdict is TrialVerdict.BLOCKED
+    assert result.oracle_results == ()
+    assert len(result.evidence.events) == 1
+    event = result.evidence.events[0]
+    assert event.kind is EvidenceKind.EVALUATION_ERROR
+    assert event.critical is True
+    assert event.payload["code"] == "replay_identity_mismatch"
+    assert "subject identity" in event.payload["reason"]
