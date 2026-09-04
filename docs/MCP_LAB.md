@@ -192,7 +192,7 @@ pytest -m mcp tests/integration/test_mcp_fault_lab.py
 
 The `mcp` extra directly declares `mcp==2.1.1`, `httpx2`, and `uvicorn`; the latter two are used by the separate remote-auth laboratory. The dedicated in-process MCP job does not require a provider credential or network service.
 
-Verified protocol checkpoint: **6/6 deterministic MCP tests passed** against protocol `2026-07-28` at implementation source checkpoint `3c33770a7be8089c1ec68f5dec26fcf76e8dc871` (CI run `33870616736`).
+Verified protocol checkpoint: **6/6 deterministic MCP tests passed** against protocol `2026-07-28` at implementation source checkpoint `ed0b1f9415e49b49a23c77c9372a5d09f70682fc` (protected-main CI run `33881346071`).
 
 ## Relationship to agent adversarial testing
 
@@ -222,10 +222,10 @@ Remote bearer authentication, scope enforcement, verifier-owned issuer/resource 
 
 ## Verified implementation checkpoint
 
-Implementation source checkpoint `3c33770a7be8089c1ec68f5dec26fcf76e8dc871`, CI run `33870616736`:
+Implementation source checkpoint `ed0b1f9415e49b49a23c77c9372a5d09f70682fc`, protected-main CI run `33881346071`:
 
-- deterministic core: **192 passed, 23 deselected**;
-- branch coverage: **93.37%** against the 90% gate;
+- deterministic core: **330 passed, 23 deselected**;
+- branch coverage: **93.61%** against the 90% gate;
 - strict mypy: **0 issues across 40 source files**;
 - deterministic OpenAI SDK: **11/11 passed**;
 - deterministic MCP protocol: **6/6 passed**;
@@ -234,6 +234,6 @@ Implementation source checkpoint `3c33770a7be8089c1ec68f5dec26fcf76e8dc871`, CI 
 - Python **3.11 minimum / 3.14 latest** quality, Ruff, formatter, Bandit, dependency audit, and package integrity: **7/7 CI jobs green**;
 - dependency audit: **no known vulnerabilities found**; the project package itself is skipped because it is not published on PyPI.
 
-Documentation-only closeout commits are validated separately by PR CI and do not silently redefine this implementation checkpoint.
+This checkpoint identifies the audited implementation revision. This documentation-only synchronization is validated separately by pull-request CI and does not silently redefine the implementation evidence.
 
 [← Documentation hub](README.md)
