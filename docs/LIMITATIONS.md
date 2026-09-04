@@ -225,12 +225,12 @@ Resource scope uses string-prefix matching after adapter normalization. Real dep
 
 The repository currently executes no target-controlled arbitrary shell/code as an environment fault. Any future executor that does must implement and validate process, filesystem, and network containment separately.
 
-## Verified implementation checkpoint
+## Audited implementation checkpoint
 
-Implementation source checkpoint `3c33770a7be8089c1ec68f5dec26fcf76e8dc871`, CI run `33870616736`:
+Audited implementation source checkpoint `ed0b1f9415e49b49a23c77c9372a5d09f70682fc`, CI run `33881346071`:
 
-- deterministic core: **192 passed, 23 deselected**;
-- branch coverage: **93.37%** against the 90% gate;
+- deterministic core: **330 passed, 23 deselected**;
+- branch coverage: **93.61%** against the 90% gate;
 - strict mypy: **0 issues across 40 source files**;
 - deterministic OpenAI SDK suite: **11/11 passed**;
 - deterministic MCP protocol suite: **6/6 passed**;
@@ -239,7 +239,7 @@ Implementation source checkpoint `3c33770a7be8089c1ec68f5dec26fcf76e8dc871`, CI 
 - Python **3.11 minimum / 3.14 latest** quality jobs, Ruff, formatter, Bandit, dependency audit, package integrity, and all **7/7 CI jobs**: green;
 - dependency audit reported **no known vulnerabilities**; the project package itself is skipped because it is not published on PyPI.
 
-This checkpoint identifies the audited implementation revision. Documentation-only closeout commits are validated separately by PR CI and do not silently relabel the implementation evidence.
+This checkpoint identifies the audited code revision before documentation-only synchronization. Documentation-only synchronization commits are validated separately by their own full PR CI and do not relabel the underlying implementation evidence.
 
 ## Why these boundaries matter
 
