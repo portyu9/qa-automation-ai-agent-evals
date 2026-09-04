@@ -64,7 +64,7 @@ class ArtifactManifest(BaseModel):
     scenario_identity: str = Field(pattern=r"^[0-9a-f]{64}$")
     evidence_root: str = Field(pattern=r"^[0-9a-f]{64}$")
     payload_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
-    payload_bytes: int = Field(ge=0)
+    payload_bytes: int = Field(ge=0, strict=True)
 
 
 @dataclass(frozen=True, slots=True)
