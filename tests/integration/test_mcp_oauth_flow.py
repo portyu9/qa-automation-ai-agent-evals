@@ -81,12 +81,13 @@ async def test_oauth_flow_separates_as_rs_and_closes_pkce_resource_introspection
     assert issuer.port is not None
     assert resource.port is not None
     assert issuer.port != resource.port
+    assert result.issuer_url.endswith("/")
     assert result.resource_url.endswith("/mcp")
 
     assert result.authorization_metadata_issuer == result.issuer_url
-    assert result.authorization_endpoint == f"{result.issuer_url}/authorize"
-    assert result.token_endpoint == f"{result.issuer_url}/token"
-    assert result.registration_endpoint == f"{result.issuer_url}/register"
+    assert result.authorization_endpoint == f"{result.issuer_url}authorize"
+    assert result.token_endpoint == f"{result.issuer_url}token"
+    assert result.registration_endpoint == f"{result.issuer_url}register"
     assert result.code_challenge_methods_supported == ("S256",)
 
     assert result.protected_resource_authorization_servers == (result.issuer_url,)
@@ -121,7 +122,5 @@ async def test_oauth_flow_separates_as_rs_and_closes_pkce_resource_introspection
 
     serialized = result.model_dump_json()
     for domain in ("authorization-code", "access-token", "introspection-secret"):
-        fixture = hashlib.sha256(
-            f"agent-evals:{domain}:{policy.identity}:1".encode()
-        ).hexdigest()
+        fixture = hashlib.sha256(f"agent-evals:{domain}:{policy.identity}:1".encode()).hexdigest()
         assert fixture not in serialized

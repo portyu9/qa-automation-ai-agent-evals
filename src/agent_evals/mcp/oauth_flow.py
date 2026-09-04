@@ -56,7 +56,9 @@ class MCPOAuthFlowPolicy(BaseModel):
             raise ValueError("MCP OAuth-flow required_scopes must not be empty")
         for scope in value:
             if not scope.strip() or scope != scope.strip() or any(char.isspace() for char in scope):
-                raise ValueError("MCP OAuth-flow scopes must be non-empty tokens without whitespace")
+                raise ValueError(
+                    "MCP OAuth-flow scopes must be non-empty tokens without whitespace"
+                )
         if len(set(value)) != len(value):
             raise ValueError("MCP OAuth-flow required_scopes must not contain duplicates")
         return tuple(sorted(value))
@@ -65,7 +67,9 @@ class MCPOAuthFlowPolicy(BaseModel):
     @classmethod
     def validate_names(cls, value: str) -> str:
         if not value.strip() or value != value.strip():
-            raise ValueError("MCP OAuth-flow names must be non-empty without surrounding whitespace")
+            raise ValueError(
+                "MCP OAuth-flow names must be non-empty without surrounding whitespace"
+            )
         return value
 
     @property
@@ -488,13 +492,12 @@ class MCPOAuthFlowLab:
 
         as_listener = bind_loopback_socket()
         rs_listener = bind_loopback_socket()
-        issuer_url = f"http://127.0.0.1:{int(as_listener.getsockname()[1])}"
+        issuer_url = f"http://127.0.0.1:{int(as_listener.getsockname()[1])}/"
         resource_url = (
-            f"http://127.0.0.1:{int(rs_listener.getsockname()[1])}"
-            f"{self._policy.resource_path}"
+            f"http://127.0.0.1:{int(rs_listener.getsockname()[1])}{self._policy.resource_path}"
         )
         redirect_uri = f"http://127.0.0.1{self._policy.redirect_path}"
-        introspection_url = f"{issuer_url}/introspect"
+        introspection_url = f"{issuer_url}introspect"
         introspection_id = "agent-evals-resource-server"
         introspection_secret = _opaque_fixture_value(
             "introspection-secret",
@@ -604,7 +607,7 @@ class MCPOAuthFlowLab:
                             {"message": "again"},
                         )
                 as_metadata_response = await metadata_http.get(
-                    f"{issuer_url}/.well-known/oauth-authorization-server"
+                    f"{issuer_url}.well-known/oauth-authorization-server"
                 )
                 as_metadata_response.raise_for_status()
                 as_metadata = as_metadata_response.json()
@@ -654,9 +657,7 @@ class MCPOAuthFlowLab:
             "introspection_count": provider.introspection_count,
             "introspection_last_issuer": str(introspection.get("iss", "")),
             "introspection_last_resource": str(introspection.get("aud", "")),
-            "introspection_last_scopes": tuple(
-                sorted(str(introspection.get("scope", "")).split())
-            ),
+            "introspection_last_scopes": tuple(sorted(str(introspection.get("scope", "")).split())),
             "issuer_url": issuer_url,
             "protected_resource_authorization_servers": prm_authorization_servers,
             "protected_resource_metadata_url": metadata_url,
@@ -708,7 +709,9 @@ class MCPOAuthFlowLab:
             ),
             authorization_request_state_present=bool(request.get("state")),
             authorization_request_code_challenge_present=bool(request.get("code_challenge")),
-            authorization_request_code_challenge_method=str(request.get("code_challenge_method", "")),
+            authorization_request_code_challenge_method=str(
+                request.get("code_challenge_method", "")
+            ),
             authorization_request_resource=str(request.get("resource", "")),
             authorization_request_scopes=tuple(sorted(str(request.get("scope", "")).split())),
             authorization_response_issuer=str(response.get("iss", "")),
@@ -718,9 +721,7 @@ class MCPOAuthFlowLab:
             introspection_count=provider.introspection_count,
             introspection_last_issuer=str(introspection.get("iss", "")),
             introspection_last_resource=str(introspection.get("aud", "")),
-            introspection_last_scopes=tuple(
-                sorted(str(introspection.get("scope", "")).split())
-            ),
+            introspection_last_scopes=tuple(sorted(str(introspection.get("scope", "")).split())),
             reused_stored_authorization=reused_stored_authorization,
             valid_tool_names=valid_tool_names,
             valid_call_text=valid_call_text,
@@ -752,11 +753,11 @@ class MCPOAuthFlowLab:
             return None
         if str(as_metadata.get("issuer", "")) != issuer_url:
             return None
-        if str(as_metadata.get("authorization_endpoint", "")) != f"{issuer_url}/authorize":
+        if str(as_metadata.get("authorization_endpoint", "")) != f"{issuer_url}authorize":
             return None
-        if str(as_metadata.get("token_endpoint", "")) != f"{issuer_url}/token":
+        if str(as_metadata.get("token_endpoint", "")) != f"{issuer_url}token":
             return None
-        if str(as_metadata.get("registration_endpoint", "")) != f"{issuer_url}/register":
+        if str(as_metadata.get("registration_endpoint", "")) != f"{issuer_url}register":
             return None
         if tuple(as_metadata.get("code_challenge_methods_supported", [])) != ("S256",):
             return None
