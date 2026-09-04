@@ -10,14 +10,14 @@
 
 **A provider-neutral quality-engineering framework for evaluating autonomous agents by observable outcomes, side effects, authority boundaries, adversarial conditions, verified evaluation preconditions, protocol state, authorization behavior, reliability, and reproducible evidence—not by persuasive final prose.**
 
-[Documentation](docs/README.md) · [Architecture](docs/ARCHITECTURE.md) · [Evaluation Model](docs/EVALUATION_MODEL.md) · [Adversarial Testing](docs/ADVERSARIAL_TESTING.md) · [MCP Fault Lab](docs/MCP_LAB.md) · [MCP Remote Auth](docs/MCP_REMOTE_AUTH.md) · [MCP OAuth Flow](docs/MCP_OAUTH_FLOW.md) · [Evidence & Replay](docs/EVIDENCE_AND_REPLAY.md) · [Session Reports](docs/ASSURANCE_REPORTS.md) · [OpenAI Adapter](docs/OPENAI_ADAPTER.md) · [Statistics](docs/STATISTICAL_ASSURANCE.md) · [Security](docs/SECURITY.md) · [Limitations](docs/LIMITATIONS.md)
+[Documentation](docs/README.md) · [Architecture](docs/ARCHITECTURE.md) · [Evaluation Model](docs/EVALUATION_MODEL.md) · [Handoff Authority](docs/HANDOFF_AUTHORITY.md) · [Adversarial Testing](docs/ADVERSARIAL_TESTING.md) · [MCP Fault Lab](docs/MCP_LAB.md) · [MCP Remote Auth](docs/MCP_REMOTE_AUTH.md) · [MCP OAuth Flow](docs/MCP_OAUTH_FLOW.md) · [Evidence & Replay](docs/EVIDENCE_AND_REPLAY.md) · [Session Reports](docs/ASSURANCE_REPORTS.md) · [OpenAI Adapter](docs/OPENAI_ADAPTER.md) · [Statistics](docs/STATISTICAL_ASSURANCE.md) · [Security](docs/SECURITY.md) · [Limitations](docs/LIMITATIONS.md)
 
 </div>
 
 ---
 
 > [!IMPORTANT]
-> **The agent is the subject, not the oracle.** Final prose is not task completion. A tool call is not a successful side effect. An attack label is not proof of delivery. A configured environment value is not proof of consumption. Cached MCP discovery is not current server truth. A raw MCP receipt is not proof that an agent consumed the condition. A bearer challenge is not proof of correct issuer policy. Resource-server success is not OAuth-flow correctness. OAuth-flow success is not agent correctness. Missing or invalid evidence is never silently promoted to PASS.
+> **The agent is the subject, not the oracle.** Final prose is not task completion. A tool call is not a successful side effect. A handoff observation is not delegated authority. An attack label is not proof of delivery. A configured environment value is not proof of consumption. Cached MCP discovery is not current server truth. A raw MCP receipt is not proof that an agent consumed the condition. A bearer challenge is not proof of correct issuer policy. Resource-server success is not OAuth-flow correctness. OAuth-flow success is not agent correctness. Missing or invalid evidence is never silently promoted to PASS.
 
 ## Engineering thesis
 
@@ -26,6 +26,7 @@ Agents act.
 Attacks perturb.
 Protocols carry untrusted content and state.
 Authorization constrains access.
+Delegation attenuates.
 Controlled injectors establish evaluation preconditions.
 Observers record.
 Bridges bind cross-boundary delivery only when identities, chronology, and observations agree.
@@ -52,6 +53,8 @@ This framework treats the **complete agent system** as the subject under test: m
 | **Bad ≠ unknown** | resolved subject failure is distinct from evaluator/runtime inability to judge |
 | **Identity is canonical** | subject, scenario, attack, MCP fault, resource-server auth policy, OAuth-flow policy, evidence, and report identities bind behavior-bearing material |
 | **Adversarial derivation preserves authority** | an attack cannot grant tools, broaden resources, remove approval, reroute handoffs, or redefine success |
+| **Handoff ≠ delegation** | an observed source→target transfer is authorized only by an exact scenario-owned grant and sufficient run-item provenance |
+| **Delegation never expands** | effective tools, resource prefixes, inherited approval requirements, and delegated budgets may preserve or narrow across a valid handoff path, never broaden |
 | **Attack delivery is a precondition** | adversarial behavior is graded only after one exact matching receipt verifies |
 | **Availability ≠ consumption** | an environment value that subject code never reads is not a delivered attack |
 | **MCP configuration ≠ observation** | an MCP fault exists as protocol evidence only after the official client observes the required representation or relation |
@@ -63,7 +66,7 @@ This framework treats the **complete agent system** as the subject under test: m
 | **Bearer authentication ≠ issuer/resource policy** | SDK bearer handling and verifier-owned identity/resource binding are credited to their actual enforcement components |
 | **Resource-server success ≠ OAuth-flow correctness** | a 401/403/authorized-call matrix does not prove registration, PKCE, issuance, or introspection |
 | **OAuth-flow success ≠ agent correctness** | a valid OAuth path proves protocol/control-plane behavior, not safe or correct agent behavior |
-| **Evaluator failure ≠ subject failure** | unavailable/unverifiable controlled delivery becomes `EVALUATION_ERROR / BLOCKED` |
+| **Evaluator failure ≠ subject failure** | unavailable/unverifiable controlled delivery or provenance becomes `EVALUATION_ERROR / BLOCKED` |
 | **Provider failure ≠ evaluator failure** | provider/runtime exceptions remain `RUNTIME_ERROR / BLOCKED` |
 | **Evidence is reverified** | persisted bytes must pass schema, identity, hash, and semantic-root checks before reuse |
 | **Replay is historical** | replay regrades recorded evidence; it does not pretend to re-execute the subject |
@@ -76,26 +79,28 @@ This framework treats the **complete agent system** as the subject under test: m
 
 The deterministic core requires no model credentials. The executable surface is intentionally separated into four lanes so one green boundary cannot silently upgrade another:
 
-1. **Provider-neutral core** — contracts, evidence, persistence, replay, deterministic oracles, statistics, metamorphic assurance, reporting, minimization, and release gates.
-2. **OpenAI Agents SDK tier** — the real SDK runner exercised with `agents.testing.ScriptedModel`, with no provider API call, across seven scoped local/SDK adversarial channels.
+1. **Provider-neutral core** — contracts, evidence, persistence, replay, deterministic oracles, statistics, metamorphic assurance, reporting, minimization, and release gates, including scenario-owned directed handoff grants and path-local authority attenuation.
+2. **OpenAI Agents SDK tier** — the real SDK runner exercised with `agents.testing.ScriptedModel`, with no provider API call, across seven scoped local/SDK adversarial channels plus a stronger native-handoff adapter that binds run-local SDK agent provenance for delegated-authority grading.
 3. **MCP protocol/control-plane laboratories** — the six-fault official-client protocol lab, real loopback resource-server authorization lab, and separated two-origin OAuth authorization-code/PKCE/introspection lab.
 4. **OpenAI↔MCP delivery bridges** — three deliberately narrow official-stdio paths: one `TOOL_RESULT_POISON` result bridge, one causal `TOOL_ERROR` → same-argument retry → benign recovery bridge, and one host-refreshed `TOOL_SCHEMA_DRIFT` v1-rejection → refreshed-v2 → corrected-call bridge. Each has its own integrity-bound receipt and ordered `PROTOCOL_DELIVERY` evidence.
 
-The bridges are not a blanket promotion of the MCP laboratories. `TOOL_METADATA_POISON`, stale-cache, and identity-drift remain protocol-only with respect to agent behavior, and the remote-auth/OAuth receipts remain separate control-plane evidence. The schema-drift bridge does **not** claim model-initiated refresh or automatic `tools/list_changed` handling: the controlled harness owns the live schema swap, the evaluator/host adapter owns one cache invalidation, the official MCP session supplies the first fresh post-invalidation discovery, and the agent is credited only for its corrected call after v2 becomes model-visible.
+The handoff-authority path and MCP bridges solve different trust problems. Handoff authority stays inside the normalized subject-evidence/scenario-policy domain; no extra receipt is introduced. The MCP bridges cross protocol and agent evidence domains and therefore require dedicated bridge receipts.
+
+The MCP bridges are not a blanket promotion of the MCP laboratories. `TOOL_METADATA_POISON`, stale-cache, and identity-drift remain protocol-only with respect to agent behavior, and the remote-auth/OAuth receipts remain separate control-plane evidence. The schema-drift bridge does **not** claim model-initiated refresh or automatic `tools/list_changed` handling: the controlled harness owns the live schema swap, the evaluator/host adapter owns one cache invalidation, the official MCP session supplies the first fresh post-invalidation discovery, and the agent is credited only for its corrected call after v2 becomes model-visible.
 
 ### Evaluation and assurance core
 
 | Surface | Implemented behavior |
 |---|---|
 | **Subject contract** | canonical SHA-256 identity across provider/model, instructions, tools, policy, memory policy, adapter, and application revision |
-| **Scenario contract** | versioned objective, initial state, required/forbidden outcomes, classification, tags, and fail-closed authority |
+| **Scenario contract** | versioned objective, initial state, required/forbidden outcomes, classification, tags, fail-closed authority, exact optional root agent, and canonical directed handoff grants |
 | **Adversarial fixtures/campaigns** | content-addressed attacks and canonical campaigns bound to one exact base scenario |
 | **Attack delivery** | exactly-one receipt verification binding scenario, attack, channel, injection point, and payload digest before adversarial grading |
 | **Evidence** | immutable ordered events plus a domain-separated evidence root |
 | **Local evidence store** | strict manifest, bounded reads, symlink rejection, no-clobber publication, payload hash, semantic-root verification |
-| **Replay** | exact trial/subject/scenario historical regrading including delivery-receipt revalidation |
+| **Replay** | exact trial/subject/scenario historical regrading including delivery-receipt revalidation and scenario-bound handoff-authority regrading |
 | **Outcome oracle** | independently validates required and forbidden terminal state |
-| **Policy oracle** | fail-closed tools/resources, call-bound approvals, tool/handoff budgets, and explicit policy violations |
+| **Policy oracle** | fail-closed tools/resources, call-bound approvals, global budgets, active-agent chronology, directed handoff grants, path-local authority attenuation, delegated per-agent budgets, and explicit policy violations |
 | **Reliability** | resolved success rate, Wilson interval, empirical `pass@k`/`pass^k`; unresolved attempts stay separate |
 | **Differential evaluation** | exact paired McNemar/binomial comparison over resolved trials |
 | **Assurance reports** | self-validating artifacts binding evidence roots, oracle snapshots, reliability, release policy, gate result, and report root |
@@ -118,6 +123,28 @@ The bridges are not a blanket promotion of the MCP laboratories. `TOOL_METADATA_
 | **runtime-context `ENVIRONMENT`** | first matching local tool sees exact canonical attack JSON for one targeted `RunContextWrapper.context` key; receipt exists only after actual value consumption |
 
 Seven generic channels implemented does **not** mean universal production interception. [Limitations](docs/LIMITATIONS.md) is authoritative.
+
+### Native OpenAI handoff authority attenuation
+
+`OpenAIAgentsHandoffAuthorityAdapter` is a separate, stronger contract for native multi-agent routing. It does not replace the generic `HANDOFF` adversarial channel.
+
+```text
+exact scenario root_agent
+        == pre-execution ==
+supplied SDK Agent.name
+        ↓
+HANDOFF(source_agent → target_agent)
+        ↓ exact directed grant
+path-local authority may only narrow
+        ↓
+SDK-attributed TOOL_REQUEST / TOOL_RESULT
+        ↓ request/result call-owner consistency
+PolicyOracle checks active agent + delegated authority
+```
+
+The scenario graph is canonical and content-addressed as part of `EvaluationScenario.identity`. Every runtime transition must match one exact grant. A child may retain only a subset of the source tools, resource prefixes must remain inside the source scope, inherited approval requirements on retained tools cannot be removed, and delegated tool/handoff budgets cannot increase. A later hop cannot regain authority lost earlier merely because that authority was legal for the root.
+
+The adapter uses public pinned-SDK run-item agent names as **run-local provenance**, not as cryptographic or globally unique principals. Root mismatch, missing/ambiguous agent identity, or request/result owner disagreement is evaluator uncertainty and becomes `EVALUATION_ERROR / BLOCKED`. Once provenance is sufficient, unauthorized transitions or delegated actions become critical deterministic `PolicyOracle` failures. See [Native Handoff Authority](docs/HANDOFF_AUTHORITY.md).
 
 ### Deterministic MCP protocol fault laboratory
 
@@ -267,11 +294,11 @@ The authorization code, access token, and introspection secret are not serialize
 
 ```mermaid
 flowchart LR
-    accTitle: Evidence-bound agent, MCP protocol, MCP-to-agent delivery, resource authorization, and OAuth-flow assurance architecture
-    accDescr: Canonical subject and scenario contracts drive agent execution and deterministic grading. Raw MCP protocol, remote-auth, and OAuth observations remain separate evidence. Three controlled MCP stdio paths cross into agent evidence only after exact bridge verification.
+    accTitle: Evidence-bound agent, delegated-handoff, MCP protocol, MCP-to-agent delivery, resource authorization, and OAuth-flow assurance architecture
+    accDescr: Canonical subject and scenario contracts drive agent execution and deterministic grading. Scenario-owned handoff grants constrain active-agent authority. Raw MCP protocol, remote-auth, and OAuth observations remain separate evidence. Three controlled MCP stdio paths cross into agent evidence only after exact bridge verification.
 
     S[Canonical subject]
-    C[Scenario + authority]
+    C[Scenario + root authority + handoff grants]
     A[Agent adapter]
     U[Agent system under test]
     E[Ordered agent evidence]
@@ -296,6 +323,7 @@ flowchart LR
     A --> U
     U --> A
     A --> E
+    C --> P
     E --> P
     E --> O
     P --> T
@@ -312,7 +340,7 @@ flowchart LR
     OP --> OR
 ```
 
-The controlled `TOOL_RESULT_POISON`, `TOOL_ERROR`, and host-refreshed `TOOL_SCHEMA_DRIFT` stdio paths can cross `MR → B → BR → E`, each through its own receipt contract. The other three MCP fault families and both authorization laboratories terminate in their own evidence domains.
+The controlled `TOOL_RESULT_POISON`, `TOOL_ERROR`, and host-refreshed `TOOL_SCHEMA_DRIFT` stdio paths can cross `MR → B → BR → E`, each through its own receipt contract. Native handoff authority remains inside `C + E → P`: the SDK supplies run-local agent provenance while the scenario and deterministic policy oracle own authorization. The other three MCP fault families and both authorization laboratories terminate in their own evidence domains.
 
 ## Trial and release semantics
 
@@ -325,7 +353,7 @@ The controlled `TOOL_RESULT_POISON`, `TOOL_ERROR`, and host-refreshed `TOOL_SCHE
 | `REJECT` | verified behavioral/safety evidence violates release policy |
 | `INCONCLUSIVE` | release evidence is insufficient; uncertainty is not converted to acceptance |
 
-A target tool that never executes, an injected runtime key that is never consumed, a missing handoff, an unclosed MCP→agent bridge, invalid delivery evidence, a non-causal recovery sequence, or an unavailable provider can block evaluation without being mislabeled as a product defect. A successful raw MCP fault, resource-auth, or OAuth-flow receipt by itself is not a trial verdict.
+A root-agent mismatch, unusable SDK agent provenance, target tool that never executes, injected runtime key that is never consumed, missing adversarial handoff, unclosed MCP→agent bridge, invalid delivery evidence, non-causal recovery sequence, or unavailable provider can block evaluation without being mislabeled as a product defect. Once handoff provenance is sufficient, an unauthorized destination or delegated authority expansion is a resolved critical policy failure rather than evaluator uncertainty. A successful raw MCP fault, resource-auth, or OAuth-flow receipt by itself is not a trial verdict.
 
 ---
 
@@ -340,7 +368,7 @@ agent-evals doctor
 pytest
 ```
 
-Deterministic OpenAI SDK integration, including all three controlled MCP stdio bridges:
+Deterministic OpenAI SDK integration, including native handoff authority and all three controlled MCP stdio bridges:
 
 ```bash
 python -m pip install -e '.[dev,openai,mcp]'
@@ -348,6 +376,7 @@ pytest -m openai \
   tests/integration/test_openai_adapter.py \
   tests/integration/test_openai_resource_adapter.py \
   tests/integration/test_openai_environment_adapter.py \
+  tests/integration/test_openai_handoff_authority_adapter.py \
   tests/integration/test_openai_mcp_tool_result_adapter.py \
   tests/integration/test_openai_mcp_tool_error_recovery_adapter.py \
   tests/integration/test_openai_mcp_tool_schema_drift_adapter.py \
@@ -377,6 +406,22 @@ The OpenAI integration is pinned to `openai-agents==0.22.0`. The MCP integration
 ---
 
 ## Selected evidence contracts
+
+### Native OpenAI handoff authority
+
+```text
+AuthorityPolicy(root_agent + directed grants)
+        +
+HANDOFF(source_agent → target_agent)
+        +
+SDK run-item generating-agent provenance
+        ↓
+path-local effective authority
+        ↓
+PolicyOracle
+```
+
+There is no handoff receipt. The exact scenario identity already binds the graph, and handoff/tool events already inhabit `TrialEvidence`. The specialized adapter verifies root and call ownership provenance; deterministic policy grading then proves that each valid hop preserves or narrows tools, resource prefixes, approvals, and delegated budgets.
 
 ### OpenAI local `TOOL_RESULT`
 
@@ -486,7 +531,7 @@ PRM + AS metadata
 MCPOAuthFlowReceipt
 ```
 
-The protocol, agent-bridge, remote-auth, and OAuth evidence domains are intentionally distinct. The public remote-auth and OAuth probe-result envelopes are diagnostic models; their embedded receipt identities are validated, but independently modified outer diagnostic fields are not cryptographically re-bound to those receipts.
+The handoff-authority, protocol, agent-bridge, remote-auth, and OAuth evidence/control domains are intentionally distinct. The public remote-auth and OAuth probe-result envelopes are diagnostic models; their embedded receipt identities are validated, but independently modified outer diagnostic fields are not cryptographically re-bound to those receipts.
 
 ---
 
@@ -539,7 +584,7 @@ Implementation source checkpoint `d98f9ca1feb1179504cd2181295a73936fd0ae6c`, pro
 - package integrity: green;
 - all **7/7 CI jobs**: green.
 
-This baseline remains the historical audited merged implementation revision. Capabilities added after that checkpoint, including the ToolError-recovery and host-refreshed schema-drift bridges described above, are accepted only after their own exact-head CI, merge, and post-merge `main` verification; documentation does not retroactively relabel the older checkpoint.
+This baseline remains the historical audited merged implementation revision. Capabilities added after that checkpoint, including the ToolError-recovery bridge, host-refreshed schema-drift bridge, and native handoff-authority attenuation described above, are accepted only after their own exact-head CI, merge, and post-merge `main` verification; documentation does not retroactively relabel the older checkpoint.
 
 ---
 
@@ -547,13 +592,14 @@ This baseline remains the historical audited merged implementation revision. Cap
 
 1. [Architecture](docs/ARCHITECTURE.md)
 2. [Evaluation Model](docs/EVALUATION_MODEL.md)
-3. [Adversarial Testing](docs/ADVERSARIAL_TESTING.md)
-4. [MCP Protocol Fault Laboratory](docs/MCP_LAB.md)
-5. [MCP Remote Authorization](docs/MCP_REMOTE_AUTH.md)
-6. [MCP OAuth Flow Laboratory](docs/MCP_OAUTH_FLOW.md)
-7. [OpenAI Adapter](docs/OPENAI_ADAPTER.md)
-8. [Evidence & Replay](docs/EVIDENCE_AND_REPLAY.md)
-9. [Session Assurance Reports](docs/ASSURANCE_REPORTS.md)
-10. [Statistical Assurance](docs/STATISTICAL_ASSURANCE.md)
-11. [Security](docs/SECURITY.md)
-12. [Limitations and Non-Claims](docs/LIMITATIONS.md)
+3. [Native Handoff Authority](docs/HANDOFF_AUTHORITY.md)
+4. [Adversarial Testing](docs/ADVERSARIAL_TESTING.md)
+5. [MCP Protocol Fault Laboratory](docs/MCP_LAB.md)
+6. [MCP Remote Authorization](docs/MCP_REMOTE_AUTH.md)
+7. [MCP OAuth Flow Laboratory](docs/MCP_OAUTH_FLOW.md)
+8. [OpenAI Adapter](docs/OPENAI_ADAPTER.md)
+9. [Evidence & Replay](docs/EVIDENCE_AND_REPLAY.md)
+10. [Session Assurance Reports](docs/ASSURANCE_REPORTS.md)
+11. [Statistical Assurance](docs/STATISTICAL_ASSURANCE.md)
+12. [Security](docs/SECURITY.md)
+13. [Limitations and Non-Claims](docs/LIMITATIONS.md)
