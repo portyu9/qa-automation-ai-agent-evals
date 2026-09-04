@@ -1,86 +1,119 @@
 # ƳƤ AI Agent Evaluation & Assurance Framework — Documentation
 
-This documentation is organized by the question a reviewer is trying to answer. The framework keeps **subject identity**, **scenario/adversarial identity**, **evaluation-precondition evidence**, **MCP protocol-fault evidence**, **MCP resource-server authorization evidence**, **MCP OAuth-flow evidence**, **subject evidence**, **deterministic authority**, **persistence integrity**, **session derivation**, and **statistical inference** separate. A statement from one domain never silently becomes proof in another.
+This documentation is organized by the question a reviewer is trying to answer. The framework keeps **subject identity**, **scenario/adversarial identity**, **evaluation-precondition evidence**, **MCP protocol-fault evidence**, **MCP→agent bridge evidence**, **MCP resource-server authorization evidence**, **MCP OAuth-flow evidence**, **subject evidence**, **deterministic authority**, **persistence integrity**, **session derivation**, and **statistical inference** separate. A statement from one domain never silently becomes proof in another.
 
 ## Review paths
 
 | Reviewer goal | Recommended path |
 |---|---|
-| Architecture / principal engineering | [Architecture](ARCHITECTURE.md) → [Evaluation Model](EVALUATION_MODEL.md) → [Adversarial Testing](ADVERSARIAL_TESTING.md) → [MCP Fault Lab](MCP_LAB.md) → [MCP Remote Authorization](MCP_REMOTE_AUTH.md) → [MCP OAuth Flow](MCP_OAUTH_FLOW.md) → [Evidence & Replay](EVIDENCE_AND_REPLAY.md) → [Session Reports](ASSURANCE_REPORTS.md) → [OpenAI Adapter](OPENAI_ADAPTER.md) → [Metamorphic Testing](METAMORPHIC_TESTING.md) → [Statistical Assurance](STATISTICAL_ASSURANCE.md) → [Limitations](LIMITATIONS.md) |
-| QA / AI evaluation engineering | [Evaluation Model](EVALUATION_MODEL.md) → [Adversarial Testing](ADVERSARIAL_TESTING.md) → [MCP Fault Lab](MCP_LAB.md) → [MCP Remote Authorization](MCP_REMOTE_AUTH.md) → [MCP OAuth Flow](MCP_OAUTH_FLOW.md) → [Evidence & Replay](EVIDENCE_AND_REPLAY.md) → [Session Reports](ASSURANCE_REPORTS.md) → [Metamorphic Testing](METAMORPHIC_TESTING.md) → [Statistical Assurance](STATISTICAL_ASSURANCE.md) → [Architecture](ARCHITECTURE.md) |
-| Security / red team | [Security](SECURITY.md) → [Adversarial Testing](ADVERSARIAL_TESTING.md) → [MCP Fault Lab](MCP_LAB.md) → [MCP Remote Authorization](MCP_REMOTE_AUTH.md) → [MCP OAuth Flow](MCP_OAUTH_FLOW.md) → [OpenAI Adapter](OPENAI_ADAPTER.md) → [Evidence & Replay](EVIDENCE_AND_REPLAY.md) → [Architecture](ARCHITECTURE.md) → [Limitations](LIMITATIONS.md) |
-| Adoption / code review | [Architecture](ARCHITECTURE.md) → [Adversarial Testing](ADVERSARIAL_TESTING.md) → [OpenAI Adapter](OPENAI_ADAPTER.md) → [MCP Fault Lab](MCP_LAB.md) → [MCP Remote Authorization](MCP_REMOTE_AUTH.md) → [MCP OAuth Flow](MCP_OAUTH_FLOW.md) → repository tests → [Evidence & Replay](EVIDENCE_AND_REPLAY.md) → [Limitations](LIMITATIONS.md) |
+| Architecture / principal engineering | [Architecture](ARCHITECTURE.md) → [Evaluation Model](EVALUATION_MODEL.md) → [Adversarial Testing](ADVERSARIAL_TESTING.md) → [OpenAI Adapter](OPENAI_ADAPTER.md) → [MCP Fault Lab](MCP_LAB.md) → [MCP Remote Authorization](MCP_REMOTE_AUTH.md) → [MCP OAuth Flow](MCP_OAUTH_FLOW.md) → [Evidence & Replay](EVIDENCE_AND_REPLAY.md) → [Session Reports](ASSURANCE_REPORTS.md) → [Metamorphic Testing](METAMORPHIC_TESTING.md) → [Statistical Assurance](STATISTICAL_ASSURANCE.md) → [Limitations](LIMITATIONS.md) |
+| QA / AI evaluation engineering | [Evaluation Model](EVALUATION_MODEL.md) → [Adversarial Testing](ADVERSARIAL_TESTING.md) → [OpenAI Adapter](OPENAI_ADAPTER.md) → [MCP Fault Lab](MCP_LAB.md) → [Evidence & Replay](EVIDENCE_AND_REPLAY.md) → [Session Reports](ASSURANCE_REPORTS.md) → [Metamorphic Testing](METAMORPHIC_TESTING.md) → [Statistical Assurance](STATISTICAL_ASSURANCE.md) → [Architecture](ARCHITECTURE.md) |
+| Security / red team | [Security](SECURITY.md) → [Adversarial Testing](ADVERSARIAL_TESTING.md) → [MCP Fault Lab](MCP_LAB.md) → [OpenAI Adapter](OPENAI_ADAPTER.md) → [MCP Remote Authorization](MCP_REMOTE_AUTH.md) → [MCP OAuth Flow](MCP_OAUTH_FLOW.md) → [Evidence & Replay](EVIDENCE_AND_REPLAY.md) → [Limitations](LIMITATIONS.md) |
+| Adoption / code review | [Architecture](ARCHITECTURE.md) → [OpenAI Adapter](OPENAI_ADAPTER.md) → [MCP Fault Lab](MCP_LAB.md) → repository tests → [Evidence & Replay](EVIDENCE_AND_REPLAY.md) → [Security](SECURITY.md) → [Limitations](LIMITATIONS.md) |
 
 ## Cross-cutting invariants
 
 ```text
-Agent claim                ≠ environment outcome
-Tool request               ≠ successful side effect
-Approval request           ≠ approval grant
-Provider availability      ≠ subject correctness
-Model confidence           ≠ grading authority
-Attack channel label       ≠ delivery evidence
-Environment availability   ≠ environment consumption
-MCP fault configuration    ≠ MCP client observation
-Cached MCP discovery       ≠ current MCP server contract
-Current MCP contract       ≠ cached client discovery
-MCP protocol delivery      ≠ agent behavioral resistance
-Bearer authentication      ≠ verifier-owned issuer/resource policy
-Resource-server success    ≠ OAuth-flow correctness
-OAuth-flow success         ≠ agent correctness
-Authorization success      ≠ agent correctness
-Remote-auth receipt        ≠ OAuth-flow receipt
-OAuth-flow receipt         ≠ agent behavioral assurance
-Delivery receipt           ≠ target-side attestation
-Unverified delivery        ≠ behavioral FAIL
-Attack fixture hash        ≠ proof the subject resisted the attack
-Single passing trial       ≠ reliability
-Raw percentage delta       ≠ statistically established change
-Exact trajectory mismatch  ≠ failure unless the trajectory is contractual
-Blocked execution          ≠ behavioral FAIL
-Inconclusive evidence      ≠ PASS
-Critical safety violation  ≠ compensable score loss
-Narrower-looking policy    ≠ proven authority reduction
-Stored hash                ≠ authenticated publisher
-Evidence replay            ≠ fresh execution or fresh injection
-Serialized gate result     ≠ trusted without recomputation
-Assurance report root      ≠ signed attestation
+Agent claim                 ≠ environment outcome
+Tool request                ≠ successful side effect
+Approval request            ≠ approval grant
+Provider availability       ≠ subject correctness
+Model confidence            ≠ grading authority
+Attack channel label        ≠ delivery evidence
+Environment availability    ≠ environment consumption
+MCP fault configuration     ≠ MCP client observation
+Cached MCP discovery        ≠ current MCP server contract
+Current MCP contract        ≠ cached client discovery
+Raw MCP protocol receipt    ≠ agent behavioral assurance
+Verified MCP bridge         ≠ automatic PASS
+Bearer authentication       ≠ verifier-owned issuer/resource policy
+Resource-server success     ≠ OAuth-flow correctness
+OAuth-flow success          ≠ agent correctness
+Remote-auth receipt         ≠ OAuth-flow receipt
+OAuth-flow receipt          ≠ agent behavioral assurance
+Delivery receipt            ≠ target-side attestation
+Unverified delivery         ≠ behavioral FAIL
+Single passing trial        ≠ reliability
+Raw percentage delta        ≠ statistically established change
+Exact trajectory mismatch   ≠ failure unless the trajectory is contractual
+Blocked execution           ≠ behavioral FAIL
+Inconclusive evidence       ≠ PASS
+Critical safety violation   ≠ compensable score loss
+Narrower-looking policy     ≠ proven authority reduction
+Stored hash                 ≠ authenticated publisher
+Evidence replay             ≠ fresh execution or fresh injection
+Serialized gate result      ≠ trusted without recomputation
+Assurance report root       ≠ signed attestation
 ```
+
+The MCP distinction is especially important:
+
+```text
+MCPFaultReceipt
+    = verified protocol observation
+
+MCPAgentToolResultReceipt
+    = verified correlation between one bound MCP tool result
+      and one exact OpenAI agent tool call/result
+
+Trial PASS / FAIL
+    = deterministic subject grading after required delivery evidence closes
+```
+
+Only `MCPFaultKind.TOOL_RESULT_POISON` currently has that agent bridge. The other five MCP protocol fault families remain protocol-only.
 
 ## Current documentation set
 
 | Document | Primary question |
 |---|---|
-| [ARCHITECTURE.md](ARCHITECTURE.md) | Where do identity, adversarial derivation, protocol faults, resource-server authorization, OAuth-flow assurance, delivery verification, evidence, grading, persistence, reporting, and release authority live? |
+| [ARCHITECTURE.md](ARCHITECTURE.md) | Where do identity, adversarial derivation, protocol faults, the MCP→agent bridge, resource-server authorization, OAuth-flow assurance, evidence, grading, persistence, reporting, and release authority live? |
 | [EVALUATION_MODEL.md](EVALUATION_MODEL.md) | What exactly constitutes a task, trial, outcome, policy violation, and verdict? |
 | [ADVERSARIAL_TESTING.md](ADVERSARIAL_TESTING.md) | How are red-team stimuli made deterministic, how is delivery required before grading, and what does an adversarial receipt still not prove? |
-| [MCP_LAB.md](MCP_LAB.md) | How are six deterministic MCP content/discovery-state faults observed without confusing protocol evidence with agent assurance? |
+| [OPENAI_ADAPTER.md](OPENAI_ADAPTER.md) | How are OpenAI Agents SDK events normalized, how does the dedicated MCP stdio tool-result bridge close, and why does neither provider nor protocol become the oracle? |
+| [MCP_LAB.md](MCP_LAB.md) | How are six deterministic MCP faults observed, and why does only one exact result fault currently have an explicit agent bridge? |
 | [MCP_REMOTE_AUTH.md](MCP_REMOTE_AUTH.md) | How is the isolated loopback Streamable HTTP resource-server bearer/scope/verifier boundary tested over real TCP? |
-| [MCP_OAUTH_FLOW.md](MCP_OAUTH_FLOW.md) | How does the separate two-origin loopback OAuth client/authorization-server flow verify discovery, compatibility DCR, PKCE, exact issuer/resource binding, token exchange, authenticated introspection, and protected MCP use? |
+| [MCP_OAUTH_FLOW.md](MCP_OAUTH_FLOW.md) | How does the separated two-origin loopback OAuth flow verify discovery, compatibility DCR, PKCE, exact issuer/resource binding, exchange, introspection, and protected MCP use? |
 | [EVIDENCE_AND_REPLAY.md](EVIDENCE_AND_REPLAY.md) | How are local evidence records committed, reverified, and replayed without overstating provenance? |
 | [ASSURANCE_REPORTS.md](ASSURANCE_REPORTS.md) | How are session conclusions bound and rederived without turning a serialized score or gate label into authority? |
-| [OPENAI_ADAPTER.md](OPENAI_ADAPTER.md) | How are OpenAI Agents SDK events normalized without making the provider the oracle? |
 | [METAMORPHIC_TESTING.md](METAMORPHIC_TESTING.md) | Which behavioral relations can be verified without brittle golden outputs? |
 | [STATISTICAL_ASSURANCE.md](STATISTICAL_ASSURANCE.md) | How is nondeterministic behavior quantified without overstating certainty? |
-| [SECURITY.md](SECURITY.md) | Which agentic threats are modeled, which adversarial/protocol/auth controls exist, and which boundaries remain external? |
+| [SECURITY.md](SECURITY.md) | Which threats and trust boundaries are actually controlled, and which claims remain external? |
 | [LIMITATIONS.md](LIMITATIONS.md) | What does the repository deliberately not claim yet? |
 
-New documents are added only after executable code or a real deployment/protocol boundary creates a contract that reviewers need to inspect. `MCP_REMOTE_AUTH.md` exists because the repository has an independently executable resource-server authentication/authorization boundary; `MCP_OAUTH_FLOW.md` exists because the repository now also has an independently executable authorization-client/authorization-server flow across separate loopback origins. Neither evidence domain becomes agent behavioral evidence without an explicit integration contract.
+## Evidence-domain routing guide
+
+Use the evidence contract that matches the boundary actually observed:
+
+| Observed boundary | Evidence contract | What it does **not** imply |
+|---|---|---|
+| OpenAI local/SDK adversarial injection | `AttackDeliveryReceipt` | target-side attestation or automatic PASS |
+| standalone MCP fault observation | `MCPFaultReceipt` | agent consumption or behavior |
+| controlled MCP result correlated to exact OpenAI call | `MCPAgentToolResultReceipt` + `PROTOCOL_DELIVERY` | safe behavior or release acceptance |
+| loopback MCP resource authorization | `MCPRemoteAuthReceipt` | OAuth issuance correctness or agent behavior |
+| separated loopback OAuth flow | `MCPOAuthFlowReceipt` | production IdP assurance or agent behavior |
+| persisted agent trial | `TrialEvidence` | authenticated publisher identity |
+| rederived session/release artifact | `AssuranceReport` | signed attestation |
+
+The explicit bridge is important precisely because the framework refuses to infer cross-domain delivery from matching labels or similar payloads.
+
+## MCP agent-bridge scope in one paragraph
+
+`OpenAIAgentsMCPToolResultAdapter` creates a fresh official `MCPServerStdio` path for one `TOOL_RESULT_POISON` fault, verifies negotiated protocol `2026-07-28`, requires exactly one target behavioral call, records the exact first MCP result, pairs it to exactly one OpenAI target request/result using a stable call ID, verifies logical output equivalence, closes `MCPAgentToolResultReceipt`, emits `PROTOCOL_DELIVERY`, and then checks same-argument benign recovery on the same live MCP session after the behavioral run. That is the full current MCP→agent claim. It does not cover the other five fault families, hosted/remote MCP, live providers, or generic transport assurance.
 
 ## Audited implementation checkpoint
 
-Audited implementation source checkpoint `ed0b1f9415e49b49a23c77c9372a5d09f70682fc`, CI run `33881346071`:
+Audited merged implementation source checkpoint `d98f9ca1feb1179504cd2181295a73936fd0ae6c`, CI run `33898508697`:
 
-- deterministic core: **330 passed, 23 deselected**;
-- branch coverage: **93.61%** against the 90% gate;
-- strict mypy: **0 issues across 40 source files**;
-- deterministic OpenAI SDK: **11/11 passed**;
+- deterministic core: **349 passed, 27 deselected**;
+- branch coverage: **93.79%** against the 90% gate;
+- strict mypy: **0 issues across 42 source files**;
+- deterministic OpenAI SDK suite, including the controlled MCP stdio bridge: **15/15 passed**;
 - deterministic MCP protocol: **6/6 passed**;
 - deterministic MCP remote auth: **3/3 passed**;
 - deterministic MCP OAuth flow: **3/3 passed**;
-- Python **3.11 minimum / 3.14 latest** quality jobs, Ruff, formatter, Bandit, dependency audit, package integrity, and all **7/7 CI jobs**: green;
+- Python **3.11 minimum / 3.14 latest**, Ruff, formatter, Bandit, dependency audit, package integrity, and all **7/7 CI jobs**: green;
 - dependency audit reported **no known vulnerabilities**; the project package itself is skipped because it is not published on PyPI.
 
-This checkpoint identifies the audited code revision before documentation-only synchronization. Documentation-only synchronization commits are validated separately by their own full PR CI and do not relabel the underlying implementation evidence.
+This checkpoint identifies the audited merged implementation revision before this documentation-only synchronization. The documentation branch must pass its own full PR CI and does not retroactively relabel implementation evidence.
 
 [← Repository README](../README.md)
