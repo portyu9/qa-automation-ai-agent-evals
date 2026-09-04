@@ -29,7 +29,7 @@ class EvidenceKind(StrEnum):
 
 
 class TrialVerdict(StrEnum):
-    PASS = "pass"  # nosec B105 - public verdict label, never a credential or secret
+    PASS = "pass"  # nosec B105
     FAIL = "fail"
     BLOCKED = "blocked"
     INCONCLUSIVE = "inconclusive"
