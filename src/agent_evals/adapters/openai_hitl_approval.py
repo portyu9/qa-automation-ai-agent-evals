@@ -9,9 +9,13 @@ from typing import Any
 from agent_evals.adapters.base import AdapterPreconditionError, AdapterResult
 from agent_evals.adapters.openai_agents import _stringify_output
 from agent_evals.adapters.openai_handoff_authority import OpenAIAgentsHandoffAuthorityAdapter
-from agent_evals.authority import validated_handoff_epoch_before
+from agent_evals.authority import validated_handoff_state_before
 from agent_evals.contracts.models import ApprovalDecision, EvaluationScenario, SubjectFingerprint
-from agent_evals.evidence.approval_intent import ApprovalIntentError, ApprovalIntentReceipt
+from agent_evals.evidence.approval_intent import (
+    ApprovalIntentError,
+    ApprovalIntentReceipt,
+    canonical_arguments_sha256,
+)
 from agent_evals.evidence.models import EvidenceEvent, EvidenceKind
 
 
@@ -118,16 +122,7 @@ class OpenAIAgentsHITLApprovalAdapter(OpenAIAgentsHandoffAuthorityAdapter):
                 reason="native SDK approval interruption lacks string tool arguments",
             )
         try:
-            ApprovalIntentReceipt.create(
-                scenario=scenario,
-                agent=spec.agent,
-                tool=spec.tool,
-                call_id=call_id,
-                arguments=arguments,
-                resource=None,
-                authority_epoch=0,
-                approval_request_sequence=0,
-            )
+            canonical_arguments_sha256(arguments)
         except ApprovalIntentError as exc:
             raise AdapterPreconditionError(
                 code="approval_arguments_unverifiable",
@@ -345,7 +340,7 @@ class OpenAIAgentsHITLApprovalAdapter(OpenAIAgentsHandoffAuthorityAdapter):
             }
         )
         stitched.append(enriched_request)
-        authority_epoch = validated_handoff_epoch_before(
+        authority_state = validated_handoff_state_before(
             scenario.authority,
             stitched,
             request_sequence,
@@ -359,7 +354,8 @@ class OpenAIAgentsHITLApprovalAdapter(OpenAIAgentsHandoffAuthorityAdapter):
                 call_id=call_id,
                 arguments=arguments,
                 resource=resource,
-                authority_epoch=authority_epoch,
+                authority_epoch=authority_state.epoch,
+                authority_path_sha256=authority_state.path_sha256,
                 approval_request_sequence=request_sequence,
             )
         except ApprovalIntentError as exc:  # pragma: no cover - validated earlier
