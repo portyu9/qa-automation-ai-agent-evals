@@ -8,23 +8,24 @@
 [![MIT License](https://img.shields.io/badge/License-MIT-2ea44f?style=flat-square)](LICENSE)
 [![Architecture](https://img.shields.io/badge/Architecture-Evidence--Bound-111827?style=flat-square)](docs/ARCHITECTURE.md)
 
-**A provider-neutral quality-engineering framework for evaluating autonomous agents by observable outcomes, side effects, authority boundaries, adversarial conditions, verified evaluation preconditions, protocol faults, reliability, and reproducible evidence—not by persuasive final prose.**
+**A provider-neutral quality-engineering framework for evaluating autonomous agents by observable outcomes, side effects, authority boundaries, adversarial conditions, verified evaluation preconditions, protocol state, remote authorization behavior, reliability, and reproducible evidence—not by persuasive final prose.**
 
-[Documentation](docs/README.md) · [Architecture](docs/ARCHITECTURE.md) · [Evaluation Model](docs/EVALUATION_MODEL.md) · [Adversarial Testing](docs/ADVERSARIAL_TESTING.md) · [MCP Lab](docs/MCP_LAB.md) · [Evidence & Replay](docs/EVIDENCE_AND_REPLAY.md) · [Session Reports](docs/ASSURANCE_REPORTS.md) · [OpenAI Adapter](docs/OPENAI_ADAPTER.md) · [Statistics](docs/STATISTICAL_ASSURANCE.md) · [Security](docs/SECURITY.md) · [Limitations](docs/LIMITATIONS.md)
+[Documentation](docs/README.md) · [Architecture](docs/ARCHITECTURE.md) · [Evaluation Model](docs/EVALUATION_MODEL.md) · [Adversarial Testing](docs/ADVERSARIAL_TESTING.md) · [MCP Fault Lab](docs/MCP_LAB.md) · [MCP Remote Auth](docs/MCP_REMOTE_AUTH.md) · [Evidence & Replay](docs/EVIDENCE_AND_REPLAY.md) · [Session Reports](docs/ASSURANCE_REPORTS.md) · [OpenAI Adapter](docs/OPENAI_ADAPTER.md) · [Statistics](docs/STATISTICAL_ASSURANCE.md) · [Security](docs/SECURITY.md) · [Limitations](docs/LIMITATIONS.md)
 
 </div>
 
 ---
 
 > [!IMPORTANT]
-> **The agent is the subject, not the oracle.** Final prose is not task completion. A tool call is not a successful side effect. An attack label is not proof of delivery. A configured environment value is not proof of consumption. An MCP fault configuration is not proof of client observation. Protocol delivery is not proof of agent resistance. Missing or invalid evaluation evidence is never silently promoted to PASS.
+> **The agent is the subject, not the oracle.** Final prose is not task completion. A tool call is not a successful side effect. An attack label is not proof of delivery. A configured environment value is not proof of consumption. Cached MCP discovery is not current server truth. A bearer challenge is not proof of correct issuer policy. Protocol evidence is not agent behavioral evidence. Missing or invalid evidence is never silently promoted to PASS.
 
 ## Engineering thesis
 
 ```text
 Agents act.
 Attacks perturb.
-Protocols carry untrusted content.
+Protocols carry untrusted content and state.
+Authorization constrains access.
 Controlled injectors establish evaluation preconditions.
 Observers record.
 State proves.
@@ -36,9 +37,9 @@ Release gates decide.
 Reports rederive.
 ```
 
-Agentic systems call tools, mutate state, consume resources, retain session history, transfer work across agents, read runtime dependencies, interact with protocol servers, request approvals, retry failures, and cross trust boundaries. Evaluating only a final message cannot distinguish completed work from a plausible claim that work occurred.
+Agentic systems call tools, mutate state, consume resources, retain session history, transfer work across agents, read runtime dependencies, interact with protocol servers, cross authorization boundaries, request approvals, retry failures, and operate nondeterministically. Evaluating only a final message cannot distinguish completed work from a plausible claim that work occurred.
 
-This framework treats the **complete agent system** as the subject under test: model, instructions, orchestration, tools, authority, memory policy, adapter, and application revision. Provider-specific execution becomes normalized evidence; deterministic state, policy, and release authority remain outside the agent and outside the provider SDK.
+This framework treats the **complete agent system** as the subject under test: model, instructions, orchestration, tools, authority, memory policy, adapter, and application revision. Provider-specific execution becomes normalized evidence; deterministic state, policy, protocol observations, and release authority remain outside the agent and outside model confidence.
 
 ## Core invariants
 
@@ -48,12 +49,16 @@ This framework treats the **complete agent system** as the subject under test: m
 | **Safety is non-compensatory** | a critical authorization violation cannot be averaged away |
 | **Unknown is not green** | blocked execution and missing evidence remain explicit uncertainty |
 | **Bad ≠ unknown** | resolved subject failure is distinct from evaluator/runtime inability to judge |
-| **Identity is canonical** | subject, scenario, attack, protocol-fault, evidence, and report identities bind behavior-bearing material |
+| **Identity is canonical** | subject, scenario, attack, MCP fault, remote-auth policy, evidence, and report identities bind behavior-bearing material |
 | **Adversarial derivation preserves authority** | an attack cannot grant tools, broaden resources, remove approval, reroute handoffs, or redefine success |
 | **Attack delivery is a precondition** | adversarial behavior is graded only after one exact matching receipt verifies |
 | **Availability ≠ consumption** | an environment value that subject code never reads is not a delivered attack |
-| **MCP configuration ≠ observation** | an MCP fault exists only as delivered protocol evidence after the official client observes the required representation or relation |
-| **Protocol delivery ≠ behavior** | an MCP receipt does not establish that an autonomous agent consumed or resisted the fault |
+| **MCP configuration ≠ observation** | an MCP fault exists as evidence only after the official client observes the required representation or relation |
+| **Cached discovery ≠ server truth** | a still-fresh `tools/list` result does not prove the current server schema or registry identity |
+| **Discovery ≠ call validation** | server-side `tools/call` validity is independently observed rather than inferred from cached metadata |
+| **Bearer authentication ≠ issuer/resource policy** | SDK bearer handling and verifier-owned identity/resource binding are credited to their actual enforcement components |
+| **Authorization success ≠ agent correctness** | a successful protected MCP call proves protocol access, not safe or correct agent behavior |
+| **Protocol delivery ≠ behavior** | MCP receipts do not establish that an autonomous agent consumed or resisted the observed condition |
 | **Evaluator failure ≠ subject failure** | unavailable/unverifiable controlled delivery becomes `EVALUATION_ERROR / BLOCKED` |
 | **Provider failure ≠ evaluator failure** | provider/runtime exceptions remain `RUNTIME_ERROR / BLOCKED` |
 | **Evidence is reverified** | persisted bytes must pass schema, identity, hash, and semantic-root checks before reuse |
@@ -65,7 +70,13 @@ This framework treats the **complete agent system** as the subject under test: m
 
 ## What is executable today
 
-The deterministic core requires no model credentials. A first-class OpenAI Agents SDK adapter is exercised against the real SDK runner using `agents.testing.ScriptedModel`, and a separate MCP laboratory uses the official Python MCP SDK with a real in-process `MCPServer`/`Client`. Neither deterministic tier requires a provider API call.
+The deterministic core requires no model credentials. The repository also contains three independently gated execution tiers:
+
+1. **Provider-neutral core** — contracts, evidence, persistence, replay, deterministic oracles, statistics, metamorphic assurance, reporting, minimization, and release gates.
+2. **OpenAI Agents SDK tier** — the real SDK runner exercised with `agents.testing.ScriptedModel`, with no provider API call.
+3. **MCP assurance tiers** — an official in-process MCP client/server fault laboratory plus a separate real loopback TCP Streamable HTTP authorization laboratory.
+
+The MCP tiers share the `mcp` optional dependency group but intentionally have separate pytest markers and CI jobs so protocol-state and remote-auth failures cannot hide behind one aggregate status.
 
 ### Evaluation and assurance core
 
@@ -103,7 +114,7 @@ The deterministic core requires no model credentials. A first-class OpenAI Agent
 
 Seven generic channels implemented does **not** mean universal production interception. [Limitations](docs/LIMITATIONS.md) is authoritative.
 
-### Deterministic MCP fault laboratory
+### Deterministic MCP protocol fault laboratory
 
 The separate `MCPFaultLab` uses official `mcp==2.1.1` and protocol revision `2026-07-28`. Each probe builds a fresh real `MCPServer`, connects an official `Client`, and emits `MCPFaultReceipt` only after the complete fault-specific public-client observation contract is satisfied.
 
@@ -111,20 +122,52 @@ The separate `MCPFaultLab` uses official `mcp==2.1.1` and protocol revision `202
 |---|---|
 | **tool metadata poison** | canonical fault JSON observed as the target description returned by `tools/list` |
 | **tool result poison** | canonical fault JSON observed as first `tools/call` result text; second call recovers to benign data |
-| **tool error** | canonical fault JSON preserved inside the SDK-generated model-visible `ToolError` envelope; second call recovers to benign data |
-| **tool-list stale cache** | target initially observed under a private positive `tools/list` TTL, removed from the live server registry, still returned by a normal cached `Client.list_tools()` call, and absent after `cache_mode="refresh"` forces current server truth |
+| **tool error** | canonical fault JSON preserved inside the SDK-generated model-visible `ToolError` envelope; second call recovers |
+| **tool-list stale cache** | target initially observed under a private positive `tools/list` TTL, removed from the live registry, still returned by a normal cached list, then absent after explicit refresh |
+| **tool-schema drift** | cached old schema remains visible after server replacement; stale old arguments fail under current server validation; refresh exposes the new schema; new arguments succeed |
+| **tool-identity drift** | cached old name remains visible after server rename; stale-name call fails; refresh exposes only the replacement; replacement call succeeds |
 
-The receipt binds both the controlled fault-material SHA-256 and the SHA-256 of the exact canonical protocol observation. For direct metadata/result poison the hashes match. For `ToolError` they intentionally differ because the SDK wraps the controlled message as:
+The three discovery-state faults deliberately prove relations rather than isolated values:
 
 ```text
-Error executing tool <tool>: <canonical fault payload>
+cached discovery
+      ≠
+current server contract
+      ≠
+call-time validity
+      ≠
+refreshed discovery
 ```
 
-For the stale-cache fault they also intentionally differ: the payload hash binds the configured TTL while the observation hash binds canonical initial/cached/refreshed tool-name sets plus the observed TTL.
+`MCPFaultReceipt` binds both the controlled fault-material SHA-256 and the exact canonical observation SHA-256. Equal hashes mean exact direct content observation; unequal hashes represent deliberate SDK transformation or stateful protocol evidence rather than a false byte-equivalence claim.
 
-This records protocol transformation and state relations instead of pretending every fault is byte-identical content delivery.
+The MCP fault laboratory is a **protocol evidence layer**, not an agent verdict engine. It does not convert `MCPFaultReceipt` into OpenAI `ATTACK_DELIVERY`, agent `PASS`/`FAIL`, or release acceptance.
 
-The MCP laboratory is a **protocol evidence layer**, not an agent verdict engine. It does not currently convert `MCPFaultReceipt` into OpenAI `ATTACK_DELIVERY`, agent `PASS`/`FAIL`, or release acceptance.
+### Loopback MCP remote authorization laboratory
+
+`MCPRemoteAuthLab` tests a separate trust boundary over an actual pre-bound `127.0.0.1` TCP socket, Uvicorn, the MCP Streamable HTTP application, and the official client transport.
+
+| Condition | Required observation |
+|---|---|
+| missing bearer | HTTP 401 |
+| unknown bearer | HTTP 401 |
+| expired bearer | HTTP 401 |
+| wrong issuer | deterministic verifier rejects → HTTP 401 |
+| wrong resource | deterministic verifier rejects → HTTP 401 |
+| missing required scope | authenticated request → HTTP 403 |
+| valid scoped bearer | protected `tools/list` and `tools/call` succeed |
+| protected-resource discovery | RFC 9728 metadata reports exact resource, issuer, and required scopes |
+
+Control ownership is intentionally explicit:
+
+- **issuer and resource binding** are enforced by the deterministic lab `TokenVerifier`;
+- **bearer recognition, verifier acceptance, and expiry** are enforced by MCP SDK authentication middleware;
+- **required scopes** are enforced by MCP SDK authorization middleware;
+- **protected-resource metadata** is served by the SDK route and fetched over HTTP.
+
+The result and `MCPRemoteAuthReceipt` never serialize the actual deterministic bearer values. Public `WWW-Authenticate: Bearer ...` challenge metadata remains evidence because the authentication scheme is not a credential.
+
+This is labeled `streamable-http-loopback` deliberately. It is not Internet, TLS, proxy, hosted-server, or production identity-provider assurance.
 
 ---
 
@@ -132,8 +175,8 @@ The MCP laboratory is a **protocol evidence layer**, not an agent verdict engine
 
 ```mermaid
 flowchart LR
-    accTitle: Evidence-bound agent and protocol evaluation architecture
-    accDescr: Canonical subject and scenario contracts drive a provider adapter. Adversarial scenarios require controlled injection and verified delivery before deterministic grading. A separate MCP laboratory verifies exact protocol-fault observations. Independent state and policy evidence feed trial verdicts, repeated-trial reliability, and a fail-closed release gate.
+    accTitle: Evidence-bound agent, MCP protocol, and remote authorization assurance architecture
+    accDescr: Canonical subject and scenario contracts drive provider execution and deterministic grading. A separate in-process MCP path verifies content and discovery-state faults. A separate loopback TCP path verifies resource-server authentication and authorization. Neither MCP path silently becomes agent behavioral evidence.
 
     S[Canonical subject]
     C[Scenario + authority]
@@ -148,10 +191,16 @@ flowchart LR
     T[Trial verdict]
     R[Reliability]
     G[Release gate]
+
     MF[MCP fault spec]
-    MS[MCPServer]
+    MS[In-process MCPServer]
     MC[MCP client observation]
     MR[MCP fault receipt]
+
+    AP[MCP remote-auth policy]
+    HTTP[Loopback TCP + Streamable HTTP]
+    AO[HTTP + protected MCP observation]
+    AR[MCP remote-auth receipt]
 
     X --> C
     C --> I
@@ -171,9 +220,13 @@ flowchart LR
     MF --> MS
     MS --> MC
     MC --> MR
+
+    AP --> HTTP
+    HTTP --> AO
+    AO --> AR
 ```
 
-The MCP path intentionally stops at protocol evidence. A future integration must explicitly bridge that receipt into an agent trial before agent behavior can be graded.
+Both MCP paths intentionally stop at protocol/control-plane evidence. A future integration must explicitly bridge an MCP receipt into an agent trial before agent behavior can be graded.
 
 ## Trial and release semantics
 
@@ -186,7 +239,7 @@ The MCP path intentionally stops at protocol evidence. A future integration must
 | `REJECT` | verified behavioral/safety evidence violates release policy |
 | `INCONCLUSIVE` | release evidence is insufficient; uncertainty is not converted to acceptance |
 
-A target tool that never executes, an injected runtime key that is never consumed, a missing handoff, invalid delivery evidence, or an unavailable provider can all block evaluation without being mislabeled as a product defect. A successful MCP fault receipt by itself is not a trial verdict at all.
+A target tool that never executes, an injected runtime key that is never consumed, a missing handoff, invalid delivery evidence, or an unavailable provider can block evaluation without being mislabeled as a product defect. A successful MCP protocol or remote-auth receipt by itself is not a trial verdict at all.
 
 ---
 
@@ -211,14 +264,21 @@ pytest -m openai \
   tests/integration/test_openai_environment_adapter.py
 ```
 
-Deterministic MCP protocol laboratory:
+Deterministic in-process MCP protocol laboratory:
 
 ```bash
 python -m pip install -e '.[dev,mcp]'
 pytest -m mcp tests/integration/test_mcp_fault_lab.py
 ```
 
-The OpenAI integration is pinned to `openai-agents==0.22.0`. The MCP integration is separately pinned to `mcp==2.1.1`; the MCP CI lane installs its own extra so it does not silently depend on OpenAI's transitive dependencies.
+Deterministic loopback MCP remote authorization:
+
+```bash
+python -m pip install -e '.[dev,mcp]'
+pytest -m mcp_remote tests/integration/test_mcp_remote_auth.py
+```
+
+The OpenAI integration is pinned to `openai-agents==0.22.0`. The MCP integration is pinned to `mcp==2.1.1`; its optional dependency group directly declares `httpx2` and `uvicorn` because the remote-auth laboratory imports them directly rather than relying on MCP's transitive dependency graph.
 
 ---
 
@@ -283,11 +343,11 @@ TOOL_REQUEST → ATTACK_DELIVERY → TOOL_RESULT
 
 A matching tool that runs without reading the key produces **no receipt** and the adversarial trial remains `BLOCKED`. A later ordinary run sees the original base context value.
 
-This is local SDK application-context perturbation. It is not `os.environ`, network/service fault injection, filesystem/sandbox mutation, clock manipulation, secret-store mutation, provider configuration change, or cloud/IAM chaos.
-
 ---
 
-## MCP fault receipt contracts
+## MCP receipt contracts
+
+### In-process protocol faults
 
 ```text
 metadata:
@@ -301,11 +361,34 @@ error:
 
 stale discovery:
   mcp:2026-07-28:tools/list:cache-use-stale-after-remove:<tool>:refresh-proves-absent
+
+schema drift:
+  mcp:2026-07-28:tools/list:schema-drift:<tool>:cached-old:call-rejects-old:refresh-new
+
+identity drift:
+  mcp:2026-07-28:tools/list:identity-drift:<tool>:cached-old-name:call-rejects-old:refresh-new-name
 ```
 
-Every probe uses a fresh server. Result/error faults are first-call-only and must recover to controlled benign output on the second call. The stale-discovery probe uses a fresh client cache and must prove initial target presence, server-side removal, cached target reuse, and refreshed target absence. Raw fault text is excluded from the receipt itself; the receipt stores integrity digests and the concrete protocol observation location.
+Every probe uses a fresh server. Result/error faults are first-call-only and must recover. Discovery-state probes use fresh client cache state and must close every stale/current/refreshed leg before a receipt exists.
 
-See [MCP Fault Laboratory](docs/MCP_LAB.md) for the complete trust and non-claim boundary.
+### Remote authorization
+
+```text
+MCPRemoteAuthPolicy
+    ↓ exact policy identity
+streamable-http-loopback
+    ↓
+401 / 403 challenge matrix
++ RFC 9728 protected-resource metadata
++ authorized tools/list
++ authorized protected tools/call
+    ↓
+MCPRemoteAuthReceipt
+```
+
+The auth receipt binds a canonical observation digest, not bearer credential values.
+
+See [MCP Protocol Fault Laboratory](docs/MCP_LAB.md) and [MCP Remote Authorization](docs/MCP_REMOTE_AUTH.md) for the complete trust and non-claim boundaries.
 
 ---
 
@@ -344,11 +427,12 @@ qa-automation-ai-agent-evals/
 
 Current source checkpoint:
 
-- deterministic core: **181 passed, 15 deselected**;
-- branch coverage: **93.14%** against the 90% gate;
-- strict mypy: **0 issues across 37 source files**;
+- deterministic core: **183 passed, 20 deselected**;
+- branch coverage: **93.04%** against the 90% gate;
+- strict mypy: **0 issues across 38 source files**;
 - deterministic OpenAI SDK suite: **11/11 passed**;
-- deterministic MCP protocol suite: **4/4 passed**;
+- deterministic MCP protocol suite: **6/6 passed**;
+- deterministic MCP remote-auth suite: **3/3 passed**;
 - Python **3.11 and 3.13** quality jobs: green;
 - Ruff lint + formatter: green;
 - Bandit: green;
@@ -363,22 +447,22 @@ The repository does not currently claim:
 
 - credentialed live-provider behavioral assurance or production-provider reliability;
 - agent-through-MCP behavioral assurance, MCP-derived agent verdicts, or release acceptance from protocol receipts alone;
-- remote MCP Streamable HTTP, stdio, proxy, network, TLS, DNS, or transport fault coverage;
-- MCP authorization issuer/scope/credential-reuse/token-binding/CIMD assurance;
-- general MCP cache correctness beyond the tested private stale-after-removal relation, including public/cross-partition sharing, cache poisoning, custom/shared stores, notification invalidation, TTL-expiry behavior, cache races, or renamed-tool discovery;
-- MCP header-routing faults, malformed JSON-RPC/framing, schema drift, duplicate/out-of-order responses, or complete protocol conformance;
+- Internet-hosted or third-party MCP fidelity, stdio/proxy/gateway/TLS/DNS/service-mesh transport assurance, or transport-chaos coverage;
+- a real authorization server issuing tokens, production JWT/JWKS/introspection/federation, PKCE, Dynamic Client Registration, CIMD, SEP-990, DPoP, mTLS, refresh/revocation lifecycle, or production IdP/IAM assurance;
+- cross-service credential-reuse resistance beyond the exact deterministic resource-binding fixture;
+- general MCP cache correctness beyond the tested stale-removal, schema-drift, and identity-drift relations, including public/cross-partition sharing, cache poisoning, custom/shared stores, notification invalidation, TTL-expiry races, or distributed caches;
+- arbitrary MCP schema migrations or arbitrary registry churn beyond the exact bound v1 drift fixtures;
+- MCP header-routing faults, malformed JSON-RPC/framing, duplicate/out-of-order responses, or complete protocol conformance;
 - malicious MCP resources, resource templates, prompts, roots, elicitation, sampling, subscriptions, or Tasks-extension coverage;
-- hosted third-party MCP server fidelity or remote target-side MCP delivery attestation;
+- hosted third-party MCP delivery attestation or remote target-side MCP attestation;
 - production application-memory, vector/RAG-memory, provider-managed-conversation, or cross-user memory poisoning under SDK `MEMORY` mode;
 - hosted File Search/vector-store/RAG, `file_id`, `file_url`, external document/database/web, or MCP-resource interception under inline-file `RESOURCE` mode;
 - destination rerouting, every-hop poisoning, or distributed/remote handoff interception under native `HANDOFF` mode;
 - process-global environment variables, network/service faults, filesystem/sandbox state, clock faults, secrets, cloud/IAM, or production infrastructure chaos under local runtime-context `ENVIRONMENT` mode;
-- tool-name or parameter-schema poisoning under description-level OpenAI `TOOL_METADATA` mode;
+- OpenAI tool-name or parameter-schema poisoning under description-level `TOOL_METADATA` mode;
 - OpenAI hosted/MCP/external-tool result or metadata interception;
-- cryptographically authenticated injector identity, authenticated MCP server identity beyond the local deterministic harness, or target-side delivery attestation;
-- automatic/adaptive red-team generation, mutation/fuzzing campaigns, or sandbox-escape execution infrastructure;
-- authenticated hostile-writer evidence, signed/MAC-authenticated reports, trusted timestamps, remote attestation, WORM retention, or transparency-log anchoring;
-- calibrated semantic/model graders or automatic perturbation generation.
+- cryptographically authenticated injector identity, authenticated hostile-writer evidence, signed/MAC-authenticated reports, trusted timestamps, remote attestation, WORM retention, or transparency-log anchoring;
+- automatic/adaptive red-team generation, mutation/fuzzing campaigns, sandbox-escape execution infrastructure, calibrated semantic/model graders, or automatic perturbation generation.
 
 New capabilities move out of this list only after implementation, deterministic tests, and documentation review make the stronger claim true.
 
@@ -389,10 +473,11 @@ New capabilities move out of this list only after implementation, deterministic 
 1. [Architecture](docs/ARCHITECTURE.md)
 2. [Evaluation Model](docs/EVALUATION_MODEL.md)
 3. [Adversarial Testing](docs/ADVERSARIAL_TESTING.md)
-4. [MCP Fault Laboratory](docs/MCP_LAB.md)
-5. [OpenAI Adapter](docs/OPENAI_ADAPTER.md)
-6. [Evidence & Replay](docs/EVIDENCE_AND_REPLAY.md)
-7. [Session Assurance Reports](docs/ASSURANCE_REPORTS.md)
-8. [Statistical Assurance](docs/STATISTICAL_ASSURANCE.md)
-9. [Security](docs/SECURITY.md)
-10. [Limitations and Non-Claims](docs/LIMITATIONS.md)
+4. [MCP Protocol Fault Laboratory](docs/MCP_LAB.md)
+5. [MCP Remote Authorization](docs/MCP_REMOTE_AUTH.md)
+6. [OpenAI Adapter](docs/OPENAI_ADAPTER.md)
+7. [Evidence & Replay](docs/EVIDENCE_AND_REPLAY.md)
+8. [Session Assurance Reports](docs/ASSURANCE_REPORTS.md)
+9. [Statistical Assurance](docs/STATISTICAL_ASSURANCE.md)
+10. [Security](docs/SECURITY.md)
+11. [Limitations and Non-Claims](docs/LIMITATIONS.md)

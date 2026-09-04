@@ -91,7 +91,7 @@ source          = injector:openai-agents:tool-metadata
 injection_point = openai-agents:FunctionTool:<tool>:description
 ```
 
-Name, parameter schema, callback, approval behavior, and routing identity remain fixed.
+Name, parameter schema, callback, approval behavior, and routing identity remain fixed. MCP schema and identity drift are tested separately at the MCP protocol boundary; they are not OpenAI adapter claims.
 
 ### SDK session-history `MEMORY`
 
@@ -153,26 +153,45 @@ injection_point = openai-agents:FunctionTool:<tool>:call:<call_id>:RunContextWra
 TOOL_REQUEST → ATTACK_DELIVERY → TOOL_RESULT
 ```
 
-If the tool executes but never reads the key, the attack remains unverified and the trial is `BLOCKED`. The SDK integration suite explicitly proves this behavior. A later ordinary run sees the original base context value and no delivery event.
+If the tool executes but never reads the key, the attack remains unverified and the trial is `BLOCKED`. A later ordinary run sees the original base context value and no delivery event.
 
 This is **local SDK application-context perturbation**, not process-wide `os.environ`, network/service chaos, filesystem/sandbox mutation, clock faults, secret-store manipulation, provider configuration changes, cloud/IAM fault injection, or production infrastructure attestation.
 
-## Relationship to the MCP fault laboratory
+## Relationship to the MCP laboratories
 
-The repository also has a real official-SDK MCP protocol fault laboratory. It is deliberately **not** folded into the OpenAI `AttackChannel` implementation above.
+The repository has two MCP assurance layers. Neither is folded into the OpenAI `AttackChannel` implementation above.
 
-`MCPFaultSpec` / `MCPFaultReceipt` currently prove four deterministic official-client observations under protocol `2026-07-28`:
+### In-process protocol fault laboratory
+
+`MCPFaultSpec` / `MCPFaultReceipt` prove six deterministic official-client observations under protocol `2026-07-28`:
 
 - `tools/list` description poisoning;
 - first `tools/call` result poisoning;
-- the model-visible `ToolError` envelope;
-- a private `tools/list` stale-discovery relation where the target is initially advertised, removed from the live server registry, still returned by a normal cached client call, and absent after `cache_mode="refresh"` forces current server truth.
+- model-visible `ToolError` envelope;
+- private positive-TTL stale discovery after server-side removal;
+- schema drift where cached old discovery coexists with current server call validation until explicit refresh;
+- identity drift where cached old name coexists with current server lookup failure until explicit refresh exposes the replacement.
 
-The first three are controlled content observations. The fourth is a protocol-state observation: its fault payload binds the configured TTL while its receipt observation binds the initial/cached/refreshed tool-name sets and observed TTL.
+The last three are protocol-state relations. Schema and identity drift additionally require successful recovery under refreshed server truth before a receipt exists.
 
-That protocol evidence does not establish that an autonomous agent consumed or resisted the MCP-delivered content or stale discovery state. No MCP protocol receipt is converted into `ATTACK_DELIVERY`, agent `PASS`/`FAIL`, or release acceptance without a future explicit integration contract.
+### Loopback Streamable HTTP authorization laboratory
 
-See [MCP Fault Laboratory](MCP_LAB.md).
+`MCPRemoteAuthPolicy` / `MCPRemoteAuthReceipt` prove a different boundary over a real `127.0.0.1` TCP socket:
+
+- missing, unknown, expired, wrong-issuer, and wrong-resource credentials fail with 401;
+- authenticated but insufficient-scope credentials fail with 403;
+- RFC 9728 protected-resource metadata identifies the exact resource, configured issuer, and scopes;
+- a valid scoped bearer completes official-client `tools/list` and protected `tools/call` over Streamable HTTP.
+
+Issuer/resource binding is owned by the deterministic token verifier; bearer/expiry and required-scope handling are owned by MCP SDK middleware. The documents do not collapse those responsibilities.
+
+### Why neither is agent delivery evidence
+
+MCP protocol and remote-auth receipts establish trusted protocol/control-plane observations. They do not establish that an autonomous agent consumed an MCP-delivered stimulus, selected a tool because of stale discovery, or responded safely to a 401/403 condition.
+
+No current MCP receipt is converted into `ATTACK_DELIVERY`, agent `PASS`/`FAIL`, or release acceptance without an explicit future integration contract.
+
+See [MCP Protocol Fault Laboratory](MCP_LAB.md) and [MCP Remote Authorization](MCP_REMOTE_AUTH.md).
 
 ## Deterministic scenario derivation
 
@@ -186,25 +205,26 @@ Valid OpenAI delivery receipts participate in ordered `TrialEvidence` and the ev
 
 Delivery-caused `BLOCKED` attempts remain evaluator uncertainty through reliability and assurance reporting; they do not count as subject behavioral failures or critical subject-oracle violations. They can still make a release decision `INCONCLUSIVE` when evidence requirements are not met.
 
-MCP fault probes are not yet `TrialEvidence` and are therefore outside this replay/report derivation path.
+MCP fault and remote-auth probes are not `TrialEvidence` and are therefore outside this replay/report derivation path.
 
 ## Current verified checkpoint
 
-The implemented OpenAI adversarial layer establishes all seven generic adapter channel categories at the scoped boundaries above, including both positive and negative `ENVIRONMENT` consumption semantics. The separate MCP layer establishes four deterministic protocol-fault observations.
+The implemented OpenAI adversarial layer establishes all seven generic adapter channel categories at the scoped boundaries above, including positive and negative `ENVIRONMENT` consumption semantics. The separate MCP protocol layer establishes six deterministic fault observations/relations, and the separate loopback HTTP layer establishes three remote-auth contract tests.
 
 Verified source baseline:
 
-- deterministic core: **181 passed, 15 deselected**;
-- branch coverage: **93.14%**;
-- strict mypy: **0 issues across 37 source files**;
+- deterministic core: **183 passed, 20 deselected**;
+- branch coverage: **93.04%**;
+- strict mypy: **0 issues across 38 source files**;
 - deterministic OpenAI SDK suite: **11/11 passed**;
-- deterministic MCP protocol suite: **4/4 passed**;
+- deterministic MCP protocol suite: **6/6 passed**;
+- deterministic MCP remote-auth suite: **3/3 passed**;
 - Python 3.11/3.13 quality, Ruff, formatter, Bandit, dependency audit, and package integrity: green.
 
 ## Explicit non-claims
 
-Seven generic OpenAI channel categories implemented does **not** mean seven universal production interceptors. Four MCP protocol faults implemented does **not** mean complete MCP assurance.
+Seven generic OpenAI channel categories implemented does **not** mean seven universal production interceptors. Six MCP protocol faults plus loopback resource-server authorization do **not** mean complete MCP or production identity assurance.
 
-Production application memory/RAG, hosted File Search/vector stores, URL/document retrieval, OpenAI hosted/MCP tool interception, schema poisoning, distributed handoff fabrics, process/network/filesystem/cloud environment faults, agent-through-MCP behavioral grading, remote MCP transport/auth/resource/prompt/task fault families, general MCP cache correctness beyond the tested private stale-after-removal relation, complete MCP conformance certification, target-side delivery attestation, automatic/adaptive attack generation, mutation/fuzzing campaigns, sandbox-escape infrastructure, and credentialed live-provider red-team assurance remain separate implementation layers.
+Production application memory/RAG, hosted File Search/vector stores, URL/document retrieval, OpenAI hosted/MCP tool interception, OpenAI parameter-schema/name poisoning, distributed handoff fabrics, process/network/filesystem/cloud environment faults, agent-through-MCP behavioral grading, arbitrary MCP schema/registry mutations, remote MCP resource/prompt/task fault families, public/shared-cache correctness beyond the exact tested relations, full MCP conformance, Internet/hosted MCP fidelity, real authorization-server/IdP/JWT/introspection assurance, DPoP/mTLS, target-side delivery attestation, automatic/adaptive attack generation, mutation/fuzzing campaigns, sandbox-escape infrastructure, and credentialed live-provider red-team assurance remain separate implementation layers.
 
 [← Documentation hub](README.md)

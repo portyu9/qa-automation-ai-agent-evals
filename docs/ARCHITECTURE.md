@@ -25,7 +25,15 @@ Trusted evaluation control plane
 │   ├── tools/list description poison
 │   ├── first tools/call result poison
 │   ├── first tools/call model-visible ToolError
-│   └── private tools/list stale cache after server-side removal with refresh truth
+│   ├── private tools/list stale cache after server-side removal
+│   ├── tool-schema drift across cached discovery / call validation / refresh
+│   └── tool-identity drift across cached discovery / stale lookup / refresh
+├── MCP remote authorization laboratory
+│   ├── pre-bound loopback TCP + Uvicorn + Streamable HTTP
+│   ├── verifier-owned issuer/resource binding
+│   ├── SDK bearer authentication + expiry checks
+│   ├── SDK required-scope enforcement
+│   └── RFC 9728 protected-resource metadata
 ├── evidence normalization and persistence verification
 ├── exact-identity replay
 ├── deterministic policy and outcome oracles
@@ -36,20 +44,42 @@ Trusted evaluation control plane
 Untrusted / evaluated subject
 └── agent runtime + model + orchestration + tools + memory + resources + handoffs + app context
 
-External systems
-└── providers, hosted/external tools, remote MCP servers, production memory/retrieval,
-    target systems, infrastructure, fault injectors
+External / not presently attested
+└── live model providers, hosted/external tools, Internet-hosted MCP servers,
+    real authorization servers / IdPs, production memory/retrieval, target systems,
+    proxies, TLS infrastructure, cloud/IAM, and production fault injectors
 ```
 
-External content can become evidence or adversarial stimulus. It does not become control-plane authority merely because a model, tool, MCP server, resource, session, handoff, application context, or external service produced it.
+External content can become evidence or adversarial stimulus. It does not become control-plane authority merely because a model, tool, MCP server, resource, session, handoff, application context, HTTP endpoint, authorization middleware, or external service produced it.
 
-## Identity contracts
+## Identity domains
 
 `SubjectFingerprint` binds provider, model, application revision, instructions, tool schema, policy, memory policy, and adapter identity/version. `EvaluationScenario` binds scenario ID/revision, objective, initial state, authority, required/forbidden outcomes, classification, and tags.
 
 `AttackFixture` and `AdversarialCampaign` add deterministic adversarial identity without changing base authority or redefining success.
 
-The MCP layer has a separate identity domain. `MCPFaultSpec` binds schema, fault ID/revision, `MCPFaultKind`, exact tool name, and canonical finite JSON payload. For content faults that payload is the controlled content. For `tool_list_stale_cache`, it instead binds the exact bounded positive `ttl_ms` parameter consumed by the laboratory. A protocol fault does not silently become an `AttackFixture`, because protocol delivery and agent behavioral grading answer different questions.
+MCP evidence has two independent identity domains:
+
+### Protocol-fault identity
+
+`MCPFaultSpec` binds schema, fault ID/revision, `MCPFaultKind`, original tool name, and canonical finite JSON payload. Content faults bind malicious content directly. Stateful discovery faults bind the exact TTL plus the before/after contract consumed by the laboratory.
+
+The six kinds are:
+
+```text
+tool_metadata_poison
+tool_result_poison
+tool_error
+tool_list_stale_cache
+tool_schema_drift
+tool_identity_drift
+```
+
+### Remote-authorization identity
+
+`MCPRemoteAuthPolicy` separately binds schema, lab ID/revision, issuer URL, MCP resource path, canonical required scopes, and protected tool name.
+
+A protocol fault does not silently become a remote-auth policy, and neither becomes an `AttackFixture`. They answer different questions.
 
 ## Attack delivery is an evaluation precondition
 
@@ -61,7 +91,7 @@ verified delivery + deterministic violation → FAIL
 verified delivery + deterministic closure   → PASS
 ```
 
-The receipt binds exact scenario identity, attack identity, channel, concrete injection point, canonical payload SHA-256, and domain-separated receipt root. It is control-plane integrity evidence, not cryptographic target-side attestation.
+The receipt binds exact scenario identity, attack identity, channel, concrete injection point, canonical payload SHA-256, and domain-separated receipt root. It is evaluator integrity evidence, not cryptographic target-side attestation.
 
 ## Seven OpenAI channel boundaries
 
@@ -77,9 +107,9 @@ The receipt binds exact scenario identity, attack identity, channel, concrete in
 
 These seven categories are **not universal production interception claims**. Each implementation is bounded by its documented concrete surface.
 
-## MCP protocol fault boundary
+## MCP protocol-fault boundary
 
-`MCPFaultLab` is provider-neutral protocol test infrastructure. It uses the official Python SDK `mcp==2.1.1`, creates a fresh real `MCPServer`, and connects an official `Client` in modern `2026-07-28` mode.
+`MCPFaultLab` is provider-neutral protocol test infrastructure. It uses official `mcp==2.1.1`, creates a fresh real `MCPServer`, and connects an official `Client` in modern `2026-07-28` mode.
 
 ```text
 content-addressed MCPFaultSpec
@@ -93,29 +123,67 @@ content observation or protocol-state relation
 MCPFaultReceipt
 ```
 
-The current implementation closes four exact protocol observations:
+Three direct content observations are closed:
 
 - target tool description returned by `tools/list` equals canonical fault JSON;
 - first target `tools/call` result text equals canonical fault JSON;
-- first target `ToolError` preserves canonical fault JSON inside the SDK-generated model-visible error envelope;
-- a private positive-TTL `tools/list` result remains visible from the client cache after the target is removed from the live server registry, while `cache_mode="refresh"` proves the current listing no longer contains the target.
+- first target `ToolError` preserves canonical fault JSON inside the SDK-generated model-visible error envelope.
 
-The stale-discovery path is deliberately relational:
+Three relational discovery-state observations are also closed:
+
+- **stale removal** — initial target present → server removes target → normal cached list still contains target → explicit refresh proves target absent;
+- **schema drift** — initial old schema → server replaces the same tool name with a new schema → cached list still exposes old schema → old arguments fail at call time against current server truth → refresh exposes new schema → new arguments succeed;
+- **identity drift** — initial old name → server removes it and adds a replacement name → cached list still exposes old name → stale-name call fails → refresh exposes only replacement name → replacement call succeeds.
+
+The core relation is:
 
 ```text
-initial Client.list_tools() → target present + configured TTL observed
-server.remove_tool(target)
-Client.list_tools()         → target still present from fresh cache
-Client.list_tools(refresh)  → target absent from live server truth
+cached discovery ≠ current server contract ≠ call-time validity ≠ refreshed discovery
 ```
 
-Result/error probes execute a second benign call to prove one-shot recovery. Every probe uses a fresh server; the stale-discovery probe also starts with a fresh client cache, so one probe cannot contaminate another.
+`MCPFaultReceipt` binds both controlled fault-material and canonical-observation digests. Direct content may produce equal digests; SDK transformation and stateful relations intentionally do not.
 
-`MCPFaultReceipt` deliberately binds both `payload_sha256` and `observation_sha256`. They match when the protocol exposes controlled content directly. They differ when the SDK wraps the payload in the `ToolError` envelope, and for the stale-cache fault they differ because the payload binds TTL configuration while the observation binds canonical initial/cached/refreshed tool-name sets plus the observed TTL. That distinction records protocol transformation or stateful relation instead of pretending neither occurred.
+Result/error probes require a benign second call. Discovery probes use fresh client cache state. Receipts are withheld unless the complete fault-specific relation closes.
 
-This MCP receipt is **not** an OpenAI `ATTACK_DELIVERY` event and does not derive an agent `PASS`/`FAIL`. Agent-through-MCP behavioral assurance remains a later integration layer.
+This receipt is **not** OpenAI `ATTACK_DELIVERY` and does not derive agent `PASS`/`FAIL`.
 
-See [MCP Fault Laboratory](MCP_LAB.md).
+See [MCP Protocol Fault Laboratory](MCP_LAB.md).
+
+## MCP remote Streamable HTTP authorization boundary
+
+`MCPRemoteAuthLab` is intentionally separate from the in-process fault laboratory.
+
+```text
+MCPRemoteAuthPolicy
+        ↓
+pre-bound 127.0.0.1 TCP socket
+        ↓
+Uvicorn + MCP Streamable HTTP app
+        ↓
+resource-server auth middleware
+        ↓
+HTTP challenge / RFC 9728 metadata / authorized MCP calls
+        ↓
+MCPRemoteAuthProbeResult
+        ↓
+MCPRemoteAuthReceipt
+```
+
+The enforcement ownership is explicit:
+
+- the deterministic `TokenVerifier` enforces exact **issuer** and **resource** binding;
+- MCP SDK authentication middleware handles bearer recognition, verifier acceptance, and expiry;
+- MCP SDK authorization middleware enforces required scopes;
+- the SDK's protected-resource route exposes RFC 9728 metadata;
+- the official client uses a real Streamable HTTP connection to prove an authorized `tools/list` and `tools/call` complete over the TCP boundary.
+
+The matrix requires 401 for missing, unknown, expired, wrong-issuer, and wrong-resource credentials; 403 for an otherwise authenticated token missing required scope; correct resource metadata; and successful protected tool discovery/call with a valid scoped bearer.
+
+The result/receipt do not serialize actual bearer token values. The `Bearer` authentication scheme in `WWW-Authenticate` remains evidence because it is public protocol output, not a credential.
+
+`MCPRemoteAuthReceipt` is separate from `MCPFaultReceipt`. Neither is inserted into agent trial chronology.
+
+See [MCP Remote Authorization](MCP_REMOTE_AUTH.md).
 
 ## Local-tool isolation
 
@@ -142,9 +210,7 @@ tool returns through ordinary SDK path
 
 Mere configuration, tool execution, or key membership does not establish delivery. If the target tool never reads the value, there is no receipt and the adversarial trial is `BLOCKED`.
 
-This gives the framework a useful distinction between **environment availability** and **environment consumption**.
-
-## Evidence chronology
+## Evidence chronology and separation
 
 Important OpenAI channel-specific ordering includes:
 
@@ -154,9 +220,16 @@ ENVIRONMENT:  TOOL_REQUEST → ATTACK_DELIVERY → TOOL_RESULT
 HANDOFF:      HANDOFF → ATTACK_DELIVERY
 ```
 
-User-input, metadata, memory, and resource structures can be prepared before subject execution; independent SDK tests prove the prepared content reaches the tested model/tool boundary.
+MCP protocol-fault receipts and remote-auth receipts are separate evidence families. They record trusted-client/protocol observations and are not inserted into agent trial chronology until a future integration contract explicitly defines that bridge.
 
-MCP protocol receipts are a separate evidence family. They record exact client-side protocol observation or a canonical relation derived from public client fields and are not inserted into agent trial chronology until a future integration contract explicitly defines that bridge.
+That separation prevents four false implications:
+
+```text
+MCP configuration      ⇏ client observation
+client observation     ⇏ agent consumption
+bearer authorization   ⇏ agent correctness
+protocol receipt       ⇏ release acceptance
+```
 
 ## Authority remains fail-closed
 
@@ -170,39 +243,34 @@ Adversarial derivation cannot broaden authority.
 
 `AgentAdapter` executes and normalizes; it does not grade itself.
 
-`AdapterPreconditionError` represents an evaluator-controlled prerequisite that cannot be satisfied, such as malformed channel payloads, unavailable targets, unbindable call identity, or unsupported runtime-context type. `TrialRunner` converts this to `EVALUATION_ERROR / BLOCKED`.
-
-Provider/SDK execution exceptions remain `RUNTIME_ERROR / BLOCKED`.
+`AdapterPreconditionError` represents evaluator-controlled prerequisites that cannot be satisfied. `TrialRunner` converts this to `EVALUATION_ERROR / BLOCKED`. Provider/SDK execution exceptions remain `RUNTIME_ERROR / BLOCKED`.
 
 Neither is rewritten as subject `FAIL`.
 
-The MCP laboratory currently returns protocol observations rather than `TrialEvidence`; it therefore does not manufacture trial failure semantics from an MCP client/server exception.
+The MCP laboratories return protocol-domain observations rather than `TrialEvidence`; protocol exceptions therefore do not manufacture agent failure semantics.
 
-## Persistence and replay
+## Persistence, replay, statistics, and release authority
 
-`LocalEvidenceStore` revalidates persisted bytes, manifests, hashes, identities, and semantic evidence roots before reuse. Local integrity hashes do not authenticate a hostile writer who can coherently replace all associated bytes.
+`LocalEvidenceStore` revalidates persisted bytes, manifests, hashes, identities, and semantic evidence roots before reuse. Local hashes do not authenticate a hostile writer who can coherently replace all associated bytes.
 
-`EvidenceReplayAdapter` performs exact-identity historical regrading. It does not re-run the agent, provider, tool, session, resource, handoff, environment injector, or MCP protocol probe and cannot establish fresh delivery.
-
-## Statistical and release authority
+`EvidenceReplayAdapter` performs exact-identity historical regrading. It does not re-run the agent, provider, tool, injector, or either MCP laboratory and cannot establish fresh delivery.
 
 Repeated trials feed `ReliabilityReport`; resolved behavior remains separate from blocked evaluator/runtime uncertainty. `AssuranceReport` binds evidence roots, deterministic oracle snapshots, reliability, release policy, gate output, and report root.
 
-`ReleaseGate` preserves non-compensatory critical safety evidence. Insufficient evidence produces `INCONCLUSIVE`, not acceptance.
-
-MCP protocol-probe success is not currently an input to release acceptance unless a caller separately establishes the required agent/evaluation contract.
+`ReleaseGate` preserves non-compensatory critical safety evidence. Insufficient evidence produces `INCONCLUSIVE`, not acceptance. MCP protocol success is not currently a release-gate input.
 
 ## Current boundary
 
-The framework currently provides deterministic contracts, content-addressed adversarial scenarios, evidence-bound OpenAI delivery verification, all seven generic OpenAI adapter channel categories at scoped boundaries, a deterministic official-SDK MCP protocol fault laboratory with three content faults plus one private stale-discovery cache relation, integrity-verified local persistence, exact historical replay, deterministic policy/outcome oracles, metamorphic relations, repeated-trial statistics, assurance reports, release gating, failure minimization, and credential-free deterministic SDK tiers.
+The framework currently provides deterministic contracts, content-addressed adversarial scenarios, evidence-bound OpenAI delivery verification across seven scoped channel categories, a six-fault official-SDK MCP protocol laboratory, a separate real-loopback Streamable HTTP authorization laboratory, integrity-verified local persistence, exact historical replay, deterministic policy/outcome oracles, metamorphic relations, repeated-trial statistics, assurance reports, release gating, failure minimization, and credential-free deterministic SDK tiers.
 
 Verified checkpoint:
 
-- deterministic core: **181 passed, 15 deselected**;
-- branch coverage: **93.14%**;
-- strict mypy: **0 issues across 37 source files**;
+- deterministic core: **183 passed, 20 deselected**;
+- branch coverage: **93.04%**;
+- strict mypy: **0 issues across 38 source files**;
 - deterministic OpenAI SDK: **11/11 passed**;
-- deterministic MCP protocol: **4/4 passed**;
+- deterministic MCP protocol: **6/6 passed**;
+- deterministic MCP remote auth: **3/3 passed**;
 - Python 3.11/3.13 quality, Ruff, formatter, Bandit, dependency audit, and package integrity: green.
 
-Credentialed live-provider assurance, agent-through-MCP behavioral grading, remote MCP transport/proxy faults, MCP authorization, public/cross-partition/shared-cache behavior, cache poisoning, notification invalidation, renamed-tool discovery, MCP resource/prompt/task fault families, full MCP conformance certification, production application-memory/RAG injection, hosted File Search/vector-store/URL retrieval manipulation, OpenAI hosted/MCP interception, tool-name/schema poisoning, distributed handoff-fabric injection, process/network/filesystem/cloud environment chaos, target-side delivery attestation, authenticated hostile-writer evidence/report signing, automatic adversarial generation, calibrated semantic graders, and production deployment attestation remain separate implementation layers.
+Still outside the executable claim boundary are credentialed live-provider assurance, agent-through-MCP behavioral grading, Internet/hosted MCP fidelity, stdio/proxy/TLS/DNS/transport-chaos faults, real authorization-server issuance and IdP/JWT/introspection assurance, DPoP/mTLS, public/shared-cache behavior beyond the exact implemented relations, arbitrary schema/registry mutations, MCP resource/prompt/task fault families, full MCP conformance certification, production application-memory/RAG injection, OpenAI hosted/MCP interception, distributed handoff-fabric injection, process/network/filesystem/cloud environment chaos, target-side delivery attestation, authenticated hostile-writer evidence/report signing, automatic adversarial generation, calibrated semantic graders, and production deployment attestation.

@@ -32,7 +32,7 @@ framework-owned deterministic oracles
 
 The adapter implements all seven generic `AttackChannel` categories, but only at the concrete SDK/local boundaries documented here. That is not a claim of universal interception of every production system carrying the same conceptual category.
 
-The repository's separate [MCP Fault Laboratory](MCP_LAB.md) exercises official MCP protocol surfaces directly. Its `MCPFaultReceipt` is a different evidence contract and does **not** turn this OpenAI adapter into a hosted/MCP interceptor.
+The repository's separate [MCP Protocol Fault Laboratory](MCP_LAB.md) and [MCP Remote Authorization](MCP_REMOTE_AUTH.md) layers exercise MCP protocol and loopback HTTP authorization surfaces directly. Their MCP-specific receipts are different evidence contracts and do **not** turn this OpenAI adapter into a hosted/MCP interceptor.
 
 ## Concrete adversarial channels
 
@@ -90,7 +90,7 @@ injection_point = openai-agents:FunctionTool:<tool>:description
 
 Tool name, parameter schema, callback, approval behavior, and routing identity remain unchanged. A later ordinary SDK run verifies that the reusable original description is intact.
 
-This mode is description poisoning, not schema poisoning, tool renaming, hosted-tool metadata mutation, MCP discovery poisoning, or external-registry mutation.
+This OpenAI mode is description poisoning, not schema poisoning, tool renaming, hosted-tool metadata mutation, MCP discovery poisoning, or external-registry mutation. MCP schema and identity drift are independently tested only in the MCP protocol laboratory and do not broaden this adapter's claim.
 
 ## SDK session-history `MEMORY`
 
@@ -239,11 +239,12 @@ The repository uses `agents.testing.ScriptedModel` against the real Agents SDK r
 
 Current repository verification checkpoint:
 
-- deterministic core: **181 passed, 15 deselected**;
-- branch coverage: **93.14%** against the 90% gate;
-- strict mypy: **0 issues across 37 source files**;
+- deterministic core: **183 passed, 20 deselected**;
+- branch coverage: **93.04%** against the 90% gate;
+- strict mypy: **0 issues across 38 source files**;
 - independent OpenAI SDK suite: **11/11 passed**;
-- independent MCP protocol suite: **4/4 passed**;
+- independent MCP protocol suite: **6/6 passed**;
+- independent MCP remote-auth suite: **3/3 passed**;
 - Python 3.11 and 3.13 quality jobs, Ruff, formatter, Bandit, dependency audit, and package integrity: green.
 
-The additional MCP suite does not broaden this adapter's claim. These OpenAI tests establish controlled SDK-harness behavior; they do not establish live-model quality, provider reliability, production deployment safety, target-side delivery attestation, OpenAI hosted/MCP interception, production memory/retrieval assurance, distributed-agent-fabric interception, or external infrastructure fault coverage.
+The additional MCP suites do not broaden this adapter's claim. These OpenAI tests establish controlled SDK-harness behavior; they do not establish live-model quality, provider reliability, production deployment safety, target-side delivery attestation, OpenAI hosted/MCP interception, production memory/retrieval assurance, distributed-agent-fabric interception, external infrastructure fault coverage, or production identity-provider assurance.
