@@ -13,9 +13,7 @@ from agent_evals.mcp.agent_error_bridge import MCPAgentToolErrorRecoveryReceipt
 _TOOL_RESULT_SOURCE = "bridge:mcp-agent:tool-result"
 _TOOL_ERROR_RECOVERY_SOURCE = "bridge:mcp-agent:tool-error-recovery"
 
-ProtocolDeliveryReceipt: TypeAlias = (
-    MCPAgentToolResultReceipt | MCPAgentToolErrorRecoveryReceipt
-)
+ProtocolDeliveryReceipt: TypeAlias = MCPAgentToolResultReceipt | MCPAgentToolErrorRecoveryReceipt
 
 
 class ProtocolDeliveryError(ValueError):
