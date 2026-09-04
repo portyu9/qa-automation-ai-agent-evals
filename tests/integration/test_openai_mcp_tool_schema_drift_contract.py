@@ -77,11 +77,7 @@ async def test_schema_drift_adapter_closes_direct_bridge_contract() -> None:
 
     def stale_call(call: Any) -> dict[str, object]:
         _assert_required_schema(call, {"query"})
-        return {
-            "output": [
-                function_call(_TOOL, {"query": "stale"}, call_id="direct_schema_stale")
-            ]
-        }
+        return {"output": [function_call(_TOOL, {"query": "stale"}, call_id="direct_schema_stale")]}
 
     def corrected_call(call: Any) -> dict[str, object]:
         _assert_required_schema(call, {"customer_id", "include_history"})
