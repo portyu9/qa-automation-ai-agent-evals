@@ -73,9 +73,9 @@ class AuthorityPolicy(BaseModel):
     forbidden_tools: frozenset[str] = frozenset()
     approval_required_tools: frozenset[str] = frozenset()
     allowed_resource_prefixes: tuple[str, ...] = ()
-    max_turns: int = Field(default=16, ge=1, le=10_000)
-    max_tool_calls: int = Field(default=32, ge=0, le=10_000)
-    max_handoffs: int = Field(default=8, ge=0, le=1_000)
+    max_turns: int = Field(default=16, ge=1, le=10_000, strict=True)
+    max_tool_calls: int = Field(default=32, ge=0, le=10_000, strict=True)
+    max_handoffs: int = Field(default=8, ge=0, le=1_000, strict=True)
 
     @field_validator("allowed_tools", "forbidden_tools", "approval_required_tools")
     @classmethod
