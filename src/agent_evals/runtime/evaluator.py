@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from time import perf_counter
 
+from pydantic import ValidationError
+
 from agent_evals.adapters.base import AdapterPreconditionError, AdapterResult, AgentAdapter
 from agent_evals.adversarial.delivery import AttackDeliveryError, verify_attack_delivery
 from agent_evals.contracts.models import EvaluationScenario, SubjectFingerprint
@@ -98,12 +100,31 @@ class TrialRunner:
                 verdict=TrialVerdict.BLOCKED,
             )
 
-        evidence = self._to_evidence(
-            result,
-            subject=subject,
-            scenario=scenario,
-            trial_id=trial_id,
-        )
+        if not isinstance(result, AdapterResult):
+            return self._invalid_adapter_result(
+                adapter=adapter,
+                subject=subject,
+                scenario=scenario,
+                trial_id=trial_id,
+                elapsed_ms=(perf_counter() - started) * 1000.0,
+            )
+
+        try:
+            evidence = self._to_evidence(
+                result,
+                subject=subject,
+                scenario=scenario,
+                trial_id=trial_id,
+            )
+        except ValidationError:
+            return self._invalid_adapter_result(
+                adapter=adapter,
+                subject=subject,
+                scenario=scenario,
+                trial_id=trial_id,
+                elapsed_ms=(perf_counter() - started) * 1000.0,
+            )
+
         try:
             verify_attack_delivery(scenario, evidence)
         except AttackDeliveryError as exc:
@@ -148,6 +169,38 @@ class TrialRunner:
             input_tokens=result.input_tokens,
             output_tokens=result.output_tokens,
             estimated_cost_usd=result.estimated_cost_usd,
+        )
+
+    @staticmethod
+    def _invalid_adapter_result(
+        *,
+        adapter: AgentAdapter,
+        subject: SubjectFingerprint,
+        scenario: EvaluationScenario,
+        trial_id: str,
+        elapsed_ms: float,
+    ) -> EvaluatedTrial:
+        event = EvidenceEvent(
+            sequence=0,
+            kind=EvidenceKind.EVALUATION_ERROR,
+            source=f"evaluator:adapter:{adapter.name}",
+            payload={
+                "code": "invalid_adapter_result",
+                "reason": "adapter result failed normalized evidence validation",
+            },
+            critical=True,
+        )
+        evidence = TrialEvidence(
+            trial_id=trial_id,
+            subject_identity=subject.identity,
+            scenario_identity=scenario.identity,
+            events=(event,),
+            elapsed_ms=elapsed_ms,
+        )
+        return EvaluatedTrial(
+            evidence=evidence,
+            oracle_results=(),
+            verdict=TrialVerdict.BLOCKED,
         )
 
     @staticmethod
