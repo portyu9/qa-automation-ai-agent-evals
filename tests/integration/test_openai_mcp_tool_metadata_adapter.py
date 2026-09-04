@@ -118,9 +118,10 @@ async def test_mcp_metadata_bridge_proves_model_visible_description_without_targ
     assert delivery.payload["agent_tool_name"] == _TOOL
     assert delivery.payload["model_snapshot_ordinal"] == 0
     assert delivery.payload["protocol_schema_sha256"] == delivery.payload["model_schema_sha256"]
-    assert delivery.payload["model_description_sha256"] == delivery.payload[
-        "protocol_receipt"
-    ]["observation_sha256"]
+    assert (
+        delivery.payload["model_description_sha256"]
+        == delivery.payload["protocol_receipt"]["observation_sha256"]
+    )
     assert fault().payload_json not in json.dumps(delivery.payload, sort_keys=True)
     assert observed_schema["type"] == "object"
     assert "customer_id" in observed_schema["properties"]
