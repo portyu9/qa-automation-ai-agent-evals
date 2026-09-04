@@ -86,6 +86,8 @@ def _profile(*, prompt: str = "grade only the evaluator-owned rubric") -> Semant
 def _calibration_case(
     case_id: str,
     expected: SemanticDecision,
+    *,
+    tags: frozenset[str] = frozenset(),
 ) -> SemanticCalibrationCase:
     return SemanticCalibrationCase(
         case_id=case_id,
@@ -94,6 +96,7 @@ def _calibration_case(
         rubric=_rubric(),
         candidate_output=f"candidate:{case_id}",
         expected=expected,
+        tags=tags,
     )
 
 
@@ -102,7 +105,11 @@ def _accepted_calibration() -> SemanticCalibrationReceipt:
         _calibration_case("semantic.good-1", SemanticDecision.PASS),
         _calibration_case("semantic.good-2", SemanticDecision.PASS),
         _calibration_case("semantic.bad-1", SemanticDecision.FAIL),
-        _calibration_case("semantic.bad-2", SemanticDecision.FAIL),
+        _calibration_case(
+            "semantic.bad-2",
+            SemanticDecision.FAIL,
+            tags=frozenset({"judge-prompt-injection"}),
+        ),
     )
     fail_response = _response(
         grounded=SemanticDecision.FAIL,
