@@ -176,7 +176,11 @@ def _canonicalize(value: Any) -> Any:
     if isinstance(value, BaseModel):
         return _canonicalize(value.model_dump(mode="python", exclude_none=True))
     if isinstance(value, dict):
-        return {str(key): _canonicalize(item) for key, item in value.items()}
+        if any(not isinstance(key, str) for key in value):
+            raise ValueError(
+                "contract JSON object keys must be strings to preserve unambiguous identity"
+            )
+        return {key: _canonicalize(item) for key, item in value.items()}
     if isinstance(value, (set, frozenset)):
         normalized = [_canonicalize(item) for item in value]
         return sorted(
