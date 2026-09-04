@@ -5,8 +5,9 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from typing import Any
 
-from agent_evals.adapters.base import AdapterPreconditionError
+from agent_evals.adapters.base import AdapterPreconditionError, AdapterResult
 from agent_evals.adapters.openai_agents import OpenAIAgentsAdapter
+from agent_evals.contracts.models import EvaluationScenario, SubjectFingerprint
 from agent_evals.evidence.models import EvidenceEvent, EvidenceKind
 
 
@@ -25,6 +26,32 @@ class OpenAIAgentsHandoffAuthorityAdapter(OpenAIAgentsAdapter):
     @property
     def name(self) -> str:
         return "openai-agents-handoff-authority"
+
+    async def execute(
+        self,
+        *,
+        subject: SubjectFingerprint,
+        scenario: EvaluationScenario,
+        trial_id: str,
+    ) -> AdapterResult:
+        if scenario.authority.has_handoff_authority:
+            expected_root = scenario.authority.root_agent
+            observed_root = _required_identity(
+                getattr(self._agent, "name", None),
+                phase="root agent",
+            )
+            if observed_root != expected_root:
+                raise AdapterPreconditionError(
+                    code="handoff_root_agent_mismatch",
+                    reason=(
+                        "configured handoff root_agent does not match the supplied OpenAI SDK Agent"
+                    ),
+                )
+        return await super().execute(
+            subject=subject,
+            scenario=scenario,
+            trial_id=trial_id,
+        )
 
     def _normalize_items(
         self,
@@ -84,6 +111,8 @@ class OpenAIAgentsHandoffAuthorityAdapter(OpenAIAgentsAdapter):
                         ),
                     )
 
+        _require_call_agent_consistency(request_agents, result_agents)
+
         normalized = super()._normalize_items(
             items,
             start_sequence=start_sequence,
@@ -123,6 +152,26 @@ class OpenAIAgentsHandoffAuthorityAdapter(OpenAIAgentsAdapter):
             attributed.append(event.model_copy(update={"payload": payload}))
 
         return attributed
+
+
+def _require_call_agent_consistency(
+    request_agents: Mapping[str, str],
+    result_agents: Mapping[str, str],
+) -> None:
+    for call_id, result_agent in result_agents.items():
+        request_agent = request_agents.get(call_id)
+        if request_agent is None:
+            raise AdapterPreconditionError(
+                code="openai_agent_request_attribution_missing",
+                reason="OpenAI tool result has no matching attributed SDK tool request",
+            )
+        if request_agent != result_agent:
+            raise AdapterPreconditionError(
+                code="openai_agent_call_owner_mismatch",
+                reason=(
+                    "OpenAI tool request/result generating-agent identities disagree for one call"
+                ),
+            )
 
 
 def _record_unique_agent(
