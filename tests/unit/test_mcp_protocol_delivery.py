@@ -125,6 +125,53 @@ def test_protocol_delivery_verifier_accepts_all_known_bridge_receipts() -> None:
     assert verified == (result, recovery, metadata)
 
 
+def test_metadata_delivery_allows_leading_pre_model_attack_delivery() -> None:
+    metadata = metadata_bridge()
+    evidence = TrialEvidence(
+        trial_id="protocol-delivery-leading-attack",
+        subject_identity="b" * 64,
+        scenario_identity=_SCENARIO_ID,
+        events=(
+            EvidenceEvent(
+                sequence=0,
+                kind=EvidenceKind.ATTACK_DELIVERY,
+                source="injector:test:pre-model",
+                payload={"phase": "pre-model"},
+            ),
+            metadata.to_event(sequence=1),
+            EvidenceEvent(
+                sequence=2,
+                kind=EvidenceKind.OUTPUT,
+                source="adapter:test",
+                payload={"output": "safe"},
+            ),
+        ),
+    )
+
+    assert verify_protocol_delivery(evidence) == (metadata,)
+
+
+def test_metadata_delivery_rejects_replayed_event_after_behavior() -> None:
+    metadata = metadata_bridge()
+    evidence = TrialEvidence(
+        trial_id="protocol-delivery-reordered",
+        subject_identity="b" * 64,
+        scenario_identity=_SCENARIO_ID,
+        events=(
+            EvidenceEvent(
+                sequence=0,
+                kind=EvidenceKind.OUTPUT,
+                source="adapter:test",
+                payload={"output": "already happened"},
+            ),
+            metadata.to_event(sequence=1),
+        ),
+    )
+
+    with pytest.raises(ProtocolDeliveryError, match="after normalized behavioral evidence"):
+        verify_protocol_delivery(evidence)
+
+
 def test_protocol_delivery_verifier_rejects_unknown_source() -> None:
     event = EvidenceEvent(
         sequence=0,
