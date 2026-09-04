@@ -40,6 +40,7 @@ class SemanticJudgmentReceipt(BaseModel):
     scenario_identity: str = Field(pattern=r"^[0-9a-f]{64}$")
     subject_identity: str = Field(pattern=r"^[0-9a-f]{64}$")
     subject_evidence_root: str = Field(pattern=r"^[0-9a-f]{64}$")
+    rubric: SemanticRubricSpec
     rubric_identity: str = Field(pattern=r"^[0-9a-f]{64}$")
     judge_profile: SemanticJudgeProfile
     calibration_receipt: SemanticCalibrationReceipt
@@ -76,6 +77,7 @@ class SemanticJudgmentReceipt(BaseModel):
             "scenario_identity": scenario_identity,
             "subject_identity": subject_identity,
             "subject_evidence_root": subject_evidence_root,
+            "rubric": rubric.model_dump(mode="json"),
             "rubric_identity": rubric.identity,
             "judge_profile": judge_profile.model_dump(mode="json"),
             "calibration_receipt": validated_calibration.model_dump(mode="json"),
@@ -88,6 +90,7 @@ class SemanticJudgmentReceipt(BaseModel):
             scenario_identity=scenario_identity,
             subject_identity=subject_identity,
             subject_evidence_root=subject_evidence_root,
+            rubric=rubric,
             rubric_identity=rubric.identity,
             judge_profile=judge_profile,
             calibration_receipt=validated_calibration,
@@ -104,6 +107,17 @@ class SemanticJudgmentReceipt(BaseModel):
             self.calibration_receipt,
             judge_profile=self.judge_profile,
         )
+        if self.rubric_identity != self.rubric.identity:
+            raise ValueError("semantic judgment rubric identity does not match embedded rubric")
+        reconstructed_response = SemanticJudgeResponse(
+            criteria=self.criteria,
+            overall=self.decision,
+        )
+        derived = derive_semantic_decision(self.rubric, reconstructed_response)
+        if derived is not self.decision:
+            raise ValueError("semantic judgment decision does not rederive from criterion results")
+        if not hmac.compare_digest(reconstructed_response.digest, self.judge_response_sha256):
+            raise ValueError("semantic judgment response digest does not match criterion results")
         expected_root = _receipt_root(self.model_dump(mode="json", exclude={"receipt_root"}))
         if not hmac.compare_digest(expected_root, self.receipt_root):
             raise ValueError("semantic judgment receipt root does not match receipt content")
