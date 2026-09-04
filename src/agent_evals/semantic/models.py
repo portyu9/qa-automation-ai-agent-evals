@@ -7,9 +7,10 @@ import json
 from enum import StrEnum
 from typing import Any, Literal, Self
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-_RUBRIC_SCHEMA: Literal["agent-evals/semantic-rubric/v1"] = "agent-evals/semantic-rubric/v1"
+from agent_evals.contracts.semantic import SemanticCriterionSpec, SemanticRubricSpec
+
 _RESPONSE_SCHEMA: Literal["agent-evals/semantic-judge-response/v1"] = (
     "agent-evals/semantic-judge-response/v1"
 )
@@ -27,47 +28,6 @@ class SemanticDecision(StrEnum):
     PASS = "pass"  # nosec B105
     FAIL = "fail"
     ABSTAIN = "abstain"
-
-
-class SemanticCriterionSpec(BaseModel):
-    """One scenario-owned semantic criterion with an explicit pass threshold."""
-
-    model_config = ConfigDict(frozen=True, extra="forbid")
-
-    criterion_id: str = Field(pattern=r"^[a-z0-9][a-z0-9._-]{1,63}$")
-    description: str = Field(min_length=1, max_length=4_000)
-    minimum_score: int = Field(ge=0, le=4, strict=True)
-
-    @field_validator("description")
-    @classmethod
-    def reject_surrounding_whitespace(cls, value: str) -> str:
-        if value != value.strip():
-            raise ValueError(
-                "semantic criterion description must not contain surrounding whitespace"
-            )
-        return value
-
-
-class SemanticRubricSpec(BaseModel):
-    """Immutable scenario-owned rubric whose identity changes when any criterion changes."""
-
-    model_config = ConfigDict(frozen=True, extra="forbid")
-
-    schema_version: Literal["agent-evals/semantic-rubric/v1"] = _RUBRIC_SCHEMA
-    rubric_id: str = Field(pattern=r"^[a-z0-9][a-z0-9._-]{2,127}$")
-    revision: str = Field(min_length=1, max_length=128)
-    criteria: tuple[SemanticCriterionSpec, ...] = Field(min_length=1, max_length=32)
-
-    @model_validator(mode="after")
-    def validate_unique_criteria(self) -> Self:
-        identities = [criterion.criterion_id for criterion in self.criteria]
-        if len(set(identities)) != len(identities):
-            raise ValueError("semantic rubric criterion IDs must be unique")
-        return self
-
-    @property
-    def identity(self) -> str:
-        return _sha256_json(self.model_dump(mode="json"))
 
 
 class SemanticCriterionResult(BaseModel):
@@ -231,3 +191,15 @@ def _sha256_json(value: Any) -> str:
     except (TypeError, ValueError) as exc:
         raise ValueError("semantic contract material must be finite JSON-compatible data") from exc
     return hashlib.sha256(material).hexdigest()
+
+
+__all__ = [
+    "SemanticCriterionResult",
+    "SemanticCriterionSpec",
+    "SemanticDecision",
+    "SemanticJudgeInput",
+    "SemanticJudgeProfile",
+    "SemanticJudgeResponse",
+    "SemanticRubricSpec",
+    "derive_semantic_decision",
+]
