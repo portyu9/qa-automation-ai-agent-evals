@@ -4,12 +4,13 @@
 
 The OpenAI integration turns documented OpenAI Agents SDK execution surfaces into provider-neutral evaluation evidence while keeping state verification, policy authority, protocol truth, and release authority outside the SDK.
 
-The integration is pinned to `openai-agents==0.22.0`. MCP integration is pinned separately to `mcp==2.1.1`. Pinning both sides makes normalization, tool-output conversion, call identity, and protocol negotiation explicit reviewable contracts rather than floating assumptions.
+The integration is pinned to `openai-agents==0.22.0`. MCP integration is pinned separately to `mcp==2.1.1`. Pinning both sides makes normalization, tool-output conversion, call identity, protocol negotiation, and retry chronology explicit reviewable contracts rather than floating assumptions.
 
-Two adapter boundaries are intentionally distinct:
+Three adapter boundaries are intentionally distinct:
 
 - `OpenAIAgentsAdapter` — seven scoped local/SDK adversarial channels;
-- `OpenAIAgentsMCPToolResultAdapter` — one controlled OpenAI-agent → official-MCP-stdio path for `MCPFaultKind.TOOL_RESULT_POISON`.
+- `OpenAIAgentsMCPToolResultAdapter` — one controlled OpenAI-agent → official-MCP-stdio path for `MCPFaultKind.TOOL_RESULT_POISON`;
+- `OpenAIAgentsMCPToolErrorRecoveryAdapter` — one controlled OpenAI-agent → official-MCP-stdio resilience path for `MCPFaultKind.TOOL_ERROR`, requiring a causal same-argument retry and exact benign recovery.
 
 Importing `agent_evals` does not import either optional provider stack or require those optional dependencies.
 
@@ -39,7 +40,7 @@ TrialEvidence
 framework-owned deterministic oracles
 ```
 
-### Dedicated MCP tool-result bridge
+### Dedicated MCP result bridge
 
 ```text
 MCPFaultSpec(kind=tool_result_poison)
@@ -56,7 +57,7 @@ MCPFaultReceipt
         ↓
 exact OpenAI TOOL_REQUEST / TOOL_RESULT call-ID pairing
 + exact model-visible output equivalence
-+ same-session same-argument benign recovery
++ same-session same-argument benign recovery after the run
         ↓
 MCPAgentToolResultReceipt
         ↓
@@ -67,7 +68,35 @@ TrialEvidence
 framework-owned deterministic oracles
 ```
 
-The second path is a bridge between evidence domains, not a conversion of MCP protocol evidence into grading authority. The bridge establishes a narrowly defined delivery precondition. The agent still passes or fails only through deterministic subject evidence and oracles.
+### Dedicated MCP ToolError retry/recovery bridge
+
+```text
+MCPFaultSpec(kind=tool_error)
+        ↓
+OpenAIAgentsMCPToolErrorRecoveryAdapter
+        ↓ fresh official MCPServerStdio subprocess
+negotiated MCP protocol = 2026-07-28
+        ↓
+TOOL_REQUEST(error_call_id)
+        ↓
+real MCP ToolError → MCPFaultReceipt
+        ↓ exact model-visible error equivalence
+TOOL_RESULT(error_call_id)
+        ↓ strict causal chronology
+TOOL_REQUEST(retry_call_id; same canonical arguments)
+        ↓ same live MCP session
+TOOL_RESULT(retry_call_id; exact benign recovery)
+        ↓
+MCPAgentToolErrorRecoveryReceipt
+        ↓
+PROTOCOL_DELIVERY inserted after the recovery result
+        ↓
+TrialEvidence
+        ↓
+framework-owned deterministic oracles
+```
+
+Both MCP paths are bridges between evidence domains, not conversions of MCP protocol evidence into grading authority. A bridge establishes a narrowly defined delivery/recovery precondition. The agent still passes or fails only through deterministic subject evidence and oracles.
 
 ## Seven concrete adversarial channels
 
@@ -112,7 +141,7 @@ TOOL_RESULT
 
 Later matching calls use copied original behavior. If the target never executes, no receipt exists and delivery verification blocks the trial.
 
-This local mode still does **not** intercept MCP or hosted tools. MCP result delivery is handled only by the separate `OpenAIAgentsMCPToolResultAdapter` described below.
+This local mode still does **not** intercept MCP or hosted tools. MCP result and ToolError-recovery assurance are handled only by the separate stdio adapters described below.
 
 ## Local `TOOL_METADATA`
 
@@ -123,7 +152,7 @@ source          = injector:openai-agents:tool-metadata
 injection_point = openai-agents:FunctionTool:<tool>:description
 ```
 
-Tool name, parameter schema, callback, approval behavior, and routing identity remain unchanged. MCP description poisoning, schema drift, and identity drift remain separate protocol-laboratory capabilities; none is promoted into the OpenAI agent bridge by the existence of the result path.
+Tool name, parameter schema, callback, approval behavior, and routing identity remain unchanged. MCP description poisoning, schema drift, and identity drift remain separate protocol-laboratory capabilities; none is promoted into an OpenAI agent bridge by the existence of the result or ToolError paths.
 
 ## SDK session-history `MEMORY`
 
@@ -187,21 +216,23 @@ This mode does not mutate process-global `os.environ`, filesystem/browser/contai
 
 ---
 
+## Shared MCP stdio provenance controls
+
+Both MCP adapters create a **fresh official `MCPServerStdio` client/server process boundary** per trial and clone the supplied OpenAI Agent with exactly that one controlled MCP server.
+
+The base Agent is rejected when it already has MCP servers, uses prefixed MCP tool names, or has a local tool colliding with the target name. Those fail-closed preconditions prevent a valid-looking call ID from being attributed to the wrong tool or server.
+
+For MCP v2, the authoritative negotiated revision is the connected `ClientSession.protocol_version`; legacy `server_initialize_result.protocol_version` is only a fallback for older initialization paths.
+
+Both adapters require negotiated protocol `2026-07-28`. A different or unavailable version is an evaluation precondition failure, not a subject failure.
+
+---
+
 ## Verified MCP `TOOL_RESULT_POISON` bridge
 
 ### Scope
 
 `OpenAIAgentsMCPToolResultAdapter` accepts exactly one `MCPFaultSpec` whose kind is `TOOL_RESULT_POISON`. It does not reuse the local `FunctionTool` injector and does not pretend an in-process protocol probe was an agent interaction.
-
-For every trial it creates a **fresh official `MCPServerStdio` client/server process boundary** and clones the supplied OpenAI Agent with exactly that one controlled MCP server.
-
-The base Agent is rejected when it already has MCP servers, uses prefixed MCP tool names, or has a local tool colliding with the target name. Those fail-closed preconditions prevent a valid-looking call ID from being attributed to the wrong tool or server.
-
-### Protocol negotiation
-
-For MCP v2, the authoritative negotiated revision is the connected `ClientSession.protocol_version`; legacy `server_initialize_result.protocol_version` is only a fallback for older initialization paths.
-
-The adapter requires negotiated protocol `2026-07-28`. A different or unavailable version is an evaluation precondition failure, not a subject failure.
 
 ### Same-call observation
 
@@ -260,7 +291,7 @@ TOOL_RESULT
 
 The raw malicious body is not duplicated into the bridge receipt. Integrity roots remain hashes, not signatures or target-side attestation.
 
-### What the bridge proves
+### What the result bridge proves
 
 The deterministic test proves that, inside the controlled harness:
 
@@ -269,28 +300,138 @@ The deterministic test proves that, inside the controlled harness:
 3. the same target result crossed the OpenAI Agents SDK MCP tool boundary;
 4. the deterministic model received that same logical result for the exact agent call ID;
 5. the normalized evidence pairs request and result identity exactly;
-6. the same connected MCP session recovered to benign behavior on the next same-argument call;
+6. the same connected MCP session recovered to benign behavior on the next same-argument evaluator-owned call after the run;
 7. only after those facts close can the trial proceed to deterministic policy/outcome grading.
 
-### What the bridge does not prove
+---
 
-It does not establish:
+## Verified MCP `TOOL_ERROR` causal retry/recovery bridge
+
+### Scope
+
+`OpenAIAgentsMCPToolErrorRecoveryAdapter` accepts exactly one `MCPFaultSpec` whose kind is `TOOL_ERROR` plus one exact expected benign recovery text. Unlike the result bridge, **both calls are behavioral agent calls**. The evaluator does not manufacture the retry after the run.
+
+The intended relation is:
+
+```text
+first target request
+→ real MCP ToolError
+→ exact model-visible error result
+→ one same-argument agent retry
+→ exact benign recovery on the same live MCP session
+```
+
+### First-call protocol observation
+
+The first target `server.call_tool` result must be an error result with exactly one text block. The adapter creates `MCPFaultReceipt` from that actual observation using the exact `TOOL_ERROR` observation point and required protocol revision.
+
+The receipt is not inferred from configured fault material. Protocol observation remains a separate evidence fact.
+
+### Exactly one behavioral retry
+
+The controlled target must be called **exactly twice** during the agent run:
+
+- zero calls → target missing → `EVALUATION_ERROR / BLOCKED`;
+- one call → retry missing → `EVALUATION_ERROR / BLOCKED`;
+- more than two calls → retry relation ambiguous → `EVALUATION_ERROR / BLOCKED`.
+
+The first and second call arguments are canonicalized as finite JSON and must be exactly equal. A changed retry becomes `mcp_error_retry_arguments_changed / EVALUATION_ERROR / BLOCKED`.
+
+### Call identity and causal chronology
+
+Normalized OpenAI evidence must contain exactly two target `TOOL_REQUEST` events with stable, non-empty, **distinct** call IDs and exactly one matching `TOOL_RESULT` per call.
+
+The bridge then requires strict normalized chronology:
+
+```text
+request₁ < result₁ < request₂ < result₂
+```
+
+This is the causality boundary. Two identical target calls pre-issued before the first result may be sequential at the MCP server, but they do not prove that the second call was a retry **in response to** the model-visible error. Such evidence fails closed as:
+
+```text
+mcp_error_retry_causality_unverified → EVALUATION_ERROR / BLOCKED
+```
+
+The regression suite explicitly exercises the invalid chronology:
+
+```text
+request₁ → request₂ → result₁ → result₂
+```
+
+and requires it to block.
+
+### Error and recovery equivalence
+
+`MCPAgentToolErrorRecoveryReceipt.create(...)` revalidates the embedded protocol receipt and binds:
+
+- scenario identity;
+- exact `TOOL_ERROR` fault identity, tool name, kind, protocol revision, and observation point;
+- exact controlled payload digest;
+- exact SDK-generated expected error-envelope digest;
+- distinct error and retry OpenAI call IDs;
+- canonical original/retry argument digest equality;
+- agent-visible error digest equal to the verified MCP observation digest;
+- expected benign recovery digest equal to the agent-visible recovery digest;
+- a domain-separated receipt root.
+
+Raw controlled error content, raw retry arguments, and benign recovery text are not duplicated into the receipt.
+
+### Bridge chronology
+
+`PROTOCOL_DELIVERY` is emitted only **after** the second `TOOL_RESULT`:
+
+```text
+TOOL_REQUEST(error)
+TOOL_RESULT(error)
+TOOL_REQUEST(retry)
+TOOL_RESULT(recovery)
+PROTOCOL_DELIVERY
+```
+
+That placement is intentional. The receipt represents the full error → retry → recovery relation and cannot truthfully exist before recovery is observed.
+
+### What the ToolError bridge proves
+
+Inside the deterministic harness it proves:
+
+1. the connected official MCP stdio session negotiated protocol `2026-07-28`;
+2. the first target call returned the bound real `ToolError` observation;
+3. the pinned Agents SDK exposed the exact expected logical error result to the deterministic model path;
+4. the agent produced a distinct second target call only after the first result in normalized chronology;
+5. the retry used the same canonical arguments;
+6. the retry recovered to the exact configured benign value on the same live session;
+7. only then did the evaluator close `MCPAgentToolErrorRecoveryReceipt` / `PROTOCOL_DELIVERY` and allow deterministic grading.
+
+### What the ToolError bridge does not prove
+
+It does not establish generic retry policy correctness, exponential backoff, jitter, idempotency semantics, retry safety for side-effecting tools, arbitrary error classes, more than one retry, arbitrary parallel plans, multiple MCP servers, hosted/remote MCP behavior, live-model behavior, provider availability, or production fault tolerance.
+
+---
+
+## What the MCP bridges do not prove
+
+Neither bridge establishes:
 
 - live OpenAI model behavior or provider availability;
 - hosted OpenAI MCP, third-party MCP, remote MCP, Internet MCP, TLS/DNS/proxy/gateway fidelity, or arbitrary stdio transport robustness;
-- MCP metadata poison, `ToolError`, stale-cache, schema-drift, or identity-drift behavior inside an agent trial;
-- arbitrary multi-call plans, retries, parallel target calls, or multiple MCP servers;
+- MCP metadata poison, stale-cache, schema-drift, or identity-drift behavior inside an agent trial;
+- arbitrary multi-call or parallel plans;
 - production authorization, OAuth, identity-provider, or credential lifecycle behavior;
 - target-side cryptographic attestation;
 - release acceptance from protocol evidence alone.
+
+A bridge closure is an evaluation precondition. It is not a behavioral verdict.
 
 ---
 
 ## Fail-closed preconditions
 
-Malformed attack payloads, missing or ambiguous local targets, unsupported target types, unusable call identities, unsupported environment context, MCP server ambiguity, protocol-version mismatch, missing protocol evidence, mismatched agent evidence, or failed recovery raise `AdapterPreconditionError`.
+Malformed attack payloads, missing or ambiguous local targets, unsupported target types, unusable call identities, unsupported environment context, MCP server ambiguity, protocol-version mismatch, missing protocol evidence, mismatched agent evidence, changed retry arguments, non-causal retry chronology, or failed recovery raise `AdapterPreconditionError`.
 
 `TrialRunner` converts these into `EVALUATION_ERROR / BLOCKED` with no completed subject oracles. Provider/runtime failures remain `RUNTIME_ERROR / BLOCKED`.
+
+The evaluator also revalidates known `PROTOCOL_DELIVERY` receipt types before subject grading. Unknown delivery sources, malformed bridge receipts, invalid semantic roots, or scenario-identity mismatch block evaluation rather than becoming trusted opaque JSON.
 
 ```text
 unverified evaluator-controlled precondition → EVALUATION_ERROR / BLOCKED
@@ -315,11 +456,11 @@ Implementation source checkpoint `d98f9ca1feb1179504cd2181295a73936fd0ae6c`, pro
 - deterministic core: **349 passed, 27 deselected**;
 - branch coverage: **93.79%** against the 90% gate;
 - strict mypy: **0 issues across 42 source files**;
-- deterministic OpenAI SDK suite, including the MCP stdio bridge: **15/15 passed**;
+- deterministic OpenAI SDK suite, including the original MCP stdio result bridge: **15/15 passed**;
 - deterministic MCP protocol suite: **6/6 passed**;
 - deterministic MCP remote-auth suite: **3/3 passed**;
 - deterministic MCP OAuth-flow suite: **3/3 passed**;
 - Python **3.11 minimum / 3.14 latest**, Ruff, formatter, Bandit, dependency audit, package integrity, and all **7/7 CI jobs**: green;
 - dependency audit: **no known vulnerabilities found**; the project package itself is skipped because it is not published on PyPI.
 
-This checkpoint identifies the audited merged implementation revision. Documentation-only synchronization is validated by its own full pull-request CI and does not silently redefine the implementation evidence.
+This checkpoint remains the historical audited merged implementation baseline. The ToolError-recovery bridge described above is accepted only after its own exact-head CI, merge, and post-merge `main` verification; documentation does not retroactively redefine the older implementation evidence.

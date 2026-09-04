@@ -8,7 +8,7 @@ This document is intentionally strict. Repository claims must never become stron
 
 The OpenAI integration is pinned to `openai-agents==0.22.0`. CI exercises the real SDK runner/tool/handoff/context loop deterministically with `agents.testing.ScriptedModel` and no provider API call.
 
-The SDK tier covers all seven generic adversarial channel categories at scoped local/SDK boundaries. A separate adapter also exercises one exact OpenAI-agent → official-MCP-stdio `TOOL_RESULT_POISON` path.
+The SDK tier covers all seven generic adversarial channel categories at scoped local/SDK boundaries. Two separate adapters also exercise exact OpenAI-agent → official-MCP-stdio paths: one `TOOL_RESULT_POISON` same-call bridge and one causal `TOOL_ERROR` → same-argument retry → benign recovery bridge.
 
 None of this establishes live-model quality, production-provider availability, provider-side delivery attestation, or credentialed end-to-end assurance.
 
@@ -28,7 +28,7 @@ Terminal application state remains independently observed; provider output is no
 
 These are concrete implementations of a generic taxonomy, not assertions that every production system carrying a similarly named boundary is intercepted.
 
-The dedicated `OpenAIAgentsMCPToolResultAdapter` is a separate integration and does not widen these seven local/SDK mechanisms.
+The dedicated MCP adapters are separate integrations and do not widen these seven local/SDK mechanisms.
 
 ### `ENVIRONMENT` means local SDK application context, not infrastructure chaos
 
@@ -46,7 +46,7 @@ The ordinary `OpenAIAgentsAdapter` result mode targets one exact local SDK `Func
 
 That local injector still does not intercept hosted tools, MCP tools, or arbitrary external services.
 
-MCP result delivery is now covered only by the **separate** controlled stdio bridge described below. The existence of that bridge must not be retroactively attributed to the local `FunctionTool` injector.
+MCP result and ToolError-recovery assurance are covered only by the **separate** controlled stdio bridges described below. Their existence must not be retroactively attributed to the local `FunctionTool` injector.
 
 ### Local `TOOL_METADATA` means OpenAI description poisoning only
 
@@ -89,15 +89,14 @@ Six exact fault families are implemented:
 
 A raw `MCPFaultReceipt` does **not** establish agent consumption, resistance, correctness, `PASS`, `FAIL`, or release acceptance.
 
-Five of the six fault families remain **protocol-only** with respect to agent behavior:
+Four of the six fault families remain **protocol-only** with respect to agent behavior:
 
 - `tool_metadata_poison`;
-- `tool_error`;
 - `tool_list_stale_cache`;
 - `tool_schema_drift`;
 - `tool_identity_drift`.
 
-The one exception is not an exception to the trust model; it is an explicit additional bridge contract for `tool_result_poison`.
+The two bridged families remain explicit additional contracts rather than exceptions to the trust model: `tool_result_poison` and `tool_error` require independent agent-visible evidence before `PROTOCOL_DELIVERY` exists.
 
 ## Controlled MCP `TOOL_RESULT_POISON` → OpenAI agent bridge
 
@@ -124,22 +123,50 @@ The bridge therefore establishes a narrow evaluation precondition: the controlle
 
 It does **not** establish that the agent behaved safely merely because delivery closed. Policy and outcome oracles still decide behavioral PASS/FAIL.
 
-### The bridge is not generic MCP assurance
+## Controlled MCP `TOOL_ERROR` → causal OpenAI retry/recovery bridge
 
-The implemented bridge does not claim:
+`OpenAIAgentsMCPToolErrorRecoveryAdapter` exercises a different deterministic path. Both target calls are part of the behavioral agent run.
 
-- agent behavior for MCP metadata poison, `ToolError`, cache drift, schema drift, or identity drift;
-- arbitrary multi-call or retry plans;
-- multiple controlled MCP servers or parallel target calls;
+The bridge requires:
+
+- a `TOOL_ERROR` fault only;
+- fresh official MCP stdio process/session state per trial;
+- negotiated protocol `2026-07-28`;
+- exactly two behavioral target calls;
+- a real first-call MCP error result with the exact expected SDK-generated model-visible envelope;
+- a valid `MCPFaultReceipt` created from that actual protocol observation;
+- two stable, non-empty, distinct OpenAI target call IDs;
+- exactly one normalized result for each call ID;
+- finite canonical original/retry arguments whose digests are equal;
+- strict normalized chronology `request₁ < result₁ < request₂ < result₂`;
+- exact benign recovery on the second target call through the same live MCP session;
+- one `MCPAgentToolErrorRecoveryReceipt` binding scenario, fault/protocol receipt, call identities, argument digest, error observation, recovery observation, and domain-separated root;
+- `PROTOCOL_DELIVERY` emitted only after the recovery `TOOL_RESULT`.
+
+The strict chronology is central to the claim. Two identical target calls issued before the first model-visible error result do **not** establish a retry reaction. That evidence fails closed as `mcp_error_retry_causality_unverified / EVALUATION_ERROR / BLOCKED`.
+
+The bridge also blocks on missing retry, extra target calls, changed arguments, reused/missing call IDs, ambiguous result identity, protocol drift, malformed error/recovery shape, error mismatch, recovery mismatch, or malformed receipt.
+
+It establishes one exact error → observed result → same-argument retry → benign recovery relation. It does not establish general fault tolerance merely because that relation closes.
+
+### The bridges are not generic MCP assurance
+
+The implemented bridges do not claim:
+
+- agent behavior for MCP metadata poison, stale-cache, schema-drift, or identity-drift;
+- arbitrary MCP result/error behavior outside the exact controlled contracts;
+- generic retry policy, exponential backoff, jitter, retry budgets, idempotency, or side-effect safety;
+- more than one ToolError retry;
+- multiple controlled MCP servers or arbitrary parallel target plans;
 - OpenAI hosted MCP interception;
 - arbitrary third-party MCP servers;
 - remote/Internet MCP fidelity;
-- generic stdio transport correctness, subprocess isolation, or transport-chaos assurance beyond the exact deterministic fixture path;
+- generic stdio transport correctness, subprocess isolation, or transport-chaos assurance beyond the exact deterministic fixture paths;
 - TLS, DNS, proxy, gateway, load-balancer, service-mesh, latency, disconnect, retry, or packet-fault behavior;
 - production authorization or identity-provider behavior;
 - target-side cryptographic delivery attestation.
 
-The bridge test uses `agents.testing.ScriptedModel`. It does not make a live provider call.
+The bridge tests use `agents.testing.ScriptedModel`. They do not make live provider calls.
 
 ### Raw protocol receipt still is not a verdict
 
@@ -150,18 +177,18 @@ MCPFaultReceipt only
     = verified protocol observation
 
 MCPFaultReceipt
-+ exact agent call identity
-+ exact matching agent result
-+ output equivalence
-+ same-session recovery
-    = verified MCPAgentToolResultReceipt / PROTOCOL_DELIVERY
++ exact agent call/result identity
++ fault-specific bridge invariants
+    = verified PROTOCOL_DELIVERY receipt
 
 verified PROTOCOL_DELIVERY
 + deterministic subject evidence
     = eligible for policy/outcome grading
 ```
 
-Protocol evidence is necessary for this path but never sufficient for behavioral conclusions by itself.
+For `TOOL_RESULT_POISON`, the fault-specific invariants are same-call output equivalence plus post-run same-session recovery. For `TOOL_ERROR`, they are exact model-visible error equivalence, distinct call IDs, same arguments, causal request/result chronology, and exact same-session recovery.
+
+Protocol evidence is necessary for these paths but never sufficient for behavioral conclusions by itself.
 
 ---
 
@@ -203,7 +230,7 @@ The framework does not currently use a model-as-judge. Deterministic state and p
 
 ### Delivery and protocol receipts are not target-side attestation
 
-A valid OpenAI attack receipt proves consistency relative to the trusted evaluator's controlled observation. `MCPFaultReceipt` proves consistency relative to a trusted protocol observation. `MCPAgentToolResultReceipt` proves consistency between one verified MCP result and one exact normalized OpenAI agent call/result boundary. `MCPRemoteAuthReceipt` and `MCPOAuthFlowReceipt` prove their respective deterministic loopback observations.
+A valid OpenAI attack receipt proves consistency relative to the trusted evaluator's controlled observation. `MCPFaultReceipt` proves consistency relative to a trusted protocol observation. `MCPAgentToolResultReceipt` proves consistency between one verified MCP result and one exact normalized OpenAI agent call/result boundary. `MCPAgentToolErrorRecoveryReceipt` proves consistency across one verified ToolError observation and one exact normalized causal retry/recovery relation. `MCPRemoteAuthReceipt` and `MCPOAuthFlowReceipt` prove their respective deterministic loopback observations.
 
 None is independent cryptographic proof that an arbitrary remote target consumed content, a production issuer minted a token correctly, or a deployed agent respected policy.
 
@@ -219,7 +246,7 @@ The repository does not claim signatures/MACs, key management, trusted timestamp
 
 ### Replay is historical regrading, not re-execution
 
-`EvidenceReplayAdapter` requires exact trial/subject/scenario identity and can reapply deterministic grading to recorded evidence. It does not rerun providers, tools, sessions, resources, handoffs, environment injectors, the MCP stdio bridge, protocol probes, authorization probes, OAuth flows, or external state readers and cannot establish fresh delivery or fresh authorization.
+`EvidenceReplayAdapter` requires exact trial/subject/scenario identity and can reapply deterministic grading to recorded evidence. It does not rerun providers, tools, sessions, resources, handoffs, environment injectors, the MCP stdio bridges, protocol probes, authorization probes, OAuth flows, or external state readers and cannot establish fresh delivery or fresh authorization.
 
 ### Assurance-report validation is not signed attestation
 
@@ -248,14 +275,14 @@ Audited merged implementation source checkpoint `d98f9ca1feb1179504cd2181295a739
 - deterministic core: **349 passed, 27 deselected**;
 - branch coverage: **93.79%** against the 90% gate;
 - strict mypy: **0 issues across 42 source files**;
-- deterministic OpenAI SDK suite, including controlled MCP stdio bridge coverage: **15/15 passed**;
+- deterministic OpenAI SDK suite, including the original controlled MCP stdio result bridge: **15/15 passed**;
 - deterministic MCP protocol suite: **6/6 passed**;
 - deterministic MCP remote-auth suite: **3/3 passed**;
 - deterministic MCP OAuth-flow suite: **3/3 passed**;
 - Python **3.11 minimum / 3.14 latest** quality jobs, Ruff, formatter, Bandit, dependency audit, package integrity, and all **7/7 CI jobs**: green;
 - dependency audit reported **no known vulnerabilities**; the project package itself is skipped because it is not published on PyPI.
 
-This checkpoint identifies the audited merged implementation revision before this documentation-only synchronization. The documentation change must pass its own full PR CI; it does not retroactively relabel implementation evidence.
+This checkpoint remains the historical audited merged implementation baseline. The ToolError-recovery capability described above is accepted only after its own exact-head CI, merge, and post-merge `main` verification; documentation does not retroactively relabel the older checkpoint.
 
 ## Why these boundaries matter
 

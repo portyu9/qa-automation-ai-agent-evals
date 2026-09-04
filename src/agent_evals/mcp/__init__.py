@@ -1,6 +1,8 @@
 """Deterministic Model Context Protocol assurance contracts and runtime probes."""
 
 from agent_evals.mcp.agent_bridge import MCPAgentToolResultReceipt
+from agent_evals.mcp.agent_error_bridge import MCPAgentToolErrorRecoveryReceipt
+from agent_evals.mcp.delivery import ProtocolDeliveryError, verify_protocol_delivery
 from agent_evals.mcp.lab import MCPFaultLab
 from agent_evals.mcp.models import (
     MCPDiscoveryProbeResult,
@@ -25,6 +27,7 @@ from agent_evals.mcp.remote_auth import (
 )
 
 __all__ = [
+    "MCPAgentToolErrorRecoveryReceipt",
     "MCPAgentToolResultReceipt",
     "MCPDiscoveryProbeResult",
     "MCPFaultKind",
@@ -42,4 +45,6 @@ __all__ = [
     "MCPRemoteAuthReceipt",
     "MCPToolIdentityDriftProbeResult",
     "MCPToolSchemaDriftProbeResult",
+    "ProtocolDeliveryError",
+    "verify_protocol_delivery",
 ]

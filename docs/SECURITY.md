@@ -6,11 +6,11 @@ The repository treats the evaluated agent and all provider/tool/MCP/memory/resou
 
 An adversarial agent trial is not behaviorally gradeable until the controlled evaluation environment closes the exact delivery precondition required by that execution path. Failure to establish that precondition is `BLOCKED` evaluation uncertainty, not an agent defect.
 
-The security model now distinguishes five relevant evidence relationships:
+The security model distinguishes five evidence-domain relationships, with the MCP→OpenAI domain containing two explicit bridge contracts:
 
 1. OpenAI local/SDK adversarial delivery — one exact `AttackDeliveryReceipt` must verify before grading an adversarial `AttackFixture` scenario.
 2. MCP protocol faults — one exact `MCPFaultReceipt` proves only the official client's bound protocol observation or relation.
-3. MCP→OpenAI result bridge — one exact `MCPAgentToolResultReceipt` binds a verified `TOOL_RESULT_POISON` protocol observation to one exact OpenAI agent tool call and model-visible output.
+3. MCP→OpenAI bridges — `MCPAgentToolResultReceipt` binds a verified `TOOL_RESULT_POISON` observation to one exact agent call/result, while `MCPAgentToolErrorRecoveryReceipt` binds a verified `TOOL_ERROR` observation to one causal error → same-argument retry → recovery relation.
 4. MCP resource-server authorization — `MCPRemoteAuthReceipt` closes the loopback authentication/authorization matrix and RFC 9728 metadata boundary.
 5. MCP OAuth flow — `MCPOAuthFlowReceipt` closes the separated authorization-server/resource-server discovery, PKCE, exact issuer/resource binding, exchange, introspection, protected-use, and reconnect-reuse boundary.
 
@@ -40,15 +40,25 @@ Implemented controls include:
 - relational MCP receipts requiring stale discovery plus refreshed server truth, and for drift faults call-time failure/recovery as well;
 - `MCPFaultReceipt` binding fault-material and exact canonical-observation digests without storing raw malicious text;
 - fresh-server/fresh-cache isolation and second-call benign recovery where applicable;
-- dedicated `OpenAIAgentsMCPToolResultAdapter` for one exact `TOOL_RESULT_POISON` bridge;
 - fresh official `MCPServerStdio` subprocess per bridged trial;
 - rejection of preconfigured MCP servers, prefixed target naming, and local target-name collisions when they would make provenance ambiguous;
 - negotiated MCP protocol verification from the connected session;
-- exactly-one behavioral target-call requirement;
-- exact OpenAI request/result call-ID pairing;
+- dedicated `OpenAIAgentsMCPToolResultAdapter` for one exact `TOOL_RESULT_POISON` same-call bridge;
+- exactly-one behavioral target-call requirement for that result bridge;
+- exact OpenAI request/result call-ID pairing and logical output equivalence;
 - `MCPAgentToolResultReceipt` binding scenario, protocol receipt, agent tool name, call ID, and model-visible output;
-- `PROTOCOL_DELIVERY` ordered immediately before the matching normalized `TOOL_RESULT`;
-- same-argument benign recovery through the same live MCP session only **after** the behavioral run;
+- `PROTOCOL_DELIVERY` ordered immediately before the matching result-bridge `TOOL_RESULT`;
+- same-argument benign recovery through the same live MCP session only **after** the result-bridge behavioral run;
+- dedicated `OpenAIAgentsMCPToolErrorRecoveryAdapter` for one exact `TOOL_ERROR` behavioral retry/recovery bridge;
+- exactly-two behavioral target-call requirement for ToolError recovery;
+- distinct stable first/retry OpenAI call IDs;
+- canonical same-argument enforcement across error and retry calls;
+- exact agent-visible ToolError observation bound to the verified protocol observation digest;
+- exact expected/observed benign recovery binding;
+- strict retry chronology `request₁ < result₁ < request₂ < result₂`, rejecting pre-issued or parallel second calls as unverified causality;
+- `MCPAgentToolErrorRecoveryReceipt` binding scenario, protocol receipt, fault identity, call identities, argument digest, error observation, recovery observation, and a domain-separated root without serializing raw controlled content;
+- ToolError `PROTOCOL_DELIVERY` ordered only after the recovery `TOOL_RESULT` because the full relation does not exist earlier;
+- semantic revalidation of known `PROTOCOL_DELIVERY` receipt types before subject grading;
 - separate content-addressed `MCPRemoteAuthPolicy` and `MCPRemoteAuthReceipt` domains;
 - real pre-bound loopback TCP, Uvicorn, Streamable HTTP, and official-client execution for resource-server authorization;
 - deterministic verifier-owned exact issuer/resource binding;
@@ -104,9 +114,9 @@ Every protocol probe gets a fresh server. Discovery probes get fresh cache state
 
 The protocol laboratory proves protocol conditions. It does not infer agent behavior from them.
 
-## MCP→OpenAI tool-result security boundary
+## MCP→OpenAI result security boundary
 
-`OpenAIAgentsMCPToolResultAdapter` is the one current exception to the statement that protocol observations never enter agent trial chronology. It implements a **specific verified bridge**, not an implicit promotion.
+`OpenAIAgentsMCPToolResultAdapter` implements one specific verified result bridge, not an implicit promotion of protocol evidence.
 
 ### Provenance controls
 
@@ -114,35 +124,61 @@ The base Agent must have no preconfigured MCP servers. The target name must not 
 
 These restrictions are security properties: they prevent the evaluator from correlating a valid call ID with the wrong tool/server provenance.
 
-### Negotiation controls
+### Negotiation and behavioral-call controls
 
-The connected MCP session must expose negotiated protocol `2026-07-28`. MCP v2 obtains this from `ClientSession.protocol_version`; legacy initialization metadata is only a fallback.
-
-Configured protocol intent is not accepted as negotiated protocol evidence.
-
-### Behavioral-call controls
+The connected MCP session must expose negotiated protocol `2026-07-28`. Configured protocol intent is not accepted as negotiated protocol evidence.
 
 The agent must make exactly one target MCP call. Zero calls do not prove consumption. Multiple calls make result attribution ambiguous. Both conditions block grading.
 
 The first target result must be one successful text content block matching the controlled fault. The protocol receipt is created from that actual result observation, not from fixture configuration.
 
-### Bridge controls
+### Bridge and recovery controls
 
 After the run, normalized evidence must contain one exact target `TOOL_REQUEST`, a stable call ID, and one matching `TOOL_RESULT`.
 
 `MCPAgentToolResultReceipt` binds the protocol receipt to the exact scenario/tool/call/output tuple. `PROTOCOL_DELIVERY` is inserted immediately before that matching result only after validation succeeds.
 
-A bridge receipt therefore means: **the controlled protocol result and the result attributed to this agent call are the same evaluated delivery fact**. It does not mean the agent handled the content safely.
+Recovery is then invoked using the same target, arguments, and still-connected MCP session. The result must equal the configured benign value. This ordering prevents a second benign result from contaminating the behavioral transcript while still checking that the fault is one-shot rather than sticky.
 
-### Recovery controls
+A result-bridge receipt therefore means: **the controlled protocol result and the result attributed to this agent call are the same evaluated delivery fact**. It does not mean the agent handled the content safely.
 
-Recovery is invoked after behavioral execution using the same target, arguments, and still-connected MCP session. The result must equal the configured benign value.
+## MCP→OpenAI ToolError retry/recovery security boundary
 
-This ordering prevents a second benign result from contaminating the behavioral transcript while still checking that the fault is one-shot rather than sticky.
+`OpenAIAgentsMCPToolErrorRecoveryAdapter` implements one distinct behavioral resilience contract. Both target calls occur inside the agent run; the evaluator does not create the retry afterward.
 
-### SDK representation control
+### First-error provenance
 
-The pinned Agents SDK uses distinct but semantically equivalent public representations for a structured tool output and the Responses input replayed to the model. Tests assert the expected SDK transformation rather than treating serialization syntax as security identity.
+The first target call must produce a real MCP error result with exactly one text block. `MCPFaultReceipt` is created from that actual observation and must identify `TOOL_ERROR`, protocol `2026-07-28`, the exact target tool, expected observation point, controlled payload digest, and SDK-generated error-envelope observation digest.
+
+### Retry identity
+
+The agent must make exactly two target calls. The normalized requests require stable, non-empty, distinct OpenAI call IDs. Each call ID must map to exactly one normalized result.
+
+The original and retry arguments are canonicalized as finite JSON and must be identical. Changed arguments do not satisfy this exact recovery contract.
+
+### Retry causality
+
+The normalized evidence must satisfy:
+
+```text
+request₁ < result₁ < request₂ < result₂
+```
+
+This requirement prevents the evaluator from mislabeling two pre-issued identical calls as “error then retry.” A second call earns retry semantics only when the first agent-visible result precedes the second request in the trusted normalized chronology.
+
+Failure of that relation becomes `mcp_error_retry_causality_unverified / EVALUATION_ERROR / BLOCKED`.
+
+### Error/recovery binding
+
+`MCPAgentToolErrorRecoveryReceipt` binds the verified protocol receipt, fault/tool identity, distinct call IDs, same-argument digest, agent-visible error digest, expected and observed recovery digests, and its own domain-separated root.
+
+The receipt does not serialize raw controlled error content, raw retry arguments, or benign recovery text.
+
+`PROTOCOL_DELIVERY` appears only after the second `TOOL_RESULT`. This is a security property: the receipt represents a four-event relation and cannot close before recovery is actually observed.
+
+### Failure semantics
+
+Missing first call, missing retry, extra target calls, changed retry arguments, reused/missing call IDs, ambiguous result identity, protocol drift, malformed error shape, model-visible error mismatch, recovery mismatch, malformed receipt, or non-causal ordering all remain evaluator uncertainty and block grading. They are not rewritten as subject failure.
 
 ## MCP resource-server authorization security boundary
 
@@ -176,10 +212,12 @@ Authorization code, access token, and introspection secret are omitted from seri
 
 Current MCP coverage does **not** establish:
 
-- agent behavior for metadata poison, `ToolError`, stale cache, schema drift, or identity drift;
-- arbitrary MCP result behavior beyond the one controlled exactly-once target-call bridge;
+- agent behavior for metadata poison, stale cache, schema drift, or identity drift;
+- arbitrary MCP result or error behavior beyond the two exact controlled bridge contracts;
+- generic retry/backoff/idempotency safety beyond one same-argument ToolError retry;
+- arbitrary parallel target plans or multiple controlled MCP servers;
 - OpenAI hosted MCP interception or third-party hosted MCP fidelity;
-- remote/Internet MCP behavior or general stdio robustness beyond the exact deterministic subprocess path;
+- remote/Internet MCP behavior or general stdio robustness beyond the exact deterministic subprocess paths;
 - reverse proxy, gateway, TLS, DNS, service-mesh, packet, latency, disconnect, retry, or rate-limit assurance;
 - third-party or production authorization-server / identity-provider assurance;
 - production JWT/JWKS signature verification, key rotation, arbitrary token formats, federation, or IdP compromise resistance;
@@ -188,7 +226,7 @@ Current MCP coverage does **not** establish:
 - refresh-token rotation, revocation propagation, replay detection, production credential storage/rotation, or distributed credential caches;
 - public/cross-partition MCP cache sharing, arbitrary cache poisoning, notification invalidation, or TTL-expiry races;
 - arbitrary schema migrations or arbitrary tool-registry churn beyond the exact fixtures;
-- malformed framing/JSON-RPC, duplicate/out-of-order responses, or header-routing faults;
+- malformed framing/JSON-RPC, duplicate/out-of-order protocol responses, or header-routing faults;
 - malicious MCP resources, prompts, roots, elicitation, sampling, subscriptions, or Tasks-extension behavior;
 - full protocol-conformance certification;
 - cryptographic target-side delivery attestation;
@@ -236,11 +274,13 @@ Implementation source checkpoint `d98f9ca1feb1179504cd2181295a73936fd0ae6c`, pro
 - deterministic core: **349 passed, 27 deselected**;
 - branch coverage: **93.79%** against the 90% gate;
 - strict mypy: **0 issues across 42 source files**;
-- deterministic OpenAI SDK suite, including MCP stdio bridge: **15/15 passed**;
+- deterministic OpenAI SDK suite, including the original MCP stdio result bridge: **15/15 passed**;
 - deterministic MCP protocol: **6/6 passed**;
 - deterministic MCP remote auth: **3/3 passed**;
 - deterministic MCP OAuth flow: **3/3 passed**;
 - Python **3.11 minimum / 3.14 latest**, Ruff, formatter, Bandit, dependency audit, package integrity, and all **7/7 CI jobs**: green;
 - dependency audit: **no known vulnerabilities found**; the project package itself is skipped because it is not published on PyPI.
+
+This checkpoint remains the historical audited merged implementation baseline. The ToolError-recovery bridge is accepted only after its own exact-head CI, merge, and post-merge `main` verification.
 
 [← Documentation hub](README.md)

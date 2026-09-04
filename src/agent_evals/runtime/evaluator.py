@@ -11,6 +11,7 @@ from agent_evals.adapters.base import AdapterPreconditionError, AdapterResult, A
 from agent_evals.adversarial.delivery import AttackDeliveryError, verify_attack_delivery
 from agent_evals.contracts.models import EvaluationScenario, SubjectFingerprint
 from agent_evals.evidence.models import EvidenceEvent, EvidenceKind, TrialEvidence, TrialVerdict
+from agent_evals.mcp.delivery import ProtocolDeliveryError, verify_protocol_delivery
 from agent_evals.oracles.deterministic import OracleResult, OutcomeOracle, PolicyOracle
 
 
@@ -131,7 +132,22 @@ class TrialRunner:
             return EvaluatedTrial(
                 evidence=self._append_evaluation_error(
                     evidence,
+                    source="evaluator:attack-delivery",
                     code="attack_delivery_unverified",
+                    reason=str(exc),
+                ),
+                oracle_results=(),
+                verdict=TrialVerdict.BLOCKED,
+            )
+
+        try:
+            verify_protocol_delivery(evidence)
+        except ProtocolDeliveryError as exc:
+            return EvaluatedTrial(
+                evidence=self._append_evaluation_error(
+                    evidence,
+                    source="evaluator:protocol-delivery",
+                    code="protocol_delivery_unverified",
                     reason=str(exc),
                 ),
                 oracle_results=(),
@@ -207,13 +223,14 @@ class TrialRunner:
     def _append_evaluation_error(
         evidence: TrialEvidence,
         *,
+        source: str,
         code: str,
         reason: str,
     ) -> TrialEvidence:
         event = EvidenceEvent(
             sequence=len(evidence.events),
             kind=EvidenceKind.EVALUATION_ERROR,
-            source="evaluator:attack-delivery",
+            source=source,
             payload={"code": code, "reason": reason},
             critical=True,
         )
