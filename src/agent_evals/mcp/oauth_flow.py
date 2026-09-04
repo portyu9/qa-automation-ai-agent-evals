@@ -276,12 +276,13 @@ class _AuthorizationServerProvider:
             subject=_SUBJECT,
         )
         self.codes[code.code] = code
-        return construct_redirect_uri(
+        redirect = construct_redirect_uri(
             str(params.redirect_uri),
             code=code.code,
             state=params.state,
             iss=self._issuer_url,
         )
+        return str(redirect)
 
     async def load_authorization_code(self, client: Any, authorization_code: str) -> Any | None:
         stored = self.codes.get(authorization_code)
