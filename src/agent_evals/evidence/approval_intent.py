@@ -30,7 +30,7 @@ class ApprovalIntentReceipt(BaseModel):
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    schema: str = Field(
+    receipt_schema: str = Field(
         default=_APPROVAL_INTENT_SCHEMA,
         pattern=r"^agent-evals/approval-intent/v1$",
     )
@@ -79,8 +79,8 @@ class ApprovalIntentReceipt(BaseModel):
         if spec is None:
             raise ApprovalIntentError("scenario does not declare an approval intent")
         arguments_sha256 = canonical_arguments_sha256(arguments)
-        material = {
-            "schema": _APPROVAL_INTENT_SCHEMA,
+        root_material = {
+            "receipt_schema": _APPROVAL_INTENT_SCHEMA,
             "scenario_identity": scenario.identity,
             "decision": spec.decision.value,
             "agent": agent,
@@ -92,7 +92,20 @@ class ApprovalIntentReceipt(BaseModel):
             "authority_path_sha256": authority_path_sha256,
             "approval_request_sequence": approval_request_sequence,
         }
-        return cls(**material, root_sha256=_root(material))
+        return cls(
+            receipt_schema=_APPROVAL_INTENT_SCHEMA,
+            scenario_identity=scenario.identity,
+            decision=spec.decision,
+            agent=agent,
+            tool=tool,
+            call_id=call_id,
+            arguments_sha256=arguments_sha256,
+            resource=resource,
+            authority_epoch=authority_epoch,
+            authority_path_sha256=authority_path_sha256,
+            approval_request_sequence=approval_request_sequence,
+            root_sha256=_root(root_material),
+        )
 
     @property
     def expected_root(self) -> str:
