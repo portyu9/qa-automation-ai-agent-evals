@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from math import sqrt
+from math import isfinite, sqrt
 
 from agent_evals.evidence.models import TrialVerdict
 
@@ -35,6 +35,8 @@ class ReliabilityReport:
             raise ValueError("at least one trial verdict is required")
         if k < 1:
             raise ValueError("k must be >= 1")
+        if not isfinite(confidence_z) or confidence_z <= 0:
+            raise ValueError("confidence_z must be finite and positive")
 
         trials = len(verdicts)
         passes = sum(verdict is TrialVerdict.PASS for verdict in verdicts)
@@ -75,8 +77,8 @@ def _wilson_interval(successes: int, trials: int, z: float) -> tuple[float, floa
         raise ValueError("trials must be positive")
     if not 0 <= successes <= trials:
         raise ValueError("successes must be between zero and trials")
-    if z <= 0:
-        raise ValueError("confidence_z must be positive")
+    if not isfinite(z) or z <= 0:
+        raise ValueError("confidence_z must be finite and positive")
 
     p = successes / trials
     z2 = z * z
