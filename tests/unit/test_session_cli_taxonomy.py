@@ -108,14 +108,48 @@ async def test_session_aggregates_critical_policy_violations() -> None:
 
 
 @pytest.mark.asyncio
-async def test_session_rejects_non_positive_trial_count() -> None:
-    with pytest.raises(ValueError, match="trials must be >= 1"):
-        await EvaluationSession().run(
-            ScriptedAdapter(lambda *_: AdapterResult()),
-            subject=subject(),
-            scenario=scenario(),
-            trials=0,
-        )
+async def test_session_rejects_invalid_trial_count_before_adapter_execution() -> None:
+    calls = 0
+
+    def script(*_args: object) -> AdapterResult:
+        nonlocal calls
+        calls += 1
+        return AdapterResult()
+
+    session = EvaluationSession()
+    adapter = ScriptedAdapter(script)
+    for invalid in (0, -1, True, 1.5):
+        with pytest.raises(ValueError, match="trials must be a positive integer"):
+            await session.run(
+                adapter,
+                subject=subject(),
+                scenario=scenario(),
+                trials=invalid,  # type: ignore[arg-type]
+            )
+    assert calls == 0
+
+
+@pytest.mark.asyncio
+async def test_session_rejects_invalid_k_before_adapter_execution() -> None:
+    calls = 0
+
+    def script(*_args: object) -> AdapterResult:
+        nonlocal calls
+        calls += 1
+        return AdapterResult()
+
+    session = EvaluationSession()
+    adapter = ScriptedAdapter(script)
+    for invalid in (0, -1, True, 1.5):
+        with pytest.raises(ValueError, match="k must be a positive integer"):
+            await session.run(
+                adapter,
+                subject=subject(),
+                scenario=scenario(),
+                trials=1,
+                k=invalid,  # type: ignore[arg-type]
+            )
+    assert calls == 0
 
 
 def test_doctor_reports_deterministic_core_contract() -> None:
