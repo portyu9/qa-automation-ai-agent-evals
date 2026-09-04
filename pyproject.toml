@@ -1,0 +1,120 @@
+[build-system]
+requires = ["hatchling==1.32.0"]
+build-backend = "hatchling.build"
+
+[project]
+name = "qa-automation-ai-agent-evals"
+version = "0.1.0"
+description = "Evidence-bound evaluation, verification, validation, and release assurance for agentic systems"
+readme = "README.md"
+requires-python = ">=3.11"
+authors = [{name = "Ƴunior Ƥortal"}]
+license = {file = "LICENSE"}
+keywords = ["ai-agents", "agent-evals", "quality-engineering", "tevv", "mcp", "pytest"]
+classifiers = [
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
+  "Topic :: Software Development :: Quality Assurance",
+  "Topic :: Software Development :: Testing",
+  "Typing :: Typed",
+]
+dependencies = ["pydantic>=2.10,<3", "typer>=0.15,<1"]
+
+[project.optional-dependencies]
+openai = ["openai-agents==0.22.0"]
+mcp = [
+  "httpx2>=2.5.0,<3",
+  "mcp==2.1.1",
+  "starlette>=0.27,<2",
+  "uvicorn>=0.31.1,<1",
+]
+yaml = ["pyyaml>=6.0.3,<7"]
+dev = [
+  "bandit>=1.8,<2",
+  "mypy>=1.14,<2",
+  "pip-audit>=2.8,<3",
+  "pytest>=9,<10",
+  "pytest-asyncio>=1,<2",
+  "pytest-cov>=6,<8",
+  "ruff==0.16.2",
+  "setuptools>=83",
+]
+
+[project.scripts]
+agent-evals = "agent_evals.cli:app"
+
+[project.urls]
+Homepage = "https://github.com/portyu9/qa-automation-ai-agent-evals"
+Repository = "https://github.com/portyu9/qa-automation-ai-agent-evals"
+Documentation = "https://github.com/portyu9/qa-automation-ai-agent-evals/tree/main/docs"
+Issues = "https://github.com/portyu9/qa-automation-ai-agent-evals/issues"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/agent_evals"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+addopts = "-q --strict-markers --disable-warnings -m 'not openai and not mcp and not mcp_remote and not mcp_oauth'"
+markers = [
+  "integration: deterministic integration tests",
+  "live: tests requiring a live model/provider",
+  "openai: deterministic OpenAI Agents SDK adapter tests; no API calls",
+  "mcp: deterministic Model Context Protocol SDK tests; no network or provider calls",
+  "mcp_remote: deterministic MCP Streamable HTTP authorization tests over loopback TCP only",
+  "mcp_oauth: deterministic MCP OAuth authorization-code/PKCE tests with separated loopback AS and RS origins",
+]
+asyncio_mode = "auto"
+
+[tool.coverage.run]
+branch = true
+source = ["agent_evals"]
+omit = [
+  "src/agent_evals/adapters/openai_agents.py",
+  "src/agent_evals/mcp/_loopback.py",
+  "src/agent_evals/mcp/lab.py",
+  "src/agent_evals/mcp/oauth_flow.py",
+  "src/agent_evals/mcp/remote_auth.py",
+]
+
+[tool.coverage.report]
+fail_under = 90
+show_missing = true
+skip_covered = true
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "PTH", "RUF"]
+ignore = ["E501"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+packages = ["agent_evals"]
+warn_unused_ignores = true
+
+[[tool.mypy.overrides]]
+module = [
+  "agents",
+  "agents.*",
+  "httpx2",
+  "httpx2.*",
+  "mcp",
+  "mcp.*",
+  "starlette",
+  "starlette.*",
+  "uvicorn",
+  "uvicorn.*",
+]
+ignore_missing_imports = true
+
+[tool.bandit]
+exclude_dirs = ["tests"]
