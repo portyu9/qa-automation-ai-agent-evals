@@ -207,6 +207,8 @@ The canonical observation covers the discovered metadata, authorization request 
 
 A receipt is emitted only when the complete relation closes. Individual successes—such as a correct metadata response, a token response, or one protected tool call—are insufficient by themselves.
 
+The surrounding `MCPOAuthFlowProbeResult` is a diagnostic result model, not a persisted authenticated evidence envelope. The embedded receipt validates its own policy/protocol/observation identity, but independently changing an outer diagnostic field does not cryptographically re-bind that field to the receipt.
+
 ## Credential minimization
 
 The following deterministic values exist during execution but must not appear in `MCPOAuthFlowProbeResult` or `MCPOAuthFlowReceipt` serialization:
@@ -248,7 +250,7 @@ pytest -m mcp tests/integration/test_mcp_fault_lab.py
 pytest -m mcp_remote tests/integration/test_mcp_remote_auth.py
 ```
 
-Current verified OAuth-flow checkpoint: **3/3 passed**.
+Verified OAuth-flow checkpoint: **3/3 passed** at implementation source checkpoint `3c33770a7be8089c1ec68f5dec26fcf76e8dc871` (CI run `33870616736`).
 
 ## Explicit non-claims
 
@@ -272,18 +274,20 @@ This laboratory does **not** establish:
 
 The correct claim is narrower: the repository executes and verifies a separated two-origin loopback OAuth authorization-code/PKCE flow with MCP discovery, exact issuer/resource binding, compatibility DCR, token exchange, authenticated HTTP introspection, protected MCP access, and stored-authorization reuse.
 
-## Verification checkpoint
+## Verified implementation checkpoint
 
-Source checkpoint `7132537c5041a7f2c828a7f3db3e5e52af020888`, CI run `33826363896`:
+Implementation source checkpoint `3c33770a7be8089c1ec68f5dec26fcf76e8dc871`, CI run `33870616736`:
 
-- deterministic core: **183 passed, 23 deselected**;
-- branch coverage: **93.05%** against the 90% gate;
+- deterministic core: **192 passed, 23 deselected**;
+- branch coverage: **93.37%** against the 90% gate;
 - strict mypy: **0 issues across 40 source files**;
 - deterministic OpenAI SDK: **11/11 passed**;
 - deterministic MCP protocol: **6/6 passed**;
 - deterministic MCP remote auth: **3/3 passed**;
 - deterministic MCP OAuth flow: **3/3 passed**;
-- Python 3.11/3.13 quality, Ruff, formatter, Bandit, dependency audit, package integrity, and all four integration lanes: green;
-- dependency audit reported no known vulnerabilities; the project package itself is skipped because it is not published on PyPI.
+- Python **3.11 minimum / 3.14 latest** quality, Ruff, formatter, Bandit, dependency audit, package integrity, and all **7/7 CI jobs**: green;
+- dependency audit: **no known vulnerabilities found**; the project package itself is skipped because it is not published on PyPI.
+
+Documentation-only closeout commits are validated separately by PR CI and do not silently redefine this implementation checkpoint.
 
 [← MCP Remote Authorization](MCP_REMOTE_AUTH.md) · [MCP Protocol Fault Laboratory](MCP_LAB.md) · [Documentation hub](README.md)
