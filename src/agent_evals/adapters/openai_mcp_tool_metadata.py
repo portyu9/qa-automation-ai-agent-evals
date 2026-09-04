@@ -5,7 +5,7 @@ from __future__ import annotations
 import copy
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import replace
-from typing import Any
+from typing import Any, cast
 
 from agent_evals.adapters.base import AdapterPreconditionError, AdapterResult
 from agent_evals.adapters.openai_agents import OpenAIAgentsAdapter, ResourceResolver, StateReader
@@ -273,6 +273,7 @@ def _new_observed_model(delegate: object, recorder: _MCPToolMetadataRecorder) ->
             code="mcp_metadata_concrete_model_required",
             reason="metadata delivery assurance requires a concrete public SDK Model instance",
         )
+    delegated_model = cast(Any, delegate)
 
     async def get_response(
         self: object,
@@ -290,8 +291,7 @@ def _new_observed_model(delegate: object, recorder: _MCPToolMetadataRecorder) ->
     ) -> Any:
         del self
         recorder.observe_model_tools(tools)
-        method = getattr(delegate, "get_response")
-        return await method(
+        return await delegated_model.get_response(
             system_instructions,
             input,
             model_settings,
@@ -320,8 +320,7 @@ def _new_observed_model(delegate: object, recorder: _MCPToolMetadataRecorder) ->
     ) -> Any:
         del self
         recorder.observe_model_tools(tools)
-        method = getattr(delegate, "stream_response")
-        return method(
+        return delegated_model.stream_response(
             system_instructions,
             input,
             model_settings,
@@ -336,19 +335,19 @@ def _new_observed_model(delegate: object, recorder: _MCPToolMetadataRecorder) ->
 
     async def cleanup_on_run_end(self: object, owner: object) -> None:
         del self
-        method = getattr(delegate, "_cleanup_on_run_end", None)
+        method = getattr(delegated_model, "_cleanup_on_run_end", None)
         if method is not None:
             await method(owner)
 
     async def close(self: object) -> None:
         del self
-        method = getattr(delegate, "close", None)
+        method = getattr(delegated_model, "close", None)
         if method is not None:
             await method()
 
     def get_retry_advice(self: object, request: Any) -> Any:
         del self
-        method = getattr(delegate, "get_retry_advice", None)
+        method = getattr(delegated_model, "get_retry_advice", None)
         return None if method is None else method(request)
 
     observed_type = type(
