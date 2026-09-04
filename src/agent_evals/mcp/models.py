@@ -79,10 +79,7 @@ class MCPFaultSpec(BaseModel):
     @field_validator("payload_json")
     @classmethod
     def canonicalize_payload_json(cls, value: str) -> str:
-        try:
-            parsed = json.loads(value)
-        except json.JSONDecodeError as exc:
-            raise ValueError("MCP fault payload_json must contain valid JSON") from exc
+        parsed = _parse_payload_json(value)
         return _canonical_json(parsed)
 
     @model_validator(mode="after")
@@ -324,6 +321,21 @@ class MCPToolIdentityDriftProbeResult(BaseModel):
             protocol_version=self.protocol_version,
         )
         return self
+
+
+def _parse_payload_json(value: str) -> Any:
+    def reject_duplicate_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+        result: dict[str, Any] = {}
+        for key, item in pairs:
+            if key in result:
+                raise ValueError("MCP fault payload_json must not contain duplicate object keys")
+            result[key] = item
+        return result
+
+    try:
+        return json.loads(value, object_pairs_hook=reject_duplicate_keys)
+    except json.JSONDecodeError as exc:
+        raise ValueError("MCP fault payload_json must contain valid JSON") from exc
 
 
 def _object_payload(payload: Any, label: str) -> dict[str, Any]:
