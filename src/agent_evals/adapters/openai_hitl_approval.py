@@ -81,10 +81,6 @@ class OpenAIAgentsHITLApprovalAdapter(OpenAIAgentsHandoffAuthorityAdapter):
         ]
 
         if not interruptions:
-            # If the protected target executed without producing the expected interruption, preserve
-            # that resolved evidence for PolicyOracle instead of misclassifying it as evaluator
-            # uncertainty. If the target was never exercised at all, the feature precondition did
-            # not close and the trial is BLOCKED.
             normalized = self._normalize_items(
                 first.new_items,
                 start_sequence=0,
@@ -121,9 +117,6 @@ class OpenAIAgentsHITLApprovalAdapter(OpenAIAgentsHandoffAuthorityAdapter):
                 reason="native SDK approval interruption lacks string tool arguments",
             )
         try:
-            # Validation happens again when the receipt is constructed. Doing it here keeps the
-            # adapter error code specific and prevents malformed provider material from leaking into
-            # normalized evidence.
             ApprovalIntentReceipt.create(
                 scenario=scenario,
                 agent=spec.agent,
@@ -313,8 +306,6 @@ class OpenAIAgentsHITLApprovalAdapter(OpenAIAgentsHandoffAuthorityAdapter):
                 reason="native tool request identity does not match approval scenario target",
             )
         if model_request.payload.get("arguments") != arguments:
-            # Semantic equality is checked by the evaluator receipt verifier. This exact check proves
-            # that the SDK interruption itself and its public ToolCallItem expose one source value.
             raise AdapterPreconditionError(
                 code="approval_interruption_arguments_mismatch",
                 reason="native SDK tool request and approval interruption arguments disagree",
@@ -324,8 +315,8 @@ class OpenAIAgentsHITLApprovalAdapter(OpenAIAgentsHandoffAuthorityAdapter):
         enriched_approval_payload["arguments"] = arguments
         if resource is not None:
             enriched_approval_payload["resource"] = resource
-        elif "resource" in enriched_approval_payload:
-            enriched_approval_payload.pop("resource")
+        else:
+            enriched_approval_payload.pop("resource", None)
 
         target_sequences = {
             model_request.sequence,
@@ -343,7 +334,10 @@ class OpenAIAgentsHITLApprovalAdapter(OpenAIAgentsHandoffAuthorityAdapter):
             if event.sequence > approval_request.sequence and event.sequence not in target_sequences
         ]
 
-        stitched = [_renumber(event, len(stitched)) for stitched in [before_approval] for event in stitched]
+        stitched: list[EvidenceEvent] = []
+        for event in before_approval:
+            stitched.append(_renumber(event, len(stitched)))
+
         request_sequence = len(stitched)
         enriched_request = approval_request.model_copy(
             update={
@@ -382,8 +376,8 @@ class OpenAIAgentsHITLApprovalAdapter(OpenAIAgentsHandoffAuthorityAdapter):
             execution_payload = dict(model_request.payload)
             if resource is not None:
                 execution_payload["resource"] = resource
-            elif "resource" in execution_payload:
-                execution_payload.pop("resource")
+            else:
+                execution_payload.pop("resource", None)
             stitched.append(
                 EvidenceEvent(
                     sequence=len(stitched),
