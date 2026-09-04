@@ -10,7 +10,12 @@ Its primary question is deliberately narrow:
 
 The answer is recorded as `MCPFaultReceipt`. That receipt is protocol evidence. **By itself** it is not an autonomous-agent verdict, an OpenAI `AttackDeliveryReceipt`, release authority, remote-transport assurance, or target-side attestation.
 
-One separate integration path now consumes the same `TOOL_RESULT_POISON` fault contract through a fresh official MCP stdio server and the pinned OpenAI Agents SDK. That dedicated bridge is described under [Relationship to agent adversarial testing](#relationship-to-agent-adversarial-testing) and in [OpenAI Agents SDK Adapter](OPENAI_ADAPTER.md). It does not broaden the other five fault families.
+Two separate deterministic integration paths consume selected fault contracts through a fresh official MCP stdio server and the pinned OpenAI Agents SDK:
+
+- `TOOL_RESULT_POISON` — exact same-call result delivery with post-run same-session recovery;
+- `TOOL_ERROR` — exact model-visible error followed by one causal same-argument retry and benign recovery on the same session.
+
+Those dedicated bridges are described under [Relationship to agent adversarial testing](#relationship-to-agent-adversarial-testing) and in [OpenAI Agents SDK Adapter](OPENAI_ADAPTER.md). They do not broaden the other four fault families.
 
 Remote Streamable HTTP authorization and the separated OAuth flow remain independent evidence domains. See [MCP Remote Authorization](MCP_REMOTE_AUTH.md) and [MCP OAuth Flow Laboratory](MCP_OAUTH_FLOW.md).
 
@@ -19,8 +24,8 @@ Remote Streamable HTTP authorization and the separated OAuth flow remain indepen
 | Fault | Boundary | Receipt precondition | Agent bridge status |
 |---|---|---|---|
 | `tool_metadata_poison` | `tools/list` | target description equals exact canonical fault JSON | protocol-only |
-| `tool_result_poison` | first `tools/call` | first result text equals exact canonical fault JSON and a second call recovers to benign data | dedicated controlled stdio bridge implemented |
-| `tool_error` | first `tools/call` | SDK-generated model-visible `ToolError` contains the canonical payload at the exact expected suffix and a second call recovers | protocol-only |
+| `tool_result_poison` | first `tools/call` | first result text equals exact canonical fault JSON and a second call recovers to benign data | dedicated controlled stdio result bridge |
+| `tool_error` | first `tools/call` | SDK-generated model-visible `ToolError` contains the canonical payload at the exact expected suffix and a second call recovers | dedicated controlled stdio causal retry/recovery bridge |
 | `tool_list_stale_cache` | cached `tools/list` | initial target present → server removes target → cached listing still contains target → forced refresh proves target absent | protocol-only |
 | `tool_schema_drift` | cached discovery + call validation | cached old schema remains visible → stale arguments fail against current server schema → refresh exposes replacement schema → replacement arguments succeed | protocol-only |
 | `tool_identity_drift` | cached discovery + tool lookup | cached old name remains visible → stale-name call fails → refresh exposes replacement name → replacement call succeeds | protocol-only |
@@ -43,7 +48,10 @@ agent behavior
 
 A stale `tools/list` response can be objectively real while a subsequent `tools/call` is evaluated against newer server truth. Conversely, a successful current call does not prove the client previously held current discovery. Neither observation alone says whether an autonomous agent noticed, understood, or resisted the condition.
 
-The new tool-result bridge does not invalidate this rule. It adds a **specific additional proof step** for one result fault: exact protocol observation must be paired with one exact OpenAI agent tool request/result identity and model-visible output before `PROTOCOL_DELIVERY` exists.
+The two agent bridges do not invalidate this rule. They add **fault-specific proof steps**:
+
+- result poison must be paired with one exact OpenAI target request/result identity and logical model-visible output;
+- ToolError recovery must additionally prove distinct call identities, same canonical arguments, exact error/recovery outputs, and strict chronology `request₁ < result₁ < request₂ < result₂` before the second call can be credited as a retry.
 
 ## Protocol paths
 
@@ -146,6 +154,8 @@ Every protocol probe creates a fresh server. Content result/error faults are fir
 
 These controls detect evaluator defects such as sticky fault state and cross-test cache contamination.
 
+The standalone protocol-lab recovery check and the agent ToolError recovery bridge answer different questions. The former proves one-shot protocol behavior; the latter proves that the **agent-visible first error causally precedes one behavioral retry** before that retry is credited as recovery.
+
 ## CI boundary
 
 MCP support is optional and isolated from the provider-neutral core:
@@ -157,11 +167,13 @@ pytest -m mcp tests/integration/test_mcp_fault_lab.py
 
 The dedicated protocol job requires neither provider credentials nor an external service.
 
-For the cross-boundary OpenAI/MCP test, both optional groups are installed and the existing OpenAI deterministic job runs the dedicated stdio integration:
+For the cross-boundary OpenAI/MCP tests, both optional groups are installed and the existing OpenAI deterministic job runs both stdio integrations:
 
 ```bash
 python -m pip install -e '.[dev,openai,mcp]'
-pytest -m openai tests/integration/test_openai_mcp_tool_result_adapter.py
+pytest -m openai \
+  tests/integration/test_openai_mcp_tool_result_adapter.py \
+  tests/integration/test_openai_mcp_tool_error_recovery_adapter.py
 ```
 
 This reuses the existing OpenAI CI status context; it does not make the protocol-lab job an agent verdict job.
@@ -174,7 +186,7 @@ This reuses the existing OpenAI CI status context; it does not make the protocol
 
 `OpenAIAgentsAdapter` local `TOOL_RESULT` injection is also still a separate local-`FunctionTool` mechanism. It does not intercept MCP tools.
 
-### What is now bridged
+### Result delivery bridge
 
 `OpenAIAgentsMCPToolResultAdapter` implements one explicit cross-domain contract for `TOOL_RESULT_POISON`:
 
@@ -190,7 +202,7 @@ exact first result observed → MCPFaultReceipt
 exact OpenAI TOOL_REQUEST call_id
 + exactly one matching TOOL_RESULT
 + output equivalence
-+ same-session benign recovery
++ same-session benign recovery after the run
         ↓
 MCPAgentToolResultReceipt
         ↓
@@ -203,17 +215,55 @@ The behavioral run makes exactly one target call. Recovery occurs only after the
 
 Missing consumption, multiple target calls, protocol-version drift, malformed result shape, agent-evidence ambiguity, output mismatch, or recovery mismatch fails closed as evaluator uncertainty.
 
-The bridge proves same-call controlled delivery in the deterministic harness. It does not assert that the agent resisted the content merely because the bridge closed; deterministic policy/outcome oracles still decide behavior.
+### ToolError retry/recovery bridge
+
+`OpenAIAgentsMCPToolErrorRecoveryAdapter` implements a distinct two-call behavioral contract for `TOOL_ERROR`:
+
+```text
+MCPFaultSpec(tool_error)
+        ↓
+fresh official MCPServerStdio subprocess
+        ↓
+TOOL_REQUEST(error_call_id)
+        ↓
+real first-call MCP ToolError → MCPFaultReceipt
+        ↓ exact model-visible error equivalence
+TOOL_RESULT(error_call_id)
+        ↓
+TOOL_REQUEST(retry_call_id; same canonical arguments)
+        ↓ same live MCP session
+TOOL_RESULT(retry_call_id; exact benign recovery)
+        ↓
+MCPAgentToolErrorRecoveryReceipt
+        ↓
+PROTOCOL_DELIVERY
+        ↓
+deterministic agent trial grading
+```
+
+The adapter requires exactly two target calls, distinct non-empty OpenAI call IDs, canonical argument equality, exactly one normalized result for each call, exact error/recovery observation equivalence, and strict normalized chronology:
+
+```text
+request₁ < result₁ < request₂ < result₂
+```
+
+That chronology is an assurance condition, not presentation detail. If two identical calls are pre-issued before the first error result, the second call is **not** accepted as a retry and evaluation blocks with `mcp_error_retry_causality_unverified`.
+
+Missing retry, more than one retry, changed arguments, protocol-version drift, malformed/ambiguous evidence, wrong error representation, wrong recovery, or non-causal ordering fails closed as evaluator uncertainty.
+
+Both bridges establish delivery/recovery preconditions only. They do not assert safe subject behavior; deterministic policy/outcome oracles still decide PASS/FAIL.
 
 ## Explicit non-claims
 
-The six-fault protocol laboratory plus the one dedicated bridge do **not** establish:
+The six-fault protocol laboratory plus the two dedicated bridges do **not** establish:
 
-- agent behavior for `tool_metadata_poison`, `tool_error`, stale-cache, schema-drift, or identity-drift faults;
-- universal agent behavior for arbitrary MCP tool results, retries, multiple target calls, multiple MCP servers, or parallel plans;
+- agent behavior for `tool_metadata_poison`, stale-cache, schema-drift, or identity-drift faults;
+- universal agent behavior for arbitrary MCP tool results or errors;
+- generic retry/backoff/idempotency correctness beyond the exact one-retry ToolError relation;
+- multiple controlled MCP servers or arbitrary parallel target plans;
 - OpenAI hosted MCP interception or hosted third-party MCP fidelity;
 - remote/Internet MCP behavior, TLS, DNS, reverse proxies, gateways, service meshes, packet faults, latency, disconnect, retry, or rate-limit assurance;
-- general stdio transport robustness beyond the exact deterministic controlled subprocess path exercised by the bridge;
+- general stdio transport robustness beyond the exact deterministic controlled subprocess paths exercised by the bridges;
 - public/cross-partition cache sharing, cache poisoning, arbitrary cache stores, notification invalidation, or TTL race correctness beyond the implemented relations;
 - arbitrary schema migrations or arbitrary registry churn beyond the bound fixtures;
 - malformed JSON-RPC/framing, duplicate/out-of-order responses, or header-routing faults;
@@ -239,6 +289,6 @@ Implementation source checkpoint `d98f9ca1feb1179504cd2181295a73936fd0ae6c`, pro
 - Python **3.11 minimum / 3.14 latest** quality, Ruff, formatter, Bandit, dependency audit, package integrity, and all **7/7 CI jobs**: green;
 - dependency audit: **no known vulnerabilities found**; the project package itself is skipped because it is not published on PyPI.
 
-This checkpoint identifies the audited merged implementation revision. Documentation-only synchronization is validated separately by its own full pull-request CI.
+This checkpoint remains a historical audited merged implementation revision. The ToolError-recovery bridge is accepted only after its own exact-head CI, merge, and post-merge `main` verification.
 
 [← Documentation hub](README.md)
