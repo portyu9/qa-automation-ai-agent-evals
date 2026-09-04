@@ -56,21 +56,25 @@ MCPAgentToolResultReceipt
     = verified correlation between one bound MCP tool result
       and one exact OpenAI agent tool call/result
 
+MCPAgentToolErrorRecoveryReceipt
+    = verified causal error → retry → recovery relation binding one
+      MCP ToolError observation to two distinct OpenAI call identities
+
 Trial PASS / FAIL
     = deterministic subject grading after required delivery evidence closes
 ```
 
-Only `MCPFaultKind.TOOL_RESULT_POISON` currently has that agent bridge. The other five MCP protocol fault families remain protocol-only.
+Two MCP fault families currently have explicit agent bridges: `MCPFaultKind.TOOL_RESULT_POISON` and `MCPFaultKind.TOOL_ERROR`. The other four MCP protocol fault families remain protocol-only with respect to agent behavior.
 
 ## Current documentation set
 
 | Document | Primary question |
 |---|---|
-| [ARCHITECTURE.md](ARCHITECTURE.md) | Where do identity, adversarial derivation, protocol faults, the MCP→agent bridge, resource-server authorization, OAuth-flow assurance, evidence, grading, persistence, reporting, and release authority live? |
+| [ARCHITECTURE.md](ARCHITECTURE.md) | Where do identity, adversarial derivation, protocol faults, the MCP→agent bridges, resource-server authorization, OAuth-flow assurance, evidence, grading, persistence, reporting, and release authority live? |
 | [EVALUATION_MODEL.md](EVALUATION_MODEL.md) | What exactly constitutes a task, trial, outcome, policy violation, and verdict? |
 | [ADVERSARIAL_TESTING.md](ADVERSARIAL_TESTING.md) | How are red-team stimuli made deterministic, how is delivery required before grading, and what does an adversarial receipt still not prove? |
-| [OPENAI_ADAPTER.md](OPENAI_ADAPTER.md) | How are OpenAI Agents SDK events normalized, how does the dedicated MCP stdio tool-result bridge close, and why does neither provider nor protocol become the oracle? |
-| [MCP_LAB.md](MCP_LAB.md) | How are six deterministic MCP faults observed, and why does only one exact result fault currently have an explicit agent bridge? |
+| [OPENAI_ADAPTER.md](OPENAI_ADAPTER.md) | How are OpenAI Agents SDK events normalized, how do the dedicated MCP stdio result and ToolError-recovery bridges close, and why does neither provider nor protocol become the oracle? |
+| [MCP_LAB.md](MCP_LAB.md) | How are six deterministic MCP faults observed, and which two exact fault families currently have explicit agent bridges? |
 | [MCP_REMOTE_AUTH.md](MCP_REMOTE_AUTH.md) | How is the isolated loopback Streamable HTTP resource-server bearer/scope/verifier boundary tested over real TCP? |
 | [MCP_OAUTH_FLOW.md](MCP_OAUTH_FLOW.md) | How does the separated two-origin loopback OAuth flow verify discovery, compatibility DCR, PKCE, exact issuer/resource binding, exchange, introspection, and protected MCP use? |
 | [EVIDENCE_AND_REPLAY.md](EVIDENCE_AND_REPLAY.md) | How are local evidence records committed, reverified, and replayed without overstating provenance? |
@@ -89,16 +93,17 @@ Use the evidence contract that matches the boundary actually observed:
 | OpenAI local/SDK adversarial injection | `AttackDeliveryReceipt` | target-side attestation or automatic PASS |
 | standalone MCP fault observation | `MCPFaultReceipt` | agent consumption or behavior |
 | controlled MCP result correlated to exact OpenAI call | `MCPAgentToolResultReceipt` + `PROTOCOL_DELIVERY` | safe behavior or release acceptance |
+| controlled MCP ToolError followed by one verified causal retry/recovery | `MCPAgentToolErrorRecoveryReceipt` + `PROTOCOL_DELIVERY` | generic retry correctness, safe behavior, or release acceptance |
 | loopback MCP resource authorization | `MCPRemoteAuthReceipt` | OAuth issuance correctness or agent behavior |
 | separated loopback OAuth flow | `MCPOAuthFlowReceipt` | production IdP assurance or agent behavior |
 | persisted agent trial | `TrialEvidence` | authenticated publisher identity |
 | rederived session/release artifact | `AssuranceReport` | signed attestation |
 
-The explicit bridge is important precisely because the framework refuses to infer cross-domain delivery from matching labels or similar payloads.
+The explicit bridges are important precisely because the framework refuses to infer cross-domain delivery from matching labels or similar payloads.
 
 ## MCP agent-bridge scope in one paragraph
 
-`OpenAIAgentsMCPToolResultAdapter` creates a fresh official `MCPServerStdio` path for one `TOOL_RESULT_POISON` fault, verifies negotiated protocol `2026-07-28`, requires exactly one target behavioral call, records the exact first MCP result, pairs it to exactly one OpenAI target request/result using a stable call ID, verifies logical output equivalence, closes `MCPAgentToolResultReceipt`, emits `PROTOCOL_DELIVERY`, and then checks same-argument benign recovery on the same live MCP session after the behavioral run. That is the full current MCP→agent claim. It does not cover the other five fault families, hosted/remote MCP, live providers, or generic transport assurance.
+The repository implements two deliberately narrow OpenAI-agent → official-MCP-stdio assurance paths. `OpenAIAgentsMCPToolResultAdapter` verifies one `TOOL_RESULT_POISON` call, correlates the exact protocol result to one stable OpenAI call ID and model-visible result, and verifies benign recovery afterward on the same live session. `OpenAIAgentsMCPToolErrorRecoveryAdapter` verifies one real `TOOL_ERROR`, the exact model-visible SDK error output, then requires exactly one same-argument retry with a distinct call ID **after** the first result is visible in normalized chronology; that retry must return the configured benign result on the same live MCP session. Only after the complete error → observed result → retry → recovery relation closes is `MCPAgentToolErrorRecoveryReceipt` emitted as `PROTOCOL_DELIVERY`. Neither bridge establishes behavioral PASS by itself, and neither covers hosted/remote/Internet MCP, live-provider behavior, metadata/cache/schema/identity drift inside an agent trial, generic retry policies, authorization, or target-side attestation.
 
 ## Audited implementation checkpoint
 
@@ -114,6 +119,6 @@ Audited merged implementation source checkpoint `d98f9ca1feb1179504cd2181295a739
 - Python **3.11 minimum / 3.14 latest**, Ruff, formatter, Bandit, dependency audit, package integrity, and all **7/7 CI jobs**: green;
 - dependency audit reported **no known vulnerabilities**; the project package itself is skipped because it is not published on PyPI.
 
-This checkpoint identifies the audited merged implementation revision before this documentation-only synchronization. The documentation branch must pass its own full PR CI and does not retroactively relabel implementation evidence.
+This checkpoint remains a historical audited merged baseline. The ToolError-recovery capability described above is accepted only after its own exact-head CI, merge, and post-merge `main` verification; documentation does not retroactively relabel the older checkpoint.
 
 [← Repository README](../README.md)
