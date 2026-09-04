@@ -29,7 +29,7 @@ class OracleSnapshot(BaseModel):
     name: str = Field(min_length=1)
     verdict: TrialVerdict
     reasons: tuple[str, ...] = ()
-    critical: bool = False
+    critical: bool = Field(default=False, strict=True)
 
     @classmethod
     def from_oracle(cls, result: OracleResult) -> Self:
