@@ -6,12 +6,13 @@ The repository treats the evaluated agent and all provider/tool/MCP/memory/resou
 
 An adversarial agent trial is not behaviorally gradeable until the controlled evaluation environment has produced one exact valid delivery receipt bound to that scenario and attack. Failure to establish that precondition is `BLOCKED` evaluation uncertainty, not an agent defect.
 
-MCP has two additional evidence domains:
+MCP has three additional evidence domains:
 
 1. a configured protocol fault is not delivered until the **official MCP client** observes the exact fault-specific content or protocol-state relation;
-2. a configured remote-auth policy is not proven until the **real loopback HTTP boundary** produces the complete expected authentication, authorization, protected-resource metadata, and authorized-MCP observations.
+2. a configured resource-server authorization policy is not proven until the **real loopback HTTP boundary** produces the complete expected authentication, authorization, protected-resource metadata, and authorized-MCP observations;
+3. a configured OAuth-flow policy is not proven until a **separate loopback authorization-server/resource-server topology** closes discovery, compatible registration fallback, PKCE, exact issuer/resource binding, code exchange, authenticated token introspection, protected MCP use, and stored-authorization reuse.
 
-Neither MCP evidence family establishes agent behavioral resistance.
+None of those MCP evidence families establishes agent behavioral resistance.
 
 ## Deterministic controls
 
@@ -41,12 +42,23 @@ Implemented controls include:
 - `MCPFaultReceipt` binding both fault-material and exact canonical-observation digests without storing raw malicious text;
 - fresh-server/fresh-cache isolation and second-call benign recovery where applicable;
 - separate content-addressed `MCPRemoteAuthPolicy` and `MCPRemoteAuthReceipt` domains;
-- real pre-bound loopback TCP, Uvicorn, Streamable HTTP, and official-client execution for remote authorization;
+- real pre-bound loopback TCP, Uvicorn, Streamable HTTP, and official-client execution for resource-server authorization;
 - deterministic verifier-owned exact issuer/resource binding;
 - MCP SDK bearer authentication/expiry and required-scope enforcement observed as real HTTP 401/403 responses;
 - RFC 9728 protected-resource metadata fetched and verified over HTTP;
 - actual bearer token values excluded from remote-auth result/receipt serialization;
-- separate MCP protocol and remote-auth CI jobs rather than one broad green status;
+- separate content-addressed `MCPOAuthFlowPolicy` and `MCPOAuthFlowReceipt` domains;
+- independent pre-bound loopback authorization-server and resource-server origins;
+- protected-resource and authorization-server metadata discovery through the official OAuth client path;
+- Dynamic Client Registration as a compatibility fallback when no client registration is stored;
+- OAuth `state`, PKCE `S256`, exact RFC 9207 authorization-response issuer validation, and RFC 8707 resource binding;
+- deterministic authorization-code and opaque access-token issuance for the loopback laboratory;
+- authenticated HTTP token introspection from resource server to authorization server rather than direct shared-token-state verification;
+- fail-closed introspection checks for activity, issuer, resource, client identity, expiration, and subject shape;
+- protected `tools/list` and `tools/call` through the introspection-backed resource server;
+- reconnect proof that stored authorization is reused without a second registration, authorization, or token exchange;
+- authorization-code, access-token, and introspection-secret exclusion from OAuth probe/receipt serialization;
+- separate MCP protocol, resource-server auth, and OAuth-flow CI jobs rather than one broad green status;
 - integrity-verified local evidence persistence and exact historical replay;
 - pinned GitHub Actions and read-only workflow permissions.
 
@@ -107,9 +119,9 @@ Every probe gets a fresh server. Discovery probes get fresh cache state. Result/
 
 See [MCP Protocol Fault Laboratory](MCP_LAB.md).
 
-## MCP remote authorization security boundary
+## MCP resource-server authorization security boundary
 
-The remote-auth laboratory tests resource-server behavior over **real loopback TCP Streamable HTTP**, not an in-process ASGI test client.
+`MCPRemoteAuthLab` tests resource-server behavior over **real loopback TCP Streamable HTTP**, not an in-process ASGI test client.
 
 ### Enforcement ownership
 
@@ -125,7 +137,7 @@ Security documentation must attribute each control to its actual enforcement poi
 | RFC 9728 protected-resource metadata | MCP SDK protected-resource route |
 | actual protected MCP request | official Streamable HTTP client over loopback TCP |
 
-The repository does **not** claim the MCP SDK intrinsically validates issuer/resource merely because the laboratory does so. Those checks are application verifier policy.
+The repository does **not** claim the MCP SDK intrinsically validates issuer/resource merely because this laboratory does so. Those checks are application verifier policy.
 
 ### Fail-closed matrix
 
@@ -147,21 +159,62 @@ The 401/403 `WWW-Authenticate` challenges must point at the generated protected-
 
 The deterministic bearer values are not serialized into `MCPRemoteAuthProbeResult` or `MCPRemoteAuthReceipt`. The public `Bearer` challenge scheme remains in evidence because it is protocol metadata, not credential material.
 
-The receipt binds canonical observation digest rather than token values.
+This laboratory deliberately begins with deterministic token records. It proves resource-server enforcement; it does not itself prove how a token was registered, authorized, issued, or introspected.
 
 See [MCP Remote Authorization](MCP_REMOTE_AUTH.md).
 
+## MCP OAuth-flow security boundary
+
+`MCPOAuthFlowLab` closes a separate authorization-client/authorization-server boundary over two independent loopback origins.
+
+### Protocol ownership
+
+| Property | Owner / observation |
+|---|---|
+| protected-resource metadata | MCP resource-server RFC 9728 route + official OAuth client discovery |
+| authorization-server metadata | separate authorization-server origin |
+| compatibility client registration | authorization-server registration endpoint + official OAuth client |
+| OAuth state / PKCE `S256` | official OAuth client authorization request |
+| exact authorization-response issuer | official OAuth client RFC 9207 validation against discovered issuer |
+| exact resource indicator | authorization request, authorization code, access token, and introspection audience |
+| token issuance | deterministic loopback authorization-server provider |
+| token verification source | authenticated HTTP introspection to separate authorization-server origin |
+| protected MCP authorization | MCP resource-server middleware after introspection-backed verification |
+| stored authorization reuse | second MCP connection without new registration/authorization/token exchange |
+
+The issuer is canonical and exact. A slash mismatch is not normalized after metadata discovery. The resource server also does not directly read the authorization server's in-memory token dictionary; it obtains active-token metadata through the HTTP introspection endpoint.
+
+### Introspection fail-closed behavior
+
+The resource-server verifier rejects the token when introspection transport/HTTP/JSON fails, when `active` is not true, when issuer or audience/resource mismatches, when client identity is invalid, when expiration is invalid/expired, or when subject type is invalid.
+
+This is authenticated RFC 7662-style active-token introspection in a deterministic laboratory. It is not a claim of production RFC 7662 interoperability across arbitrary identity providers.
+
+### Credential minimization
+
+The authorization code, opaque access token, and resource-server introspection secret are intentionally absent from `MCPOAuthFlowProbeResult` and `MCPOAuthFlowReceipt` serialization. The standardized `Bearer` token-type label is protocol metadata.
+
+### DCR compatibility scope
+
+The tested client registers dynamically only because no client record exists in its in-memory storage. That demonstrates compatibility fallback behavior. It must not be described as the preferred modern MCP enrollment path; Client ID Metadata Documents remain outside this repository's implemented scope.
+
+See [MCP OAuth Flow Laboratory](MCP_OAUTH_FLOW.md).
+
 ## MCP security non-claims
 
-The two current MCP laboratories do **not** establish:
+The three current MCP laboratories do **not** establish:
 
-- agent behavior after consuming MCP content or encountering an authorization response;
+- agent behavior after consuming MCP content or encountering an authorization/OAuth response;
 - OpenAI hosted/MCP interception by `OpenAIAgentsAdapter`;
 - Internet-hosted or third-party MCP server fidelity;
 - stdio, reverse proxy, gateway, TLS, DNS, service-mesh, packet, latency, disconnect, retry, or rate-limit assurance;
-- a real authorization server issuing tokens;
-- production JWT/JWKS verification, introspection, federation, IdP compromise resistance, DPoP, mTLS, certificate/token binding, refresh/revocation lifecycle, or distributed credential caches;
-- CIMD, Dynamic Client Registration, PKCE, authorization-code, or SEP-990 identity-assertion flow assurance;
+- third-party or production authorization-server / identity-provider assurance;
+- production JWT/JWKS signature verification, key rotation, arbitrary token formats, federation, or IdP compromise resistance;
+- Client ID Metadata Documents, Enterprise Managed Authorization, or SEP-990 identity-assertion flow assurance;
+- DPoP, mTLS, certificate/token binding, hardware-backed keys, or other proof-of-possession mechanisms;
+- refresh-token issuance/rotation, revocation propagation, replay detection, production credential rotation/storage, or distributed credential caches;
+- arbitrary issuer federation/discovery beyond the exact separated loopback authorization server;
+- production RFC 7662 interoperability beyond the deterministic authenticated introspection contract implemented here;
 - public/cross-partition MCP cache sharing, cache poisoning, custom/shared stores, notification invalidation, TTL-expiry races, or arbitrary cache correctness;
 - arbitrary schema migrations or arbitrary tool-registry churn beyond the exact bound drift fixtures;
 - malformed framing/JSON-RPC, duplicate/out-of-order responses, or header-routing faults;
@@ -224,27 +277,31 @@ Exact canonical fixture JSON is appended to the first native SDK handoff context
 
 ## Integrity is not attestation
 
-`injector:<identity>`, MCP fault identities, and remote-auth policy identities are control-plane/content identities, not authenticated signer identities. Receipt/evidence roots are domain-separated integrity hashes, not signatures, MACs, trusted timestamps, or hardware attestation.
+`injector:<identity>`, MCP fault identities, remote-auth policy identities, and OAuth-flow policy identities are control-plane/content identities, not authenticated signer identities. Receipt/evidence roots are domain-separated integrity hashes, not signatures, MACs, trusted timestamps, or hardware attestation.
 
 A stronger deployment layer must separately address signer identity, trusted timestamps, tamper-resistant storage, transport authenticity, and independent target-side acknowledgements where required.
 
 ## Sensitive data
 
-Adversarial and MCP receipts store digests rather than raw attack/fault bodies or deterministic bearer credentials. Controlled boundaries necessarily expose the test stimulus or credential to the exact surface being tested. Normal redaction, minimization, retention, and access-control discipline still applies to tool outputs, protocol payloads, HTTP logs, session state, resource content, handoff context, and runtime application context.
+Adversarial and MCP receipts store digests and minimized protocol observations rather than raw attack/fault bodies or deterministic bearer/OAuth credentials. Controlled boundaries necessarily expose the test stimulus or credential to the exact surface being tested. Normal redaction, minimization, retention, and access-control discipline still applies to tool outputs, protocol payloads, HTTP logs, OAuth client state, session state, resource content, handoff context, and runtime application context.
 
 ## Deployment boundary
 
-Application-level evaluation and loopback protocol testing cannot by themselves prove process isolation, Internet transport security, secret-manager policy, production IAM, tenant isolation, sandbox containment, remote MCP fidelity, production memory/retrieval integrity, distributed handoff correctness, authorization-server security, or infrastructure fault behavior.
+Application-level evaluation and loopback protocol testing cannot by themselves prove process isolation, Internet transport security, secret-manager policy, production IAM, tenant isolation, sandbox containment, remote MCP fidelity, production memory/retrieval integrity, distributed handoff correctness, third-party authorization-server security, or infrastructure fault behavior.
 
 ## Current verification checkpoint
 
-- deterministic core: **183 passed, 20 deselected**;
-- branch coverage: **93.04%**;
-- strict mypy: **0 issues across 38 source files**;
+Source checkpoint `7132537c5041a7f2c828a7f3db3e5e52af020888`, CI run `33826363896`:
+
+- deterministic core: **183 passed, 23 deselected**;
+- branch coverage: **93.05%**;
+- strict mypy: **0 issues across 40 source files**;
 - deterministic OpenAI SDK suite: **11/11 passed**;
 - deterministic MCP protocol suite: **6/6 passed**;
 - deterministic MCP remote-auth suite: **3/3 passed**;
-- Python 3.11/3.13 quality, Ruff, formatter, Bandit, dependency audit, and package integrity: green.
+- deterministic MCP OAuth-flow suite: **3/3 passed**;
+- Python 3.11/3.13 quality, Ruff, formatter, Bandit, dependency audit, package integrity, and all seven CI jobs: green;
+- dependency audit reported no known vulnerabilities; the project package itself is skipped because it is not published on PyPI.
 
 ## Reporting vulnerabilities
 
