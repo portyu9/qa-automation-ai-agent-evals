@@ -618,12 +618,13 @@ def _exact_target_schema(tools: list[Any], target_tool: str) -> dict[str, object
             reason="MCP target discovery did not expose a JSON input schema",
         )
     try:
-        return schema_projection(raw_schema)
+        schema_projection(raw_schema)
     except ValueError as exc:
         raise AdapterPreconditionError(
             code="mcp_schema_target_contract_invalid",
             reason="MCP target schema is outside the controlled scalar-required contract",
         ) from exc
+    return copy.deepcopy(dict(raw_schema))
 
 
 def _result_is_error(result: object) -> bool:
