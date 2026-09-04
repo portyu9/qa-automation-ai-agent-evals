@@ -9,6 +9,7 @@ from typing import Any
 from agent_evals.adapters.base import AdapterPreconditionError, AdapterResult
 from agent_evals.adapters.openai_agents import _stringify_output
 from agent_evals.adapters.openai_handoff_authority import OpenAIAgentsHandoffAuthorityAdapter
+from agent_evals.authority import validated_handoff_epoch_before
 from agent_evals.contracts.models import ApprovalDecision, EvaluationScenario, SubjectFingerprint
 from agent_evals.evidence.approval_intent import ApprovalIntentError, ApprovalIntentReceipt
 from agent_evals.evidence.models import EvidenceEvent, EvidenceKind
@@ -254,8 +255,7 @@ class OpenAIAgentsHITLApprovalAdapter(OpenAIAgentsHandoffAuthorityAdapter):
         target_requests = [
             event
             for event in normalized
-            if event.kind is EvidenceKind.TOOL_REQUEST
-            and event.payload.get("call_id") == call_id
+            if event.kind is EvidenceKind.TOOL_REQUEST and event.payload.get("call_id") == call_id
         ]
         target_approvals = [
             event
@@ -266,8 +266,7 @@ class OpenAIAgentsHITLApprovalAdapter(OpenAIAgentsHandoffAuthorityAdapter):
         target_results = [
             event
             for event in normalized
-            if event.kind is EvidenceKind.TOOL_RESULT
-            and event.payload.get("call_id") == call_id
+            if event.kind is EvidenceKind.TOOL_RESULT and event.payload.get("call_id") == call_id
         ]
 
         if len(target_requests) != 1:
@@ -346,7 +345,11 @@ class OpenAIAgentsHITLApprovalAdapter(OpenAIAgentsHandoffAuthorityAdapter):
             }
         )
         stitched.append(enriched_request)
-        authority_epoch = sum(event.kind is EvidenceKind.HANDOFF for event in stitched[:request_sequence])
+        authority_epoch = validated_handoff_epoch_before(
+            scenario.authority,
+            stitched,
+            request_sequence,
+        )
 
         try:
             receipt = ApprovalIntentReceipt.create(
