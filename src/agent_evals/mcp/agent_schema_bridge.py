@@ -126,7 +126,9 @@ class MCPAgentToolSchemaDriftReceipt(BaseModel):
             recovery_arguments_sha256,
             _sha256_json(_EXPECTED_RECOVERY_ARGUMENTS),
         ):
-            raise ValueError("MCP schema-drift recovery does not use the bound replacement arguments")
+            raise ValueError(
+                "MCP schema-drift recovery does not use the bound replacement arguments"
+            )
 
         if not stale_protocol_text:
             raise ValueError("stale MCP schema-drift call must expose a non-empty rejection")
@@ -134,10 +136,14 @@ class MCPAgentToolSchemaDriftReceipt(BaseModel):
         agent_error_text = _extract_single_text_output(agent_error_output, phase="stale-call error")
         agent_error_sha256 = _sha256_text(agent_error_text)
         if not hmac.compare_digest(stale_protocol_sha256, agent_error_sha256):
-            raise ValueError("agent-observed schema rejection does not match MCP protocol observation")
+            raise ValueError(
+                "agent-observed schema rejection does not match MCP protocol observation"
+            )
 
         if protocol_recovery_text != _EXPECTED_RECOVERY_TEXT:
-            raise ValueError("MCP schema-drift recovery does not match the bound replacement result")
+            raise ValueError(
+                "MCP schema-drift recovery does not match the bound replacement result"
+            )
         protocol_recovery_sha256 = _sha256_text(protocol_recovery_text)
         expected_recovery_sha256 = _sha256_text(_EXPECTED_RECOVERY_TEXT)
         agent_recovery_text = _extract_single_text_output(
@@ -249,7 +255,9 @@ class MCPAgentToolSchemaDriftReceipt(BaseModel):
             self.stale_protocol_observation_sha256,
             self.agent_error_observation_sha256,
         ):
-            raise ValueError("agent schema rejection digest does not match protocol rejection digest")
+            raise ValueError(
+                "agent schema rejection digest does not match protocol rejection digest"
+            )
         if not hmac.compare_digest(
             self.expected_recovery_sha256,
             _sha256_text(_EXPECTED_RECOVERY_TEXT),
@@ -411,7 +419,9 @@ def _require_schema_drift_receipt_shape(receipt: MCPFaultReceipt) -> None:
     if receipt.protocol_version != _PROTOCOL_VERSION:
         raise ValueError(f"MCP schema-drift bridge requires protocol version {_PROTOCOL_VERSION}")
     if receipt.injection_point != _protocol_point(receipt.tool_name):
-        raise ValueError("MCP schema-drift receipt uses an unexpected protocol observation boundary")
+        raise ValueError(
+            "MCP schema-drift receipt uses an unexpected protocol observation boundary"
+        )
 
 
 def _require_fault_payload(fault: MCPFaultSpec, *, ttl_ms: int) -> None:
@@ -462,7 +472,9 @@ def _protocol_observation(
 
 
 def _require_protocol_chronology(ordinals: tuple[int, int, int, int, int, int]) -> None:
-    if any(isinstance(value, bool) or not isinstance(value, int) or value < 0 for value in ordinals):
+    if any(
+        isinstance(value, bool) or not isinstance(value, int) or value < 0 for value in ordinals
+    ):
         raise ValueError("MCP schema-drift protocol ordinals must be non-negative integers")
     if not all(left < right for left, right in pairwise(ordinals)):
         raise ValueError(
