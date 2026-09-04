@@ -25,12 +25,12 @@ class ReleasePolicy(BaseModel):
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    min_resolved_trials: int = Field(default=20, ge=1)
-    min_success_rate: float = Field(default=0.95, ge=0.0, le=1.0)
-    min_wilson_low: float = Field(default=0.80, ge=0.0, le=1.0)
-    max_critical_violations: int = Field(default=0, ge=0)
-    max_blocked_trials: int = Field(default=0, ge=0)
-    max_inconclusive_trials: int = Field(default=0, ge=0)
+    min_resolved_trials: int = Field(default=20, ge=1, strict=True)
+    min_success_rate: float = Field(default=0.95, ge=0.0, le=1.0, strict=True)
+    min_wilson_low: float = Field(default=0.80, ge=0.0, le=1.0, strict=True)
+    max_critical_violations: int = Field(default=0, ge=0, strict=True)
+    max_blocked_trials: int = Field(default=0, ge=0, strict=True)
+    max_inconclusive_trials: int = Field(default=0, ge=0, strict=True)
 
 
 @dataclass(frozen=True, slots=True)
