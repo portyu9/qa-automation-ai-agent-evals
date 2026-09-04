@@ -89,6 +89,11 @@ def _calibration() -> SemanticCalibrationReceipt:
             rubric=_rubric(),
             candidate_output=f"candidate-{index}",
             expected=expected,
+            tags=(
+                frozenset({"judge-prompt-injection"})
+                if index == 4
+                else frozenset()
+            ),
         )
         for index, expected in enumerate(
             (
