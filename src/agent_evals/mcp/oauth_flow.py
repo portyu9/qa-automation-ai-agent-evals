@@ -317,7 +317,8 @@ class _AuthorizationServerProvider:
         self.codes.pop(authorization_code.code, None)
         return OAuthToken(
             access_token=access_value,
-            token_type="Bearer",
+            # RFC 6749 token type label; this is protocol metadata, not credential material.
+            token_type="Bearer",  # nosec B106
             expires_in=3600,
             scope=" ".join(authorization_code.scopes),
         )
@@ -358,7 +359,8 @@ class _AuthorizationServerProvider:
             "iss": str(claims.get("iss", "")),
             "scope": " ".join(access.scopes),
             "sub": access.subject,
-            "token_type": "Bearer",
+            # RFC 7662 token type label; this is protocol metadata, not credential material.
+            "token_type": "Bearer",  # nosec B105
         }
         self.last_introspection = response
         return response
