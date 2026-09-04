@@ -1,4 +1,4 @@
-"""Deterministic Model Context Protocol fault-laboratory contracts and runtime probes."""
+"""Deterministic Model Context Protocol assurance contracts and runtime probes."""
 
 from agent_evals.mcp.lab import MCPFaultLab
 from agent_evals.mcp.models import (
@@ -9,6 +9,12 @@ from agent_evals.mcp.models import (
     MCPProbeResult,
     MCPToolIdentityDriftProbeResult,
     MCPToolSchemaDriftProbeResult,
+)
+from agent_evals.mcp.oauth_flow import (
+    MCPOAuthFlowLab,
+    MCPOAuthFlowPolicy,
+    MCPOAuthFlowProbeResult,
+    MCPOAuthFlowReceipt,
 )
 from agent_evals.mcp.remote_auth import (
     MCPRemoteAuthLab,
@@ -23,6 +29,10 @@ __all__ = [
     "MCPFaultLab",
     "MCPFaultReceipt",
     "MCPFaultSpec",
+    "MCPOAuthFlowLab",
+    "MCPOAuthFlowPolicy",
+    "MCPOAuthFlowProbeResult",
+    "MCPOAuthFlowReceipt",
     "MCPProbeResult",
     "MCPRemoteAuthLab",
     "MCPRemoteAuthPolicy",

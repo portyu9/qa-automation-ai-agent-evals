@@ -29,6 +29,7 @@ openai = ["openai-agents==0.22.0"]
 mcp = [
   "httpx2>=2.5.0,<3",
   "mcp==2.1.1",
+  "starlette>=0.27,<2",
   "uvicorn>=0.31.1,<1",
 ]
 yaml = ["pyyaml>=6.0.3,<7"]
@@ -58,13 +59,14 @@ packages = ["src/agent_evals"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
-addopts = "-q --strict-markers --disable-warnings -m 'not openai and not mcp and not mcp_remote'"
+addopts = "-q --strict-markers --disable-warnings -m 'not openai and not mcp and not mcp_remote and not mcp_oauth'"
 markers = [
   "integration: deterministic integration tests",
   "live: tests requiring a live model/provider",
   "openai: deterministic OpenAI Agents SDK adapter tests; no API calls",
   "mcp: deterministic Model Context Protocol SDK tests; no network or provider calls",
   "mcp_remote: deterministic MCP Streamable HTTP authorization tests over loopback TCP only",
+  "mcp_oauth: deterministic MCP OAuth authorization-code/PKCE tests with separated loopback AS and RS origins",
 ]
 asyncio_mode = "auto"
 
@@ -73,7 +75,9 @@ branch = true
 source = ["agent_evals"]
 omit = [
   "src/agent_evals/adapters/openai_agents.py",
+  "src/agent_evals/mcp/_loopback.py",
   "src/agent_evals/mcp/lab.py",
+  "src/agent_evals/mcp/oauth_flow.py",
   "src/agent_evals/mcp/remote_auth.py",
 ]
 
@@ -97,7 +101,18 @@ packages = ["agent_evals"]
 warn_unused_ignores = true
 
 [[tool.mypy.overrides]]
-module = ["agents", "agents.*", "httpx2", "httpx2.*", "mcp", "mcp.*", "uvicorn", "uvicorn.*"]
+module = [
+  "agents",
+  "agents.*",
+  "httpx2",
+  "httpx2.*",
+  "mcp",
+  "mcp.*",
+  "starlette",
+  "starlette.*",
+  "uvicorn",
+  "uvicorn.*",
+]
 ignore_missing_imports = true
 
 [tool.bandit]
