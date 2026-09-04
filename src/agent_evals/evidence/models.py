@@ -77,8 +77,8 @@ class TrialEvidence(BaseModel):
     final_state: dict[str, Any] = Field(default_factory=dict)
     final_output: str | None = None
     elapsed_ms: float = Field(default=0.0, ge=0.0, allow_inf_nan=False)
-    input_tokens: int = Field(default=0, ge=0)
-    output_tokens: int = Field(default=0, ge=0)
+    input_tokens: int = Field(default=0, ge=0, strict=True)
+    output_tokens: int = Field(default=0, ge=0, strict=True)
     estimated_cost_usd: float = Field(default=0.0, ge=0.0, allow_inf_nan=False)
 
     @model_validator(mode="after")
