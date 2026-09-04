@@ -146,9 +146,12 @@ Before subject grading, the evaluator dispatches each known protocol-delivery so
 
 | Source | Revalidated receipt | Relation rechecked |
 |---|---|---|
+| `bridge:mcp-agent:tool-metadata` | `MCPAgentToolMetadataReceipt` | exact discovery-description/model-visible-definition binding, target schema-digest equality, and pre-behavior delivery chronology |
 | `bridge:mcp-agent:tool-result` | `MCPAgentToolResultReceipt` | exact result-bridge identity and model-visible output binding |
 | `bridge:mcp-agent:tool-error-recovery` | `MCPAgentToolErrorRecoveryReceipt` | exact error/retry identities, causal chronology, argument and recovery bindings |
 | `bridge:mcp-agent:tool-schema-drift` | `MCPAgentToolSchemaDriftReceipt` | exact schema/argument/observation digests, strict protocol chronology, and host-refreshed adaptation binding |
+
+The metadata replay verifier does not recreate MCP discovery or a model request. It rechecks the typed receipt's exact `TOOL_METADATA_POISON` kind, protocol revision and `tools/list:<tool>:description` observation point, description digest relation, tool identity, schema-digest relation, scenario identity, semantic root, and chronology. Leading pre-model `ATTACK_DELIVERY` is permitted, but metadata `PROTOCOL_DELIVERY` appearing after normalized model/agent behavior fails closed.
 
 The schema-drift replay verifier does not recreate a refresh. It checks that the historical receipt still proves the exact recorded relation: bound v1/cached/v2 schema digests, stale/recovery argument digests, matching protocol/model-visible observations, distinct call identities, strict `initial-list < swap < stale-call < cache-invalidation < refreshed-list < recovery-call` chronology, and a valid domain-separated root.
 

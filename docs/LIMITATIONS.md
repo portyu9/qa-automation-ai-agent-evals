@@ -8,7 +8,7 @@ This document is intentionally strict. Repository claims must never become stron
 
 The OpenAI integration is pinned to `openai-agents==0.22.0`. CI exercises the real SDK runner/tool/handoff/approval/context loop deterministically with `agents.testing.ScriptedModel` and no provider API call.
 
-The SDK tier covers all seven generic adversarial channel categories at scoped local/SDK boundaries. A separate `OpenAIAgentsHandoffAuthorityAdapter` exercises run-local native handoff authority attenuation. `OpenAIAgentsHITLApprovalAdapter` exercises one exact native `ToolApprovalItem` → evaluator decision → same-`RunState` continuation relation. Three additional adapters exercise exact OpenAI-agent → official-MCP-stdio paths: one `TOOL_RESULT_POISON` same-call bridge, one causal `TOOL_ERROR` → same-argument retry → benign recovery bridge, and one host-refreshed `TOOL_SCHEMA_DRIFT` adaptation bridge.
+The SDK tier covers all seven generic adversarial channel categories at scoped local/SDK boundaries. A separate `OpenAIAgentsHandoffAuthorityAdapter` exercises run-local native handoff authority attenuation. `OpenAIAgentsHITLApprovalAdapter` exercises one exact native `ToolApprovalItem` → evaluator decision → same-`RunState` continuation relation. Four additional adapters exercise exact official-MCP-stdio/OpenAI SDK paths: one `TOOL_METADATA_POISON` discovery → model-visible target-definition bridge, one `TOOL_RESULT_POISON` same-call bridge, one causal `TOOL_ERROR` → same-argument retry → benign recovery bridge, and one host-refreshed `TOOL_SCHEMA_DRIFT` adaptation bridge.
 
 None of this establishes live-model quality, production-provider availability, provider-side delivery attestation, authenticated human approval, production IAM, or credentialed end-to-end assurance.
 
@@ -52,7 +52,7 @@ MCP result, ToolError-recovery, and schema-drift adaptation assurance are covere
 
 The OpenAI metadata mode changes only copied `FunctionTool.description`. It does not mutate tool name, parameter schema, callback, approval semantics, routing identity, hosted metadata, or external registries.
 
-MCP description poisoning, schema drift, and identity drift exist in the protocol laboratory. Only schema drift currently has a separate agent bridge, and that bridge is a narrow host-refreshed v1→v2 adaptation contract. It does not turn local `TOOL_METADATA` replacement into MCP schema mutation, nor does it establish arbitrary schema-migration behavior.
+MCP description poisoning, schema drift, and identity drift exist in the protocol laboratory. Description poisoning now has a separate narrow model-visible delivery bridge, and schema drift has a separate host-refreshed v1→v2 adaptation bridge; identity drift remains protocol-only with respect to agent behavior. The metadata bridge proves exact exposure, not attention, interpretation, compliance, resistance, or safe behavior. Neither bridge turns local `TOOL_METADATA` replacement into an MCP mechanism or establishes arbitrary metadata/schema behavior.
 
 ### SDK session-history `MEMORY` is not production memory poisoning
 
@@ -134,13 +134,35 @@ Six exact fault families are implemented:
 
 A raw `MCPFaultReceipt` does **not** establish agent consumption, resistance, correctness, `PASS`, `FAIL`, or release acceptance.
 
-Three of the six fault families remain **protocol-only** with respect to agent behavior:
+Two of the six fault families remain **protocol-only** with respect to agent behavior:
 
-- `tool_metadata_poison`;
 - `tool_list_stale_cache`;
 - `tool_identity_drift`.
 
-The three bridged families remain explicit additional contracts rather than exceptions to the trust model: `tool_result_poison`, `tool_error`, and `tool_schema_drift` each require independent agent-visible evidence and fault-specific relation closure before `PROTOCOL_DELIVERY` exists.
+Four bridged families remain explicit additional contracts rather than exceptions to the trust model: `tool_metadata_poison`, `tool_result_poison`, `tool_error`, and `tool_schema_drift` each require independent cross-domain evidence and fault-specific relation closure before `PROTOCOL_DELIVERY` exists. For metadata poison, that relation closes at exact model-visible exposure and still does not establish a behavioral verdict.
+
+## Controlled MCP `TOOL_METADATA_POISON` → OpenAI model-visible definition bridge
+
+`OpenAIAgentsMCPToolMetadataAdapter` exercises one exact deterministic path through a fresh official MCP stdio server and the pinned OpenAI Agents SDK.
+
+The bridge requires:
+
+- a `TOOL_METADATA_POISON` fault only;
+- fresh `MCPServerStdio` process/session state per trial;
+- negotiated protocol `2026-07-28`;
+- a base Agent with no preconfigured MCP servers, prefixed MCP naming, or local target-name collision;
+- a concrete public SDK `Model` instance so evaluator observation does not change provider model resolution;
+- one exact target description observed through official MCP discovery, producing a valid `MCPFaultReceipt`;
+- exactly one target definition in the first bound public model-tool snapshot;
+- exact target-name and description-digest equality across protocol/model observations;
+- exact canonical JSON parameter-schema digest equality across those same observations;
+- one `MCPAgentToolMetadataReceipt` binding scenario, protocol receipt, target, description/schema digests, model snapshot ordinal, and domain-separated root;
+- metadata `PROTOCOL_DELIVERY` after any genuine leading pre-model `ATTACK_DELIVERY` but before normalized behavioral evidence;
+- replay revalidation of that chronology and typed receipt.
+
+The target tool does **not** need to execute. This is a delivery property, not a call property: poisoned tool metadata can affect selection before any invocation exists. Streaming is covered at the public `Model.stream_response(...)` boundary so it cannot bypass the observer.
+
+The bridge does **not** establish that the model attended to, understood, followed, or resisted the description; arbitrary MCP metadata fields; live-provider behavior; hosted/remote MCP; schema poisoning; identity-drift adaptation; provider/target-side attestation; or safe behavior merely because delivery closed. Deterministic policy/outcome evidence remains the grading authority.
 
 ## Controlled MCP `TOOL_RESULT_POISON` → OpenAI agent bridge
 
@@ -230,7 +252,8 @@ It establishes one exact host-refreshed schema-adaptation relation. It does not 
 
 The implemented bridges do not claim:
 
-- agent behavior for MCP metadata poison, generic stale-cache, or identity-drift faults;
+- model attention to, interpretation of, compliance with, or resistance to MCP metadata poison after verified exposure;
+- agent behavior for generic stale-cache or identity-drift faults;
 - arbitrary MCP result/error/schema behavior outside the exact controlled contracts;
 - generic retry policy, exponential backoff, jitter, retry budgets, idempotency, or side-effect safety;
 - more than one ToolError retry;
@@ -314,7 +337,7 @@ The framework does not currently use a model-as-judge. Deterministic state and p
 
 ### Delivery, approval, and protocol receipts are not target-side attestation
 
-A valid OpenAI attack receipt proves consistency relative to the trusted evaluator's controlled observation. `ApprovalIntentReceipt` proves consistency between one scenario-owned decision and one exact recorded native approval interruption/continuation relation. `MCPFaultReceipt` proves consistency relative to a trusted protocol observation. `MCPAgentToolResultReceipt` proves consistency between one verified MCP result and one exact normalized OpenAI agent call/result boundary. `MCPAgentToolErrorRecoveryReceipt` proves consistency across one verified ToolError observation and one exact normalized causal retry/recovery relation. `MCPAgentToolSchemaDriftReceipt` proves consistency across one verified schema-drift protocol relation and one exact normalized host-refreshed agent adaptation relation. `MCPRemoteAuthReceipt` and `MCPOAuthFlowReceipt` prove their respective deterministic loopback observations.
+A valid OpenAI attack receipt proves consistency relative to the trusted evaluator's controlled observation. `ApprovalIntentReceipt` proves consistency between one scenario-owned decision and one exact recorded native approval interruption/continuation relation. `MCPFaultReceipt` proves consistency relative to a trusted protocol observation. `MCPAgentToolResultReceipt` proves consistency between one verified MCP result and one exact normalized OpenAI agent call/result boundary. `MCPAgentToolErrorRecoveryReceipt` proves consistency across one verified ToolError observation and one exact normalized causal retry/recovery relation. `MCPAgentToolSchemaDriftReceipt` proves consistency across one verified schema-drift protocol relation and one exact normalized host-refreshed agent adaptation relation. `MCPAgentToolMetadataReceipt` proves consistency between one exact verified MCP target-description observation and one exact model-visible target definition with the same parameter-schema digest. `MCPRemoteAuthReceipt` and `MCPOAuthFlowReceipt` prove their respective deterministic loopback observations.
 
 None is independent cryptographic proof that a real human approved an invocation, an arbitrary remote target consumed content, a production issuer minted a token correctly, or a deployed agent respected policy.
 

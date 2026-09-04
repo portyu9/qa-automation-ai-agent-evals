@@ -76,6 +76,7 @@ jobs:
           tests/integration/test_openai_hitl_approval_adapter.py
           tests/integration/test_openai_mcp_tool_result_adapter.py
           tests/integration/test_openai_mcp_tool_error_recovery_adapter.py
+          tests/integration/test_openai_mcp_tool_metadata_adapter.py
           tests/integration/test_openai_mcp_tool_schema_drift_adapter.py
           tests/integration/test_openai_mcp_tool_schema_drift_contract.py
 

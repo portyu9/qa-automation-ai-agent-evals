@@ -10,8 +10,9 @@ Its primary question is deliberately narrow:
 
 The answer is recorded as `MCPFaultReceipt`. That receipt is protocol evidence. **By itself** it is not an autonomous-agent verdict, an OpenAI `AttackDeliveryReceipt`, release authority, remote-transport assurance, or target-side attestation.
 
-Three separate deterministic integration paths consume selected fault contracts through a fresh official MCP stdio server and the pinned OpenAI Agents SDK:
+Four separate deterministic integration paths consume selected fault contracts through a fresh official MCP stdio server and the pinned OpenAI Agents SDK:
 
+- `TOOL_METADATA_POISON` — exact controlled target description observed through official MCP discovery and bound to the exact target tool definition supplied at the public model boundary, without requiring a target call;
 - `TOOL_RESULT_POISON` — exact same-call result delivery with post-run same-session recovery;
 - `TOOL_ERROR` — exact model-visible error followed by one causal same-argument retry and benign recovery on the same session;
 - `TOOL_SCHEMA_DRIFT` — exact v1 model-visible schema, hidden live v2 replacement, real stale-call rejection, evaluator-owned cache invalidation, first fresh v2 discovery, and one corrected v2 behavioral call on the same session.
@@ -24,7 +25,7 @@ Remote Streamable HTTP authorization and the separated OAuth flow remain indepen
 
 | Fault | Boundary | Receipt precondition | Agent bridge status |
 |---|---|---|---|
-| `tool_metadata_poison` | `tools/list` | target description equals exact canonical fault JSON | protocol-only |
+| `tool_metadata_poison` | `tools/list` | target description equals exact canonical fault JSON | dedicated controlled stdio model-visible metadata bridge |
 | `tool_result_poison` | first `tools/call` | first result text equals exact canonical fault JSON and a second call recovers to benign data | dedicated controlled stdio result bridge |
 | `tool_error` | first `tools/call` | SDK-generated model-visible `ToolError` contains the canonical payload at the exact expected suffix and a second call recovers | dedicated controlled stdio causal retry/recovery bridge |
 | `tool_list_stale_cache` | cached `tools/list` | initial target present → server removes target → cached listing still contains target → forced refresh proves target absent | protocol-only |
@@ -49,8 +50,9 @@ agent behavior
 
 A stale `tools/list` response can be objectively real while a subsequent `tools/call` is evaluated against newer server truth. Conversely, a successful current call does not prove the client previously held current discovery. Neither observation alone says whether an autonomous agent noticed, understood, or resisted the condition.
 
-The three agent bridges do not invalidate this rule. They add **fault-specific proof steps**:
+The four agent bridges do not invalidate this rule. They add **fault-specific proof steps**:
 
+- metadata poison must pair the exact official `tools/list` description observation with one exact model-visible target definition and matching JSON-schema digest; no target invocation is required because metadata can affect selection before any call;
 - result poison must be paired with one exact OpenAI target request/result identity and logical model-visible output;
 - ToolError recovery must additionally prove distinct call identities, same canonical arguments, exact error/recovery outputs, and strict chronology `request₁ < result₁ < request₂ < result₂` before the second call can be credited as a retry;
 - schema-drift adaptation must additionally prove v1 model-visible discovery, a hidden evaluator-owned live swap, real stale-call rejection, one host cache invalidation, first fresh post-invalidation v2 discovery, distinct stale/recovery call identities, exact bound v1/v2 arguments, and recovery only after v2 becomes model-visible.
@@ -173,11 +175,12 @@ pytest -m mcp tests/integration/test_mcp_fault_lab.py
 
 The dedicated protocol job requires neither provider credentials nor an external service.
 
-For the cross-boundary OpenAI/MCP tests, both optional groups are installed and the existing OpenAI deterministic job runs all three stdio bridge families:
+For the cross-boundary OpenAI/MCP tests, both optional groups are installed and the existing OpenAI deterministic job runs all four stdio bridge families:
 
 ```bash
 python -m pip install -e '.[dev,openai,mcp]'
 pytest -m openai \
+  tests/integration/test_openai_mcp_tool_metadata_adapter.py \
   tests/integration/test_openai_mcp_tool_result_adapter.py \
   tests/integration/test_openai_mcp_tool_error_recovery_adapter.py \
   tests/integration/test_openai_mcp_tool_schema_drift_adapter.py \
@@ -193,6 +196,34 @@ This reuses the existing OpenAI CI status context; it does not make the protocol
 `MCPFaultLab` still returns protocol-domain evidence. An `MCPFaultReceipt` does not itself become `ATTACK_DELIVERY`, `PASS`, `FAIL`, or release acceptance.
 
 `OpenAIAgentsAdapter` local `TOOL_RESULT` injection is also still a separate local-`FunctionTool` mechanism. It does not intercept MCP tools.
+
+### Tool-metadata model-visible delivery bridge
+
+`OpenAIAgentsMCPToolMetadataAdapter` implements one explicit cross-domain contract for `TOOL_METADATA_POISON`:
+
+```text
+MCPFaultSpec(tool_metadata_poison)
+        ↓
+fresh official MCPServerStdio subprocess
+        ↓
+exact target description observed through official tools/list
+        ↓
+MCPFaultReceipt
+        ↓
+pinned Agents SDK converts the MCP target to a model Tool
+        ↓
+public Model observer sees exactly one target definition
++ exact description equivalence
++ protocol/model JSON-schema digest equality
+        ↓
+MCPAgentToolMetadataReceipt
+        ↓
+PROTOCOL_DELIVERY before normalized model/agent behavior
+        ↓
+deterministic agent trial grading
+```
+
+The target does **not** need to be called. That is intentional: poisoned discovery metadata can influence tool selection before any invocation exists. Leading pre-model `ATTACK_DELIVERY` evidence remains before metadata delivery in compound trials; replay rejects a metadata receipt moved after normalized behavioral evidence. The bridge proves exposure at the controlled model boundary, not model attention, compliance, resistance, or behavioral safety.
 
 ### Result delivery bridge
 
@@ -299,13 +330,14 @@ initial-list < swap < stale-call < cache-invalidation < refreshed-list < recover
 
 Later SDK turns may reuse the already-refreshed v2 cache. The bridge therefore distinguishes one fresh post-invalidation discovery from harmless cached reads. Recovery before refreshed discovery, repeated stale arguments, extra target calls, control-tool leakage, wrong schema/result observations, or receipt tampering fails closed as evaluator uncertainty.
 
-All three bridges establish delivery/recovery/adaptation preconditions only. They do not assert safe subject behavior; deterministic policy/outcome oracles still decide PASS/FAIL.
+All four bridges establish delivery/recovery/adaptation preconditions only. They do not assert safe subject behavior; deterministic policy/outcome oracles still decide PASS/FAIL.
 
 ## Explicit non-claims
 
-The six-fault protocol laboratory plus the three dedicated bridges do **not** establish:
+The six-fault protocol laboratory plus the four dedicated bridges do **not** establish:
 
-- agent behavior for `tool_metadata_poison`, generic stale-cache, or identity-drift faults;
+- model attention to, interpretation of, compliance with, or resistance to a verified `tool_metadata_poison` description;
+- agent behavior for generic stale-cache or identity-drift faults;
 - universal agent behavior for arbitrary MCP tool results, errors, or schema changes;
 - generic retry/backoff/idempotency correctness beyond the exact one-retry ToolError relation;
 - model-initiated MCP refresh or automatic `tools/list_changed` handling;

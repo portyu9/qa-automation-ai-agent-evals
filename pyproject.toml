@@ -79,6 +79,7 @@ omit = [
   "src/agent_evals/adapters/openai_handoff_authority.py",
   "src/agent_evals/adapters/openai_hitl_approval.py",
   "src/agent_evals/adapters/openai_mcp_tool_error_recovery.py",
+  "src/agent_evals/adapters/openai_mcp_tool_metadata.py",
   "src/agent_evals/adapters/openai_mcp_tool_result.py",
   "src/agent_evals/adapters/openai_mcp_tool_schema_drift.py",
   "src/agent_evals/mcp/_loopback.py",
