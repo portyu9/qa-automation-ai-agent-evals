@@ -59,7 +59,9 @@ class MCPAgentToolMetadataReceipt(BaseModel):
         _require_metadata_receipt(validated_protocol)
         _validate_identity_text(agent_tool_name, label="agent tool name")
         if agent_tool_name != validated_protocol.tool_name:
-            raise ValueError("model-visible tool name does not match the verified MCP protocol tool")
+            raise ValueError(
+                "model-visible tool name does not match the verified MCP protocol tool"
+            )
         if isinstance(model_snapshot_ordinal, bool) or model_snapshot_ordinal < 0:
             raise ValueError("model snapshot ordinal must be a non-negative integer")
 
@@ -112,7 +114,9 @@ class MCPAgentToolMetadataReceipt(BaseModel):
     def verify_bridge(self) -> Self:
         _require_metadata_receipt(self.protocol_receipt)
         if self.agent_tool_name != self.protocol_receipt.tool_name:
-            raise ValueError("model-visible tool name does not match the verified MCP protocol tool")
+            raise ValueError(
+                "model-visible tool name does not match the verified MCP protocol tool"
+            )
         if not hmac.compare_digest(
             self.model_description_sha256,
             self.protocol_receipt.observation_sha256,
@@ -124,7 +128,9 @@ class MCPAgentToolMetadataReceipt(BaseModel):
             raise ValueError("protocol and model-visible MCP tool schema digests do not match")
         expected_root = _receipt_root(self.model_dump(mode="json", exclude={"receipt_root"}))
         if not hmac.compare_digest(expected_root, self.receipt_root):
-            raise ValueError("MCP-to-agent tool-metadata receipt root does not match receipt content")
+            raise ValueError(
+                "MCP-to-agent tool-metadata receipt root does not match receipt content"
+            )
         return self
 
     def to_event(self, *, sequence: int) -> EvidenceEvent:
@@ -192,4 +198,6 @@ def _canonical_json_bytes(value: object) -> bytes:
             allow_nan=False,
         ).encode("utf-8")
     except (TypeError, ValueError) as exc:
-        raise ValueError("MCP metadata receipt material must be finite JSON-compatible data") from exc
+        raise ValueError(
+            "MCP metadata receipt material must be finite JSON-compatible data"
+        ) from exc
