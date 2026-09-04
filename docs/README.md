@@ -24,6 +24,8 @@ Environment availability    ≠ environment consumption
 MCP fault configuration     ≠ MCP client observation
 Cached MCP discovery        ≠ current MCP server contract
 Current MCP contract        ≠ cached client discovery
+Cache invalidation          ≠ model-owned refresh
+Refreshed discovery         ≠ correct agent adaptation
 Raw MCP protocol receipt    ≠ agent behavioral assurance
 Verified MCP bridge         ≠ automatic PASS
 Bearer authentication       ≠ verifier-owned issuer/resource policy
@@ -60,11 +62,17 @@ MCPAgentToolErrorRecoveryReceipt
     = verified causal error → retry → recovery relation binding one
       MCP ToolError observation to two distinct OpenAI call identities
 
+MCPAgentToolSchemaDriftReceipt
+    = verified host-refreshed v1 rejection → v2 discovery → corrected-call
+      relation with strict protocol chronology and distinct OpenAI call identities
+
 Trial PASS / FAIL
     = deterministic subject grading after required delivery evidence closes
 ```
 
-Two MCP fault families currently have explicit agent bridges: `MCPFaultKind.TOOL_RESULT_POISON` and `MCPFaultKind.TOOL_ERROR`. The other four MCP protocol fault families remain protocol-only with respect to agent behavior.
+Three MCP fault families currently have explicit agent bridges: `MCPFaultKind.TOOL_RESULT_POISON`, `MCPFaultKind.TOOL_ERROR`, and `MCPFaultKind.TOOL_SCHEMA_DRIFT`. `TOOL_METADATA_POISON`, `TOOL_LIST_STALE_CACHE`, and `TOOL_IDENTITY_DRIFT` remain protocol-only with respect to agent behavior.
+
+The schema-drift bridge is intentionally host-refreshed: the harness owns the live schema replacement, the evaluator/host adapter owns one cache invalidation, the official MCP session supplies the first fresh post-invalidation v2 discovery, and the model is credited only for changing the subsequent call after v2 becomes visible. It does not claim model-initiated refresh or automatic `tools/list_changed` handling.
 
 ## Current documentation set
 
@@ -73,11 +81,11 @@ Two MCP fault families currently have explicit agent bridges: `MCPFaultKind.TOOL
 | [ARCHITECTURE.md](ARCHITECTURE.md) | Where do identity, adversarial derivation, protocol faults, the MCP→agent bridges, resource-server authorization, OAuth-flow assurance, evidence, grading, persistence, reporting, and release authority live? |
 | [EVALUATION_MODEL.md](EVALUATION_MODEL.md) | What exactly constitutes a task, trial, outcome, policy violation, and verdict? |
 | [ADVERSARIAL_TESTING.md](ADVERSARIAL_TESTING.md) | How are red-team stimuli made deterministic, how is delivery required before grading, and what does an adversarial receipt still not prove? |
-| [OPENAI_ADAPTER.md](OPENAI_ADAPTER.md) | How are OpenAI Agents SDK events normalized, how do the dedicated MCP stdio result and ToolError-recovery bridges close, and why does neither provider nor protocol become the oracle? |
-| [MCP_LAB.md](MCP_LAB.md) | How are six deterministic MCP faults observed, and which two exact fault families currently have explicit agent bridges? |
+| [OPENAI_ADAPTER.md](OPENAI_ADAPTER.md) | How are OpenAI Agents SDK events normalized; how do result, ToolError-recovery, and host-refreshed schema-drift stdio bridges close; and why does neither provider nor protocol become the oracle? |
+| [MCP_LAB.md](MCP_LAB.md) | How are six deterministic MCP faults observed, and which three exact fault families currently have explicit agent bridges? |
 | [MCP_REMOTE_AUTH.md](MCP_REMOTE_AUTH.md) | How is the isolated loopback Streamable HTTP resource-server bearer/scope/verifier boundary tested over real TCP? |
 | [MCP_OAUTH_FLOW.md](MCP_OAUTH_FLOW.md) | How does the separated two-origin loopback OAuth flow verify discovery, compatibility DCR, PKCE, exact issuer/resource binding, exchange, introspection, and protected MCP use? |
-| [EVIDENCE_AND_REPLAY.md](EVIDENCE_AND_REPLAY.md) | How are local evidence records committed, reverified, and replayed without overstating provenance? |
+| [EVIDENCE_AND_REPLAY.md](EVIDENCE_AND_REPLAY.md) | How are local evidence records committed, reverified, and replayed without overstating provenance, including semantic revalidation of persisted protocol-delivery receipts? |
 | [ASSURANCE_REPORTS.md](ASSURANCE_REPORTS.md) | How are session conclusions bound and rederived without turning a serialized score or gate label into authority? |
 | [METAMORPHIC_TESTING.md](METAMORPHIC_TESTING.md) | Which behavioral relations can be verified without brittle golden outputs? |
 | [STATISTICAL_ASSURANCE.md](STATISTICAL_ASSURANCE.md) | How is nondeterministic behavior quantified without overstating certainty? |
@@ -94,6 +102,7 @@ Use the evidence contract that matches the boundary actually observed:
 | standalone MCP fault observation | `MCPFaultReceipt` | agent consumption or behavior |
 | controlled MCP result correlated to exact OpenAI call | `MCPAgentToolResultReceipt` + `PROTOCOL_DELIVERY` | safe behavior or release acceptance |
 | controlled MCP ToolError followed by one verified causal retry/recovery | `MCPAgentToolErrorRecoveryReceipt` + `PROTOCOL_DELIVERY` | generic retry correctness, safe behavior, or release acceptance |
+| controlled live schema replacement followed by host refresh and exact corrected agent call | `MCPAgentToolSchemaDriftReceipt` + `PROTOCOL_DELIVERY` | model-owned refresh, arbitrary schema migration, safe behavior, or release acceptance |
 | loopback MCP resource authorization | `MCPRemoteAuthReceipt` | OAuth issuance correctness or agent behavior |
 | separated loopback OAuth flow | `MCPOAuthFlowReceipt` | production IdP assurance or agent behavior |
 | persisted agent trial | `TrialEvidence` | authenticated publisher identity |
@@ -103,7 +112,7 @@ The explicit bridges are important precisely because the framework refuses to in
 
 ## MCP agent-bridge scope in one paragraph
 
-The repository implements two deliberately narrow OpenAI-agent → official-MCP-stdio assurance paths. `OpenAIAgentsMCPToolResultAdapter` verifies one `TOOL_RESULT_POISON` call, correlates the exact protocol result to one stable OpenAI call ID and model-visible result, and verifies benign recovery afterward on the same live session. `OpenAIAgentsMCPToolErrorRecoveryAdapter` verifies one real `TOOL_ERROR`, the exact model-visible SDK error output, then requires exactly one same-argument retry with a distinct call ID **after** the first result is visible in normalized chronology; that retry must return the configured benign result on the same live MCP session. Only after the complete error → observed result → retry → recovery relation closes is `MCPAgentToolErrorRecoveryReceipt` emitted as `PROTOCOL_DELIVERY`. Neither bridge establishes behavioral PASS by itself, and neither covers hosted/remote/Internet MCP, live-provider behavior, metadata/cache/schema/identity drift inside an agent trial, generic retry policies, authorization, or target-side attestation.
+The repository implements three deliberately narrow OpenAI-agent → official-MCP-stdio assurance paths. `OpenAIAgentsMCPToolResultAdapter` verifies one `TOOL_RESULT_POISON` call, correlates the exact protocol result to one stable OpenAI call ID and model-visible result, and verifies benign recovery afterward on the same live session. `OpenAIAgentsMCPToolErrorRecoveryAdapter` verifies one real `TOOL_ERROR`, the exact model-visible SDK error output, then requires exactly one same-argument retry with a distinct call ID **after** the first result is visible in normalized chronology; that retry must return the configured benign result on the same live MCP session. `OpenAIAgentsMCPToolSchemaDriftAdapter` verifies one bound v1 schema, performs an evaluator-only hidden live v2 swap after model selection, requires real stale-call rejection, invalidates the host cache only after rejection, requires the first fresh post-invalidation discovery to expose v2, and then accepts only one exact corrected v2 behavioral call with a distinct ID and bound same-session result. Each multi-step bridge emits `PROTOCOL_DELIVERY` only when its full relation closes. None establishes behavioral PASS by itself, and none covers hosted/remote/Internet MCP, live-provider behavior, arbitrary schema migration, generic retry/cache policy, authorization, or target-side attestation.
 
 ## Audited implementation checkpoint
 
@@ -119,6 +128,6 @@ Audited merged implementation source checkpoint `d98f9ca1feb1179504cd2181295a739
 - Python **3.11 minimum / 3.14 latest**, Ruff, formatter, Bandit, dependency audit, package integrity, and all **7/7 CI jobs**: green;
 - dependency audit reported **no known vulnerabilities**; the project package itself is skipped because it is not published on PyPI.
 
-This checkpoint remains a historical audited merged baseline. The ToolError-recovery capability described above is accepted only after its own exact-head CI, merge, and post-merge `main` verification; documentation does not retroactively relabel the older checkpoint.
+This checkpoint remains a historical audited merged baseline. Capabilities added after it, including ToolError recovery and host-refreshed schema-drift adaptation, are accepted only after their own exact-head CI, merge, and post-merge `main` verification; documentation does not retroactively relabel the older checkpoint.
 
 [← Repository README](../README.md)
