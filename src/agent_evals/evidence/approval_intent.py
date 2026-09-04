@@ -119,7 +119,9 @@ def canonical_arguments_sha256(arguments: str) -> str:
         )
         _require_finite_json(parsed)
     except (TypeError, ValueError, json.JSONDecodeError) as exc:
-        raise ApprovalIntentError("approval intent arguments must be finite unambiguous JSON") from exc
+        raise ApprovalIntentError(
+            "approval intent arguments must be finite unambiguous JSON"
+        ) from exc
     if not isinstance(parsed, dict) or any(not isinstance(key, str) for key in parsed):
         raise ApprovalIntentError(
             "approval intent arguments must be a JSON object with string keys"
@@ -273,7 +275,9 @@ def verify_approval_intent(scenario: EvaluationScenario, evidence: TrialEvidence
             raise ApprovalIntentError(
                 "rejected bypass must produce exactly one matching tool result"
             )
-        _verify_result_identity(matching_results[0], receipt=receipt, phase="rejected bypass result")
+        _verify_result_identity(
+            matching_results[0], receipt=receipt, phase="rejected bypass result"
+        )
         return
 
     if len(matching_results) != 1:
@@ -281,7 +285,9 @@ def verify_approval_intent(scenario: EvaluationScenario, evidence: TrialEvidence
             "rejected interruption must produce exactly one matching continuation result"
         )
     rejection_result = matching_results[0]
-    _verify_result_identity(rejection_result, receipt=receipt, phase="rejection continuation result")
+    _verify_result_identity(
+        rejection_result, receipt=receipt, phase="rejection continuation result"
+    )
     if rejection_result.payload.get("approval_rejected") is not True:
         raise ApprovalIntentError("rejection continuation result lacks explicit rejection marker")
 
