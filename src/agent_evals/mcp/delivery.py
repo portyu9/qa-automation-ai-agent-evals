@@ -16,9 +16,7 @@ _TOOL_ERROR_RECOVERY_SOURCE = "bridge:mcp-agent:tool-error-recovery"
 _TOOL_SCHEMA_DRIFT_SOURCE = "bridge:mcp-agent:tool-schema-drift"
 
 ProtocolDeliveryReceipt: TypeAlias = (
-    MCPAgentToolResultReceipt
-    | MCPAgentToolErrorRecoveryReceipt
-    | MCPAgentToolSchemaDriftReceipt
+    MCPAgentToolResultReceipt | MCPAgentToolErrorRecoveryReceipt | MCPAgentToolSchemaDriftReceipt
 )
 
 
