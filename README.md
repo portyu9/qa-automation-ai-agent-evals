@@ -88,11 +88,11 @@ The deterministic core requires no model credentials. The executable surface is 
 1. **Provider-neutral core** — contracts, evidence, persistence, replay, deterministic oracles, statistics, metamorphic assurance, reporting, minimization, and release gates, including scenario-owned directed handoff grants, exact accepted authority-path state, and scenario-bound optional approval intent.
 2. **OpenAI Agents SDK tier** — the real SDK runner exercised with `agents.testing.ScriptedModel`, with no provider API call, across seven scoped local/SDK adversarial channels, native handoff-authority attenuation, and an exact native HITL `ToolApprovalItem` → same-`RunState` approve/reject continuation path.
 3. **MCP protocol/control-plane laboratories** — the six-fault official-client protocol lab, real loopback resource-server authorization lab, and separated two-origin OAuth authorization-code/PKCE/introspection lab.
-4. **OpenAI↔MCP delivery bridges** — three deliberately narrow official-stdio paths: one `TOOL_RESULT_POISON` result bridge, one causal `TOOL_ERROR` → same-argument retry → benign recovery bridge, and one host-refreshed `TOOL_SCHEMA_DRIFT` v1-rejection → refreshed-v2 → corrected-call bridge. Each has its own integrity-bound receipt and ordered `PROTOCOL_DELIVERY` evidence.
+4. **OpenAI↔MCP delivery bridges** — four deliberately narrow official-stdio paths: one `TOOL_METADATA_POISON` discovery → exact model-visible tool-definition bridge, one `TOOL_RESULT_POISON` result bridge, one causal `TOOL_ERROR` → same-argument retry → benign recovery bridge, and one host-refreshed `TOOL_SCHEMA_DRIFT` v1-rejection → refreshed-v2 → corrected-call bridge. Each has its own integrity-bound receipt and ordered `PROTOCOL_DELIVERY` evidence. Metadata delivery closes at the first verified model-visible target definition and does not require a target tool call.
 
 Handoff authority, native HITL approval, and MCP bridges solve different trust problems. Handoff authority remains scenario-owned authorization over normalized subject evidence. Native HITL introduces a dedicated evaluator-owned receipt because a decision must bind one exact pending interruption to its continuation. MCP bridges cross protocol and agent evidence domains and therefore require their own dedicated bridge receipts.
 
-The stronger HITL path does **not** claim authenticated humans, enterprise workflow attestation, production IAM, hosted approval UI correctness, or distributed resume safety. The MCP bridges are likewise not a blanket promotion of the MCP laboratories: `TOOL_METADATA_POISON`, stale-cache, and identity-drift remain protocol-only with respect to agent behavior, and remote-auth/OAuth receipts remain separate control-plane evidence.
+The stronger HITL path does **not** claim authenticated humans, enterprise workflow attestation, production IAM, hosted approval UI correctness, or distributed resume safety. The MCP bridges are likewise not a blanket promotion of the MCP laboratories: `TOOL_METADATA_POISON` now has a narrow model-visible delivery bridge, but that receipt does not prove model attention, interpretation, compliance, resistance, or safe behavior; stale-cache and identity-drift remain protocol-only with respect to agent behavior, and remote-auth/OAuth receipts remain separate control-plane evidence.
 
 ### Evaluation and assurance core
 
@@ -304,7 +304,7 @@ deterministic policy/outcome oracles
 
 The receipt binds the initial/cached/refreshed schema digests, stale/recovery argument digests, protocol and model-visible rejection/recovery observations, distinct OpenAI call IDs, and the strict chronology `initial-list < swap < stale-call < cache-invalidation < refreshed-list < recovery-call`. The evaluator control tool is filtered from the model-visible tool set. Later SDK turns may reuse the already-refreshed v2 cache; the assurance claim is one host invalidation and the first fresh v2 discovery before recovery, not “exactly one later list_tools() call.” Missing or extra target calls, recovery before refreshed discovery, wrong schemas/arguments/results, protocol drift, receipt tampering, or ambiguous evidence fails closed.
 
-None of these three bridges establishes safe behavior merely because delivery closes. They do not generalize to MCP metadata poison, generic stale-cache behavior, identity drift, arbitrary JSON Schema migrations, tool rename semantics, hosted MCP, remote/Internet MCP, live-provider behavior, generic retry/backoff/idempotency, authorization, or target-side attestation. The schema-drift path specifically does not claim model-initiated refresh or automatic `tools/list_changed` handling. A raw `MCPFaultReceipt` still does not create a trial verdict by itself.
+None of these four bridges establishes safe behavior merely because delivery closes. The metadata bridge proves exact model-visible exposure but not model attention, interpretation, compliance, or resistance. The bridges do not generalize to generic stale-cache behavior, identity drift, arbitrary JSON Schema migrations, tool rename semantics, hosted MCP, remote/Internet MCP, live-provider behavior, generic retry/backoff/idempotency, authorization, or target-side attestation. The schema-drift path specifically does not claim model-initiated refresh or automatic `tools/list_changed` handling. A raw `MCPFaultReceipt` still does not create a trial verdict by itself.
 
 ### Loopback MCP resource-server authorization laboratory
 
@@ -387,7 +387,7 @@ flowchart LR
     OP --> OR
 ```
 
-The controlled `TOOL_RESULT_POISON`, `TOOL_ERROR`, and host-refreshed `TOOL_SCHEMA_DRIFT` stdio paths can cross `MR → B → BR → E`, each through its own receipt contract. Native handoff authority remains scenario/evidence-owned authorization in `C + E → P`. Native HITL approval remains an evaluator-owned request→decision→continuation relation in `C + E → H → P`; the receipt is reverified before policy grading and never substitutes for the policy oracle. The other three MCP fault families and both authorization laboratories terminate in their own evidence domains.
+The controlled `TOOL_METADATA_POISON`, `TOOL_RESULT_POISON`, `TOOL_ERROR`, and host-refreshed `TOOL_SCHEMA_DRIFT` stdio paths can cross `MR → B → BR → E`, each through its own receipt contract. Native handoff authority remains scenario/evidence-owned authorization in `C + E → P`. Native HITL approval remains an evaluator-owned request→decision→continuation relation in `C + E → H → P`; the receipt is reverified before policy grading and never substitutes for the policy oracle. The remaining stale-cache and identity-drift MCP fault families and both authorization laboratories terminate in their own evidence domains.
 
 ## Trial and release semantics
 
@@ -415,7 +415,7 @@ agent-evals doctor
 pytest
 ```
 
-Deterministic OpenAI SDK integration, including native handoff authority, native HITL approval, and all three controlled MCP stdio bridges:
+Deterministic OpenAI SDK integration, including native handoff authority, native HITL approval, and all four controlled MCP stdio bridges:
 
 ```bash
 python -m pip install -e '.[dev,openai,mcp]'
@@ -425,6 +425,7 @@ pytest -m openai \
   tests/integration/test_openai_environment_adapter.py \
   tests/integration/test_openai_handoff_authority_adapter.py \
   tests/integration/test_openai_hitl_approval_adapter.py \
+  tests/integration/test_openai_mcp_tool_metadata_adapter.py \
   tests/integration/test_openai_mcp_tool_result_adapter.py \
   tests/integration/test_openai_mcp_tool_error_recovery_adapter.py \
   tests/integration/test_openai_mcp_tool_schema_drift_adapter.py \

@@ -6,11 +6,12 @@ The OpenAI integration turns documented OpenAI Agents SDK execution surfaces int
 
 The integration is pinned to `openai-agents==0.22.0`. MCP integration is pinned separately to `mcp==2.1.1`. Pinning both sides makes normalization, tool-output conversion, call identity, approval interruption/resume behavior, protocol negotiation, retry chronology, tool-discovery semantics, and run-item agent attribution explicit reviewable contracts rather than floating assumptions.
 
-Six adapter boundaries are intentionally distinct:
+Seven adapter boundaries are intentionally distinct:
 
 - `OpenAIAgentsAdapter` — seven scoped local/SDK adversarial channels;
 - `OpenAIAgentsHandoffAuthorityAdapter` — native SDK handoff provenance plus scenario-owned path-local authority attenuation across exact source→target transitions;
 - `OpenAIAgentsHITLApprovalAdapter` — one exact native SDK `ToolApprovalItem` interruption bound to scenario-owned approve/reject intent, stable call identity, canonical arguments, exact resource, accepted authority path, and same-`RunState` continuation;
+- `OpenAIAgentsMCPToolMetadataAdapter` — one controlled official-MCP-stdio → OpenAI public-model-boundary path for `MCPFaultKind.TOOL_METADATA_POISON`, binding exact discovery description and target JSON schema without requiring a target call;
 - `OpenAIAgentsMCPToolResultAdapter` — one controlled OpenAI-agent → official-MCP-stdio path for `MCPFaultKind.TOOL_RESULT_POISON`;
 - `OpenAIAgentsMCPToolErrorRecoveryAdapter` — one controlled OpenAI-agent → official-MCP-stdio resilience path for `MCPFaultKind.TOOL_ERROR`, requiring a causal same-argument retry and exact benign recovery;
 - `OpenAIAgentsMCPToolSchemaDriftAdapter` — one controlled OpenAI-agent → official-MCP-stdio schema-adaptation path for `MCPFaultKind.TOOL_SCHEMA_DRIFT`, requiring a real stale-call rejection, evaluator-owned cache invalidation, first fresh v2 discovery, and one exact corrected behavioral call.
@@ -110,6 +111,38 @@ On approval, exactly one resumed request and one matching result must close the 
 
 Legacy call-scoped and persistent tool-scoped `APPROVAL` evidence remains supported outside this stronger contract, but neither legacy scope can satisfy or override an `ApprovalIntentSpec`. See [Native HITL Approval Intent](APPROVAL_INTENT.md) for the full receipt, replay, failure-semantics, and non-claim contract.
 
+### Dedicated MCP metadata-delivery bridge
+
+```text
+MCPFaultSpec(kind=tool_metadata_poison)
+        ↓
+OpenAIAgentsMCPToolMetadataAdapter
+        ↓ fresh official MCPServerStdio subprocess
+negotiated MCP protocol = 2026-07-28
+        ↓
+exact target description observed through official tools/list
+        ↓
+MCPFaultReceipt
+        ↓
+pinned SDK converts MCP target to a model-visible Tool
+        ↓
+public Model observer sees exactly one target Tool
++ exact target name
++ exact description digest equality
++ protocol/model parameter-schema digest equality
+        ↓
+MCPAgentToolMetadataReceipt
+        ↓
+PROTOCOL_DELIVERY after any leading pre-model ATTACK_DELIVERY
+and before normalized model/agent behavior
+        ↓
+TrialEvidence
+        ↓
+framework-owned deterministic oracles
+```
+
+The controlled target need not execute. Metadata can influence tool selection before a call exists, so requiring `TOOL_REQUEST` would manufacture a false precondition. The adapter therefore requires a concrete public SDK `Model` instance and wraps both `get_response(...)` and `stream_response(...)`; string/default model resolution is rejected rather than changed by the evaluator. Duplicate target definitions, local target collisions, transformed descriptions, schema mismatch, protocol drift, or replayed post-behavior metadata delivery fail closed as `EVALUATION_ERROR / BLOCKED`.
+
 ### Dedicated MCP result bridge
 
 ```text
@@ -204,7 +237,7 @@ TrialEvidence
 framework-owned deterministic oracles
 ```
 
-All three MCP paths are bridges between evidence domains, not conversions of MCP protocol evidence into grading authority. A bridge establishes a narrowly defined delivery/recovery/adaptation precondition. The agent still passes or fails only through deterministic subject evidence and oracles.
+All four MCP paths are bridges between evidence domains, not conversions of MCP protocol evidence into grading authority. A bridge establishes a narrowly defined delivery/recovery/adaptation precondition. The agent still passes or fails only through deterministic subject evidence and oracles.
 
 ## Seven concrete adversarial channels
 
@@ -262,7 +295,7 @@ source          = injector:openai-agents:tool-metadata
 injection_point = openai-agents:FunctionTool:<tool>:description
 ```
 
-Tool name, parameter schema, callback, approval behavior, and routing identity remain unchanged. MCP description poisoning and identity drift remain separate protocol-laboratory capabilities. MCP schema drift has its own narrowly bounded host-refreshed bridge; that does not turn local `TOOL_METADATA` replacement into an MCP capability or establish arbitrary schema-migration behavior.
+Tool name, parameter schema, callback, approval behavior, and routing identity remain unchanged. MCP description poisoning now has its own narrowly bounded model-visible delivery bridge, while identity drift remains protocol-only with respect to agent behavior. MCP schema drift has its own host-refreshed adaptation bridge. Neither bridge turns local `TOOL_METADATA` replacement into an MCP mechanism or establishes arbitrary metadata/schema behavior.
 
 ## SDK session-history `MEMORY`
 
@@ -328,13 +361,13 @@ This mode does not mutate process-global `os.environ`, filesystem/browser/contai
 
 ## Shared MCP stdio provenance controls
 
-All three MCP adapters create a **fresh official `MCPServerStdio` client/server process boundary** per trial and clone the supplied OpenAI Agent with exactly that one controlled MCP server.
+All four MCP adapters create a **fresh official `MCPServerStdio` client/server process boundary** per trial and clone the supplied OpenAI Agent with exactly that one controlled MCP server.
 
 The base Agent is rejected when it already has MCP servers, uses prefixed MCP tool names, or has a local tool colliding with the target name. The schema-drift adapter additionally reserves an evaluator-only control-tool identity and filters that control from the agent-visible MCP tool list. Those fail-closed preconditions prevent a valid-looking call ID or control action from being attributed to the wrong tool or server.
 
 For MCP v2, the authoritative negotiated revision is the connected `ClientSession.protocol_version`; legacy `server_initialize_result.protocol_version` is only a fallback for older initialization paths.
 
-All three adapters require negotiated protocol `2026-07-28`. A different or unavailable version is an evaluation precondition failure, not a subject failure.
+All four adapters require negotiated protocol `2026-07-28`. A different or unavailable version is an evaluation precondition failure, not a subject failure.
 
 ---
 
@@ -612,11 +645,12 @@ It does not establish model-owned refresh, notification-driven `tools/list_chang
 
 ## What the MCP bridges do not prove
 
-None of the three bridges establishes:
+None of the four bridges establishes:
 
 - live OpenAI model behavior or provider availability;
 - hosted OpenAI MCP, third-party MCP, remote MCP, Internet MCP, TLS/DNS/proxy/gateway fidelity, or arbitrary stdio transport robustness;
-- MCP metadata poison, generic stale-cache behavior, or identity-drift behavior inside an agent trial;
+- model attention to, interpretation of, compliance with, or resistance to MCP metadata poison after exact model-visible exposure;
+- generic stale-cache or identity-drift behavior inside an agent trial;
 - arbitrary schema migrations beyond the one controlled host-refreshed schema-drift contract;
 - arbitrary multi-call or parallel plans;
 - production authorization, OAuth, identity-provider, or credential lifecycle behavior;
