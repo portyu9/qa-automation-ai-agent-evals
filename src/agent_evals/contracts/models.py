@@ -312,15 +312,48 @@ class EvaluationScenario(BaseModel):
             raise ValueError(
                 f"outcomes cannot be simultaneously required and forbidden: {sorted(conflicts)!r}"
             )
-        if self.approval_intent is not None and not self.authority.authorizes_tool(
-            self.approval_intent.tool
-        ):
-            raise ValueError("approval intent target tool must be inside root scenario authority")
+
+        spec = self.approval_intent
+        if spec is not None:
+            if not self.authority.authorizes_tool(spec.tool):
+                raise ValueError("approval intent target tool must be inside root scenario authority")
+            if not _agent_path_requires_approval(self.authority, agent=spec.agent, tool=spec.tool):
+                raise ValueError(
+                    "approval intent target must be approval-required on at least one configured "
+                    "authority path to that agent"
+                )
         return self
 
     @property
     def identity(self) -> str:
         return _sha256_json(self.model_dump(mode="python", exclude_none=True))
+
+
+def _agent_path_requires_approval(policy: AuthorityPolicy, *, agent: str, tool: str) -> bool:
+    root_required = tool in policy.approval_required_tools
+    if not policy.has_handoff_authority:
+        return root_required
+    if policy.root_agent == agent:
+        return root_required
+    if policy.root_agent is None:
+        return False
+
+    pending: list[tuple[str, bool]] = [(policy.root_agent, root_required)]
+    visited: set[tuple[str, bool]] = set()
+    while pending:
+        source, required = pending.pop()
+        state = (source, required)
+        if state in visited:
+            continue
+        visited.add(state)
+        for grant in policy.handoff_grants:
+            if grant.source_agent != source or tool not in grant.allowed_tools:
+                continue
+            child_required = required or tool in grant.additional_approval_required_tools
+            if grant.target_agent == agent and child_required:
+                return True
+            pending.append((grant.target_agent, child_required))
+    return False
 
 
 def _canonical_resource_prefixes(value: tuple[str, ...]) -> tuple[str, ...]:
