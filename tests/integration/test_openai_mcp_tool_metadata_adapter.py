@@ -3,11 +3,17 @@ from __future__ import annotations
 import json
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
 
-from agent_evals.adapters.openai_mcp_tool_metadata import OpenAIAgentsMCPToolMetadataAdapter
+from agent_evals.adapters.base import AdapterPreconditionError
+from agent_evals.adapters.openai_mcp_tool_metadata import (
+    OpenAIAgentsMCPToolMetadataAdapter,
+    _MCPToolMetadataRecorder,
+    _new_observed_model,
+)
 from agent_evals.adversarial import AttackChannel, AttackFixture
 from agent_evals.contracts.models import (
     AuthorityPolicy,
@@ -22,6 +28,11 @@ from agent_evals.security.taxonomy import ThreatClass
 
 _FIXTURE = Path(__file__).resolve().parents[1] / "fixtures" / "mcp_tool_metadata_server.py"
 _TOOL = "lookup_customer"
+_SCHEMA = {
+    "type": "object",
+    "properties": {"customer_id": {"type": "string"}},
+    "required": ["customer_id"],
+}
 
 
 def subject() -> SubjectFingerprint:
@@ -73,6 +84,25 @@ def stdio_params(*, tool: str = _TOOL) -> dict[str, object]:
             fault().payload_json,
         ],
     }
+
+
+async def _metadata_recorder() -> _MCPToolMetadataRecorder:
+    async def list_tools(*_args: object, **_kwargs: object) -> list[object]:
+        return [
+            SimpleNamespace(
+                name=_TOOL,
+                description=fault().payload_json,
+                input_schema=_SCHEMA,
+            )
+        ]
+
+    recorder = _MCPToolMetadataRecorder(
+        original_list_tools=list_tools,
+        fault=fault(),
+        protocol_version="2026-07-28",
+    )
+    await recorder.list_tools()
+    return recorder
 
 
 @pytest.mark.openai
@@ -183,6 +213,110 @@ async def test_mcp_metadata_bridge_orders_pre_model_attack_before_metadata_deliv
     assert evaluated.evidence.events[1].source == "bridge:mcp-agent:tool-metadata"
     assert not any(event.kind is EvidenceKind.TOOL_REQUEST for event in evaluated.evidence.events)
     model.assert_complete()
+
+
+@pytest.mark.openai
+@pytest.mark.asyncio
+async def test_metadata_model_observer_records_streaming_tool_snapshot_before_delegation() -> None:
+    pytest.importorskip("agents")
+    from agents.models.interface import Model
+
+    recorder = await _metadata_recorder()
+
+    class StreamingProbeModel(Model):
+        def __init__(self) -> None:
+            self.stream_called = False
+
+        async def get_response(self, *_args: object, **_kwargs: object) -> object:
+            raise AssertionError("streaming probe must not use get_response")
+
+        def stream_response(self, *_args: object, **_kwargs: object) -> object:
+            self.stream_called = True
+
+            async def empty_stream():
+                if False:
+                    yield None
+
+            return empty_stream()
+
+    delegate = StreamingProbeModel()
+    observed = _new_observed_model(delegate, recorder)
+    model_tool = SimpleNamespace(
+        name=_TOOL,
+        description=fault().payload_json,
+        params_json_schema=_SCHEMA,
+    )
+    stream = observed.stream_response(
+        None,
+        [],
+        None,
+        [model_tool],
+        None,
+        [],
+        None,
+        previous_response_id=None,
+        conversation_id=None,
+        prompt=None,
+    )
+    async for _ in stream:
+        pass
+
+    receipt = recorder.require_bridge(scenario_identity=scenario().identity)
+    assert delegate.stream_called is True
+    assert receipt.model_snapshot_ordinal == 0
+    assert receipt.model_description_sha256 == receipt.protocol_receipt.observation_sha256
+
+
+@pytest.mark.openai
+@pytest.mark.asyncio
+async def test_metadata_recorder_blocks_duplicate_model_visible_target_definitions() -> None:
+    recorder = await _metadata_recorder()
+    duplicate = SimpleNamespace(
+        name=_TOOL,
+        description=fault().payload_json,
+        params_json_schema=_SCHEMA,
+    )
+
+    with pytest.raises(AdapterPreconditionError) as exc_info:
+        recorder.observe_model_tools([duplicate, duplicate])
+
+    assert exc_info.value.code == "mcp_metadata_target_identity_ambiguous"
+
+
+@pytest.mark.openai
+@pytest.mark.mcp
+@pytest.mark.asyncio
+async def test_mcp_metadata_bridge_blocks_local_target_collision_before_model_execution() -> None:
+    pytest.importorskip("agents")
+    pytest.importorskip("mcp")
+    from agents import Agent
+    from agents.decorators import tool
+    from agents.testing import ScriptedModel, assistant_message
+
+    @tool
+    def lookup_customer(customer_id: str) -> str:
+        """Local tool that intentionally collides with the controlled MCP target."""
+        return customer_id
+
+    model = ScriptedModel([[assistant_message("Must not execute.")]])
+    agent = Agent(name="MCP metadata collision agent", model=model, tools=[lookup_customer])
+    evaluated = await TrialRunner().run(
+        OpenAIAgentsMCPToolMetadataAdapter(
+            agent,
+            stdio_params=stdio_params(),
+            fault=fault(),
+            state_reader=lambda: {"protected": "safe"},
+        ),
+        subject=subject(),
+        scenario=scenario(),
+        trial_id="openai-mcp-tool-metadata-collision",
+    )
+
+    assert evaluated.verdict is TrialVerdict.BLOCKED
+    error = evaluated.evidence.events[-1]
+    assert error.kind is EvidenceKind.EVALUATION_ERROR
+    assert error.payload["code"] == "mcp_target_tool_collision"
+    assert model.first_call is None
 
 
 @pytest.mark.openai
