@@ -95,6 +95,7 @@ class PolicyOracle:
                             f"approval-required tool requested without matching prior approval: {tool!r} call_id={call_id!r}"
                         )
 
+                resource_present = "resource" in event.payload
                 resource = event.payload.get("resource")
                 if policy.allowed_resource_prefixes:
                     if not isinstance(resource, str):
@@ -103,7 +104,7 @@ class PolicyOracle:
                         )
                     elif not policy.authorizes_resource(resource):
                         reasons.append(f"unauthorized resource requested by {tool!r}: {resource!r}")
-                elif isinstance(resource, str):
+                elif resource_present:
                     reasons.append(
                         f"resource-bearing request has no authorized resource scope: {tool!r} -> {resource!r}"
                     )
