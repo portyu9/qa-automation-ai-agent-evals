@@ -112,9 +112,31 @@ Any failed layer prevents the bytes from becoming trusted evaluation evidence.
 - requested `SubjectFingerprint.identity` equals the recorded subject identity;
 - requested `EvaluationScenario.identity` equals the recorded scenario identity.
 
-A mismatch raises `ReplayIdentityError` at the adapter boundary. When all identities match, replay returns the recorded events, terminal state, output, timing, usage, and cost observations unchanged. Running that adapter through `TrialRunner` therefore re-applies the deterministic policy and outcome oracles to the same evidence envelope.
+A mismatch raises `ReplayIdentityError` at the adapter boundary. When all identities match, replay returns the recorded events, terminal state, output, timing, usage, and cost observations unchanged. Running that adapter through `TrialRunner` therefore re-applies evaluator-owned semantic receipt checks plus the deterministic policy and outcome oracles to the same evidence envelope.
 
 For an unchanged evidence model, a successful exact-identity replay reproduces the original `evidence_root`.
+
+## Native approval-intent receipts are semantically revalidated
+
+A persisted `APPROVAL_DECISION` event is not trusted merely because the surrounding `TrialEvidence` has a valid payload hash/evidence root or because `ApprovalIntentReceipt` passes structural validation.
+
+When the exact scenario declares `ApprovalIntentSpec`, `TrialRunner` revalidates the historical request → decision → continuation relation before deterministic grading. The verifier requires:
+
+- exactly one decision event when a bound decision exists;
+- receipt scenario identity equal to the current exact scenario;
+- receipt decision/agent/tool equal to the scenario intent;
+- a referenced prior `APPROVAL_REQUEST` at the exact bound evidence sequence;
+- exact agent, tool, call ID, canonical finite-JSON argument digest, and normalized resource identity;
+- accepted authority epoch derived from semantically valid prior handoffs rather than a raw handoff count;
+- exact accepted handoff-path hash, preventing same-depth sibling-path replay;
+- on `APPROVE`, exactly one matching resumed executable request and exactly one matching non-rejection result;
+- on clean `REJECT`, exactly one matching continuation result explicitly marked as rejection and no protected executable request.
+
+If an exact rejected invocation does reach executable `TOOL_REQUEST` evidence, the verifier preserves that resolved chronology so `PolicyOracle` can grade execution-after-rejection as critical subject `FAIL`. It is not hidden behind evaluator uncertainty.
+
+Malformed/root-invalid receipts, decision/request ordering errors, changed arguments/resource, authority epoch/path mismatch, duplicate/missing continuation, or ambiguous result identity become `approval_intent_unverified / EVALUATION_ERROR / BLOCKED`.
+
+Replay does **not** recreate a human review, authenticated approver, or SDK interruption. It rechecks whether the historical normalized evidence still proves the exact evaluator-owned approval relation. See [Native HITL Approval Intent](APPROVAL_INTENT.md).
 
 ## Protocol-delivery receipts are semantically revalidated
 
@@ -132,7 +154,7 @@ The schema-drift replay verifier does not recreate a refresh. It checks that the
 
 Unknown `PROTOCOL_DELIVERY` sources fail closed until an explicit verifier exists. Malformed typed receipts, invalid roots, impossible chronology, or receipt scenario identity that differs from the enclosing `TrialEvidence.scenario_identity` block evaluation instead of being treated as trusted historical evidence.
 
-This distinction matters because persistence can preserve a claim without making that claim semantically true. Replay therefore rechecks both the envelope and the cross-domain receipt contract.
+This distinction matters because persistence can preserve a claim without making that claim semantically true. Replay therefore rechecks the envelope plus every evaluator-owned receipt relation required by the scenario before deterministic subject grading.
 
 ## Replay is not re-execution
 
@@ -148,6 +170,7 @@ Replay does **not** answer:
 - is an external dependency currently healthy?;
 - did a specific human, service, or machine originally produce these bytes?;
 - would nondeterministic behavior reproduce on another attempt?;
+- would a native approval interruption or human review happen the same way now?;
 - would an MCP server still expose the same result, error, schema, cache state, or authorization behavior now?;
 - would a host perform the same schema-drift cache invalidation now?
 
@@ -196,6 +219,7 @@ It currently does **not** provide:
 
 - digital signatures or MACs;
 - authenticated writer identity;
+- authenticated approver identity;
 - trusted timestamps;
 - remote attestation;
 - WORM/object-lock enforcement;
@@ -214,8 +238,8 @@ The hard-link publication primitive also depends on filesystem support for hard 
 - Put the evidence root on a filesystem whose ownership and access controls match the evaluation control-plane trust boundary.
 - Treat partial records and stale locks as incidents to review, not clutter to auto-delete.
 - Preserve manifests with their payloads; neither is a substitute for the other.
-- Do not use replay as a live-provider or live-MCP smoke test.
-- Do not interpret a matching SHA-256 as publisher authentication.
+- Do not use replay as a live-provider, live-HITL, or live-MCP smoke test.
+- Do not interpret a matching SHA-256 as publisher or approver authentication.
 - If evidence must survive a compromised host, export it to a separately authenticated or immutable system.
 
 [← Documentation hub](README.md)
