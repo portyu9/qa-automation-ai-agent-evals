@@ -4,11 +4,12 @@
 
 The OpenAI integration turns documented OpenAI Agents SDK execution surfaces into provider-neutral evaluation evidence while keeping state verification, policy authority, protocol truth, and release authority outside the SDK.
 
-The integration is pinned to `openai-agents==0.22.0`. MCP integration is pinned separately to `mcp==2.1.1`. Pinning both sides makes normalization, tool-output conversion, call identity, protocol negotiation, retry chronology, and tool-discovery semantics explicit reviewable contracts rather than floating assumptions.
+The integration is pinned to `openai-agents==0.22.0`. MCP integration is pinned separately to `mcp==2.1.1`. Pinning both sides makes normalization, tool-output conversion, call identity, protocol negotiation, retry chronology, tool-discovery semantics, and run-item agent attribution explicit reviewable contracts rather than floating assumptions.
 
-Four adapter boundaries are intentionally distinct:
+Five adapter boundaries are intentionally distinct:
 
 - `OpenAIAgentsAdapter` — seven scoped local/SDK adversarial channels;
+- `OpenAIAgentsHandoffAuthorityAdapter` — native SDK handoff provenance plus scenario-owned path-local authority attenuation across exact source→target transitions;
 - `OpenAIAgentsMCPToolResultAdapter` — one controlled OpenAI-agent → official-MCP-stdio path for `MCPFaultKind.TOOL_RESULT_POISON`;
 - `OpenAIAgentsMCPToolErrorRecoveryAdapter` — one controlled OpenAI-agent → official-MCP-stdio resilience path for `MCPFaultKind.TOOL_ERROR`, requiring a causal same-argument retry and exact benign recovery;
 - `OpenAIAgentsMCPToolSchemaDriftAdapter` — one controlled OpenAI-agent → official-MCP-stdio schema-adaptation path for `MCPFaultKind.TOOL_SCHEMA_DRIFT`, requiring a real stale-call rejection, evaluator-owned cache invalidation, first fresh v2 discovery, and one exact corrected behavioral call.
@@ -40,6 +41,36 @@ TrialEvidence
         ↓ exact ATTACK_DELIVERY verification when adversarial
 framework-owned deterministic oracles
 ```
+
+### Native handoff authority attenuation
+
+```text
+AuthorityPolicy(root_agent + directed HandoffAuthorityGrant graph)
+        ↓
+OpenAIAgentsHandoffAuthorityAdapter
+        ↓ root Agent.name must match before execution
+native SDK HandoffOutputItem(source_agent, target_agent)
+        + public RunItemBase.agent.name
+        + stable tool call identities
+        ↓
+agent-attributed TOOL_REQUEST / TOOL_RESULT / APPROVAL_REQUEST
+        ↓
+TrialEvidence
+        +
+scenario-owned authority graph
+        ↓
+PolicyOracle active-agent chronology
+        ↓
+child tools/resources/approvals/budgets may preserve or narrow only
+        ↓
+deterministic policy PASS / critical FAIL contribution
+```
+
+This path does not introduce a provider-owned authorization decision or a new receipt domain. SDK agent names are run-local provenance identities. `AuthorityPolicy` and `PolicyOracle` remain the authorization authority.
+
+The specialized adapter verifies the configured root before provider execution. It also requires each completed tool result to have a matching attributed request with the same call ID and generating-agent name, and it verifies that a native handoff run item's generating agent agrees with the SDK handoff source. Missing or contradictory provider provenance becomes `EVALUATION_ERROR / BLOCKED`; a verified unauthorized transition or delegated action becomes deterministic critical policy `FAIL`.
+
+See [Native Handoff Authority](HANDOFF_AUTHORITY.md) for the graph, attenuation, replay, and non-claim contract.
 
 ### Dedicated MCP result bridge
 
@@ -151,6 +182,8 @@ All three MCP paths are bridges between evidence domains, not conversions of MCP
 
 A channel label is never proof that an attack occurred. Each injector must either produce exact delivery evidence or allow the adversarial trial to remain `BLOCKED`.
 
+The generic `HANDOFF` adversarial channel and the handoff-authority adapter answer different questions. The channel verifies exact controlled context transfer into one actual handoff without rerouting the destination. The authority adapter verifies whether observed native routing and subsequent actions stay inside a separately declared delegation graph. Neither contract silently substitutes for the other.
+
 ## `USER_INPUT`
 
 ```text
@@ -230,7 +263,7 @@ injection_point = openai-agents:RunConfig.handoff_input_filter:first:input_histo
 HANDOFF → ATTACK_DELIVERY
 ```
 
-This is context poisoning, not destination rerouting or distributed-agent-fabric interception.
+This is context poisoning, not destination rerouting or distributed-agent-fabric interception. Native routing authorization is handled separately by `OpenAIAgentsHandoffAuthorityAdapter` and scenario-owned `HandoffAuthorityGrant` values; see [Native Handoff Authority](HANDOFF_AUTHORITY.md).
 
 ## Local runtime-context `ENVIRONMENT`
 
@@ -558,9 +591,11 @@ A bridge closure is an evaluation precondition. It is not a behavioral verdict.
 
 ## Fail-closed preconditions
 
-Malformed attack payloads, missing or ambiguous local targets, unsupported target types, unusable call identities, unsupported environment context, MCP server ambiguity, protocol-version mismatch, missing protocol evidence, mismatched agent evidence, changed retry arguments, non-causal retry chronology, schema-control leakage, incomplete schema chronology, recovery before refreshed discovery, wrong replacement contracts/arguments/results, or failed recovery raise `AdapterPreconditionError`.
+Malformed attack payloads, missing or ambiguous local targets, unsupported target types, unusable call identities, unsupported environment context, handoff root mismatch, missing or contradictory SDK agent attribution, request/result call-owner mismatch, MCP server ambiguity, protocol-version mismatch, missing protocol evidence, mismatched agent evidence, changed retry arguments, non-causal retry chronology, schema-control leakage, incomplete schema chronology, recovery before refreshed discovery, wrong replacement contracts/arguments/results, or failed recovery raise `AdapterPreconditionError`.
 
 `TrialRunner` converts these into `EVALUATION_ERROR / BLOCKED` with no completed subject oracles. Provider/runtime failures remain `RUNTIME_ERROR / BLOCKED`.
+
+Verified handoff-policy violations are different. Once provenance is sufficient, unauthorized destinations, non-active sources, path-local authority expansion, delegated tool/resource violations, missing required approvals, or delegated budget overruns become critical deterministic `PolicyOracle` failures rather than evaluator uncertainty.
 
 The evaluator also revalidates known `PROTOCOL_DELIVERY` receipt types before subject grading. Unknown delivery sources, malformed bridge receipts, invalid semantic roots, or scenario-identity mismatch block evaluation rather than becoming trusted opaque JSON.
 
@@ -574,13 +609,19 @@ verified subject violation                    → deterministic oracle FAIL
 
 An SDK `ToolApprovalItem` normalizes as `APPROVAL_REQUEST`, never `APPROVAL`. Asking for permission is not proof that permission was granted; authorization evidence remains independently controlled.
 
+Handoff authority does not redesign that lifecycle. Approval requirements on retained tools are inherited across a valid transition, while a child grant may add stricter requirements for delegated tools. Existing independent `APPROVAL` evidence still determines whether an approval requirement was satisfied.
+
 ## Tracing and sensitive data
 
 The adapters set sensitive tracing off for deterministic tests. Delivery and protocol receipts retain digests and identities rather than duplicating raw malicious content. Controlled execution boundaries necessarily contain the test stimulus, so ordinary data minimization and retention discipline still applies.
 
+Handoff-authority evidence records run-local SDK agent names. Those names are necessary to grade the configured scenario relation but are not authenticated principals, organization identities, or production IAM credentials.
+
 ## Deterministic SDK verification
 
 The repository uses `agents.testing.ScriptedModel` against the real pinned Agents SDK without provider API calls.
+
+The handoff-authority suite verifies one-hop and two-hop native handoffs, actual public run-item agent attribution, request/result owner consistency, path-local tool/resource/budget attenuation, legacy-adapter fail-closed behavior, and root mismatch before model execution.
 
 Implementation source checkpoint `d98f9ca1feb1179504cd2181295a73936fd0ae6c`, protected-main CI run `33898508697`:
 
@@ -594,4 +635,6 @@ Implementation source checkpoint `d98f9ca1feb1179504cd2181295a73936fd0ae6c`, pro
 - Python **3.11 minimum / 3.14 latest**, Ruff, formatter, Bandit, dependency audit, package integrity, and all **7/7 CI jobs**: green;
 - dependency audit: **no known vulnerabilities found**; the project package itself is skipped because it is not published on PyPI.
 
-This checkpoint remains the historical audited merged implementation baseline. Capabilities added after that checkpoint, including the ToolError-recovery and host-refreshed schema-drift bridges described above, are accepted only after their own exact-head CI, merge, and post-merge `main` verification; documentation does not retroactively redefine the older implementation evidence.
+This checkpoint remains the historical audited merged implementation baseline. Capabilities added after that checkpoint, including the ToolError-recovery bridge, host-refreshed schema-drift bridge, and native handoff-authority attenuation described above, are accepted only after their own exact-head CI, merge, and post-merge `main` verification; documentation does not retroactively redefine the older implementation evidence.
+
+[← Documentation hub](README.md)
