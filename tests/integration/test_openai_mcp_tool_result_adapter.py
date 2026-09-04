@@ -134,7 +134,7 @@ async def test_openai_agent_consumes_same_call_mcp_result_before_bridge_closes()
         trial_id="openai-mcp-same-call",
     )
 
-    assert evaluated.verdict is TrialVerdict.PASS
+    assert evaluated.verdict is TrialVerdict.PASS, evaluated.evidence.model_dump(mode="json")
     kinds = tuple(event.kind for event in evaluated.evidence.events)
     request_index = kinds.index(EvidenceKind.TOOL_REQUEST)
     delivery_index = kinds.index(EvidenceKind.PROTOCOL_DELIVERY)
