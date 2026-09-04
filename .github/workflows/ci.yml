@@ -72,6 +72,7 @@ jobs:
           tests/integration/test_openai_adapter.py
           tests/integration/test_openai_resource_adapter.py
           tests/integration/test_openai_environment_adapter.py
+          tests/integration/test_openai_handoff_authority_adapter.py
           tests/integration/test_openai_mcp_tool_result_adapter.py
           tests/integration/test_openai_mcp_tool_error_recovery_adapter.py
           tests/integration/test_openai_mcp_tool_schema_drift_adapter.py

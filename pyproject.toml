@@ -76,6 +76,7 @@ branch = true
 source = ["agent_evals"]
 omit = [
   "src/agent_evals/adapters/openai_agents.py",
+  "src/agent_evals/adapters/openai_handoff_authority.py",
   "src/agent_evals/adapters/openai_mcp_tool_error_recovery.py",
   "src/agent_evals/adapters/openai_mcp_tool_result.py",
   "src/agent_evals/adapters/openai_mcp_tool_schema_drift.py",
