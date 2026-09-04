@@ -41,6 +41,21 @@ def test_subject_identity_is_content_addressed_and_stable() -> None:
     assert fingerprint().identity != changed.identity
 
 
+def test_subject_identity_rejects_non_string_mapping_keys_in_behavior_material() -> None:
+    with pytest.raises(ValueError, match="object keys must be strings"):
+        SubjectFingerprint.from_material(
+            provider="example",
+            model="model-a",
+            application_revision="abc123",
+            instructions="Be useful.",
+            tool_schema={1: {"name": "lookup"}},
+            policy={"allowed": ["lookup"]},
+            memory_policy={"retention": "trial"},
+            adapter="scripted",
+            adapter_version="1",
+        )
+
+
 def test_scenario_identity_is_independent_of_set_and_prefix_input_order() -> None:
     first = EvaluationScenario(
         scenario_id="identity.case",
