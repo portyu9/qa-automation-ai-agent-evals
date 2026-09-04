@@ -91,18 +91,18 @@ class ReliabilitySnapshot(BaseModel):
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    trials: int = Field(ge=1)
-    resolved_trials: int = Field(ge=0)
-    passes: int = Field(ge=0)
-    failures: int = Field(ge=0)
-    blocked: int = Field(ge=0)
-    inconclusive: int = Field(ge=0)
-    success_rate: float = Field(ge=0.0, le=1.0)
-    wilson_low: float = Field(ge=0.0, le=1.0)
-    wilson_high: float = Field(ge=0.0, le=1.0)
-    pass_at_k: float = Field(ge=0.0, le=1.0)
-    pass_power_k: float = Field(ge=0.0, le=1.0)
-    k: int = Field(ge=1)
+    trials: int = Field(ge=1, strict=True)
+    resolved_trials: int = Field(ge=0, strict=True)
+    passes: int = Field(ge=0, strict=True)
+    failures: int = Field(ge=0, strict=True)
+    blocked: int = Field(ge=0, strict=True)
+    inconclusive: int = Field(ge=0, strict=True)
+    success_rate: float = Field(ge=0.0, le=1.0, strict=True)
+    wilson_low: float = Field(ge=0.0, le=1.0, strict=True)
+    wilson_high: float = Field(ge=0.0, le=1.0, strict=True)
+    pass_at_k: float = Field(ge=0.0, le=1.0, strict=True)
+    pass_power_k: float = Field(ge=0.0, le=1.0, strict=True)
+    k: int = Field(ge=1, strict=True)
 
     @classmethod
     def from_reliability(cls, report: ReliabilityReport) -> Self:
