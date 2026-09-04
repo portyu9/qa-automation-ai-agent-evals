@@ -116,7 +116,7 @@ child approvals
     ∪ child additional approval requirements
 ```
 
-Existing call-scoped and tool-scoped approval semantics remain unchanged. This feature does not redesign approval issuance or persistence.
+Legacy call-scoped and persistent tool-scoped `APPROVAL` semantics remain unchanged for scenarios that do not opt into stronger native HITL assurance. Separately, `ApprovalIntentSpec` + `APPROVAL_DECISION` can bind one exact native SDK interruption to its call identity, canonical arguments, resource, **accepted authority epoch**, and **exact accepted handoff-path hash**. Legacy approval evidence cannot satisfy or override that stronger contract. See [Native HITL Approval Intent](APPROVAL_INTENT.md).
 
 ### Budget attenuation
 
@@ -143,7 +143,7 @@ When handoff authority is enabled:
 8. later tool requests must be attributed to that active agent and are graded against its effective authority;
 9. onward handoffs repeat the same process.
 
-An invalid handoff never advances the active-agent state. Subsequent evidence therefore cannot use a failed transition to acquire authority indirectly.
+An invalid handoff never advances the active-agent state, accepted authority epoch, or accepted path identity. Subsequent evidence therefore cannot use a malformed, unauthorized, wrong-source, or re-expanding transition to acquire authority indirectly or to spoof an approval context.
 
 ## OpenAI SDK provenance boundary
 
@@ -238,24 +238,28 @@ These are resolved deterministic authorization failures, not evaluator uncertain
 
 ## Legacy compatibility
 
-A scenario with no `root_agent` and no handoff grants retains the previous single-authority policy behavior. Existing tool/resource/approval/global-budget semantics remain intact, and ordinary handoff events continue to count toward the global handoff ceiling.
+A scenario with no `root_agent` and no handoff grants retains the previous single-authority policy behavior. Existing tool/resource/legacy-approval/global-budget semantics remain intact, and ordinary handoff events continue to count toward the global handoff ceiling.
 
 A scenario that enables handoff authority but is run through the legacy `OpenAIAgentsAdapter` does **not** silently fall back to root authority. Because legacy normalized tool requests lack the stronger generating-agent attribution, deterministic policy grading fails closed.
 
+The native HITL approval-intent path is also opt-in and separate. Enabling `ApprovalIntentSpec` does not mutate the meaning of historical `APPROVAL` events; it introduces a stronger exact-interruption relation that only `APPROVAL_DECISION` evidence can satisfy.
+
 ## Replay semantics
 
-No new receipt type is introduced.
+No new **handoff** receipt type is introduced.
 
 Handoff and tool events already live in the same normalized subject-evidence domain, while the scenario itself already binds the authority contract. Historical replay therefore regrades the persisted evidence against the exact persisted scenario identity and the same deterministic `PolicyOracle` semantics.
 
 Replay does not recreate SDK agent provenance. It verifies the historical evidence that was recorded. If required run-local agent attribution is absent or inconsistent with active-agent chronology, regrading fails deterministically rather than inventing identity.
 
+Approval intent is a separate receipt domain because it binds a decision to one exact pending interruption and continuation. Replay semantically revalidates that receipt and its accepted authority epoch/path before policy grading. See [Native HITL Approval Intent](APPROVAL_INTENT.md) and [Evidence & Replay](EVIDENCE_AND_REPLAY.md).
+
 ## Deterministic verification
 
 The implementation is covered at two levels:
 
-- provider-neutral unit tests for canonical graph identity, configuration rejection, one-/multi-hop attenuation, unauthorized transitions, resource/tool confinement, approval monotonicity, delegated budgets, re-expansion rejection, missing agent identity, and legacy no-graph behavior;
-- real pinned-SDK tests using `agents.testing.ScriptedModel` for one-hop and two-hop native handoffs, actual run-item agent attribution, legacy-adapter fail-closed behavior, and root mismatch before model execution.
+- provider-neutral unit tests for canonical graph identity, configuration rejection, one-/multi-hop attenuation, unauthorized transitions, resource/tool confinement, approval monotonicity, delegated budgets, re-expansion rejection, missing agent identity, exact accepted path identity, and legacy no-graph behavior;
+- real pinned-SDK tests using `agents.testing.ScriptedModel` for one-hop and two-hop native handoffs, actual run-item agent attribution, legacy-adapter fail-closed behavior, root mismatch before model execution, and the separate native HITL handoff→approval→resume path.
 
 No provider API call is required.
 
@@ -271,10 +275,10 @@ This boundary does **not** establish:
 - cross-process or cross-host delegation;
 - hosted-agent routing assurance;
 - production IAM or credential delegation;
-- a redesign of persistent/call-scoped approval lifecycle;
+- enterprise approval-workflow correctness or authenticated human approval;
 - correctness of arbitrary orchestration frameworks outside the pinned OpenAI SDK boundary;
 - target-system enforcement merely because the evaluator detected a violation.
 
-The narrow claim is: **inside the pinned deterministic OpenAI Agents SDK execution boundary, scenario-owned directed grants plus evidence-bound run-item agent identity prove that each observed native handoff follows an explicitly authorized path and that effective tool/resource/approval/budget authority never expands along that path.**
+The narrow claim is: **inside the pinned deterministic OpenAI Agents SDK execution boundary, scenario-owned directed grants plus evidence-bound run-item agent identity prove that each observed native handoff follows an explicitly authorized path and that effective tool/resource/approval/budget authority never expands along that path.** The separate approval-intent contract can additionally bind one exact native HITL decision to that accepted path, but it does not turn the handoff graph into production IAM or human-authentication evidence.
 
 [← Documentation hub](README.md)
