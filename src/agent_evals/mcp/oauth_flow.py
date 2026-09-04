@@ -23,6 +23,7 @@ _RECEIPT_SCHEMA: Literal["agent-evals/mcp-oauth-flow-receipt/v1"] = (
     "agent-evals/mcp-oauth-flow-receipt/v1"
 )
 _TRANSPORT: Literal["oauth-code-pkce-loopback"] = "oauth-code-pkce-loopback"
+_AUTH_SCHEME: Literal["Bearer"] = "Bearer"
 _SUBJECT = "agent-evals-user"
 
 
@@ -317,8 +318,7 @@ class _AuthorizationServerProvider:
         self.codes.pop(authorization_code.code, None)
         return OAuthToken(
             access_token=access_value,
-            # RFC 6749 token type label; this is protocol metadata, not credential material.
-            token_type="Bearer",  # nosec B106
+            token_type=_AUTH_SCHEME,
             expires_in=3600,
             scope=" ".join(authorization_code.scopes),
         )
@@ -359,8 +359,7 @@ class _AuthorizationServerProvider:
             "iss": str(claims.get("iss", "")),
             "scope": " ".join(access.scopes),
             "sub": access.subject,
-            # RFC 7662 token type label; this is protocol metadata, not credential material.
-            "token_type": "Bearer",  # nosec B105
+            "token_type": _AUTH_SCHEME,
         }
         self.last_introspection = response
         return response
