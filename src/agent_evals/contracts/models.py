@@ -107,8 +107,7 @@ class HandoffAuthorityGrant(BaseModel):
         if not self.additional_approval_required_tools <= self.allowed_tools:
             missing = self.additional_approval_required_tools - self.allowed_tools
             raise ValueError(
-                "additional approval-required tools must also be delegated: "
-                f"{sorted(missing)!r}"
+                f"additional approval-required tools must also be delegated: {sorted(missing)!r}"
             )
         return self
 
@@ -185,8 +184,7 @@ class AuthorityPolicy(BaseModel):
             if not grant.allowed_tools <= self.allowed_tools:
                 widened = grant.allowed_tools - self.allowed_tools
                 raise ValueError(
-                    "handoff grant tools must remain within root authority: "
-                    f"{sorted(widened)!r}"
+                    f"handoff grant tools must remain within root authority: {sorted(widened)!r}"
                 )
             if grant.max_tool_calls > self.max_tool_calls:
                 raise ValueError("handoff grant tool budget cannot exceed root tool budget")
