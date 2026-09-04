@@ -206,7 +206,7 @@ class MCPAgentToolSchemaDriftReceipt(BaseModel):
             "refreshed_list_ordinal": refreshed_list_ordinal,
             "recovery_call_ordinal": recovery_call_ordinal,
         }
-        return cls(**unsigned, receipt_root=_receipt_root(unsigned))
+        return cls.model_validate({**unsigned, "receipt_root": _receipt_root(unsigned)})
 
     @field_validator("protocol_receipt", mode="before")
     @classmethod
