@@ -292,3 +292,32 @@ async def test_legacy_openai_adapter_cannot_silently_satisfy_agent_bound_handoff
     )
     root_model.assert_complete()
     specialist_model.assert_complete()
+
+
+@pytest.mark.openai
+@pytest.mark.asyncio
+async def test_openai_handoff_authority_blocks_root_agent_mismatch_before_model_execution() -> None:
+    pytest.importorskip("agents")
+    from agents import Agent
+    from agents.testing import ScriptedModel, assistant_message
+
+    model = ScriptedModel([[assistant_message("This step must not execute.")]])
+    wrong_root = Agent(name="Unexpected root agent", model=model)
+
+    evaluated = await TrialRunner().run(
+        OpenAIAgentsHandoffAuthorityAdapter(
+            wrong_root,
+            state_reader=lambda: {"order_read": False},
+        ),
+        subject=subject(),
+        scenario=one_hop_scenario(),
+        trial_id="openai-handoff-authority-root-mismatch",
+    )
+
+    assert evaluated.verdict is TrialVerdict.BLOCKED
+    assert evaluated.oracle_results == ()
+    assert len(evaluated.evidence.events) == 1
+    error = evaluated.evidence.events[0]
+    assert error.kind is EvidenceKind.EVALUATION_ERROR
+    assert error.payload["code"] == "handoff_root_agent_mismatch"
+    assert not model.calls
