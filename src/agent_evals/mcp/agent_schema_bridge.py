@@ -6,6 +6,7 @@ import hashlib
 import hmac
 import json
 from collections.abc import Mapping
+from itertools import pairwise
 from typing import Any, Literal, Self
 
 from pydantic import BaseModel, ConfigDict, Field, StrictInt, field_validator, model_validator
@@ -463,7 +464,7 @@ def _protocol_observation(
 def _require_protocol_chronology(ordinals: tuple[int, int, int, int, int, int]) -> None:
     if any(isinstance(value, bool) or not isinstance(value, int) or value < 0 for value in ordinals):
         raise ValueError("MCP schema-drift protocol ordinals must be non-negative integers")
-    if not all(left < right for left, right in zip(ordinals, ordinals[1:], strict=True)):
+    if not all(left < right for left, right in pairwise(ordinals)):
         raise ValueError(
             "MCP schema-drift protocol chronology must be initial-list < swap < stale-call < "
             "cache-invalidation < refreshed-list < recovery-call"
