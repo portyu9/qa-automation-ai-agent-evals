@@ -95,23 +95,23 @@ class OpenAIAgentsHandoffAuthorityAdapter(OpenAIAgentsAdapter):
         attributed: list[EvidenceEvent] = []
         for event in normalized:
             agent: str | None = None
-            call_id = event.payload.get("call_id")
+            event_call_id = event.payload.get("call_id")
             if event.kind is EvidenceKind.TOOL_REQUEST:
                 agent = _event_agent_for_call(
                     request_agents,
-                    call_id,
+                    event_call_id,
                     phase="normalized tool request",
                 )
             elif event.kind is EvidenceKind.TOOL_RESULT:
                 agent = _event_agent_for_call(
                     result_agents,
-                    call_id,
+                    event_call_id,
                     phase="normalized tool result",
                 )
             elif event.kind is EvidenceKind.APPROVAL_REQUEST:
                 agent = _event_agent_for_call(
                     approval_agents,
-                    call_id,
+                    event_call_id,
                     phase="normalized approval request",
                 )
 
