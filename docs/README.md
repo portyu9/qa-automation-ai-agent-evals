@@ -67,17 +67,20 @@ Assurance report root      ≠ signed attestation
 
 New documents are added only after executable code or a real deployment/protocol boundary creates a contract that reviewers need to inspect. `MCP_REMOTE_AUTH.md` exists because the repository has an independently executable resource-server authentication/authorization boundary; `MCP_OAUTH_FLOW.md` exists because the repository now also has an independently executable authorization-client/authorization-server flow across separate loopback origins. Neither evidence domain becomes agent behavioral evidence without an explicit integration contract.
 
-## Verified source checkpoint
+## Verified implementation checkpoint
 
-Source checkpoint `7132537c5041a7f2c828a7f3db3e5e52af020888`, CI run `33826363896`:
+Implementation source checkpoint `3c33770a7be8089c1ec68f5dec26fcf76e8dc871`, CI run `33870616736`:
 
-- deterministic core: **183 passed, 23 deselected**;
-- branch coverage: **93.05%**;
+- deterministic core: **192 passed, 23 deselected**;
+- branch coverage: **93.37%**;
 - strict mypy: **0 issues across 40 source files**;
 - deterministic OpenAI SDK: **11/11 passed**;
 - deterministic MCP protocol: **6/6 passed**;
 - deterministic MCP remote auth: **3/3 passed**;
 - deterministic MCP OAuth flow: **3/3 passed**;
-- all seven CI jobs green, including Ruff, formatter, Bandit, dependency audit, and package integrity.
+- Python **3.11 minimum / 3.14 latest** quality jobs, Ruff, formatter, Bandit, dependency audit, package integrity, and all **7/7 CI jobs**: green;
+- dependency audit reported **no known vulnerabilities**; the project package itself is skipped because it is not published on PyPI.
+
+Documentation-only closeout commits are validated separately by PR CI and do not silently redefine this implementation checkpoint.
 
 [← Repository README](../README.md)

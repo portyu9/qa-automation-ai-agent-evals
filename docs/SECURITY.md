@@ -279,6 +279,8 @@ Exact canonical fixture JSON is appended to the first native SDK handoff context
 
 `injector:<identity>`, MCP fault identities, remote-auth policy identities, and OAuth-flow policy identities are control-plane/content identities, not authenticated signer identities. Receipt/evidence roots are domain-separated integrity hashes, not signatures, MACs, trusted timestamps, or hardware attestation.
 
+The public `MCPRemoteAuthProbeResult` and `MCPOAuthFlowProbeResult` models are diagnostic envelopes. Their embedded receipt identities are validated, but outer diagnostic fields are not independently cryptographically rebound to those receipts. They must not be treated as authenticated persisted evidence envelopes without a future explicit binding contract.
+
 A stronger deployment layer must separately address signer identity, trusted timestamps, tamper-resistant storage, transport authenticity, and independent target-side acknowledgements where required.
 
 ## Sensitive data
@@ -289,19 +291,21 @@ Adversarial and MCP receipts store digests and minimized protocol observations r
 
 Application-level evaluation and loopback protocol testing cannot by themselves prove process isolation, Internet transport security, secret-manager policy, production IAM, tenant isolation, sandbox containment, remote MCP fidelity, production memory/retrieval integrity, distributed handoff correctness, third-party authorization-server security, or infrastructure fault behavior.
 
-## Current verification checkpoint
+## Verified implementation checkpoint
 
-Source checkpoint `7132537c5041a7f2c828a7f3db3e5e52af020888`, CI run `33826363896`:
+Implementation source checkpoint `3c33770a7be8089c1ec68f5dec26fcf76e8dc871`, CI run `33870616736`:
 
-- deterministic core: **183 passed, 23 deselected**;
-- branch coverage: **93.05%**;
+- deterministic core: **192 passed, 23 deselected**;
+- branch coverage: **93.37%**;
 - strict mypy: **0 issues across 40 source files**;
 - deterministic OpenAI SDK suite: **11/11 passed**;
 - deterministic MCP protocol suite: **6/6 passed**;
 - deterministic MCP remote-auth suite: **3/3 passed**;
 - deterministic MCP OAuth-flow suite: **3/3 passed**;
-- Python 3.11/3.13 quality, Ruff, formatter, Bandit, dependency audit, package integrity, and all seven CI jobs: green;
-- dependency audit reported no known vulnerabilities; the project package itself is skipped because it is not published on PyPI.
+- Python **3.11 minimum / 3.14 latest** quality, Ruff, formatter, Bandit, dependency audit, package integrity, and all **7/7 CI jobs**: green;
+- dependency audit reported **no known vulnerabilities**; the project package itself is skipped because it is not published on PyPI.
+
+Documentation-only closeout commits are validated separately by PR CI and do not silently redefine this implementation checkpoint.
 
 ## Reporting vulnerabilities
 
