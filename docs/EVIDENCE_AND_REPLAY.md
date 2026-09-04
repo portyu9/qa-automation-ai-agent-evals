@@ -116,6 +116,24 @@ A mismatch raises `ReplayIdentityError` at the adapter boundary. When all identi
 
 For an unchanged evidence model, a successful exact-identity replay reproduces the original `evidence_root`.
 
+## Protocol-delivery receipts are semantically revalidated
+
+Byte-level and evidence-root integrity are necessary but not sufficient for a persisted cross-domain MCP claim. A recorded `PROTOCOL_DELIVERY` event is not trusted as opaque JSON merely because the enclosing `TrialEvidence` is structurally valid.
+
+Before subject grading, the evaluator dispatches each known protocol-delivery source to its exact typed receipt contract and revalidates its semantic root and relation:
+
+| Source | Revalidated receipt | Relation rechecked |
+|---|---|---|
+| `bridge:mcp-agent:tool-result` | `MCPAgentToolResultReceipt` | exact result-bridge identity and model-visible output binding |
+| `bridge:mcp-agent:tool-error-recovery` | `MCPAgentToolErrorRecoveryReceipt` | exact error/retry identities, causal chronology, argument and recovery bindings |
+| `bridge:mcp-agent:tool-schema-drift` | `MCPAgentToolSchemaDriftReceipt` | exact schema/argument/observation digests, strict protocol chronology, and host-refreshed adaptation binding |
+
+The schema-drift replay verifier does not recreate a refresh. It checks that the historical receipt still proves the exact recorded relation: bound v1/cached/v2 schema digests, stale/recovery argument digests, matching protocol/model-visible observations, distinct call identities, strict `initial-list < swap < stale-call < cache-invalidation < refreshed-list < recovery-call` chronology, and a valid domain-separated root.
+
+Unknown `PROTOCOL_DELIVERY` sources fail closed until an explicit verifier exists. Malformed typed receipts, invalid roots, impossible chronology, or receipt scenario identity that differs from the enclosing `TrialEvidence.scenario_identity` block evaluation instead of being treated as trusted historical evidence.
+
+This distinction matters because persistence can preserve a claim without making that claim semantically true. Replay therefore rechecks both the envelope and the cross-domain receipt contract.
+
 ## Replay is not re-execution
 
 Replay answers:
@@ -129,7 +147,9 @@ Replay does **not** answer:
 - does a remote side effect still exist now?;
 - is an external dependency currently healthy?;
 - did a specific human, service, or machine originally produce these bytes?;
-- would nondeterministic behavior reproduce on another attempt?
+- would nondeterministic behavior reproduce on another attempt?;
+- would an MCP server still expose the same result, error, schema, cache state, or authorization behavior now?;
+- would a host perform the same schema-drift cache invalidation now?
 
 Those questions require fresh execution, fresh environment observation, or authenticated provenance—not replay.
 
@@ -194,7 +214,7 @@ The hard-link publication primitive also depends on filesystem support for hard 
 - Put the evidence root on a filesystem whose ownership and access controls match the evaluation control-plane trust boundary.
 - Treat partial records and stale locks as incidents to review, not clutter to auto-delete.
 - Preserve manifests with their payloads; neither is a substitute for the other.
-- Do not use replay as a live-provider smoke test.
+- Do not use replay as a live-provider or live-MCP smoke test.
 - Do not interpret a matching SHA-256 as publisher authentication.
 - If evidence must survive a compromised host, export it to a separately authenticated or immutable system.
 

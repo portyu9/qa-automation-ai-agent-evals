@@ -9,11 +9,15 @@ from pydantic import ValidationError
 from agent_evals.evidence.models import EvidenceKind, TrialEvidence
 from agent_evals.mcp.agent_bridge import MCPAgentToolResultReceipt
 from agent_evals.mcp.agent_error_bridge import MCPAgentToolErrorRecoveryReceipt
+from agent_evals.mcp.agent_schema_bridge import MCPAgentToolSchemaDriftReceipt
 
 _TOOL_RESULT_SOURCE = "bridge:mcp-agent:tool-result"
 _TOOL_ERROR_RECOVERY_SOURCE = "bridge:mcp-agent:tool-error-recovery"
+_TOOL_SCHEMA_DRIFT_SOURCE = "bridge:mcp-agent:tool-schema-drift"
 
-ProtocolDeliveryReceipt: TypeAlias = MCPAgentToolResultReceipt | MCPAgentToolErrorRecoveryReceipt
+ProtocolDeliveryReceipt: TypeAlias = (
+    MCPAgentToolResultReceipt | MCPAgentToolErrorRecoveryReceipt | MCPAgentToolSchemaDriftReceipt
+)
 
 
 class ProtocolDeliveryError(ValueError):
@@ -33,11 +37,17 @@ def verify_protocol_delivery(evidence: TrialEvidence) -> tuple[ProtocolDeliveryR
         if event.kind is not EvidenceKind.PROTOCOL_DELIVERY:
             continue
 
-        receipt_type: type[MCPAgentToolResultReceipt] | type[MCPAgentToolErrorRecoveryReceipt]
+        receipt_type: (
+            type[MCPAgentToolResultReceipt]
+            | type[MCPAgentToolErrorRecoveryReceipt]
+            | type[MCPAgentToolSchemaDriftReceipt]
+        )
         if event.source == _TOOL_RESULT_SOURCE:
             receipt_type = MCPAgentToolResultReceipt
         elif event.source == _TOOL_ERROR_RECOVERY_SOURCE:
             receipt_type = MCPAgentToolErrorRecoveryReceipt
+        elif event.source == _TOOL_SCHEMA_DRIFT_SOURCE:
+            receipt_type = MCPAgentToolSchemaDriftReceipt
         else:
             raise ProtocolDeliveryError(
                 f"unsupported protocol delivery evidence source: {event.source}"

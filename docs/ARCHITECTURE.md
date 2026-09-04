@@ -35,17 +35,27 @@ Trusted evaluation control plane
 │   │   ├── exact OpenAI request/result call-ID pairing
 │   │   ├── MCPAgentToolResultReceipt
 │   │   └── same-session benign recovery after behavioral run
-│   └── TOOL_ERROR causal retry/recovery bridge
-│       ├── exactly two behavioral target calls
-│       ├── first real MCP ToolError → MCPFaultReceipt
-│       ├── exact model-visible error observation
-│       ├── distinct OpenAI error/retry call IDs
-│       ├── same canonical arguments
-│       ├── request₁ < result₁ < request₂ < result₂
-│       ├── exact same-session benign recovery
-│       └── MCPAgentToolErrorRecoveryReceipt
+│   ├── TOOL_ERROR causal retry/recovery bridge
+│   │   ├── exactly two behavioral target calls
+│   │   ├── first real MCP ToolError → MCPFaultReceipt
+│   │   ├── exact model-visible error observation
+│   │   ├── distinct OpenAI error/retry call IDs
+│   │   ├── same canonical arguments
+│   │   ├── request₁ < result₁ < request₂ < result₂
+│   │   ├── exact same-session benign recovery
+│   │   └── MCPAgentToolErrorRecoveryReceipt
+│   └── TOOL_SCHEMA_DRIFT host-refreshed adaptation bridge
+│       ├── model receives bound v1 target schema
+│       ├── evaluator-only hidden live swap to v2
+│       ├── real MCP rejection of stale v1 arguments
+│       ├── host-owned cache invalidation after rejection
+│       ├── first fresh post-invalidation tools/list exposes v2
+│       ├── distinct stale/recovery OpenAI call IDs
+│       ├── exact bound v1/v2 arguments and recovery result
+│       ├── strict six-step protocol chronology
+│       └── MCPAgentToolSchemaDriftReceipt
 │
-│   both paths use a fresh official MCPServerStdio subprocess per trial
+│   all three paths use a fresh official MCPServerStdio subprocess per trial
 │   and require negotiated MCP 2026-07-28
 ├── protocol-delivery semantic verifier
 ├── MCP resource-server authorization laboratory
@@ -98,10 +108,11 @@ MCPRemoteAuthPolicy    → MCPRemoteAuthReceipt
 MCPOAuthFlowPolicy     → MCPOAuthFlowReceipt
 ```
 
-Two receipt types bridge selected MCP protocol observations into agent-trial evidence without creating new fault identities:
+Three receipt types bridge selected MCP protocol observations into agent-trial evidence without creating new fault identities:
 
 - `MCPAgentToolResultReceipt` binds one verified MCP `TOOL_RESULT_POISON` observation to one exact agent scenario, tool name, call ID, and model-visible output;
-- `MCPAgentToolErrorRecoveryReceipt` binds one verified MCP `TOOL_ERROR` observation to one exact causal two-call agent relation: error call, model-visible error result, distinct same-argument retry call, and exact benign recovery.
+- `MCPAgentToolErrorRecoveryReceipt` binds one verified MCP `TOOL_ERROR` observation to one exact causal two-call agent relation: error call, model-visible error result, distinct same-argument retry call, and exact benign recovery;
+- `MCPAgentToolSchemaDriftReceipt` binds one verified MCP `TOOL_SCHEMA_DRIFT` relation to one exact host-refreshed two-call agent relation: v1 discovery, hidden live replacement, stale-call rejection, host cache invalidation, first fresh v2 discovery, distinct corrected call, and exact replacement result.
 
 These identities answer different questions and do not inherit authority from one another.
 
@@ -118,7 +129,9 @@ tool_schema_drift
 tool_identity_drift
 ```
 
-`tool_result_poison` and `tool_error` currently have explicit agent bridges. The other four remain protocol-only with respect to agent behavior.
+`tool_result_poison`, `tool_error`, and `tool_schema_drift` currently have explicit agent bridges. `tool_metadata_poison`, `tool_list_stale_cache`, and `tool_identity_drift` remain protocol-only with respect to agent behavior.
+
+The schema-drift bridge is not a blanket promotion of cache semantics. Its host/model ownership is explicit: the harness owns the live schema swap, the evaluator/host adapter owns one cache invalidation, the official MCP session supplies the first fresh post-invalidation listing, the pinned Agents SDK converts that listing into model tool definitions, and the agent is credited only for changing its second target call after v2 becomes model-visible. It does **not** claim model-initiated refresh or automatic `tools/list_changed` handling.
 
 ### Resource-server authorization identity
 
@@ -144,7 +157,7 @@ verified delivery + deterministic violation   → FAIL
 verified delivery + deterministic closure     → PASS
 ```
 
-For either dedicated MCP bridge:
+For any dedicated MCP bridge:
 
 ```text
 raw MCPFaultReceipt only                      → protocol evidence only
@@ -153,7 +166,7 @@ verified bridge + deterministic violation     → FAIL
 verified bridge + deterministic closure       → PASS
 ```
 
-Neither bridge receipt is grading authority. Both are evaluator-owned integrity evidence used to establish preconditions before deterministic subject grading.
+No bridge receipt is grading authority. All three are evaluator-owned integrity evidence used to establish preconditions before deterministic subject grading.
 
 ## Seven OpenAI local/SDK channel boundaries
 
@@ -296,9 +309,66 @@ That chronology closes a subtle trust boundary: two identical calls emitted befo
 
 Missing retry, extra target calls, changed retry arguments, malformed/ambiguous identities, protocol drift, error mismatch, recovery mismatch, or non-causal ordering becomes `AdapterPreconditionError` and therefore `EVALUATION_ERROR / BLOCKED`.
 
+## OpenAI↔MCP schema-drift adaptation boundary
+
+`OpenAIAgentsMCPToolSchemaDriftAdapter` closes a third relation for `TOOL_SCHEMA_DRIFT`: a corrected v2 call is credited only when the model first selected the bound v1 call, the live server changed before validation, the stale call was genuinely rejected, and host-owned refresh made v2 model-visible before the corrected call.
+
+```text
+MCPFaultSpec(tool_schema_drift)
+        ↓
+fresh MCPServerStdio subprocess
+        ↓
+connected official MCP session
+        ↓ protocol_version == 2026-07-28
+model receives bound v1 target schema
+        ↓
+TOOL_REQUEST(stale_call_id; bound v1 arguments)
+        ↓
+hidden evaluator-only live schema swap to v2
+        ↓ same live MCP session
+real MCP v2 validation rejects stale v1 arguments
+        ↓
+TOOL_RESULT(stale_call_id; exact model-visible rejection)
+        ↓
+host adapter invalidates tool cache once
+        ↓
+first fresh post-invalidation tools/list exposes bound v2
+        ↓
+model receives v2 + stale rejection
+        ↓
+TOOL_REQUEST(recovery_call_id; bound v2 arguments)
+        ↓ same live MCP session
+TOOL_RESULT(recovery_call_id; exact replacement result)
+        ↓
+MCPAgentToolSchemaDriftReceipt
+        ↓
+PROTOCOL_DELIVERY ordered after recovery TOOL_RESULT
+        ↓
+TrialEvidence → policy/outcome oracles
+```
+
+The bridge requires:
+
+- a fresh official stdio session and negotiated MCP `2026-07-28`;
+- exactly one model-visible controlled target and no leaked evaluator control identity;
+- the exact initial/cached v1 schema and exact refreshed v2 schema;
+- exactly two target behavioral calls with stable, distinct OpenAI call IDs;
+- exact stale v1 and corrected v2 argument digests;
+- a real stale-call MCP error result whose model-visible observation matches the protocol observation;
+- one host cache invalidation after that rejection;
+- the first fresh post-invalidation listing to expose v2 before recovery;
+- exact same-session replacement result equivalence;
+- strict protocol chronology `initial-list < swap < stale-call < cache-invalidation < refreshed-list < recovery-call`.
+
+Later SDK turns may reuse the already-refreshed v2 cache. Such reads are not extra refreshes. The bridge binds the first fresh discovery after one evaluator-owned invalidation, not a count of every later `list_tools()` access.
+
+Missing or extra calls, recovery before refreshed discovery, repeated stale arguments, schema/control leakage, protocol drift, observation mismatch, or malformed receipt becomes `AdapterPreconditionError` and therefore `EVALUATION_ERROR / BLOCKED`.
+
 ## SDK representation is not protocol identity
 
 The pinned Agents SDK may serialize one logical text result differently across internal `ToolCallOutputItem.output` and Responses replay input. The bridges compare the logical public outputs represented by normalized evidence rather than pretending incidental wire spellings are the same object.
+
+For schema drift, the same principle applies to tool definitions: the bridge binds canonical required-property/type projections of the raw MCP schemas while the integration tests separately assert the actual SDK model-visible v1/v2 tool definitions.
 
 ## MCP resource-server Streamable HTTP authorization boundary
 
@@ -375,7 +445,10 @@ HANDOFF:      HANDOFF → ATTACK_DELIVERY
 The MCP bridges use distinct protocol-delivery chronology:
 
 ```text
-MCP RESULT:   TOOL_REQUEST → PROTOCOL_DELIVERY → TOOL_RESULT
+MCP RESULT:
+              TOOL_REQUEST
+              → PROTOCOL_DELIVERY
+              → TOOL_RESULT
 
 MCP ERROR RECOVERY:
               TOOL_REQUEST(error)
@@ -383,13 +456,25 @@ MCP ERROR RECOVERY:
               → TOOL_REQUEST(retry)
               → TOOL_RESULT(recovery)
               → PROTOCOL_DELIVERY
+
+MCP SCHEMA DRIFT:
+              model-visible v1 discovery
+              → TOOL_REQUEST(stale)
+              → hidden live swap
+              → real stale rejection
+              → TOOL_RESULT(stale)
+              → host cache invalidation
+              → first fresh v2 discovery
+              → TOOL_REQUEST(recovery)
+              → TOOL_RESULT(recovery)
+              → PROTOCOL_DELIVERY
 ```
 
 The event kind is deliberately different from `ATTACK_DELIVERY`. It communicates that protocol evidence crossed into agent evidence through an explicit verified bridge rather than through an `AttackFixture` injector.
 
-The ToolError bridge event is deliberately ordered **after** the recovery result because its receipt represents the full error → observed result → retry → recovery relation. Emitting it earlier would claim a relation that had not yet closed.
+The ToolError and schema-drift bridge events are deliberately ordered **after** the recovery result because each receipt represents a full multi-step relation. Emitting either earlier would claim a relation that had not yet closed.
 
-Other MCP fault receipts, remote-auth receipts, and OAuth-flow receipts remain outside agent trial chronology.
+Unbridged MCP fault receipts, remote-auth receipts, and OAuth-flow receipts remain outside agent trial chronology.
 
 This preserves the following non-implications:
 
@@ -397,6 +482,8 @@ This preserves the following non-implications:
 MCP configuration        ⇏ client observation
 client observation       ⇏ agent consumption
 second call              ⇏ causal retry
+cache invalidation       ⇏ model-owned refresh
+refreshed discovery      ⇏ correct adaptation
 raw protocol receipt     ⇏ agent behavior
 bridge closure           ⇏ automatic PASS
 bearer authorization     ⇏ OAuth issuance correctness
@@ -422,13 +509,13 @@ Neither is rewritten as subject `FAIL`.
 
 The standalone MCP laboratories return their own evidence-domain results rather than `TrialEvidence`. The dedicated bridges are exceptions only because they explicitly verify cross-domain identities and emit `PROTOCOL_DELIVERY` inside the agent trial.
 
-The evaluator revalidates known `PROTOCOL_DELIVERY` receipt types before subject grading. Unknown delivery sources, malformed receipts, receipt-root inconsistencies, or scenario-identity mismatches block evaluation rather than being treated as opaque trusted JSON.
+The evaluator revalidates all known `PROTOCOL_DELIVERY` receipt types before subject grading. Unknown delivery sources, malformed receipts, receipt-root inconsistencies, protocol-relation inconsistencies, or scenario-identity mismatches block evaluation rather than being treated as opaque trusted JSON.
 
 ## Persistence, replay, statistics, and release authority
 
 `LocalEvidenceStore` revalidates persisted bytes, manifests, hashes, identities, schema, semantic roots, symlink/file constraints, and no-clobber publication behavior before reuse. Local hashes do not authenticate a hostile writer who can coherently replace all controlled bytes.
 
-`EvidenceReplayAdapter` performs exact-identity historical regrading. It does not re-run the agent, provider, tool, injector, MCP stdio bridges, MCP labs, or authorization flow and cannot establish fresh delivery.
+`EvidenceReplayAdapter` performs exact-identity historical regrading. It does not re-run the agent, provider, tool, injector, MCP stdio bridges, MCP labs, or authorization flow and cannot establish fresh delivery. Persisted `PROTOCOL_DELIVERY` events are semantically revalidated as typed result, ToolError-recovery, or schema-drift receipts before deterministic grading.
 
 Repeated trials feed `ReliabilityReport`; resolved behavior remains separate from blocked evaluator/runtime uncertainty. `AssuranceReport` binds evidence roots, deterministic oracle snapshots, reliability, release policy, gate output, and report root.
 
@@ -436,7 +523,7 @@ Repeated trials feed `ReliabilityReport`; resolved behavior remains separate fro
 
 ## Current boundary
 
-The framework currently provides deterministic contracts, content-addressed adversarial scenarios, evidence-bound OpenAI delivery verification across seven scoped channel categories, a six-fault official-SDK MCP protocol laboratory, two exact OpenAI↔MCP stdio bridge contracts (`TOOL_RESULT_POISON` same-call delivery and causal `TOOL_ERROR` retry/recovery), a real-loopback resource-server authorization laboratory, a separated two-origin OAuth authorization-code/PKCE/introspection laboratory, integrity-verified local persistence, exact historical replay, deterministic policy/outcome oracles, metamorphic relations, repeated-trial statistics, assurance reports, release gating, and bounded failure minimization.
+The framework currently provides deterministic contracts, content-addressed adversarial scenarios, evidence-bound OpenAI delivery verification across seven scoped channel categories, a six-fault official-SDK MCP protocol laboratory, three exact OpenAI↔MCP stdio bridge contracts (`TOOL_RESULT_POISON` same-call delivery, causal `TOOL_ERROR` retry/recovery, and host-refreshed `TOOL_SCHEMA_DRIFT` adaptation), a real-loopback resource-server authorization laboratory, a separated two-origin OAuth authorization-code/PKCE/introspection laboratory, integrity-verified local persistence, exact historical replay, deterministic policy/outcome oracles, metamorphic relations, repeated-trial statistics, assurance reports, release gating, and bounded failure minimization.
 
 Implementation source checkpoint `d98f9ca1feb1179504cd2181295a73936fd0ae6c`, protected-main CI run `33898508697`:
 
@@ -450,8 +537,8 @@ Implementation source checkpoint `d98f9ca1feb1179504cd2181295a73936fd0ae6c`, pro
 - Python **3.11 minimum / 3.14 latest**, Ruff, formatter, Bandit, dependency audit, package integrity, and all **7/7 CI jobs**: green;
 - dependency audit: no known vulnerabilities found; the project package itself is skipped because it is not published on PyPI.
 
-This checkpoint remains a historical audited merged implementation baseline. The ToolError-recovery bridge is accepted only after its own exact-head CI, merge, and post-merge `main` verification.
+This checkpoint remains a historical audited merged implementation baseline. Capabilities added afterward, including ToolError recovery and host-refreshed schema-drift adaptation, are accepted only after their own exact-head CI, merge, and post-merge `main` verification; the historical checkpoint is not retroactively relabeled.
 
-Still outside the executable claim boundary are credentialed live-provider assurance; agent-through-MCP grading for `tool_metadata_poison`, stale-cache, schema-drift, and identity-drift; generic retry/backoff/idempotency assurance beyond the exact one-retry ToolError relation; hosted/remote/Internet MCP fidelity; generic stdio/proxy/TLS/DNS/transport-chaos assurance; production IdP/JWT/JWKS/federation; CIMD/enterprise-managed authorization; DPoP/mTLS; refresh/revocation/replay lifecycle; public/shared-cache behavior beyond the exact implemented relations; arbitrary schema/registry mutations; MCP resource/prompt/task fault families; production memory/retrieval; infrastructure chaos; semantic/model graders; signed provenance; and formal non-inferiority testing.
+Still outside the executable claim boundary are credentialed live-provider assurance; agent-through-MCP grading for `tool_metadata_poison`, generic stale-cache, and `tool_identity_drift`; model-initiated MCP refresh and automatic `tools/list_changed` handling; arbitrary schema compatibility/migrations beyond the exact bound schema-drift fixture; generic retry/backoff/idempotency assurance beyond the exact one-retry ToolError relation; hosted/remote/Internet MCP fidelity; generic stdio/proxy/TLS/DNS/transport-chaos assurance; production IdP/JWT/JWKS/federation; CIMD/enterprise-managed authorization; DPoP/mTLS; refresh/revocation/replay lifecycle; public/shared-cache behavior beyond the exact implemented relations; arbitrary registry mutations; MCP resource/prompt/task fault families; production memory/retrieval; infrastructure chaos; semantic/model graders; signed provenance; and formal non-inferiority testing.
 
 [← Documentation hub](README.md)

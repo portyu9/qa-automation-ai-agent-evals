@@ -38,9 +38,11 @@ If delivery cannot be verified, the trial is `BLOCKED` before deterministic subj
 
 `OpenAIAgentsAdapter` therefore implements all seven generic channel categories at narrow, explicitly tested SDK/local boundaries. The taxonomy is broader than any one adapter implementation.
 
+The dedicated OpenAI↔MCP stdio bridges are **not** additional `AttackChannel` values. They use separate protocol fault identities and `PROTOCOL_DELIVERY` receipts because protocol observation, agent observation, host refresh/retry chronology, and grading authority are distinct trust domains.
+
 ## Delivery invariants
 
-Every adversarial path follows the same rules:
+Every adversarial `AttackFixture` path follows the same rules:
 
 - base objective, required/forbidden outcomes, and exact authority remain unchanged;
 - complete canonical `AttackFixture.payload_json` is the injected content/value for the implemented boundary;
@@ -56,6 +58,8 @@ provider/runtime unavailable               → BLOCKED
 verified attack + subject violation        → FAIL
 verified attack + deterministic closure    → PASS
 ```
+
+MCP bridge paths preserve the same fail-closed principle with different evidence contracts: a raw `MCPFaultReceipt` is insufficient, and the exact bridge receipt must close before deterministic grading.
 
 ## Concrete OpenAI boundaries
 
@@ -82,6 +86,8 @@ TOOL_REQUEST → ATTACK_DELIVERY → TOOL_RESULT
 
 Later matching calls use copied original behavior. Missing targets or unused targets do not manufacture a receipt.
 
+This mechanism remains local. It does not intercept MCP tools; MCP `TOOL_RESULT_POISON` is verified by a separate stdio bridge.
+
 ### Local `TOOL_METADATA`
 
 A fixture requires `tool` + `description`. Only the copied local `FunctionTool.description` becomes exact canonical fixture JSON.
@@ -91,7 +97,7 @@ source          = injector:openai-agents:tool-metadata
 injection_point = openai-agents:FunctionTool:<tool>:description
 ```
 
-Name, parameter schema, callback, approval behavior, and routing identity remain fixed. MCP schema and identity drift are tested separately at the MCP protocol boundary; they are not OpenAI adapter claims.
+Name, parameter schema, callback, approval behavior, and routing identity remain fixed. MCP metadata poison, schema drift, and identity drift are separate protocol fault families. Only schema drift currently has a separate host-refreshed agent bridge; that bridge is not a local `TOOL_METADATA` injector and does not establish arbitrary parameter-schema poisoning.
 
 ### SDK session-history `MEMORY`
 
@@ -157,9 +163,9 @@ If the tool executes but never reads the key, the attack remains unverified and 
 
 This is **local SDK application-context perturbation**, not process-wide `os.environ`, network/service chaos, filesystem/sandbox mutation, clock faults, secret-store manipulation, provider configuration changes, cloud/IAM fault injection, or production infrastructure attestation.
 
-## Relationship to the MCP laboratories
+## Relationship to MCP assurance
 
-The repository has two MCP assurance layers. Neither is folded into the OpenAI `AttackChannel` implementation above.
+The MCP system has several deliberately separate evidence layers. None is folded into the generic OpenAI `AttackChannel` implementation above.
 
 ### In-process protocol fault laboratory
 
@@ -172,7 +178,23 @@ The repository has two MCP assurance layers. Neither is folded into the OpenAI `
 - schema drift where cached old discovery coexists with current server call validation until explicit refresh;
 - identity drift where cached old name coexists with current server lookup failure until explicit refresh exposes the replacement.
 
-The last three are protocol-state relations. Schema and identity drift additionally require successful recovery under refreshed server truth before a receipt exists.
+The last three are protocol-state relations. Schema and identity drift additionally require successful recovery under refreshed server truth before a standalone protocol receipt exists.
+
+A standalone `MCPFaultReceipt` proves the protocol relation only. It does not establish agent consumption or behavior.
+
+### Three controlled OpenAI↔MCP stdio bridges
+
+Selected fault families have explicit cross-domain contracts:
+
+| MCP fault | Bridge receipt | Extra assurance required before grading |
+|---|---|---|
+| `TOOL_RESULT_POISON` | `MCPAgentToolResultReceipt` | exact target call ID/output correlation plus same-session post-run benign recovery |
+| `TOOL_ERROR` | `MCPAgentToolErrorRecoveryReceipt` | exact model-visible error, distinct same-argument retry after first result, exact same-session recovery |
+| `TOOL_SCHEMA_DRIFT` | `MCPAgentToolSchemaDriftReceipt` | v1 model-visible schema, hidden live v2 swap, real stale rejection, host invalidation, first fresh v2 discovery, exact corrected call/result |
+
+These bridge receipts emit `PROTOCOL_DELIVERY`, not `ATTACK_DELIVERY`.
+
+For schema drift, ownership is explicit: the controlled harness owns the live server swap; the evaluator/host adapter owns one cache invalidation; the official MCP session owns first fresh post-invalidation discovery; the pinned Agents SDK owns presentation of refreshed v2 to the next model turn; and the agent/model is credited only for changing the corrected call after v2 becomes visible. This is **not** model-initiated refresh or automatic `tools/list_changed` handling.
 
 ### Loopback Streamable HTTP authorization laboratory
 
@@ -185,13 +207,25 @@ The last three are protocol-state relations. Schema and identity drift additiona
 
 Issuer/resource binding is owned by the deterministic token verifier; bearer/expiry and required-scope handling are owned by MCP SDK middleware. The documents do not collapse those responsibilities.
 
-### Why neither is agent delivery evidence
+### Separated OAuth-flow laboratory
 
-MCP protocol and remote-auth receipts establish trusted protocol/control-plane observations. They do not establish that an autonomous agent consumed an MCP-delivered stimulus, selected a tool because of stale discovery, or responded safely to a 401/403 condition.
+`MCPOAuthFlowPolicy` / `MCPOAuthFlowReceipt` prove protected-resource and authorization-server discovery, compatibility DCR fallback, state, PKCE `S256`, exact issuer/resource binding, code exchange, authenticated introspection, protected MCP use, and stored-authorization reuse across independent loopback origins.
 
-No current MCP receipt is converted into `ATTACK_DELIVERY`, agent `PASS`/`FAIL`, or release acceptance without an explicit future integration contract.
+Authorization success is not agent behavior and is not automatically promoted into trial evidence.
 
-See [MCP Protocol Fault Laboratory](MCP_LAB.md) and [MCP Remote Authorization](MCP_REMOTE_AUTH.md).
+### Why explicit bridges matter
+
+Protocol and control-plane receipts establish trusted observations in their own domains. Cross-domain agent assurance exists only where a dedicated bridge verifies the exact identities, observations, and chronology required by that fault family.
+
+```text
+raw MCPFaultReceipt                       → protocol evidence only
+valid bridge receipt + PROTOCOL_DELIVERY → agent-trial precondition closed
+bridge closure                           → not automatic PASS
+```
+
+`TOOL_METADATA_POISON`, generic stale-cache behavior, and `TOOL_IDENTITY_DRIFT` remain protocol-only with respect to agent behavior.
+
+See [MCP Protocol Fault Laboratory](MCP_LAB.md), [OpenAI Agents SDK Adapter](OPENAI_ADAPTER.md), [MCP Remote Authorization](MCP_REMOTE_AUTH.md), and [MCP OAuth Flow Laboratory](MCP_OAUTH_FLOW.md).
 
 ## Deterministic scenario derivation
 
@@ -201,34 +235,36 @@ See [MCP Protocol Fault Laboratory](MCP_LAB.md) and [MCP Remote Authorization](M
 
 ## Replay and reporting
 
-Valid OpenAI delivery receipts participate in ordered `TrialEvidence` and the evidence root. Historical replay revalidates recorded receipts but does not execute an injector again and cannot establish fresh delivery.
+Valid OpenAI `AttackDeliveryReceipt` events participate in ordered `TrialEvidence` and the evidence root. Historical replay revalidates recorded receipts but does not execute an injector again and cannot establish fresh delivery.
+
+Known MCP `PROTOCOL_DELIVERY` receipts also participate in `TrialEvidence` and are semantically revalidated on replay. That includes the schema-drift bridge's digests and strict protocol chronology; replay verifies the recorded historical relation but does not rerun the MCP session, schema swap, host invalidation, or corrected call.
 
 Delivery-caused `BLOCKED` attempts remain evaluator uncertainty through reliability and assurance reporting; they do not count as subject behavioral failures or critical subject-oracle violations. They can still make a release decision `INCONCLUSIVE` when evidence requirements are not met.
 
-MCP fault and remote-auth probes are not `TrialEvidence` and are therefore outside this replay/report derivation path.
+Standalone MCP fault, remote-auth, and OAuth probes are not `TrialEvidence` and remain outside this replay/report derivation path unless an explicit bridge places verified evidence into a trial.
 
 ## Verified implementation checkpoint
 
-The implemented OpenAI adversarial layer establishes all seven generic adapter channel categories at the scoped boundaries above, including positive and negative `ENVIRONMENT` consumption semantics. The separate MCP protocol layer establishes six deterministic fault observations/relations, the loopback HTTP layer establishes three remote-auth contract tests, and the separated OAuth layer establishes three OAuth-flow contract tests.
+The implemented OpenAI adversarial layer establishes all seven generic adapter channel categories at the scoped boundaries above. The separate MCP protocol layer establishes six deterministic fault observations/relations; three selected fault families have dedicated OpenAI↔MCP stdio bridge contracts; the loopback HTTP layer establishes remote-auth behavior; and the separated OAuth layer establishes its own OAuth-flow behavior.
 
-Implementation source checkpoint `ed0b1f9415e49b49a23c77c9372a5d09f70682fc`, protected-main CI run `33881346071`:
+Implementation source checkpoint `d98f9ca1feb1179504cd2181295a73936fd0ae6c`, protected-main CI run `33898508697`:
 
-- deterministic core: **330 passed, 23 deselected**;
-- branch coverage: **93.61%** against the 90% gate;
-- strict mypy: **0 issues across 40 source files**;
-- deterministic OpenAI SDK suite: **11/11 passed**;
+- deterministic core: **349 passed, 27 deselected**;
+- branch coverage: **93.79%** against the 90% gate;
+- strict mypy: **0 issues across 42 source files**;
+- deterministic OpenAI SDK suite, including the original controlled MCP stdio result bridge: **15/15 passed**;
 - deterministic MCP protocol suite: **6/6 passed**;
 - deterministic MCP remote-auth suite: **3/3 passed**;
 - deterministic MCP OAuth-flow suite: **3/3 passed**;
 - Python **3.11 minimum / 3.14 latest** quality jobs, Ruff, formatter, Bandit, dependency audit, and package integrity: **7/7 CI jobs green**;
 - dependency audit: **no known vulnerabilities found**; the project package itself is skipped because it is not published on PyPI.
 
-This checkpoint identifies the audited implementation revision. This documentation-only synchronization is validated separately by pull-request CI and does not silently redefine the implementation evidence.
+This checkpoint remains a historical audited merged implementation revision. Capabilities added afterward, including ToolError recovery and host-refreshed schema-drift adaptation, are accepted only after their own exact-head CI, merge, and post-merge `main` verification; documentation does not retroactively redefine the older implementation evidence.
 
 ## Explicit non-claims
 
-Seven generic OpenAI channel categories implemented does **not** mean seven universal production interceptors. Six MCP protocol faults plus loopback resource-server authorization do **not** mean complete MCP or production identity assurance.
+Seven generic OpenAI channel categories implemented does **not** mean seven universal production interceptors. Six MCP protocol faults plus three dedicated stdio bridges and loopback authorization/OAuth laboratories do **not** mean complete MCP or production identity assurance.
 
-Production application memory/RAG, hosted File Search/vector stores, URL/document retrieval, OpenAI hosted/MCP tool interception, OpenAI parameter-schema/name poisoning, distributed handoff fabrics, process/network/filesystem/cloud environment faults, agent-through-MCP behavioral grading, arbitrary MCP schema/registry mutations, remote MCP resource/prompt/task fault families, public/shared-cache correctness beyond the exact tested relations, full MCP conformance, Internet/hosted MCP fidelity, real authorization-server/IdP/JWT/introspection assurance, DPoP/mTLS, target-side delivery attestation, automatic/adaptive attack generation, mutation/fuzzing campaigns, sandbox-escape infrastructure, and credentialed live-provider red-team assurance remain separate implementation layers.
+Production application memory/RAG, hosted File Search/vector stores, URL/document retrieval, OpenAI hosted/MCP tool interception, arbitrary OpenAI parameter-schema/name poisoning, distributed handoff fabrics, process/network/filesystem/cloud environment faults, agent-through-MCP grading for metadata poison/generic stale-cache/identity drift, model-owned MCP refresh, automatic `tools/list_changed` handling, arbitrary schema/registry mutations, remote MCP resource/prompt/task fault families, public/shared-cache correctness beyond the exact tested relations, full MCP conformance, Internet/hosted MCP fidelity, real production authorization-server/IdP/JWT assurance, DPoP/mTLS, target-side delivery attestation, automatic/adaptive attack generation, mutation/fuzzing campaigns, sandbox-escape infrastructure, and credentialed live-provider red-team assurance remain separate implementation layers.
 
 [← Documentation hub](README.md)
