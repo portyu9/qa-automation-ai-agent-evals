@@ -64,7 +64,7 @@ def _bridge_kwargs() -> dict[str, object]:
         "protocol_receipt": _protocol_receipt(),
         "tool_name": _TOOL,
         "stale_call_id": "call-stale",
-        "ttl_ms": _TTL_MS,
+        "mcp_cache_hint_ttl_ms": _TTL_MS,
         "stale_arguments": {"query": "stale"},
         "stale_protocol_text": _STALE_TEXT,
         "agent_error_output": {"type": "text", "text": _STALE_TEXT},
@@ -227,7 +227,7 @@ def test_stale_cache_bridge_rejects_protocol_receipt_from_different_fault_identi
     ("field", "value", "message"),
     [
         ("tool_name", "different_tool", "verified MCP protocol receipt"),
-        ("ttl_ms", 1, "payload digest does not match bound TTL"),
+        ("mcp_cache_hint_ttl_ms", 1, "payload digest does not match bound TTL"),
         ("stale_arguments_sha256", "0" * 64, "stale argument digest"),
         (
             "stale_protocol_observation_sha256",

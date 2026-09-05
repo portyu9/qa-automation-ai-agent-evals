@@ -77,7 +77,7 @@ def receipt() -> MCPAgentToolSchemaDriftReceipt:
         agent_tool_name=_TOOL,
         stale_call_id="call_stale",
         recovery_call_id="call_recovery",
-        ttl_ms=_TTL_MS,
+        mcp_cache_hint_ttl_ms=_TTL_MS,
         initial_schema=initial_schema(),
         cached_schema=initial_schema(),
         refreshed_schema=replacement_schema(),
