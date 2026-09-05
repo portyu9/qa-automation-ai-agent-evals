@@ -45,9 +45,7 @@ class OpenAIAgentsMCPToolStaleCacheAdapter:
         tracing_disabled: bool = True,
     ) -> None:
         if fault.kind is not MCPFaultKind.TOOL_LIST_STALE_CACHE:
-            raise ValueError(
-                "OpenAI MCP stale-cache bridge requires a TOOL_LIST_STALE_CACHE fault"
-            )
+            raise ValueError("OpenAI MCP stale-cache bridge requires a TOOL_LIST_STALE_CACHE fault")
         if fault.tool_name == _CONTROL_TOOL:
             raise ValueError("MCP stale-cache target must not collide with evaluator control tool")
         self._agent = agent
@@ -542,8 +540,7 @@ def _clone_agent_with_controlled_server_and_observer(
         from agents.models.interface import Model
     except ImportError as exc:  # pragma: no cover
         raise RuntimeError(
-            "install both the 'openai' and 'mcp' extras to use "
-            "OpenAIAgentsMCPToolStaleCacheAdapter"
+            "install both the 'openai' and 'mcp' extras to use OpenAIAgentsMCPToolStaleCacheAdapter"
         ) from exc
 
     if not isinstance(agent, Agent):
@@ -687,8 +684,7 @@ def _new_stdio_server(params: Mapping[str, object]) -> Any:
         from agents.mcp import MCPServerStdio
     except ImportError as exc:  # pragma: no cover
         raise RuntimeError(
-            "install both the 'openai' and 'mcp' extras to use "
-            "OpenAIAgentsMCPToolStaleCacheAdapter"
+            "install both the 'openai' and 'mcp' extras to use OpenAIAgentsMCPToolStaleCacheAdapter"
         ) from exc
 
     return MCPServerStdio(
