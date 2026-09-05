@@ -702,7 +702,7 @@ It does not establish generic retry policy correctness, exponential backoff, jit
 
 ### Scope and ownership
 
-`OpenAIAgentsMCPToolSchemaDriftAdapter` accepts exactly one `MCPFaultSpec` whose kind is `TOOL_SCHEMA_DRIFT` and whose controlled payload binds the repository's narrow v1/v2 scalar-required contracts plus a positive TTL. It does not claim arbitrary JSON Schema migration.
+`OpenAIAgentsMCPToolSchemaDriftAdapter` accepts exactly one `MCPFaultSpec` whose kind is `TOOL_SCHEMA_DRIFT` and whose controlled payload binds the repository's narrow v1/v2 scalar-required contracts plus a positive MCP cache-hint TTL. It does not claim arbitrary JSON Schema migration.
 
 Ownership is intentionally split:
 
@@ -712,7 +712,7 @@ Ownership is intentionally split:
 - the pinned Agents SDK owns conversion of refreshed MCP schema into next-turn model tool definitions and may reuse that v2 cache later;
 - the agent/model is credited only for changing the second target call after v2 is model-visible.
 
-The adapter does **not** claim model-initiated refresh or automatic `tools/list_changed` handling.
+The adapter does **not** claim model-initiated refresh, automatic `tools/list_changed` handling, or automatic Agents SDK expiry according to the MCP cache hint. The hint is protocol evidence; host-cache behavior is demonstrated separately by `cache_tools_list=True`, observed cached post-mutation discovery, and evaluator-owned `invalidate_tools_cache()`.
 
 ### Hidden swap without control leakage
 
@@ -744,9 +744,10 @@ Zero target calls, no corrected call, more than two target calls, corrected call
 
 `MCPAgentToolSchemaDriftReceipt` binds:
 
+- exact bridge schema `agent-evals/mcp-agent-tool-schema-drift-receipt/v3`;
 - scenario identity and the revalidated `MCPFaultReceipt`;
 - exact tool identity and distinct stale/recovery OpenAI call IDs;
-- positive bound TTL;
+- the MCP server-advertised cache-hint value as `mcp_cache_hint_ttl_ms`;
 - initial, cached, and refreshed schema digests;
 - stale and recovery argument digests;
 - protocol and agent-visible stale-rejection digests;
@@ -759,6 +760,7 @@ The required protocol chronology is:
 ```text
 initial-list
 < hidden schema swap
+< cached post-swap v1 list
 < stale call
 < host cache invalidation
 < first refreshed v2 list
@@ -793,7 +795,7 @@ It does not establish model-owned refresh, notification-driven `tools/list_chang
 
 ### Scope and ownership
 
-`OpenAIAgentsMCPToolIdentityDriftAdapter` accepts exactly one `MCPFaultSpec` whose kind is `TOOL_IDENTITY_DRIFT`. The controlled payload binds a positive TTL and one exact nonblank replacement identity. The callable argument shape remains stable in v1 so the bridge isolates identity adaptation rather than combining it with schema migration.
+`OpenAIAgentsMCPToolIdentityDriftAdapter` accepts exactly one `MCPFaultSpec` whose kind is `TOOL_IDENTITY_DRIFT`. The controlled payload binds a positive MCP cache-hint TTL and one exact nonblank replacement identity. The callable argument shape remains stable in v1 so the bridge isolates identity adaptation rather than combining it with schema migration.
 
 Ownership is intentionally split:
 
@@ -803,7 +805,7 @@ Ownership is intentionally split:
 - the pinned Agents SDK owns conversion of MCP tools into public model-visible definitions;
 - the agent/model is credited only for selecting the exact replacement name after that identity is visible.
 
-The adapter does **not** claim model-initiated refresh or automatic `tools/list_changed` handling.
+The adapter does **not** claim model-initiated refresh, automatic `tools/list_changed` handling, or automatic Agents SDK expiry according to the MCP cache hint. The hint is protocol evidence; host-cache behavior is demonstrated separately by `cache_tools_list=True`, observed cached post-mutation discovery, and evaluator-owned `invalidate_tools_cache()`.
 
 ### Exact model-visible identity transition
 
@@ -835,7 +837,9 @@ A removed old name emitted after refresh may be rejected by the pinned SDK/MCP b
 
 `MCPAgentToolIdentityDriftReceipt` binds:
 
+- exact bridge schema `agent-evals/mcp-agent-tool-identity-drift-receipt/v3`;
 - scenario identity and the revalidated `MCPFaultReceipt`;
+- the MCP server-advertised cache-hint value as `mcp_cache_hint_ttl_ms`;
 - exact original and replacement names and their compact digests;
 - distinct stale/recovery OpenAI call IDs;
 - canonical stale/recovery argument digests;
@@ -850,6 +854,7 @@ The required protocol chronology is:
 ```text
 initial-list
 < hidden identity swap
+< cached post-swap original-name list
 < stale old-name call
 < host cache invalidation
 < first refreshed replacement list

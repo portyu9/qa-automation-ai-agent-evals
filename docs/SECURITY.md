@@ -125,7 +125,7 @@ Two pre-issued identical calls do not prove causal retry. `MCPAgentToolErrorReco
 
 ### Stale-cache removal-delivery bridge
 
-`OpenAIAgentsMCPToolStaleCacheAdapter` requires initial target presence, hidden evaluator-owned live removal, cached post-removal target presence, a real unknown-tool rejection, one host-owned invalidation, first fresh target absence, and direct target-absent public-model observation carrying the exact rejection and call ID. `MCPAgentToolStaleCacheReceipt` binds target/TTL/call/argument/rejection/model-set/ordinal material without duplicating raw rejection text. Replay revalidates the typed receipt and the persisted request < result < delivery chronology.
+`OpenAIAgentsMCPToolStaleCacheAdapter` requires initial target presence, hidden evaluator-owned live removal, cached post-removal target presence, a real unknown-tool rejection, one host-owned invalidation, first fresh target absence, and direct target-absent public-model observation carrying the exact rejection and call ID. `MCPAgentToolStaleCacheReceipt` binds target/MCP-cache-hint/call/argument/rejection/model-set/ordinal material, naming the bridge field `mcp_cache_hint_ttl_ms`, without duplicating raw rejection text. That field binds server-advertised protocol material; it is not evidence of automatic SDK TTL expiry. Replay revalidates the typed receipt and the persisted request < result < delivery chronology.
 
 The harness owns removal; the host owns invalidation; the MCP session owns discovery/call truth; the SDK owns model-visible conversion. This is not model-owned refresh, generic cache coherence, automatic recovery, or production retirement/rollout assurance. See [MCP Stale-Cache Tool-Removal Assurance](MCP_STALE_CACHE.md).
 
@@ -216,7 +216,7 @@ Current MCP coverage does **not** establish:
 - reverse proxy, gateway, TLS, DNS, service-mesh, packet, latency, disconnect, retry, or rate-limit assurance;
 - third-party/production authorization-server or identity-provider assurance;
 - production JWT/JWKS signature verification, federation, DPoP/mTLS, refresh/revocation/replay lifecycle, or enterprise IAM;
-- public/cross-partition cache sharing, arbitrary cache poisoning, notification invalidation, or TTL race correctness;
+- public/cross-partition cache sharing, arbitrary cache poisoning, notification invalidation, automatic host expiry from MCP cache hints, or TTL race correctness;
 - arbitrary registry churn beyond exact fixtures;
 - malformed framing/JSON-RPC, duplicate/out-of-order responses, or header-routing faults;
 - malicious MCP resources, prompts, roots, elicitation, sampling, subscriptions, or Tasks-extension behavior;

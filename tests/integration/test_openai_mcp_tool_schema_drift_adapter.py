@@ -231,6 +231,9 @@ async def test_openai_agent_adapts_after_host_refreshes_live_mcp_schema() -> Non
     assert delivery.payload["agent_tool_name"] == _TOOL
     assert delivery.payload["stale_call_id"] == "call_schema_stale"
     assert delivery.payload["recovery_call_id"] == "call_schema_recovery"
+    assert delivery.payload["mcp_cache_hint_ttl_ms"] == _TTL_MS
+    assert "ttl_ms" not in delivery.payload
+    assert fault().payload["ttl_ms"] == _TTL_MS
     assert delivery.payload["protocol_receipt"]["kind"] == MCPFaultKind.TOOL_SCHEMA_DRIFT.value
     assert delivery.payload["protocol_receipt"]["protocol_version"] == "2026-07-28"
     assert [

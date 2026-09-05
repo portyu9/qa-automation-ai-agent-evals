@@ -166,7 +166,7 @@ All six fault families now have explicit agent bridges, each as an additional co
 
 `OpenAIAgentsMCPToolStaleCacheAdapter` proves one exact controlled relation: target initially visible at protocol/model boundaries, evaluator-only live removal, cached host discovery still advertising the removed target, real unknown-tool rejection, host-owned cache invalidation, first fresh target absence, and exact rejection delivery at the target-absent public model boundary. `MCPAgentToolStaleCacheReceipt` binds that historical relation and replay revalidates the normalized request/result chronology.
 
-This does **not** establish generic cache-coherence policy, arbitrary TTL race behavior, notification-driven invalidation, shared/distributed cache propagation, automatic agent recovery after tool retirement, model-owned refresh, production rollout/service-discovery correctness, or behavioral PASS from target absence. See [MCP Stale-Cache Tool-Removal Assurance](MCP_STALE_CACHE.md).
+This does **not** establish generic cache-coherence policy, automatic Agents SDK expiry from MCP cache hints, arbitrary TTL race behavior, notification-driven invalidation, shared/distributed cache propagation, automatic agent recovery after tool retirement, model-owned refresh, production rollout/service-discovery correctness, or behavioral PASS from target absence. See [MCP Stale-Cache Tool-Removal Assurance](MCP_STALE_CACHE.md).
 
 ## Controlled MCP `TOOL_METADATA_POISON` → OpenAI model-visible definition bridge
 
@@ -248,7 +248,7 @@ It establishes one exact error → observed result → same-argument retry → b
 
 The bridge requires:
 
-- a `TOOL_SCHEMA_DRIFT` fault whose payload matches the bound deterministic v1/v2 scalar-required fixture and positive TTL;
+- a `TOOL_SCHEMA_DRIFT` fault whose payload matches the bound deterministic v1/v2 scalar-required fixture and positive MCP cache-hint TTL;
 - fresh official MCP stdio process/session state per trial;
 - negotiated protocol `2026-07-28`;
 - a base Agent with no preconfigured MCP servers or colliding local target/control names;
@@ -281,7 +281,7 @@ It establishes one exact host-refreshed schema-adaptation relation. It does not 
 
 The bridge requires:
 
-- a `TOOL_IDENTITY_DRIFT` fault with positive TTL and one exact distinct replacement tool name;
+- a `TOOL_IDENTITY_DRIFT` fault with positive MCP cache-hint TTL and one exact distinct replacement tool name;
 - fresh official MCP stdio process/session state per trial;
 - negotiated protocol `2026-07-28`;
 - a base Agent with no preconfigured MCP servers, prefixed MCP names, or colliding local original/replacement/control names;

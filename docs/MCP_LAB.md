@@ -82,7 +82,7 @@ MCPFaultReceipt
 ### Stale discovery
 
 ```text
-initial tools/list → target present + positive private TTL
+initial tools/list → target present + positive MCP cache-hint TTL
 server.remove_tool(target)
 normal tools/list  → cached target still present
 refresh tools/list → target absent
@@ -123,7 +123,7 @@ The dedicated agent bridge adds a stronger cross-domain requirement: the public 
 
 Its identity is SHA-256 over canonical fault material.
 
-For direct content faults, complete canonical `payload_json` is the controlled content. Stateful faults bind the exact deterministic parameters consumed by the laboratory, including bounded TTL and the bound before/after schema or identity relation.
+For direct content faults, complete canonical `payload_json` is the controlled content. Stateful faults bind the exact deterministic parameters consumed by the laboratory, including the bounded MCP cache-hint TTL and the bound before/after schema or identity relation.
 
 The lab does not invent unbound mutation parameters at runtime.
 
@@ -402,7 +402,7 @@ The six-fault protocol laboratory plus the six dedicated bridges do **not** esta
 - OpenAI hosted MCP interception or hosted third-party MCP fidelity;
 - remote/Internet MCP behavior, TLS, DNS, reverse proxies, gateways, service meshes, packet faults, latency, disconnect, retry, or rate-limit assurance;
 - general stdio transport robustness beyond the exact deterministic controlled subprocess paths exercised by the bridges;
-- public/cross-partition cache sharing, cache poisoning, arbitrary cache stores, notification invalidation, or TTL race correctness beyond the implemented relations;
+- public/cross-partition cache sharing, cache poisoning, arbitrary cache stores, notification invalidation, automatic host expiry from MCP cache hints, or TTL race correctness beyond the implemented relations;
 - arbitrary registry churn beyond the bound identity fixture;
 - malformed JSON-RPC/framing, duplicate/out-of-order responses, or header-routing faults;
 - malicious MCP resources, templates, prompts, roots, elicitation, sampling, subscriptions, or Tasks-extension behavior;
