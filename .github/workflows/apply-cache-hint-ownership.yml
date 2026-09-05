@@ -39,18 +39,14 @@ jobs:
 
           for path, (old_schema, new_schema, marker) in bridges.items():
               text = path.read_text()
-              if text.count(old_schema) != 3:
-                  raise SystemExit(f'{path}: expected 3 old schema references, got {text.count(old_schema)}')
+              if text.count(old_schema) != 4:
+                  raise SystemExit(f'{path}: expected 4 old schema references, got {text.count(old_schema)}')
               if text.count(marker) != 1:
                   raise SystemExit(f'{path}: protocol helper marker mismatch')
               prefix, suffix = text.split(marker, 1)
-              # Rename Python identifiers in the agent-receipt portion only. Quoted protocol payload
-              # key "ttl_ms" is intentionally preserved as MCP fault/cache-hint material.
               prefix, n = re.subn(r'(?<!["\'])\bttl_ms\b(?!["\'])', 'mcp_cache_hint_ttl_ms', prefix)
               if n < 8:
                   raise SystemExit(f'{path}: too few bridge TTL identifier migrations: {n}')
-              # The bridge's serialized field name must also be explicit. Preserve nested protocol
-              # payload keys and standalone protocol observation fields as ttl_ms.
               old_unsigned = '"ttl_ms": mcp_cache_hint_ttl_ms,'
               if prefix.count(old_unsigned) != 1:
                   raise SystemExit(f'{path}: expected exactly one bridge unsigned TTL field')
@@ -90,7 +86,6 @@ jobs:
               if text.count(bridge_marker) != 1:
                   raise SystemExit(f'{path}: bridge constructor marker mismatch')
               before, after = text.split(bridge_marker, 1)
-              # Only the bridge constructor changes the keyword name. Protocol helpers retain ttl_ms.
               if after.count('ttl_ms=recorder.ttl_ms,') != 1:
                   raise SystemExit(f'{path}: bridge recorder TTL call mismatch')
               after = after.replace(
@@ -101,7 +96,6 @@ jobs:
               text = before + bridge_marker + after
               path.write_text(text)
 
-          # Fail closed if agent bridge models still expose a bare ttl_ms field/property.
           for path in bridges:
               prefix = path.read_text().split(bridges[path][2], 1)[0]
               if re.search(r'^\s+ttl_ms:\s', prefix, re.M):
