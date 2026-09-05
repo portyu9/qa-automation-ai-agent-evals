@@ -26,9 +26,7 @@ def _pass_trial() -> EvaluatedTrial:
             scenario_identity=SCENARIO,
             final_state={"ok": True},
         ),
-        oracle_results=(
-            OracleResult(name="outcome", verdict=TrialVerdict.PASS, critical=False),
-        ),
+        oracle_results=(OracleResult(name="outcome", verdict=TrialVerdict.PASS, critical=False),),
         verdict=TrialVerdict.PASS,
     )
 
