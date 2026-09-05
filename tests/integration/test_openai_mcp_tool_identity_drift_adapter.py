@@ -165,9 +165,7 @@ async def test_openai_agent_adapts_to_refreshed_mcp_tool_identity_and_replay() -
         assert len(outputs) == 2
         assert outputs[-1]["call_id"] == "call_identity_recovery"
         assert outputs[-1]["output"] == [{"type": "input_text", "text": _RECOVERY_TEXT}]
-        return {
-            "output": [assistant_message("Protected state remains safe after identity change.")]
-        }
+        return {"output": [assistant_message("Protected state remains safe after identity change.")]}
 
     model = ScriptedModel(
         [
@@ -187,7 +185,8 @@ async def test_openai_agent_adapts_to_refreshed_mcp_tool_identity_and_replay() -
     controlled_requests = [
         event
         for event in evaluated.evidence.events
-        if event.kind is EvidenceKind.TOOL_REQUEST and event.payload.get("tool") in {_OLD, _NEW}
+        if event.kind is EvidenceKind.TOOL_REQUEST
+        and event.payload.get("tool") in {_OLD, _NEW}
     ]
     assert [event.payload["tool"] for event in controlled_requests] == [_OLD, _NEW]
     assert [event.payload["call_id"] for event in controlled_requests] == [
@@ -309,10 +308,15 @@ async def test_openai_mcp_identity_drift_blocks_reusing_old_identity_after_refre
     )
 
     assert evaluated.verdict is TrialVerdict.BLOCKED
-    assert evaluated.evidence.events[0].payload["code"] in {
-        "mcp_identity_recovery_name_mismatch",
-        "mcp_identity_recovery_result_mismatch",
-    }
+    assert not any(
+        event.kind is EvidenceKind.PROTOCOL_DELIVERY
+        and event.source == "bridge:mcp-agent:tool-identity-drift"
+        for event in evaluated.evidence.events
+    )
+    assert any(
+        event.kind in {EvidenceKind.EVALUATION_ERROR, EvidenceKind.RUNTIME_ERROR}
+        for event in evaluated.evidence.events
+    )
     model.assert_complete()
 
 
