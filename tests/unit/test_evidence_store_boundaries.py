@@ -125,7 +125,9 @@ def test_coherently_rehashed_payload_identity_mismatch_is_rejected(tmp_path: Pat
     payload_data["trial_id"] = "different-trial"
     _rewrite_payload_and_manifest(payload_path, manifest_path, payload_data)
 
-    with pytest.raises(EvidenceIntegrityError, match="stored evidence identity does not match manifest"):
+    with pytest.raises(
+        EvidenceIntegrityError, match="stored evidence identity does not match manifest"
+    ):
         store.read(manifest.record_key)
 
 
@@ -137,7 +139,9 @@ def test_coherently_rehashed_payload_root_mismatch_is_rejected(tmp_path: Path) -
     payload_data["final_output"] = "tampered-but-valid"
     _rewrite_payload_and_manifest(payload_path, manifest_path, payload_data)
 
-    with pytest.raises(EvidenceIntegrityError, match="stored evidence root does not match manifest"):
+    with pytest.raises(
+        EvidenceIntegrityError, match="stored evidence root does not match manifest"
+    ):
         store.read(manifest.record_key)
 
 
