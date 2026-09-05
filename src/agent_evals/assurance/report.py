@@ -115,7 +115,7 @@ class TrialAssuranceRecord(BaseModel):
 
         if self.verdict is not expected:
             raise ValueError(
-                "assurance trial verdict does not recompute from deterministic and semantic grading"
+                "assurance trial verdict does not recompute from oracle results and semantic grading"
             )
         return self
 
