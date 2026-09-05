@@ -58,7 +58,7 @@ class TrialRunner:
     """
 
     def __init__(self, *, semantic_judge: SemanticJudge | None = None) -> None:
-        self._oracles = (PolicyOracle(), SideEffectIdempotencyOracle(), OutcomeOracle())
+        self._oracles = (PolicyOracle(), OutcomeOracle())
         self._semantic_judge = semantic_judge
 
     async def run(
@@ -217,7 +217,10 @@ class TrialRunner:
                 verdict=TrialVerdict.BLOCKED,
             )
 
-        oracle_results = tuple(oracle.grade(scenario, evidence) for oracle in self._oracles)
+        oracles = self._oracles
+        if scenario.side_effect_idempotency is not None:
+            oracles = (self._oracles[0], SideEffectIdempotencyOracle(), self._oracles[1])
+        oracle_results = tuple(oracle.grade(scenario, evidence) for oracle in oracles)
         deterministic_failed = any(result.verdict is TrialVerdict.FAIL for result in oracle_results)
 
         try:
