@@ -44,6 +44,9 @@ class ReleaseGate:
         self._policy = policy
 
     def decide(self, report: ReliabilityReport, *, critical_violations: int) -> GateResult:
+        if type(report) is not ReliabilityReport:
+            raise ValueError("report must be an exact ReliabilityReport")
+        report.validate()
         if isinstance(critical_violations, bool) or not isinstance(critical_violations, int):
             raise ValueError("critical_violations must be a non-negative integer")
         if critical_violations < 0:
