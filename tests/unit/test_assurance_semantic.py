@@ -186,13 +186,13 @@ def _policy() -> ReleasePolicy:
     )
 
 
-def test_assurance_report_v2_keeps_semantic_failure_noncritical() -> None:
+def test_assurance_report_v3_keeps_semantic_failure_noncritical() -> None:
     report = AssuranceReport.from_session(
         _session(_trial(SemanticDecision.FAIL)),
         release_policy=_policy(),
     )
 
-    assert report.schema_version == "agent-evals/assurance-report/v2"
+    assert report.schema_version == "agent-evals/assurance-report/v3"
     assert report.trials[0].verdict is TrialVerdict.FAIL
     assert report.trials[0].semantic_judgment is not None
     assert report.trials[0].semantic_judgment.decision is SemanticDecision.FAIL
