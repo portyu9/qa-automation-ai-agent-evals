@@ -29,6 +29,10 @@ class ReliabilityReport:
     confidence_z: float = DEFAULT_CONFIDENCE_Z
 
     def __post_init__(self) -> None:
+        self.validate()
+
+    def validate(self) -> None:
+        """Revalidate counts, configuration, and every derived statistic in place."""
         for name in (
             "trials",
             "resolved_trials",
@@ -147,7 +151,7 @@ def _derive_metrics(
 
 def _validate_confidence_z(value: object) -> None:
     if isinstance(value, bool) or not isinstance(value, float) or not isfinite(value) or value <= 0:
-        raise ValueError("confidence_z must be a finite positive float")
+        raise ValueError("confidence_z must be finite and positive")
 
 
 def _wilson_interval(successes: int, trials: int, z: float) -> tuple[float, float]:
