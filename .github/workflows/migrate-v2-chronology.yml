@@ -111,7 +111,7 @@ jobs:
 
           identity = Path('tests/unit/test_mcp_agent_identity_bridge_boundaries.py')
           text = identity.read_text()
-          marker = 'def test_protocol_receipt_rejects_cached_discovery_not_after_identity_swap() -> None:'
+          marker = 'def test_protocol_receipt_rejects_cached_discovery_not_after_identity_swap('
           if marker not in text:
               text += '''\n\n@pytest.mark.parametrize("cached_list_ordinal", [0, 1])\ndef test_protocol_receipt_rejects_cached_discovery_not_after_identity_swap(\n    cached_list_ordinal: int,\n) -> None:\n    with pytest.raises(ValueError, match="chronology"):\n        create_identity_drift_protocol_receipt(\n            fault=_fault(),\n            ttl_ms=60_000,\n            original_tool_name=_OLD,\n            replacement_tool_name=_NEW,\n            stale_protocol_text=_STALE_TEXT,\n            protocol_recovery_text=_RECOVERY_TEXT,\n            initial_list_ordinal=0,\n            identity_swap_ordinal=1,\n            cached_list_ordinal=cached_list_ordinal,\n            stale_call_ordinal=3,\n            cache_invalidation_ordinal=4,\n            refreshed_list_ordinal=5,\n            recovery_call_ordinal=6,\n        )\n'''
           identity.write_text(text)
@@ -124,11 +124,8 @@ jobs:
           schema.write_text(text)
 
           for path in targets:
-              text = path.read_text()
-              if 'schema_swap_ordinal=1,\n' in text and 'stale_call_ordinal=2,' in text:
-                  raise SystemExit(f'old schema chronology remains in {path}')
-              if 'identity_swap_ordinal=1,\n' in text and 'stale_call_ordinal=2,' in text:
-                  raise SystemExit(f'old identity chronology remains in {path}')
+              if chronology.search(path.read_text()):
+                  raise SystemExit(f'old six-leg chronology remains in {path}')
           PY
           ruff format tests/unit/test_mcp_agent_identity_bridge.py \
             tests/unit/test_mcp_agent_identity_bridge_boundaries.py \
