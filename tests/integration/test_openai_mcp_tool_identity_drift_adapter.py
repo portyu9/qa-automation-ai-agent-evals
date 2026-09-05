@@ -221,11 +221,12 @@ async def test_openai_agent_adapts_to_refreshed_mcp_tool_identity_and_replay() -
     assert [
         delivery.payload["initial_list_ordinal"],
         delivery.payload["identity_swap_ordinal"],
+        delivery.payload["cached_list_ordinal"],
         delivery.payload["stale_call_ordinal"],
         delivery.payload["cache_invalidation_ordinal"],
         delivery.payload["refreshed_list_ordinal"],
         delivery.payload["recovery_call_ordinal"],
-    ] == [0, 1, 2, 3, 4, 5]
+    ] == [0, 1, 2, 3, 4, 5, 6]
     serialized = json.dumps(delivery.payload, sort_keys=True)
     assert observed["stale_text"] not in serialized
     assert _RECOVERY_TEXT not in serialized

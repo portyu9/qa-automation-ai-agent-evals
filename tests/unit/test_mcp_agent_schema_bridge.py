@@ -66,10 +66,11 @@ def protocol_receipt():
         protocol_recovery_text=_RECOVERY_TEXT,
         initial_list_ordinal=0,
         schema_swap_ordinal=1,
-        stale_call_ordinal=2,
-        cache_invalidation_ordinal=3,
-        refreshed_list_ordinal=4,
-        recovery_call_ordinal=5,
+        cached_list_ordinal=2,
+        stale_call_ordinal=3,
+        cache_invalidation_ordinal=4,
+        refreshed_list_ordinal=5,
+        recovery_call_ordinal=6,
     )
 
 
@@ -94,10 +95,11 @@ def create_receipt() -> MCPAgentToolSchemaDriftReceipt:
         agent_recovery_output={"type": "text", "text": _RECOVERY_TEXT},
         initial_list_ordinal=0,
         schema_swap_ordinal=1,
-        stale_call_ordinal=2,
-        cache_invalidation_ordinal=3,
-        refreshed_list_ordinal=4,
-        recovery_call_ordinal=5,
+        cached_list_ordinal=2,
+        stale_call_ordinal=3,
+        cache_invalidation_ordinal=4,
+        refreshed_list_ordinal=5,
+        recovery_call_ordinal=6,
     )
 
 
@@ -136,10 +138,11 @@ def test_schema_drift_protocol_receipt_rejects_noncausal_refresh_order() -> None
             protocol_recovery_text=_RECOVERY_TEXT,
             initial_list_ordinal=0,
             schema_swap_ordinal=1,
-            stale_call_ordinal=2,
-            cache_invalidation_ordinal=4,
-            refreshed_list_ordinal=3,
-            recovery_call_ordinal=5,
+            cached_list_ordinal=2,
+            stale_call_ordinal=3,
+            cache_invalidation_ordinal=5,
+            refreshed_list_ordinal=4,
+            recovery_call_ordinal=6,
         )
 
 
@@ -165,10 +168,11 @@ def test_schema_drift_receipt_rejects_stale_recovery_arguments() -> None:
             agent_recovery_output={"type": "text", "text": _RECOVERY_TEXT},
             initial_list_ordinal=0,
             schema_swap_ordinal=1,
-            stale_call_ordinal=2,
-            cache_invalidation_ordinal=3,
-            refreshed_list_ordinal=4,
-            recovery_call_ordinal=5,
+            cached_list_ordinal=2,
+            stale_call_ordinal=3,
+            cache_invalidation_ordinal=4,
+            refreshed_list_ordinal=5,
+            recovery_call_ordinal=6,
         )
 
 
@@ -194,10 +198,11 @@ def test_schema_drift_receipt_rejects_agent_error_mismatch() -> None:
             agent_recovery_output={"type": "text", "text": _RECOVERY_TEXT},
             initial_list_ordinal=0,
             schema_swap_ordinal=1,
-            stale_call_ordinal=2,
-            cache_invalidation_ordinal=3,
-            refreshed_list_ordinal=4,
-            recovery_call_ordinal=5,
+            cached_list_ordinal=2,
+            stale_call_ordinal=3,
+            cache_invalidation_ordinal=4,
+            refreshed_list_ordinal=5,
+            recovery_call_ordinal=6,
         )
 
 
@@ -245,8 +250,32 @@ def test_schema_drift_receipt_rejects_wrong_fault_kind() -> None:
             protocol_recovery_text=_RECOVERY_TEXT,
             initial_list_ordinal=0,
             schema_swap_ordinal=1,
-            stale_call_ordinal=2,
-            cache_invalidation_ordinal=3,
-            refreshed_list_ordinal=4,
-            recovery_call_ordinal=5,
+            cached_list_ordinal=2,
+            stale_call_ordinal=3,
+            cache_invalidation_ordinal=4,
+            refreshed_list_ordinal=5,
+            recovery_call_ordinal=6,
+        )
+
+
+@pytest.mark.parametrize("cached_list_ordinal", [0, 1])
+def test_schema_drift_protocol_receipt_rejects_cached_discovery_not_after_schema_swap(
+    cached_list_ordinal: int,
+) -> None:
+    with pytest.raises(ValueError, match="chronology"):
+        create_schema_drift_protocol_receipt(
+            fault=fault(),
+            ttl_ms=_TTL_MS,
+            initial_schema=initial_schema(),
+            cached_schema=initial_schema(),
+            refreshed_schema=replacement_schema(),
+            stale_protocol_text=_STALE_TEXT,
+            protocol_recovery_text=_RECOVERY_TEXT,
+            initial_list_ordinal=0,
+            schema_swap_ordinal=1,
+            cached_list_ordinal=cached_list_ordinal,
+            stale_call_ordinal=3,
+            cache_invalidation_ordinal=4,
+            refreshed_list_ordinal=5,
+            recovery_call_ordinal=6,
         )

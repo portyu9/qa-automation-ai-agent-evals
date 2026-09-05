@@ -236,11 +236,12 @@ async def test_openai_agent_adapts_after_host_refreshes_live_mcp_schema() -> Non
     assert [
         delivery.payload["initial_list_ordinal"],
         delivery.payload["schema_swap_ordinal"],
+        delivery.payload["cached_list_ordinal"],
         delivery.payload["stale_call_ordinal"],
         delivery.payload["cache_invalidation_ordinal"],
         delivery.payload["refreshed_list_ordinal"],
         delivery.payload["recovery_call_ordinal"],
-    ] == [0, 1, 2, 3, 4, 5]
+    ] == [0, 1, 2, 3, 4, 5, 6]
     serialized_delivery = json.dumps(delivery.payload, sort_keys=True)
     assert observed["stale_text"] not in serialized_delivery
     assert _RECOVERY_TEXT not in serialized_delivery
