@@ -12,6 +12,9 @@ from agent_evals.mcp.models import MCPFaultKind, MCPFaultReceipt, MCPFaultSpec
 _SCENARIO_ID = "a" * 64
 _SUBJECT_ID = "b" * 64
 _TOOL = "lookup_customer"
+_RESULT_TEXT = '{"value":"controlled"}'
+_ERROR_PAYLOAD = '{"code":"TRANSIENT"}'
+_ERROR_TEXT = f"Error executing tool {_TOOL}: {_ERROR_PAYLOAD}"
 _METADATA_SCHEMA = {
     "type": "object",
     "properties": {"customer_id": {"type": "string"}},
@@ -126,11 +129,10 @@ def result(sequence: int, *, call_id: str, text: str) -> EvidenceEvent:
 
 def result_evidence(receipt: MCPAgentToolResultReceipt | None = None) -> TrialEvidence:
     bridge = receipt or result_bridge()
-    controlled_text = bridge.protocol_receipt.payload_json
     return trial(
         request(0, call_id=bridge.agent_call_id, arguments='{"customer_id":"7"}'),
         bridge.to_event(sequence=1),
-        result(2, call_id=bridge.agent_call_id, text=controlled_text),
+        result(2, call_id=bridge.agent_call_id, text=_RESULT_TEXT),
     )
 
 
@@ -141,10 +143,9 @@ def recovery_evidence(
     recovery_text: str = "benign",
 ) -> TrialEvidence:
     bridge = receipt or error_recovery_bridge()
-    error_text = f"Error executing tool {_TOOL}: {bridge.protocol_receipt.payload_json}"
     return trial(
         request(0, call_id=bridge.error_call_id, arguments='{"customer_id":"7"}'),
-        result(1, call_id=bridge.error_call_id, text=error_text),
+        result(1, call_id=bridge.error_call_id, text=_ERROR_TEXT),
         request(2, call_id=bridge.retry_call_id, arguments=retry_arguments),
         result(3, call_id=bridge.retry_call_id, text=recovery_text),
         bridge.to_event(sequence=4),
