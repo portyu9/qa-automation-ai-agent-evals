@@ -1,0 +1,186 @@
+name: Synchronize v2 drift chronology docs
+on:
+  push:
+    branches: [fix/mcp-post-mutation-stale-discovery]
+permissions:
+  contents: write
+jobs:
+  sync:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: fix/mcp-post-mutation-stale-discovery
+          fetch-depth: 0
+      - name: Synchronize chronology documentation
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace(path: str, old: str, new: str, count: int = 1) -> None:
+              p = Path(path)
+              text = p.read_text()
+              actual = text.count(old)
+              if actual != count:
+                  raise SystemExit(f'{path}: expected {count} occurrences, found {actual}: {old!r}')
+              p.write_text(text.replace(old, new))
+
+          # Architecture: make the post-mutation cached observation and seven-leg receipt explicit.
+          replace(
+              'docs/ARCHITECTURE.md',
+              '│   │   ├── evaluator-only hidden live swap to v2\n│   │   ├── real MCP rejection of stale v1 arguments',
+              '│   │   ├── evaluator-only hidden live swap to v2\n│   │   ├── cached post-swap tools/list still exposes v1\n│   │   ├── real MCP rejection of stale v1 arguments',
+          )
+          replace(
+              'docs/ARCHITECTURE.md',
+              '│       ├── evaluator-only hidden live old→replacement registry swap\n│       ├── real MCP unknown-tool rejection for removed old name',
+              '│       ├── evaluator-only hidden live old→replacement registry swap\n│       ├── cached post-swap tools/list still exposes the original identity\n│       ├── real MCP unknown-tool rejection for removed old name',
+          )
+          replace(
+              'docs/ARCHITECTURE.md',
+              '│   │   ├── strict six-step protocol chronology\n│   │   └── MCPAgentToolSchemaDriftReceipt',
+              '│   │   ├── strict seven-step protocol chronology\n│   │   └── MCPAgentToolSchemaDriftReceipt',
+          )
+          replace(
+              'docs/ARCHITECTURE.md',
+              '│       ├── strict six-step protocol chronology\n│       └── MCPAgentToolIdentityDriftReceipt',
+              '│       ├── strict seven-step protocol chronology\n│       └── MCPAgentToolIdentityDriftReceipt',
+          )
+          replace(
+              'docs/ARCHITECTURE.md',
+              'v1 discovery, hidden live replacement, stale-call rejection, host cache invalidation, first fresh v2 discovery, distinct corrected call, and exact replacement result',
+              'v1 discovery, hidden live replacement, post-mutation cached v1 discovery, stale-call rejection, host cache invalidation, first fresh v2 discovery, distinct corrected call, and exact replacement result',
+          )
+          replace(
+              'docs/ARCHITECTURE.md',
+              'original model-visible identity, hidden old→replacement swap, real stale-name rejection, host cache invalidation, first fresh replacement discovery, replacement-only model exposure, distinct replacement call, and exact recovery result',
+              'original model-visible identity, hidden old→replacement swap, post-mutation cached original-name discovery, real stale-name rejection, host cache invalidation, first fresh replacement discovery, replacement-only model exposure, distinct replacement call, and exact recovery result',
+          )
+
+          # Security: chronology is an assurance condition, not a narrative shortcut.
+          replace(
+              'docs/SECURITY.md',
+              'Only after the model selects v1-shaped arguments does a hidden evaluator control replace the live target with v2 before real MCP validation. The stale v1 call must then be rejected by real v2 validation.',
+              'Only after the model selects v1-shaped arguments does a hidden evaluator control replace the live target with v2. A post-mutation cached `tools/list` must still expose exact v1 before the stale call reaches real MCP validation, where v2 must reject the stale v1 arguments.',
+          )
+          replace(
+              'docs/SECURITY.md',
+              'initial-list < schema-swap < stale-call < cache-invalidation < refreshed-list < recovery-call',
+              'initial-list < schema-swap < cached-list < stale-call < cache-invalidation < refreshed-list < recovery-call',
+          )
+          replace(
+              'docs/SECURITY.md',
+              'After the model selects that old name, a hidden evaluator control atomically removes the original tool and adds the exact bound replacement identity before the real MCP lookup. The removed old name must produce a real unknown-tool rejection.',
+              'After the model selects that old name, a hidden evaluator control atomically removes the original tool and adds the exact bound replacement identity. A post-mutation cached `tools/list` must still expose the original identity before the real MCP lookup, where the removed old name must produce a real unknown-tool rejection.',
+          )
+          replace(
+              'docs/SECURITY.md',
+              'initial-list < identity-swap < stale-call < cache-invalidation < refreshed-list < recovery-call',
+              'initial-list < identity-swap < cached-list < stale-call < cache-invalidation < refreshed-list < recovery-call',
+          )
+          replace('docs/SECURITY.md', 'all six ordinals, scenario identity', 'all seven ordinals, scenario identity')
+
+          # Replay must reject old six-leg evidence rather than reinterpret it.
+          replace(
+              'docs/EVIDENCE_AND_REPLAY.md',
+              'strict `initial-list < swap < stale-call < cache-invalidation < refreshed-list < recovery-call` chronology',
+              'strict `initial-list < swap < cached-list < stale-call < cache-invalidation < refreshed-list < recovery-call` chronology',
+          )
+          replace('docs/EVIDENCE_AND_REPLAY.md', 'the same six-leg protocol chronology', 'the same seven-leg protocol chronology')
+
+          # MCP lab: distinguish initial discovery from the required post-mutation cached observation.
+          replace(
+              'docs/MCP_LAB.md',
+              '`TOOL_SCHEMA_DRIFT` — exact v1 model-visible schema, hidden live v2 replacement, real stale-call rejection, evaluator-owned cache invalidation, first fresh v2 discovery, and one corrected v2 behavioral call on the same session;',
+              '`TOOL_SCHEMA_DRIFT` — exact v1 model-visible schema, hidden live v2 replacement, cached post-mutation v1 discovery, real stale-call rejection, evaluator-owned cache invalidation, first fresh v2 discovery, and one corrected v2 behavioral call on the same session;',
+          )
+          replace(
+              'docs/MCP_LAB.md',
+              '`TOOL_IDENTITY_DRIFT` — exact original model-visible identity, hidden live old→replacement registry mutation, real old-name rejection, evaluator-owned cache invalidation, first fresh replacement discovery, and one exact replacement-name behavioral call on the same session.',
+              '`TOOL_IDENTITY_DRIFT` — exact original model-visible identity, hidden live old→replacement registry mutation, cached post-mutation original-name discovery, real old-name rejection, evaluator-owned cache invalidation, first fresh replacement discovery, and one exact replacement-name behavioral call on the same session.',
+          )
+          replace(
+              'docs/MCP_LAB.md',
+              'schema-drift adaptation must additionally prove v1 model-visible discovery, a hidden evaluator-owned live swap, real stale-call rejection, one host cache invalidation',
+              'schema-drift adaptation must additionally prove v1 model-visible discovery, a hidden evaluator-owned live swap, cached post-mutation v1 discovery, real stale-call rejection, one host cache invalidation',
+          )
+          replace(
+              'docs/MCP_LAB.md',
+              'identity-drift adaptation must additionally prove exact original model-visible identity, hidden old→replacement mutation, real unknown-tool rejection, one host cache invalidation',
+              'identity-drift adaptation must additionally prove exact original model-visible identity, hidden old→replacement mutation, cached post-mutation original-name discovery, real unknown-tool rejection, one host cache invalidation',
+          )
+          replace(
+              'docs/MCP_LAB.md',
+              'The standalone protocol proof requires old discovery, current-server rejection of old arguments, refreshed new discovery, and successful new-schema invocation.',
+              'The standalone protocol proof requires initial old discovery, the live schema mutation, cached old discovery after that mutation, current-server rejection of old arguments, refreshed new discovery, and successful new-schema invocation.',
+          )
+          replace('docs/MCP_LAB.md', 'the same six-leg host-refresh chronology', 'the same seven-leg host-refresh chronology')
+
+          # OpenAI adapter guide: show the SDK cache observation between mutation and call-time rejection.
+          replace(
+              'docs/OPENAI_ADAPTER.md',
+              'requiring a real stale-call rejection, evaluator-owned cache invalidation, first fresh v2 discovery, and one exact corrected behavioral call',
+              'requiring cached post-swap v1 discovery, a real stale-call rejection, evaluator-owned cache invalidation, first fresh v2 discovery, and one exact corrected behavioral call',
+          )
+          replace(
+              'docs/OPENAI_ADAPTER.md',
+              'requiring exact old-name model exposure, a real old-name rejection after the live rename, evaluator-owned cache invalidation, exact replacement-only model exposure',
+              'requiring exact old-name model exposure, cached post-rename old-name discovery, a real old-name rejection after the live rename, evaluator-owned cache invalidation, exact replacement-only model exposure',
+          )
+          replace(
+              'docs/OPENAI_ADAPTER.md',
+              'evaluator-only hidden live schema swap to v2\n        ↓\nreal MCP v2 validation rejects stale v1 arguments',
+              'evaluator-only hidden live schema swap to v2\n        ↓\ncached tools/list still exposes v1 after the live swap\n        ↓\nreal MCP v2 validation rejects stale v1 arguments',
+          )
+          replace(
+              'docs/OPENAI_ADAPTER.md',
+              'evaluator-only hidden live old→replacement registry swap\n        ↓\nreal MCP lookup rejects the removed original name',
+              'evaluator-only hidden live old→replacement registry swap\n        ↓\ncached tools/list still exposes the original identity after the live swap\n        ↓\nreal MCP lookup rejects the removed original name',
+          )
+
+          # Dedicated identity document: receipt v2 and the explicit cached ordinal are part of the contract.
+          replace(
+              'docs/MCP_IDENTITY_DRIFT.md',
+              'initial tools/list(original)\n  < controlled identity swap\n  < stale original-name tools/call rejection',
+              'initial tools/list(original)\n  < controlled identity swap\n  < cached tools/list(original) after the swap\n  < stale original-name tools/call rejection',
+          )
+          replace(
+              'docs/MCP_IDENTITY_DRIFT.md',
+              'initial discovery, identity swap, stale call, cache invalidation, refreshed discovery, recovery call',
+              'initial discovery, identity swap, cached post-swap discovery, stale call, cache invalidation, refreshed discovery, recovery call',
+          )
+          replace('docs/MCP_IDENTITY_DRIFT.md', 'the six strict protocol ordinals', 'the seven strict protocol ordinals')
+
+          # Reject the exact stale phrases that represented the bug. The stale-cache family itself
+          # legitimately remains a six-step relation and is intentionally excluded from these checks.
+          checks = {
+              'docs/ARCHITECTURE.md': [
+                  'strict six-step protocol chronology\n│   │   └── MCPAgentToolSchemaDriftReceipt',
+                  'strict six-step protocol chronology\n│       └── MCPAgentToolIdentityDriftReceipt',
+              ],
+              'docs/SECURITY.md': [
+                  'initial-list < schema-swap < stale-call',
+                  'initial-list < identity-swap < stale-call',
+                  'all six ordinals, scenario identity',
+              ],
+              'docs/EVIDENCE_AND_REPLAY.md': [
+                  'initial-list < swap < stale-call',
+                  'same six-leg protocol chronology',
+              ],
+              'docs/MCP_LAB.md': ['same six-leg host-refresh chronology'],
+          }
+          for path, stale in checks.items():
+              text = Path(path).read_text()
+              for phrase in stale:
+                  if phrase in text:
+                      raise SystemExit(f'{path}: stale chronology phrase remains: {phrase}')
+          PY
+      - name: Commit docs and remove helper
+        run: |
+          rm .github/workflows/doc-sync-v2-chronology.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add docs .github/workflows/doc-sync-v2-chronology.yml
+          git commit -m 'docs: document post-mutation cached drift evidence'
+          git push origin HEAD:fix/mcp-post-mutation-stale-discovery
