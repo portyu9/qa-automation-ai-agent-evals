@@ -38,7 +38,7 @@ jobs:
               Path('tests/integration/test_openai_mcp_tool_identity_drift_adapter.py'),
           ]
 
-          chronology = re.compile(
+          keyword_normal = re.compile(
               r'(?m)^(?P<i>[ \t]*)initial_list_ordinal=0,\n'
               r'(?P=i)(?P<m>schema_swap_ordinal|identity_swap_ordinal)=1,\n'
               r'(?P=i)stale_call_ordinal=2,\n'
@@ -46,7 +46,22 @@ jobs:
               r'(?P=i)refreshed_list_ordinal=4,\n'
               r'(?P=i)recovery_call_ordinal=5,'
           )
-
+          keyword_inverted_refresh = re.compile(
+              r'(?m)^(?P<i>[ \t]*)initial_list_ordinal=0,\n'
+              r'(?P=i)(?P<m>schema_swap_ordinal|identity_swap_ordinal)=1,\n'
+              r'(?P=i)stale_call_ordinal=2,\n'
+              r'(?P=i)cache_invalidation_ordinal=4,\n'
+              r'(?P=i)refreshed_list_ordinal=3,\n'
+              r'(?P=i)recovery_call_ordinal=5,'
+          )
+          dict_normal = re.compile(
+              r'(?m)^(?P<i>[ \t]*)"initial_list_ordinal": 0,\n'
+              r'(?P=i)"(?P<m>schema_swap_ordinal|identity_swap_ordinal)": 1,\n'
+              r'(?P=i)"stale_call_ordinal": 2,\n'
+              r'(?P=i)"cache_invalidation_ordinal": 3,\n'
+              r'(?P=i)"refreshed_list_ordinal": 4,\n'
+              r'(?P=i)"recovery_call_ordinal": 5,'
+          )
           assertion = re.compile(
               r'(?m)^(?P<i>[ \t]*)delivery\.payload\["initial_list_ordinal"\],\n'
               r'(?P=i)delivery\.payload\["(?P<m>schema_swap_ordinal|identity_swap_ordinal)"\],\n'
@@ -57,44 +72,74 @@ jobs:
               r'(?P<close>[ \t]*)\] == \[0, 1, 2, 3, 4, 5\]'
           )
 
-          total_chronology = 0
-          total_assertions = 0
+          counts = {'keyword': 0, 'inverted': 0, 'dict': 0, 'assertion': 0, 'residual': 0}
           for path in targets:
               text = path.read_text()
 
-              def replace_chronology(match: re.Match[str]) -> str:
-                  indent = match.group('i')
-                  mutation = match.group('m')
+              def normal_repl(match: re.Match[str]) -> str:
+                  i, m = match.group('i'), match.group('m')
                   return (
-                      f'{indent}initial_list_ordinal=0,\n'
-                      f'{indent}{mutation}=1,\n'
-                      f'{indent}cached_list_ordinal=2,\n'
-                      f'{indent}stale_call_ordinal=3,\n'
-                      f'{indent}cache_invalidation_ordinal=4,\n'
-                      f'{indent}refreshed_list_ordinal=5,\n'
-                      f'{indent}recovery_call_ordinal=6,'
+                      f'{i}initial_list_ordinal=0,\n{i}{m}=1,\n{i}cached_list_ordinal=2,\n'
+                      f'{i}stale_call_ordinal=3,\n{i}cache_invalidation_ordinal=4,\n'
+                      f'{i}refreshed_list_ordinal=5,\n{i}recovery_call_ordinal=6,'
                   )
 
-              text, count = chronology.subn(replace_chronology, text)
-              total_chronology += count
-
-              def replace_assertion(match: re.Match[str]) -> str:
-                  indent = match.group('i')
-                  mutation = match.group('m')
-                  close = match.group('close')
+              def inverted_repl(match: re.Match[str]) -> str:
+                  i, m = match.group('i'), match.group('m')
                   return (
-                      f'{indent}delivery.payload["initial_list_ordinal"],\n'
-                      f'{indent}delivery.payload["{mutation}"],\n'
-                      f'{indent}delivery.payload["cached_list_ordinal"],\n'
-                      f'{indent}delivery.payload["stale_call_ordinal"],\n'
-                      f'{indent}delivery.payload["cache_invalidation_ordinal"],\n'
-                      f'{indent}delivery.payload["refreshed_list_ordinal"],\n'
-                      f'{indent}delivery.payload["recovery_call_ordinal"],\n'
+                      f'{i}initial_list_ordinal=0,\n{i}{m}=1,\n{i}cached_list_ordinal=2,\n'
+                      f'{i}stale_call_ordinal=3,\n{i}cache_invalidation_ordinal=5,\n'
+                      f'{i}refreshed_list_ordinal=4,\n{i}recovery_call_ordinal=6,'
+                  )
+
+              def dict_repl(match: re.Match[str]) -> str:
+                  i, m = match.group('i'), match.group('m')
+                  return (
+                      f'{i}"initial_list_ordinal": 0,\n{i}"{m}": 1,\n{i}"cached_list_ordinal": 2,\n'
+                      f'{i}"stale_call_ordinal": 3,\n{i}"cache_invalidation_ordinal": 4,\n'
+                      f'{i}"refreshed_list_ordinal": 5,\n{i}"recovery_call_ordinal": 6,'
+                  )
+
+              text, n = keyword_inverted_refresh.subn(inverted_repl, text)
+              counts['inverted'] += n
+              text, n = keyword_normal.subn(normal_repl, text)
+              counts['keyword'] += n
+              text, n = dict_normal.subn(dict_repl, text)
+              counts['dict'] += n
+
+              def assertion_repl(match: re.Match[str]) -> str:
+                  i, m, close = match.group('i'), match.group('m'), match.group('close')
+                  return (
+                      f'{i}delivery.payload["initial_list_ordinal"],\n'
+                      f'{i}delivery.payload["{m}"],\n'
+                      f'{i}delivery.payload["cached_list_ordinal"],\n'
+                      f'{i}delivery.payload["stale_call_ordinal"],\n'
+                      f'{i}delivery.payload["cache_invalidation_ordinal"],\n'
+                      f'{i}delivery.payload["refreshed_list_ordinal"],\n'
+                      f'{i}delivery.payload["recovery_call_ordinal"],\n'
                       f'{close}] == [0, 1, 2, 3, 4, 5, 6]'
                   )
 
-              text, count = assertion.subn(replace_assertion, text)
-              total_assertions += count
+              text, n = assertion.subn(assertion_repl, text)
+              counts['assertion'] += n
+
+              # Remaining negative constructors can intentionally use non-baseline ordinal values.
+              # Give them the new required cached observation without rewriting the deliberate fault.
+              lines = text.splitlines(keepends=True)
+              out: list[str] = []
+              for idx, line in enumerate(lines):
+                  out.append(line)
+                  kw = re.match(r'^(?P<i>[ \t]*)(schema_swap_ordinal|identity_swap_ordinal)=(?P<v>[^,]+),\s*$', line.rstrip('\n'))
+                  dk = re.match(r'^(?P<i>[ \t]*)"(schema_swap_ordinal|identity_swap_ordinal)": (?P<v>[^,]+),\s*$', line.rstrip('\n'))
+                  nxt = lines[idx + 1] if idx + 1 < len(lines) else ''
+                  if kw and 'cached_list_ordinal' not in nxt:
+                      out.append(f"{kw.group('i')}cached_list_ordinal=2,\n")
+                      counts['residual'] += 1
+                  elif dk and '"cached_list_ordinal"' not in nxt:
+                      out.append(f"{dk.group('i')}\"cached_list_ordinal\": 2,\n")
+                      counts['residual'] += 1
+              text = ''.join(out)
+
               text = text.replace(
                   'agent-evals/mcp-agent-tool-schema-drift-receipt/v1',
                   'agent-evals/mcp-agent-tool-schema-drift-receipt/v2',
@@ -104,10 +149,14 @@ jobs:
               )
               path.write_text(text)
 
-          if total_chronology < 12:
-              raise SystemExit(f'expected at least 12 chronology migrations, got {total_chronology}')
-          if total_assertions != 2:
-              raise SystemExit(f'expected exactly 2 integration assertion migrations, got {total_assertions}')
+          if counts['keyword'] < 10:
+              raise SystemExit(f"expected >=10 normal keyword migrations, got {counts}")
+          if counts['dict'] < 2:
+              raise SystemExit(f"expected >=2 dictionary migrations, got {counts}")
+          if counts['inverted'] != 2:
+              raise SystemExit(f"expected 2 deliberate inverted-refresh migrations, got {counts}")
+          if counts['assertion'] != 2:
+              raise SystemExit(f"expected 2 integration assertion migrations, got {counts}")
 
           identity = Path('tests/unit/test_mcp_agent_identity_bridge_boundaries.py')
           text = identity.read_text()
@@ -123,9 +172,14 @@ jobs:
               text += '''\n\n@pytest.mark.parametrize("cached_list_ordinal", [0, 1])\ndef test_schema_drift_protocol_receipt_rejects_cached_discovery_not_after_schema_swap(\n    cached_list_ordinal: int,\n) -> None:\n    with pytest.raises(ValueError, match="chronology"):\n        create_schema_drift_protocol_receipt(\n            fault=fault(),\n            ttl_ms=_TTL_MS,\n            initial_schema=initial_schema(),\n            cached_schema=initial_schema(),\n            refreshed_schema=replacement_schema(),\n            stale_protocol_text=_STALE_TEXT,\n            protocol_recovery_text=_RECOVERY_TEXT,\n            initial_list_ordinal=0,\n            schema_swap_ordinal=1,\n            cached_list_ordinal=cached_list_ordinal,\n            stale_call_ordinal=3,\n            cache_invalidation_ordinal=4,\n            refreshed_list_ordinal=5,\n            recovery_call_ordinal=6,\n        )\n'''
           schema.write_text(text)
 
+          # Structural postcondition: every mutation ordinal in these tests must now be
+          # immediately followed by the required cached-list ordinal.
           for path in targets:
-              if chronology.search(path.read_text()):
-                  raise SystemExit(f'old six-leg chronology remains in {path}')
+              lines = path.read_text().splitlines()
+              for idx, line in enumerate(lines):
+                  if re.search(r'(schema_swap_ordinal|identity_swap_ordinal)["\]]?\s*[:=]', line):
+                      if idx + 1 >= len(lines) or 'cached_list_ordinal' not in lines[idx + 1]:
+                          raise SystemExit(f'missing cached-list ordinal after mutation in {path}:{idx + 1}')
           PY
           ruff format tests/unit/test_mcp_agent_identity_bridge.py \
             tests/unit/test_mcp_agent_identity_bridge_boundaries.py \
