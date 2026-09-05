@@ -383,7 +383,7 @@ def _verify_stale_cache_delivery_chronology(
     _require_output_digest(
         result,
         receipt.agent_error_observation_sha256,
-        phase="stale-cache rejection",
+        phase="stale-cache normalized rejection",
     )
     if not (request.sequence < result.sequence < delivery_sequence):
         raise ProtocolDeliveryError(
