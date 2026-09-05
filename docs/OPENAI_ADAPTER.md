@@ -6,7 +6,7 @@ The OpenAI integration turns documented OpenAI Agents SDK execution surfaces int
 
 The integration is pinned to `openai-agents==0.22.0`. MCP integration is pinned separately to `mcp==2.1.1`. Pinning both sides makes normalization, tool-output conversion, call identity, approval interruption/resume behavior, protocol negotiation, retry chronology, tool-discovery semantics, and run-item agent attribution explicit reviewable contracts rather than floating assumptions.
 
-Ten adapter boundaries are intentionally distinct:
+Eleven adapter boundaries are intentionally distinct:
 
 - `OpenAIAgentsAdapter` — seven scoped local/SDK adversarial channels;
 - `OpenAIAgentsRetrievalAdapter` — one evaluator-owned deterministic retrieval tool binding the exact scenario query and canonical ranked context to one stable SDK call/result relation;
@@ -16,7 +16,8 @@ Ten adapter boundaries are intentionally distinct:
 - `OpenAIAgentsMCPToolMetadataAdapter` — one controlled official-MCP-stdio → OpenAI public-model-boundary path for `MCPFaultKind.TOOL_METADATA_POISON`, binding exact discovery description and target JSON schema without requiring a target call;
 - `OpenAIAgentsMCPToolResultAdapter` — one controlled OpenAI-agent → official-MCP-stdio path for `MCPFaultKind.TOOL_RESULT_POISON`;
 - `OpenAIAgentsMCPToolErrorRecoveryAdapter` — one controlled OpenAI-agent → official-MCP-stdio resilience path for `MCPFaultKind.TOOL_ERROR`, requiring a causal same-argument retry and exact benign recovery;
-- `OpenAIAgentsMCPToolSchemaDriftAdapter` — one controlled OpenAI-agent → official-MCP-stdio schema-adaptation path for `MCPFaultKind.TOOL_SCHEMA_DRIFT`, requiring a real stale-call rejection, evaluator-owned cache invalidation, first fresh v2 discovery, and one exact corrected behavioral call.
+- `OpenAIAgentsMCPToolSchemaDriftAdapter` — one controlled OpenAI-agent → official-MCP-stdio schema-adaptation path for `MCPFaultKind.TOOL_SCHEMA_DRIFT`, requiring a real stale-call rejection, evaluator-owned cache invalidation, first fresh v2 discovery, and one exact corrected behavioral call;
+- `OpenAIAgentsMCPToolIdentityDriftAdapter` — one controlled OpenAI-agent → official-MCP-stdio identity-adaptation path for `MCPFaultKind.TOOL_IDENTITY_DRIFT`, requiring exact old-name model exposure, a real old-name rejection after the live rename, evaluator-owned cache invalidation, exact replacement-only model exposure, and one exact replacement-name behavioral call;
 - `OpenAIAgentsSemanticJudge` — one optional subordinate no-tools, one-turn evaluator over a concrete public SDK `Model`, accepting only canonical bounded semantic input and strict JSON output under an exact calibrated judge profile.
 
 Importing `agent_evals` does not import either optional provider stack or require those optional dependencies.
@@ -308,7 +309,45 @@ TrialEvidence
 framework-owned deterministic oracles
 ```
 
-All four MCP paths are bridges between evidence domains, not conversions of MCP protocol evidence into grading authority. A bridge establishes a narrowly defined delivery/recovery/adaptation precondition. The agent still passes or fails only through deterministic subject evidence and oracles.
+### Dedicated MCP identity-drift adaptation bridge
+
+```text
+MCPFaultSpec(kind=tool_identity_drift)
+        ↓
+OpenAIAgentsMCPToolIdentityDriftAdapter
+        ↓ fresh official MCPServerStdio subprocess
+negotiated MCP protocol = 2026-07-28
+        ↓
+model receives exact original tool identity
+        ↓
+TOOL_REQUEST(stale_call_id; original name)
+        ↓
+evaluator-only hidden live old→replacement registry swap
+        ↓
+real MCP lookup rejects the removed original name
+        ↓
+TOOL_RESULT(stale_call_id; exact model-visible unknown-tool rejection)
+        ↓
+host adapter invalidates MCP tool cache
+        ↓
+first fresh post-invalidation tools/list exposes replacement only
+        ↓
+model receives exact replacement identity + stale rejection
+        ↓
+TOOL_REQUEST(recovery_call_id; exact replacement name)
+        ↓ same live MCP session
+TOOL_RESULT(recovery_call_id; exact deterministic recovery)
+        ↓
+MCPAgentToolIdentityDriftReceipt
+        ↓
+PROTOCOL_DELIVERY inserted after the recovery result
+        ↓
+TrialEvidence
+        ↓
+framework-owned deterministic oracles
+```
+
+All five MCP paths are bridges between evidence domains, not conversions of MCP protocol evidence into grading authority. A bridge establishes a narrowly defined delivery/recovery/adaptation precondition. The agent still passes or fails only through deterministic subject evidence and oracles.
 
 ## Seven concrete adversarial channels
 
@@ -355,7 +394,7 @@ TOOL_RESULT
 
 Later matching calls use copied original behavior. If the target never executes, no receipt exists and delivery verification blocks the trial.
 
-This local mode still does **not** intercept MCP or hosted tools. MCP result, ToolError-recovery, and host-refreshed schema-drift assurance are handled only by the separate stdio adapters described below.
+This local mode still does **not** intercept MCP or hosted tools. MCP result, ToolError-recovery, host-refreshed schema-drift, and host-refreshed identity-drift assurance are handled only by the separate stdio adapters described below.
 
 ## Local `TOOL_METADATA`
 
@@ -366,7 +405,7 @@ source          = injector:openai-agents:tool-metadata
 injection_point = openai-agents:FunctionTool:<tool>:description
 ```
 
-Tool name, parameter schema, callback, approval behavior, and routing identity remain unchanged. MCP description poisoning now has its own narrowly bounded model-visible delivery bridge, while identity drift remains protocol-only with respect to agent behavior. MCP schema drift has its own host-refreshed adaptation bridge. Neither bridge turns local `TOOL_METADATA` replacement into an MCP mechanism or establishes arbitrary metadata/schema behavior.
+Tool name, parameter schema, callback, approval behavior, and routing identity remain unchanged. MCP description poisoning has its own narrowly bounded model-visible delivery bridge; MCP schema drift has its own host-refreshed contract-adaptation bridge; and MCP identity drift has its own host-refreshed old→replacement identity-adaptation bridge. None of these converts local `TOOL_METADATA` replacement into an MCP mechanism or establishes arbitrary metadata/schema/rename behavior.
 
 ## SDK session-history `MEMORY`
 
@@ -432,13 +471,13 @@ This mode does not mutate process-global `os.environ`, filesystem/browser/contai
 
 ## Shared MCP stdio provenance controls
 
-All four MCP adapters create a **fresh official `MCPServerStdio` client/server process boundary** per trial and clone the supplied OpenAI Agent with exactly that one controlled MCP server.
+All five MCP adapters create a **fresh official `MCPServerStdio` client/server process boundary** per trial and clone the supplied OpenAI Agent with exactly that one controlled MCP server.
 
-The base Agent is rejected when it already has MCP servers, uses prefixed MCP tool names, or has a local tool colliding with the target name. The schema-drift adapter additionally reserves an evaluator-only control-tool identity and filters that control from the agent-visible MCP tool list. Those fail-closed preconditions prevent a valid-looking call ID or control action from being attributed to the wrong tool or server.
+The base Agent is rejected when it already has MCP servers, uses prefixed MCP tool names, or has a local tool colliding with the controlled names. The schema- and identity-drift adapters additionally reserve evaluator-only control-tool identities and filter those controls from the agent-visible MCP tool list. Those fail-closed preconditions prevent a valid-looking call ID or hidden control action from being attributed to the wrong tool or server.
 
 For MCP v2, the authoritative negotiated revision is the connected `ClientSession.protocol_version`; legacy `server_initialize_result.protocol_version` is only a fallback for older initialization paths.
 
-All four adapters require negotiated protocol `2026-07-28`. A different or unavailable version is an evaluation precondition failure, not a subject failure.
+All five adapters require negotiated protocol `2026-07-28`. A different or unavailable version is an evaluation precondition failure, not a subject failure.
 
 ---
 
@@ -710,19 +749,112 @@ Inside the deterministic harness it proves:
 
 ### What the schema-drift bridge does not prove
 
-It does not establish model-owned refresh, notification-driven `tools/list_changed` behavior, arbitrary schema compatibility, optional/default/coercion semantics beyond the bound fixture, tool rename handling, identity drift handling, generic cache policy correctness, multiple simultaneous schema migrations, multiple MCP servers, hosted/remote MCP behavior, live-model behavior, provider availability, authorization, or production deployment behavior.
+It does not establish model-owned refresh, notification-driven `tools/list_changed` behavior, arbitrary schema compatibility, optional/default/coercion semantics beyond the bound fixture, or identity migration merely because a separate identity-drift bridge exists. Identity adaptation is covered only by its dedicated contract below. It also does not establish generic cache policy correctness, multiple simultaneous schema migrations, multiple MCP servers, hosted/remote MCP behavior, live-model behavior, provider availability, authorization, or production deployment behavior.
+
+---
+
+## Verified MCP `TOOL_IDENTITY_DRIFT` host-refreshed adaptation bridge
+
+### Scope and ownership
+
+`OpenAIAgentsMCPToolIdentityDriftAdapter` accepts exactly one `MCPFaultSpec` whose kind is `TOOL_IDENTITY_DRIFT`. The controlled payload binds a positive TTL and one exact nonblank replacement identity. The callable argument shape remains stable in v1 so the bridge isolates identity adaptation rather than combining it with schema migration.
+
+Ownership is intentionally split:
+
+- the controlled harness owns the live old→replacement registry mutation;
+- the evaluator/host adapter owns MCP tool-cache invalidation after the stale old-name rejection;
+- the official MCP session owns cached/refreshed `tools/list` observations and call-time lookup results;
+- the pinned Agents SDK owns conversion of MCP tools into public model-visible definitions;
+- the agent/model is credited only for selecting the exact replacement name after that identity is visible.
+
+The adapter does **not** claim model-initiated refresh or automatic `tools/list_changed` handling.
+
+### Exact model-visible identity transition
+
+The public model boundary is observed directly. Initial model-visible controlled tools must contain exactly the original identity and not the replacement. After the real old-name rejection and host invalidation, the recovery model boundary must contain exactly the replacement identity and not the stale original.
+
+Protocol discovery alone is insufficient. The hidden evaluator control tool is filtered from model-visible tools; control leakage blocks evaluation.
+
+### Real stale rejection and host refresh
+
+The first controlled call must use the original name. Inside that intercepted call, the hidden control performs the live registry mutation after the model selected the old identity but before the real MCP lookup. The removed old-name call must then fail with an unknown-tool relation.
+
+Only after that live rejection does the adapter invalidate MCP discovery. The first fresh post-invalidation listing must expose exactly the replacement identity before recovery occurs.
+
+### Exact replacement call
+
+The behavioral run must contain exactly two controlled logical attempts. The second request must use the exact replacement identity, a stable call ID distinct from the stale call ID, and strict finite canonical JSON arguments that match the live invocation. The same live MCP session must return the exact deterministic replacement result.
+
+Normalized evidence independently requires:
+
+```text
+request(original) < result(rejection) < request(replacement) < result(recovery)
+```
+
+Missing recovery, more than two controlled attempts, stale-name reuse, an unbound third identity, reused call ID, malformed/changed arguments, result ambiguity, or non-causal ordering blocks evaluation.
+
+A removed old name emitted after refresh may be rejected by the pinned SDK/MCP boundary before another model turn is possible. That runtime failure is preserved as `RUNTIME_ERROR / BLOCKED`; the evaluator does not synthesize a fake continuation.
+
+### Protocol chronology and receipt closure
+
+`MCPAgentToolIdentityDriftReceipt` binds:
+
+- scenario identity and the revalidated `MCPFaultReceipt`;
+- exact original and replacement names and their compact digests;
+- distinct stale/recovery OpenAI call IDs;
+- canonical stale/recovery argument digests;
+- protocol and agent-visible stale-rejection digests;
+- expected, protocol-observed, and agent-visible recovery digests;
+- initial and refreshed model-visible controlled identity-set digests;
+- strict protocol ordinals;
+- a domain-separated receipt root.
+
+The required protocol chronology is:
+
+```text
+initial-list
+< hidden identity swap
+< stale old-name call
+< host cache invalidation
+< first refreshed replacement list
+< replacement-name recovery call
+```
+
+`PROTOCOL_DELIVERY` is emitted only after the recovery `TOOL_RESULT`. Raw stale rejection text, raw recovery text, and raw call arguments are not duplicated into the bridge receipt when digests suffice.
+
+### What the identity-drift bridge proves
+
+Inside the deterministic harness it proves:
+
+1. the official stdio session negotiated MCP `2026-07-28`;
+2. the first model turn received exactly the original controlled identity;
+3. the model selected the original name with a stable call ID;
+4. the harness replaced the live registry entry before that call reached real lookup;
+5. the removed name produced a real unknown-tool rejection that became model-visible;
+6. the host invalidated cached discovery and the first fresh listing exposed exactly the replacement identity;
+7. the recovery model turn received exactly the replacement identity and the stale rejection;
+8. the agent issued the exact replacement-name request with a distinct call ID and bound arguments;
+9. the same live session returned the bound deterministic recovery result;
+10. only then could `MCPAgentToolIdentityDriftReceipt` / `PROTOCOL_DELIVERY` close and deterministic grading proceed.
+
+### What the identity-drift bridge does not prove
+
+It does not establish model-owned refresh, notification-driven invalidation, generic rename or alias migration, arbitrary registry churn, simultaneous schema+identity migration, semantic equivalence of independently administered tools, cryptographic/global tool identity, provider-side or target-side attestation, hosted/remote MCP behavior, production service discovery/IAM/deployment correctness, live-model behavior, provider availability, generic retry/idempotency, or release acceptance.
+
+See [MCP Tool-Identity Drift Assurance](MCP_IDENTITY_DRIFT.md) for the dedicated receipt/replay/non-claim contract.
 
 ---
 
 ## What the MCP bridges do not prove
 
-None of the four bridges establishes:
+None of the five bridges establishes:
 
 - live OpenAI model behavior or provider availability;
 - hosted OpenAI MCP, third-party MCP, remote MCP, Internet MCP, TLS/DNS/proxy/gateway fidelity, or arbitrary stdio transport robustness;
 - model attention to, interpretation of, compliance with, or resistance to MCP metadata poison after exact model-visible exposure;
-- generic stale-cache or identity-drift behavior inside an agent trial;
+- generic stale-cache behavior inside an agent trial; `TOOL_LIST_STALE_CACHE` remains protocol-only;
 - arbitrary schema migrations beyond the one controlled host-refreshed schema-drift contract;
+- arbitrary rename/alias/multi-tool migration graphs beyond the one controlled host-refreshed identity-drift contract;
 - arbitrary multi-call or parallel plans;
 - production authorization, OAuth, identity-provider, or credential lifecycle behavior;
 - target-side cryptographic attestation;
@@ -734,7 +866,7 @@ A bridge closure is an evaluation precondition. It is not a behavioral verdict.
 
 ## Fail-closed preconditions
 
-Malformed attack payloads, missing or ambiguous local targets, unsupported target types, unusable call identities, unsupported environment context, handoff root mismatch, missing or contradictory SDK agent attribution, request/result call-owner mismatch, malformed approval-intent arguments or receipt, missing/ambiguous approval continuation, approval resource/authority-path mismatch, MCP server ambiguity, protocol-version mismatch, missing protocol evidence, mismatched agent evidence, changed retry arguments, non-causal retry chronology, schema-control leakage, incomplete schema chronology, recovery before refreshed discovery, wrong replacement contracts/arguments/results, or failed recovery raise `AdapterPreconditionError` or are converted by evaluator-owned semantic verification into `EVALUATION_ERROR / BLOCKED`.
+Malformed attack payloads, missing or ambiguous local targets, unsupported target types, unusable call identities, unsupported environment context, handoff root mismatch, missing or contradictory SDK agent attribution, request/result call-owner mismatch, malformed approval-intent arguments or receipt, missing/ambiguous approval continuation, approval resource/authority-path mismatch, MCP server ambiguity, protocol-version mismatch, missing protocol evidence, mismatched agent evidence, changed retry arguments, non-causal retry chronology, schema-control leakage, incomplete schema chronology, recovery before refreshed schema discovery, wrong schema contracts/arguments/results, identity-control leakage, incomplete identity chronology, ambiguous original/replacement model exposure, stale-name reuse, recovery before refreshed identity discovery, wrong replacement identity/arguments/results, reused identity call IDs, or failed recovery raise `AdapterPreconditionError` or are converted by evaluator-owned semantic verification into `EVALUATION_ERROR / BLOCKED`.
 
 `TrialRunner` converts adapter precondition failures into `EVALUATION_ERROR / BLOCKED` with no completed subject oracles. Provider/runtime failures remain `RUNTIME_ERROR / BLOCKED`.
 
@@ -787,6 +919,6 @@ Implementation source checkpoint `d98f9ca1feb1179504cd2181295a73936fd0ae6c`, pro
 - Python **3.11 minimum / 3.14 latest**, Ruff, formatter, Bandit, dependency audit, package integrity, and all **7/7 CI jobs**: green;
 - dependency audit: **no known vulnerabilities found**; the project package itself is skipped because it is not published on PyPI.
 
-This checkpoint remains the historical audited merged implementation baseline. Capabilities added after that checkpoint, including the ToolError-recovery bridge, host-refreshed schema-drift bridge, native handoff-authority attenuation, and native HITL approval-intent binding described above, are accepted only after their own exact-head CI, merge, and post-merge `main` verification; documentation does not retroactively redefine the older implementation evidence.
+This checkpoint remains the historical audited merged implementation baseline. Capabilities added after that checkpoint, including the ToolError-recovery bridge, host-refreshed schema-drift bridge, host-refreshed identity-drift bridge, native handoff-authority attenuation, native HITL approval-intent binding, calibrated semantic judging, deterministic retrieval assurance, and run-local side-effect idempotency assurance described above, are accepted only after their own exact-head CI, merge, and post-merge `main` verification; documentation does not retroactively redefine the older implementation evidence.
 
 [← Documentation hub](README.md)
