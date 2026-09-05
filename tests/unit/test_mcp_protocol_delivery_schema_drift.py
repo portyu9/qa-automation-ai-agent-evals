@@ -95,33 +95,88 @@ def receipt() -> MCPAgentToolSchemaDriftReceipt:
     )
 
 
-def evidence(payload: dict[str, object] | None = None) -> TrialEvidence:
+def request(sequence: int, *, call_id: str, arguments: str) -> EvidenceEvent:
+    return EvidenceEvent(
+        sequence=sequence,
+        kind=EvidenceKind.TOOL_REQUEST,
+        source="adapter:test",
+        payload={"tool": _TOOL, "call_id": call_id, "arguments": arguments},
+    )
+
+
+def result(sequence: int, *, call_id: str, text: str) -> EvidenceEvent:
+    return EvidenceEvent(
+        sequence=sequence,
+        kind=EvidenceKind.TOOL_RESULT,
+        source="adapter:test",
+        payload={"call_id": call_id, "output": {"type": "text", "text": text}},
+    )
+
+
+def evidence(
+    payload: dict[str, object] | None = None,
+    *,
+    stale_arguments: str = '{"query":"stale"}',
+    recovery_text: str = _RECOVERY_TEXT,
+) -> TrialEvidence:
     bridge = receipt()
-    event = EvidenceEvent(
-        sequence=0,
+    delivery_payload = payload or bridge.model_dump(mode="json")
+    delivery = EvidenceEvent(
+        sequence=4,
         kind=EvidenceKind.PROTOCOL_DELIVERY,
         source="bridge:mcp-agent:tool-schema-drift",
-        payload=payload or bridge.model_dump(mode="json"),
+        payload=delivery_payload,
     )
     return TrialEvidence(
         trial_id="schema-drift-delivery",
         subject_identity=_SUBJECT,
         scenario_identity=_SCENARIO,
-        events=(event,),
+        events=(
+            request(0, call_id=bridge.stale_call_id, arguments=stale_arguments),
+            result(1, call_id=bridge.stale_call_id, text=_STALE_TEXT),
+            request(
+                2,
+                call_id=bridge.recovery_call_id,
+                arguments='{"customer_id":7,"include_history":true}',
+            ),
+            result(3, call_id=bridge.recovery_call_id, text=recovery_text),
+            delivery,
+        ),
         final_state={},
     )
 
 
-def test_protocol_delivery_revalidates_schema_drift_receipt() -> None:
+def test_protocol_delivery_revalidates_schema_drift_receipt_and_normalized_relation() -> None:
     verified = verify_protocol_delivery(evidence())
     assert len(verified) == 1
     assert isinstance(verified[0], MCPAgentToolSchemaDriftReceipt)
 
 
+def test_protocol_delivery_rejects_schema_drift_receipt_only_replay() -> None:
+    bridge = receipt()
+    detached = TrialEvidence(
+        trial_id="schema-drift-detached",
+        subject_identity=_SUBJECT,
+        scenario_identity=_SCENARIO,
+        events=(bridge.to_event(sequence=0),),
+    )
+    with pytest.raises(ProtocolDeliveryError, match="exactly two normalized target requests"):
+        verify_protocol_delivery(detached)
+
+
+def test_protocol_delivery_rejects_changed_schema_drift_arguments() -> None:
+    with pytest.raises(ProtocolDeliveryError, match="stale request arguments"):
+        verify_protocol_delivery(evidence(stale_arguments='{"query":"changed"}'))
+
+
+def test_protocol_delivery_rejects_changed_schema_drift_recovery_output() -> None:
+    with pytest.raises(ProtocolDeliveryError, match="recovery output"):
+        verify_protocol_delivery(evidence(recovery_text="changed"))
+
+
 def test_protocol_delivery_rejects_tampered_schema_drift_relation() -> None:
     tampered = receipt().model_dump(mode="json")
     tampered["refreshed_list_ordinal"] = 2
-
     with pytest.raises(ProtocolDeliveryError, match="malformed or internally inconsistent"):
         verify_protocol_delivery(evidence(tampered))
 
@@ -129,8 +184,5 @@ def test_protocol_delivery_rejects_tampered_schema_drift_relation() -> None:
 def test_protocol_delivery_rejects_schema_drift_scenario_mismatch() -> None:
     bridge = receipt().model_dump(mode="json")
     bridge["scenario_identity"] = "c" * 64
-
-    # Re-rooting is intentionally not attempted here: either the receipt validation or the outer
-    # scenario-binding check must reject a delivery that no longer belongs to this trial.
     with pytest.raises(ProtocolDeliveryError):
         verify_protocol_delivery(evidence(bridge))
