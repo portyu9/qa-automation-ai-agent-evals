@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
-from typing import TypeAlias
+import hashlib
+import json
+from collections.abc import Mapping
+from typing import Any, TypeAlias
 
 from pydantic import ValidationError
 
@@ -102,6 +105,14 @@ def verify_protocol_delivery(evidence: TrialEvidence) -> tuple[ProtocolDeliveryR
             )
         if event.source == _TOOL_METADATA_SOURCE:
             _verify_metadata_delivery_chronology(evidence, delivery_sequence=event.sequence)
+        elif event.source == _TOOL_STALE_CACHE_SOURCE:
+            if not isinstance(receipt, MCPAgentToolStaleCacheReceipt):
+                raise ProtocolDeliveryError("stale-cache delivery did not parse as its typed receipt")
+            _verify_stale_cache_delivery_chronology(
+                evidence,
+                receipt=receipt,
+                delivery_sequence=event.sequence,
+            )
         receipts.append(receipt)
 
     return tuple(receipts)
@@ -124,3 +135,101 @@ def _verify_metadata_delivery_chronology(
             raise ProtocolDeliveryError(
                 "MCP tool-metadata delivery appears after normalized behavioral evidence"
             )
+
+
+def _verify_stale_cache_delivery_chronology(
+    evidence: TrialEvidence,
+    *,
+    receipt: MCPAgentToolStaleCacheReceipt,
+    delivery_sequence: int,
+) -> None:
+    """Bind stale-cache delivery to the exact normalized request/result pair on replay."""
+    target_requests = [
+        event
+        for event in evidence.events
+        if event.kind is EvidenceKind.TOOL_REQUEST
+        and event.payload.get("tool") == receipt.tool_name
+    ]
+    if len(target_requests) != 1:
+        raise ProtocolDeliveryError(
+            "MCP stale-cache delivery requires exactly one normalized controlled target request"
+        )
+    request = target_requests[0]
+    if request.payload.get("call_id") != receipt.stale_call_id:
+        raise ProtocolDeliveryError(
+            "MCP stale-cache normalized request call identity does not match delivery receipt"
+        )
+    if _strict_json_object(request.payload.get("arguments")) != {"query": "stale"}:
+        raise ProtocolDeliveryError(
+            "MCP stale-cache normalized request arguments do not match the bound v1 relation"
+        )
+
+    matching_results = [
+        event
+        for event in evidence.events
+        if event.kind is EvidenceKind.TOOL_RESULT
+        and event.payload.get("call_id") == receipt.stale_call_id
+    ]
+    if len(matching_results) != 1:
+        raise ProtocolDeliveryError(
+            "MCP stale-cache delivery requires exactly one normalized result for the stale call"
+        )
+    result = matching_results[0]
+    result_text = _single_text_output(result.payload.get("output"))
+    if _sha256_text(result_text) != receipt.agent_error_observation_sha256:
+        raise ProtocolDeliveryError(
+            "MCP stale-cache normalized rejection does not match the receipt-bound model rejection"
+        )
+    if not (request.sequence < result.sequence < delivery_sequence):
+        raise ProtocolDeliveryError(
+            "MCP stale-cache delivery must occur after its normalized stale request and result"
+        )
+
+
+def _strict_json_object(value: object) -> dict[str, Any]:
+    if not isinstance(value, str) or not value:
+        raise ProtocolDeliveryError("normalized MCP stale-cache arguments are missing")
+
+    def reject_constant(token: str) -> None:
+        raise ValueError(f"non-finite JSON constant: {token}")
+
+    def reject_duplicate_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+        result: dict[str, Any] = {}
+        for key, item in pairs:
+            if key in result:
+                raise ValueError(f"duplicate JSON object key: {key}")
+            result[key] = item
+        return result
+
+    try:
+        parsed = json.loads(
+            value,
+            parse_constant=reject_constant,
+            object_pairs_hook=reject_duplicate_keys,
+        )
+    except (json.JSONDecodeError, ValueError) as exc:
+        raise ProtocolDeliveryError(
+            "normalized MCP stale-cache arguments are not strict finite JSON"
+        ) from exc
+    if not isinstance(parsed, dict) or any(not isinstance(key, str) for key in parsed):
+        raise ProtocolDeliveryError(
+            "normalized MCP stale-cache arguments are not a string-keyed object"
+        )
+    return parsed
+
+
+def _single_text_output(value: object) -> str:
+    if not isinstance(value, Mapping) or set(value) != {"type", "text"}:
+        raise ProtocolDeliveryError(
+            "normalized MCP stale-cache result is not one exact text output object"
+        )
+    text = value.get("text")
+    if value.get("type") != "text" or not isinstance(text, str):
+        raise ProtocolDeliveryError(
+            "normalized MCP stale-cache result is not one exact text output object"
+        )
+    return text
+
+
+def _sha256_text(value: str) -> str:
+    return hashlib.sha256(value.encode("utf-8")).hexdigest()
