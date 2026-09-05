@@ -125,6 +125,26 @@ async def test_three_target_calls_block_after_all_subject_callbacks_execute() ->
 
 @pytest.mark.openai
 @pytest.mark.asyncio
+async def test_missing_sdk_call_identity_blocks_after_subject_callbacks_execute() -> None:
+    evaluated, callback_calls, _ = await _run(
+        [
+            ("", {"operation_id": "op-7", "value": 3}),
+            ("call-2", {"operation_id": "op-7", "value": 3}),
+        ]
+    )
+
+    assert callback_calls == 2
+    assert evaluated.verdict is TrialVerdict.BLOCKED  # type: ignore[attr-defined]
+    event = evaluated.evidence.events[-1]  # type: ignore[attr-defined]
+    assert event.kind is EvidenceKind.EVALUATION_ERROR
+    assert event.payload["code"] in {
+        "side_effect_observation_unavailable",
+        "side_effect_call_identity_unavailable",
+    }
+
+
+@pytest.mark.openai
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     "second_arguments",
     [
