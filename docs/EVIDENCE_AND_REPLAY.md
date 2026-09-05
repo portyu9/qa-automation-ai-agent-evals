@@ -112,7 +112,7 @@ Any failed layer prevents the bytes from becoming trusted evaluation evidence.
 - requested `SubjectFingerprint.identity` equals the recorded subject identity;
 - requested `EvaluationScenario.identity` equals the recorded scenario identity.
 
-A mismatch raises `ReplayIdentityError` at the adapter boundary. When all identities match, replay returns the recorded events, terminal state, output, timing, usage, and cost observations unchanged. Running that adapter through `TrialRunner` therefore re-applies evaluator-owned retrieval-delivery verification, approval/protocol/semantic receipt checks where configured, plus the deterministic policy and outcome oracles to the same evidence envelope.
+A mismatch raises `ReplayIdentityError` at the adapter boundary. When all identities match, replay returns the recorded events, terminal state, output, timing, usage, and cost observations unchanged. Running that adapter through `TrialRunner` therefore re-applies evaluator-owned retrieval-delivery verification, approval-intent verification, side-effect-observation verification, protocol/semantic receipt checks where configured, plus the active deterministic oracle set to the same evidence envelope.
 
 For an unchanged evidence model, a successful exact-identity replay reproduces the original `evidence_root`.
 
@@ -123,6 +123,14 @@ A persisted terminal `SEMANTIC_JUDGMENT` event is not trusted merely because its
 The semantic event must be unique, terminal, emitted from the known evaluator source, and non-critical. If deterministic policy/outcome replay fails, historical semantic evidence cannot coexist with or rescue that failure. If deterministic replay passes, historical semantic PASS/FAIL/ABSTAIN is rederived as PASS/non-critical FAIL/INCONCLUSIVE respectively.
 
 Replay does **not** call a semantic model when a valid historical semantic receipt is present. It proves only that the recorded semantic relation remains internally valid for the exact recorded evidence and scenario identity; it does not establish current provider liveness or that the judge would return the same response today. See [Calibrated Semantic Judging](SEMANTIC_JUDGING.md).
+
+## Side-effect observations are semantically revalidated
+
+A persisted `SIDE_EFFECT_OBSERVATION` is not trusted merely because the enclosing evidence root is valid. When the exact scenario carries `SideEffectIdempotencySpec`, `TrialRunner` requires exactly one recognized non-critical observation event after exactly two matching target request/result pairs.
+
+The verifier rechecks receipt schema/root, scenario and contract identity, exact tool and logical operation, distinct call IDs, strict duplicate-key-rejecting canonical arguments, logical-key digests, one result per attempt, continuous before/after effect chronology, and strict `request1 < result1 < request2 < result2 < observation` ordering. It then reconstructs the expected receipt from scenario-owned material and the persisted attempt digests. Malformed, missing, duplicated, foreign, or ambiguous relations become `side_effect_observation_unverified / EVALUATION_ERROR / BLOCKED`.
+
+Replay does **not** execute the subject callback or call the evaluator's effect reader. It proves only that the historical two-attempt observation remains internally valid for the exact recorded scenario and evidence. A verified duplicate physical mutation remains deterministic critical subject `FAIL` through `SideEffectIdempotencyOracle`. See [Side-Effect Idempotency Assurance](SIDE_EFFECT_IDEMPOTENCY.md).
 
 ## Native approval-intent receipts are semantically revalidated
 
@@ -191,6 +199,7 @@ Replay does **not** answer:
 - did a specific human, service, or machine originally produce these bytes?;
 - would nondeterministic behavior reproduce on another attempt?;
 - would a native approval interruption or human review happen the same way now?;
+- would the same two callbacks or effect-reader snapshots produce the same side-effect relation now?;
 - would an evaluator-owned or external retrieval system produce the same ranking/context now?;
 - would an MCP server still expose the same result, error, schema, cache state, or authorization behavior now?;
 - would a host perform the same schema-drift cache invalidation now?

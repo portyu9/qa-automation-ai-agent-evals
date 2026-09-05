@@ -8,7 +8,7 @@ This document is intentionally strict. Repository claims must never become stron
 
 The OpenAI integration is pinned to `openai-agents==0.22.0`. CI exercises the real SDK runner/tool/handoff/approval/context loop deterministically with `agents.testing.ScriptedModel` and no provider API call.
 
-The SDK tier covers all seven generic adversarial channel categories at scoped local/SDK boundaries. A separate `OpenAIAgentsRetrievalAdapter` closes one evaluator-owned deterministic retrieval-delivery relation. A separate `OpenAIAgentsHandoffAuthorityAdapter` exercises run-local native handoff authority attenuation. `OpenAIAgentsHITLApprovalAdapter` exercises one exact native `ToolApprovalItem` → evaluator decision → same-`RunState` continuation relation. Four additional adapters exercise exact official-MCP-stdio/OpenAI SDK paths: one `TOOL_METADATA_POISON` discovery → model-visible target-definition bridge, one `TOOL_RESULT_POISON` same-call bridge, one causal `TOOL_ERROR` → same-argument retry → benign recovery bridge, and one host-refreshed `TOOL_SCHEMA_DRIFT` adaptation bridge. `OpenAIAgentsSemanticJudge` separately exercises one concrete public SDK `Model` through a no-tools, one-turn evaluator boundary under deterministic `ScriptedModel` integration.
+The SDK tier covers all seven generic adversarial channel categories at scoped local/SDK boundaries. A separate `OpenAIAgentsRetrievalAdapter` closes one evaluator-owned deterministic retrieval-delivery relation. A separate `OpenAIAgentsHandoffAuthorityAdapter` exercises run-local native handoff authority attenuation. `OpenAIAgentsHITLApprovalAdapter` exercises one exact native `ToolApprovalItem` → evaluator decision → same-`RunState` continuation relation. `OpenAIAgentsSideEffectIdempotencyAdapter` separately exercises two exact local `FunctionTool` attempts while independently sampling effect state around the real callback. Four additional adapters exercise exact official-MCP-stdio/OpenAI SDK paths: one `TOOL_METADATA_POISON` discovery → model-visible target-definition bridge, one `TOOL_RESULT_POISON` same-call bridge, one causal `TOOL_ERROR` → same-argument retry → benign recovery bridge, and one host-refreshed `TOOL_SCHEMA_DRIFT` adaptation bridge. `OpenAIAgentsSemanticJudge` separately exercises one concrete public SDK `Model` through a no-tools, one-turn evaluator boundary under deterministic `ScriptedModel` integration.
 
 None of this establishes live-model quality, production-provider availability, provider-side delivery attestation, authenticated human approval, production IAM, or credentialed end-to-end assurance.
 
@@ -38,7 +38,7 @@ The optional OpenAI judge test exercises the pinned SDK public `Model`/`Runner` 
 
 These are concrete implementations of a generic taxonomy, not assertions that every production system carrying a similarly named boundary is intercepted.
 
-The dedicated handoff-authority, native-HITL, and MCP adapters are separate integrations and do not widen these seven local/SDK mechanisms.
+The dedicated handoff-authority, native-HITL, side-effect-idempotency, and MCP adapters are separate integrations and do not widen these seven local/SDK mechanisms.
 
 ### `ENVIRONMENT` means local SDK application context, not infrastructure chaos
 
@@ -134,6 +134,14 @@ This executable boundary still does **not** establish:
 `ApprovalIntentReceipt.root_sha256` is an integrity value over evaluator-owned evidence, not an authenticated approver signature. The narrow claim remains historical and local to the controlled pinned-SDK relation: the exact interruption observed by the evaluator is the exact invocation whose approve/reject continuation is then verified.
 
 ---
+
+### Run-local side-effect idempotency is not distributed exactly-once assurance
+
+`OpenAIAgentsSideEffectIdempotencyAdapter` evaluates exactly two calls to one existing local SDK `FunctionTool` under one scenario-owned `SideEffectIdempotencySpec`. It copies/wraps the SDK tool object only for observation; the original subject callback executes on every attempt, and its return/exception behavior is preserved. An evaluator-owned `effect_reader` supplies finite JSON-compatible state immediately before and after each callback.
+
+A valid receipt proves only the controlled historical relation that it binds: two distinct OpenAI call identities, the same exact canonical scenario arguments and logical key, matching normalized results, continuous effect digests, and zero/one/two observed physical mutations. A verified second mutation is deterministic critical subject `FAIL`; missing or contradictory observation/provenance blocks evaluation.
+
+This does **not** establish distributed exactly-once processing; durable idempotency-key storage; database uniqueness/transaction correctness; cross-process, multi-worker, queue, webhook, timeout, retry-storm, cancellation, crash-recovery, or network-partition safety; concurrent/racing duplicate suppression; linearizability/serializability; provider- or target-side idempotency enforcement; arbitrary hosted/MCP tool behavior; current external-state truth after the run; authenticated observer provenance; or correctness of the operator-supplied `effect_reader` beyond the trust placed in it. The deterministic SDK lane uses `agents.testing.ScriptedModel` and makes no live-provider claim. See [Side-Effect Idempotency Assurance](SIDE_EFFECT_IDEMPOTENCY.md).
 
 ## MCP protocol laboratory remains protocol evidence by default
 

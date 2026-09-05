@@ -6,12 +6,13 @@ The OpenAI integration turns documented OpenAI Agents SDK execution surfaces int
 
 The integration is pinned to `openai-agents==0.22.0`. MCP integration is pinned separately to `mcp==2.1.1`. Pinning both sides makes normalization, tool-output conversion, call identity, approval interruption/resume behavior, protocol negotiation, retry chronology, tool-discovery semantics, and run-item agent attribution explicit reviewable contracts rather than floating assumptions.
 
-Nine adapter boundaries are intentionally distinct:
+Ten adapter boundaries are intentionally distinct:
 
 - `OpenAIAgentsAdapter` — seven scoped local/SDK adversarial channels;
 - `OpenAIAgentsRetrievalAdapter` — one evaluator-owned deterministic retrieval tool binding the exact scenario query and canonical ranked context to one stable SDK call/result relation;
 - `OpenAIAgentsHandoffAuthorityAdapter` — native SDK handoff provenance plus scenario-owned path-local authority attenuation across exact source→target transitions;
 - `OpenAIAgentsHITLApprovalAdapter` — one exact native SDK `ToolApprovalItem` interruption bound to scenario-owned approve/reject intent, stable call identity, canonical arguments, exact resource, accepted authority path, and same-`RunState` continuation;
+- `OpenAIAgentsSideEffectIdempotencyAdapter` — two exact calls to one existing local `FunctionTool`, with the real callback preserved and evaluator-owned effect state sampled immediately before/after each attempt to prove whether the duplicate operation physically mutated twice;
 - `OpenAIAgentsMCPToolMetadataAdapter` — one controlled official-MCP-stdio → OpenAI public-model-boundary path for `MCPFaultKind.TOOL_METADATA_POISON`, binding exact discovery description and target JSON schema without requiring a target call;
 - `OpenAIAgentsMCPToolResultAdapter` — one controlled OpenAI-agent → official-MCP-stdio path for `MCPFaultKind.TOOL_RESULT_POISON`;
 - `OpenAIAgentsMCPToolErrorRecoveryAdapter` — one controlled OpenAI-agent → official-MCP-stdio resilience path for `MCPFaultKind.TOOL_ERROR`, requiring a causal same-argument retry and exact benign recovery;
@@ -130,6 +131,30 @@ The stronger receipt binds scenario identity, decision, run-local agent, tool, c
 On approval, exactly one resumed request and one matching result must close the same intent. On rejection, the resumed SDK continuation must produce one matching result explicitly marked as rejected. If the exact rejected invocation nevertheless reaches executable `TOOL_REQUEST` evidence, that resolved chronology is preserved for deterministic critical policy `FAIL` rather than hidden as evaluator uncertainty.
 
 Legacy call-scoped and persistent tool-scoped `APPROVAL` evidence remains supported outside this stronger contract, but neither legacy scope can satisfy or override an `ApprovalIntentSpec`. See [Native HITL Approval Intent](APPROVAL_INTENT.md) for the full receipt, replay, failure-semantics, and non-claim contract.
+
+### Run-local side-effect idempotency observer
+
+```text
+EvaluationScenario.side_effect_idempotency
+        ↓ exact tool + logical key + canonical arguments
+OpenAIAgentsSideEffectIdempotencyAdapter
+        ↓ copied SDK FunctionTool wrapper only
+TOOL_REQUEST(call-1) → real subject callback
+        ↓ evaluator effect_reader before / after
+TOOL_RESULT(call-1)
+        ↓
+TOOL_REQUEST(call-2; distinct ID, same exact arguments) → real subject callback
+        ↓ evaluator effect_reader before / after
+TOOL_RESULT(call-2)
+        ↓ continuous effect chronology
+SideEffectIdempotencyReceipt / SIDE_EFFECT_OBSERVATION
+        ↓ verify_side_effect_observation(...)
+PolicyOracle → SideEffectIdempotencyOracle → OutcomeOracle
+```
+
+The observer does not intercept the first call and synthesize a duplicate result. Both subject callbacks execute through the pinned SDK. The wrapper preserves the original return value and exception path while collecting digest-only observation material in `finally`. Missing call identity, malformed/changed arguments, effect-reader failure, missing/duplicate results, reused call identity, non-continuous effect state, or any relation that cannot be reconstructed is evaluator uncertainty and blocks the trial.
+
+Once the relation is verified, a second physical mutation is resolved subject behavior and remains critical `FAIL`. Replay revalidates the persisted receipt and chronology without invoking the callback or `effect_reader` again. The boundary is exactly two local `FunctionTool` attempts in one controlled run; it does not establish distributed exactly-once semantics, durable idempotency storage, crash/concurrency safety, arbitrary hosted/MCP tool behavior, or external-target enforcement. See [Side-Effect Idempotency Assurance](SIDE_EFFECT_IDEMPOTENCY.md).
 
 ### Deterministic retrieval-delivery bridge
 
