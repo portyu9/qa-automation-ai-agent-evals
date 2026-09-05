@@ -19,6 +19,10 @@ jobs:
         with:
           ref: fix/mcp-cache-hint-ttl-ownership
           fetch-depth: 0
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: '3.11'
+          cache: pip
       - name: Synchronize ownership semantics
         run: |
           python - <<'PY'
@@ -40,7 +44,6 @@ jobs:
                   raise AssertionError(f"{path}: expected {count} matches, found {actual}: {old!r}")
               p.write_text(text.replace(old, new))
 
-          # Deterministic SDK integrations: bridge field is explicit; MCP fault payload remains ttl_ms.
           for path, anchor in (
               (
                   "tests/integration/test_openai_mcp_tool_schema_drift_adapter.py",
@@ -59,7 +62,6 @@ jobs:
               )
               replace_once(path, anchor, addition)
 
-          # README: identify protocol ownership and preserve non-claims.
           replace_once(
               "README.md",
               "target initially observed under positive private TTL, removed from live registry, still returned from cache, then absent after refresh",
@@ -71,7 +73,6 @@ jobs:
               "The stale-cache bridge does not establish SDK expiry from the MCP cache hint and does not generalize to arbitrary TTL races, shared/distributed cache coherence, notification-driven invalidation, or automatic post-retirement recovery.",
           )
 
-          # Dedicated stale-cache contract.
           replace_once("docs/MCP_STALE_CACHE.md", "## Controlled v1 contract", "## Controlled fault contract")
           replace_once(
               "docs/MCP_STALE_CACHE.md",
@@ -105,7 +106,6 @@ jobs:
               "- automatic Agents SDK expiry from the MCP cache hint, arbitrary TTL races, shared/distributed caches, or cross-process cache propagation;",
           )
 
-          # Dedicated identity-drift contract.
           replace_once(
               "docs/MCP_IDENTITY_DRIFT.md",
               "`fault.tool_name` is the exact original identity. The replacement name must be a distinct nonblank string already bound by `fault.identity`.",
@@ -132,7 +132,6 @@ jobs:
               "- automatic `notifications/tools/list_changed` handling;\n- automatic Agents SDK expiry according to the MCP cache-hint TTL;",
           )
 
-          # MCP lab terminology.
           replace_once(
               "docs/MCP_LAB.md",
               "initial tools/list → target present + positive private TTL",
@@ -149,7 +148,6 @@ jobs:
               "public/cross-partition cache sharing, cache poisoning, arbitrary cache stores, notification invalidation, automatic host expiry from MCP cache hints, or TTL race correctness beyond the implemented relations",
           )
 
-          # OpenAI adapter guide: name protocol ownership, bind versions, and restore the cached leg.
           replace_once(
               "docs/OPENAI_ADAPTER.md",
               "whose controlled payload binds the repository's narrow v1/v2 scalar-required contracts plus a positive TTL.",
@@ -192,7 +190,6 @@ jobs:
               2,
           )
 
-          # Replay/security/limitations: preserve the same ownership wording.
           replace_once(
               "docs/EVIDENCE_AND_REPLAY.md",
               "scenario/tool/TTL binding",
@@ -224,8 +221,6 @@ jobs:
               "a `TOOL_IDENTITY_DRIFT` fault with positive MCP cache-hint TTL and one exact distinct replacement tool name",
           )
 
-          # Stale-cache receipt version is explicit in the dedicated doc; schema/identity versions are
-          # explicit in OpenAI/identity docs. Assert all current source schema versions are documented.
           docs = "\n".join(
               Path(p).read_text()
               for p in (
@@ -242,13 +237,16 @@ jobs:
               if schema not in docs:
                   raise AssertionError(f"missing documented bridge schema: {schema}")
           PY
-      - name: Verify ownership wording and tests
+      - name: Verify provider-neutral contract
         run: |
-          python -m pip install --disable-pip-version-check -e '.[dev,openai]'
+          python -m pip install --disable-pip-version-check -e '.[dev]'
           ruff check .
           ruff format --check --diff .
           mypy
           pytest -q
+      - name: Verify pinned SDK ownership assertions
+        run: |
+          python -m pip install --disable-pip-version-check -e '.[openai]'
           pytest -q -m 'openai and mcp' \
             tests/integration/test_openai_mcp_tool_stale_cache_adapter.py \
             tests/integration/test_openai_mcp_tool_schema_drift_adapter.py \
