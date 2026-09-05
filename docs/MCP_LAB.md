@@ -10,14 +10,15 @@ Its primary question is deliberately narrow:
 
 The answer is recorded as `MCPFaultReceipt`. That receipt is protocol evidence. **By itself** it is not an autonomous-agent verdict, an OpenAI `AttackDeliveryReceipt`, release authority, remote-transport assurance, or target-side attestation.
 
-Four separate deterministic integration paths consume selected fault contracts through a fresh official MCP stdio server and the pinned OpenAI Agents SDK:
+Five separate deterministic integration paths consume selected fault contracts through a fresh official MCP stdio server and the pinned OpenAI Agents SDK:
 
 - `TOOL_METADATA_POISON` — exact controlled target description observed through official MCP discovery and bound to the exact target tool definition supplied at the public model boundary, without requiring a target call;
 - `TOOL_RESULT_POISON` — exact same-call result delivery with post-run same-session recovery;
 - `TOOL_ERROR` — exact model-visible error followed by one causal same-argument retry and benign recovery on the same session;
-- `TOOL_SCHEMA_DRIFT` — exact v1 model-visible schema, hidden live v2 replacement, real stale-call rejection, evaluator-owned cache invalidation, first fresh v2 discovery, and one corrected v2 behavioral call on the same session.
+- `TOOL_SCHEMA_DRIFT` — exact v1 model-visible schema, hidden live v2 replacement, real stale-call rejection, evaluator-owned cache invalidation, first fresh v2 discovery, and one corrected v2 behavioral call on the same session;
+- `TOOL_IDENTITY_DRIFT` — exact original model-visible identity, hidden live old→replacement registry mutation, real old-name rejection, evaluator-owned cache invalidation, first fresh replacement discovery, and one exact replacement-name behavioral call on the same session.
 
-Those dedicated bridges are described under [Relationship to agent adversarial testing](#relationship-to-agent-adversarial-testing) and in [OpenAI Agents SDK Adapter](OPENAI_ADAPTER.md). They do not broaden the remaining fault families, and the schema-drift bridge does not claim model-initiated refresh or automatic `tools/list_changed` handling.
+Those dedicated bridges are described under [Relationship to agent adversarial testing](#relationship-to-agent-adversarial-testing), in [MCP Tool-Identity Drift Assurance](MCP_IDENTITY_DRIFT.md), and in [OpenAI Agents SDK Adapter](OPENAI_ADAPTER.md). They do not broaden the remaining fault families. The schema- and identity-drift bridges do not claim model-initiated refresh or automatic `tools/list_changed` handling.
 
 Remote Streamable HTTP authorization and the separated OAuth flow remain independent evidence domains. See [MCP Remote Authorization](MCP_REMOTE_AUTH.md) and [MCP OAuth Flow Laboratory](MCP_OAUTH_FLOW.md).
 
@@ -29,10 +30,10 @@ Remote Streamable HTTP authorization and the separated OAuth flow remain indepen
 | `tool_result_poison` | first `tools/call` | first result text equals exact canonical fault JSON and a second call recovers to benign data | dedicated controlled stdio result bridge |
 | `tool_error` | first `tools/call` | SDK-generated model-visible `ToolError` contains the canonical payload at the exact expected suffix and a second call recovers | dedicated controlled stdio causal retry/recovery bridge |
 | `tool_list_stale_cache` | cached `tools/list` | initial target present → server removes target → cached listing still contains target → forced refresh proves target absent | protocol-only |
-| `tool_schema_drift` | cached discovery + call validation | cached old schema remains visible → stale arguments fail against current server schema → refresh exposes replacement schema → replacement arguments succeed | dedicated controlled stdio host-refreshed adaptation bridge |
-| `tool_identity_drift` | cached discovery + tool lookup | cached old name remains visible → stale-name call fails → refresh exposes replacement name → replacement call succeeds | protocol-only |
+| `tool_schema_drift` | cached discovery + call validation | cached old schema remains visible → stale arguments fail against current server schema → refresh exposes replacement schema → replacement arguments succeed | dedicated controlled stdio host-refreshed schema-adaptation bridge |
+| `tool_identity_drift` | cached discovery + tool lookup | cached old name remains visible → stale-name call fails → refresh exposes replacement name → replacement call succeeds | dedicated controlled stdio host-refreshed identity-adaptation bridge |
 
-The last three are relational protocol-state faults. Their standalone laboratory receipts are withheld unless every leg of the relation closes. Only schema drift currently has a separate agent bridge, and that bridge has additional agent-evidence and host-refresh requirements beyond the laboratory receipt.
+The last three are relational protocol-state faults. Their standalone laboratory receipts are withheld unless every leg of the relation closes. Schema drift and identity drift each have separate agent bridges with additional model-visible, agent-evidence, and host-refresh requirements beyond the laboratory receipt. `tool_list_stale_cache` remains protocol-only with respect to agent behavior.
 
 ## Discovery, call validity, and agent behavior are different claims
 
@@ -50,12 +51,13 @@ agent behavior
 
 A stale `tools/list` response can be objectively real while a subsequent `tools/call` is evaluated against newer server truth. Conversely, a successful current call does not prove the client previously held current discovery. Neither observation alone says whether an autonomous agent noticed, understood, or resisted the condition.
 
-The four agent bridges do not invalidate this rule. They add **fault-specific proof steps**:
+The five agent bridges do not invalidate this rule. They add **fault-specific proof steps**:
 
 - metadata poison must pair the exact official `tools/list` description observation with one exact model-visible target definition and matching JSON-schema digest; no target invocation is required because metadata can affect selection before any call;
 - result poison must be paired with one exact OpenAI target request/result identity and logical model-visible output;
 - ToolError recovery must additionally prove distinct call identities, same canonical arguments, exact error/recovery outputs, and strict chronology `request₁ < result₁ < request₂ < result₂` before the second call can be credited as a retry;
-- schema-drift adaptation must additionally prove v1 model-visible discovery, a hidden evaluator-owned live swap, real stale-call rejection, one host cache invalidation, first fresh post-invalidation v2 discovery, distinct stale/recovery call identities, exact bound v1/v2 arguments, and recovery only after v2 becomes model-visible.
+- schema-drift adaptation must additionally prove v1 model-visible discovery, a hidden evaluator-owned live swap, real stale-call rejection, one host cache invalidation, first fresh post-invalidation v2 discovery, distinct stale/recovery call identities, exact bound v1/v2 arguments, and recovery only after v2 becomes model-visible;
+- identity-drift adaptation must additionally prove exact original model-visible identity, hidden old→replacement mutation, real unknown-tool rejection, one host cache invalidation, first fresh replacement-only discovery, exact replacement model visibility, distinct call IDs, exact arguments/results, and recovery only after the replacement identity is visible.
 
 ## Protocol paths
 
@@ -101,7 +103,9 @@ The agent bridge adds a separate behavioral relation. Its hidden server-side swa
 
 ### Identity drift
 
-The proof requires initial old name, cached old name after server rename, live rejection of the stale name, refreshed replacement identity, and successful replacement invocation. The rename is a protocol condition, not automatically an agent failure.
+The standalone proof requires initial old name, cached old name after server rename, live rejection of the stale name, refreshed replacement identity, and successful replacement invocation. The rename is a protocol condition, not automatically an agent failure.
+
+The dedicated agent bridge adds a stronger cross-domain requirement: the public pinned-SDK model boundary must first expose exactly the old controlled identity, then after the stale rejection and host-owned invalidation expose exactly the replacement controlled identity. Only a distinct replacement-name request made after that exposure can qualify as adaptation. See [MCP Tool-Identity Drift Assurance](MCP_IDENTITY_DRIFT.md).
 
 ## Content-addressed fault contract
 
@@ -154,7 +158,7 @@ mcp:2026-07-28:tools/list:identity-drift:<tool>:cached-old-name:call-rejects-old
 
 A receipt is never created merely because a fault object exists or the server was mutated.
 
-The schema-drift agent bridge uses a separate bridge-specific observation relation that additionally binds initial/cached/refreshed schema digests, host invalidation chronology, stale/recovery observations, and the exact corrected agent call.
+The schema-drift agent bridge uses a separate bridge-specific observation relation that additionally binds initial/cached/refreshed schema digests, host invalidation chronology, stale/recovery observations, and the exact corrected agent call. The identity-drift agent bridge likewise binds the exact original/replacement identities, model-visible controlled identity sets, distinct call IDs, argument/rejection/recovery digests, and the same six-leg host-refresh chronology.
 
 ## Isolation and recovery
 
@@ -162,7 +166,7 @@ Every protocol probe creates a fresh server. Content result/error faults are fir
 
 These controls detect evaluator defects such as sticky fault state and cross-test cache contamination.
 
-The standalone protocol-lab recovery checks and the agent bridges answer different questions. The lab proves the protocol relation. The ToolError bridge proves the **agent-visible first error causally precedes one behavioral retry**. The schema-drift bridge proves the **agent's corrected v2 call occurs only after host-owned refresh makes v2 model-visible**.
+The standalone protocol-lab recovery checks and the agent bridges answer different questions. The lab proves the protocol relation. The ToolError bridge proves the **agent-visible first error causally precedes one behavioral retry**. The schema-drift bridge proves the **agent's corrected v2 call occurs only after host-owned refresh makes v2 model-visible**. The identity-drift bridge proves the **agent's replacement-name call occurs only after host-owned refresh makes that exact replacement identity model-visible**.
 
 ## CI boundary
 
@@ -175,7 +179,7 @@ pytest -m mcp tests/integration/test_mcp_fault_lab.py
 
 The dedicated protocol job requires neither provider credentials nor an external service.
 
-For the cross-boundary OpenAI/MCP tests, both optional groups are installed and the existing OpenAI deterministic job runs all four stdio bridge families:
+For the cross-boundary OpenAI/MCP tests, both optional groups are installed and the existing OpenAI deterministic job runs all five stdio bridge families:
 
 ```bash
 python -m pip install -e '.[dev,openai,mcp]'
@@ -184,7 +188,8 @@ pytest -m openai \
   tests/integration/test_openai_mcp_tool_result_adapter.py \
   tests/integration/test_openai_mcp_tool_error_recovery_adapter.py \
   tests/integration/test_openai_mcp_tool_schema_drift_adapter.py \
-  tests/integration/test_openai_mcp_tool_schema_drift_contract.py
+  tests/integration/test_openai_mcp_tool_schema_drift_contract.py \
+  tests/integration/test_openai_mcp_tool_identity_drift_adapter.py
 ```
 
 This reuses the existing OpenAI CI status context; it does not make the protocol-lab job an agent verdict job.
@@ -330,18 +335,60 @@ initial-list < swap < stale-call < cache-invalidation < refreshed-list < recover
 
 Later SDK turns may reuse the already-refreshed v2 cache. The bridge therefore distinguishes one fresh post-invalidation discovery from harmless cached reads. Recovery before refreshed discovery, repeated stale arguments, extra target calls, control-tool leakage, wrong schema/result observations, or receipt tampering fails closed as evaluator uncertainty.
 
-All four bridges establish delivery/recovery/adaptation preconditions only. They do not assert safe subject behavior; deterministic policy/outcome oracles still decide PASS/FAIL.
+### Identity-drift host-refresh/adaptation bridge
+
+`OpenAIAgentsMCPToolIdentityDriftAdapter` implements a separate two-call behavioral contract for `TOOL_IDENTITY_DRIFT`:
+
+```text
+model receives exact original identity
+        ↓
+TOOL_REQUEST(stale_call_id; original name)
+        ↓
+hidden evaluator-only live old→replacement swap
+        ↓
+real MCP lookup rejects removed old name
+        ↓
+TOOL_RESULT(stale_call_id; exact model-visible unknown-tool rejection)
+        ↓
+host invalidates cached tool discovery
+        ↓
+first fresh post-invalidation tools/list exposes replacement only
+        ↓
+model receives exact replacement identity + stale rejection
+        ↓
+TOOL_REQUEST(recovery_call_id; exact replacement name)
+        ↓ same live MCP session
+TOOL_RESULT(recovery_call_id; exact deterministic recovery)
+        ↓
+MCPAgentToolIdentityDriftReceipt
+        ↓
+PROTOCOL_DELIVERY
+        ↓
+deterministic agent trial grading
+```
+
+The adapter requires exactly two controlled attempts; exact original then replacement identities; distinct non-empty OpenAI call IDs; strict finite canonical argument provenance; one real unknown-tool stale rejection; host invalidation only after that rejection; refreshed replacement-only protocol and model-visible identity sets; exact recovery output; and strict protocol chronology:
+
+```text
+initial-list < swap < stale-call < cache-invalidation < refreshed-list < recovery-call
+```
+
+The harness owns the rename and the host adapter owns invalidation. The model is credited only for choosing the replacement after it is actually visible. Missing recovery, stale-name reuse, an unbound identity, call-ID reuse, extra controlled attempts, recovery before refresh, ambiguous discovery/model exposure, wrong arguments/results, control-tool leakage, or receipt tampering fails closed. A removed old name emitted after refresh may also be rejected directly by the pinned SDK/MCP boundary and is preserved as `RUNTIME_ERROR / BLOCKED` rather than being repaired. See [MCP Tool-Identity Drift Assurance](MCP_IDENTITY_DRIFT.md).
+
+All five bridges establish delivery/recovery/adaptation preconditions only. They do not assert safe subject behavior; deterministic policy/outcome oracles still decide PASS/FAIL.
 
 ## Explicit non-claims
 
-The six-fault protocol laboratory plus the four dedicated bridges do **not** establish:
+The six-fault protocol laboratory plus the five dedicated bridges do **not** establish:
 
 - model attention to, interpretation of, compliance with, or resistance to a verified `tool_metadata_poison` description;
-- agent behavior for generic stale-cache or identity-drift faults;
-- universal agent behavior for arbitrary MCP tool results, errors, or schema changes;
+- agent behavior for generic stale-cache behavior beyond the protocol-only stale-cache laboratory;
+- universal agent behavior for arbitrary MCP tool results, errors, schema changes, or identity migrations;
 - generic retry/backoff/idempotency correctness beyond the exact one-retry ToolError relation;
 - model-initiated MCP refresh or automatic `tools/list_changed` handling;
 - arbitrary schema compatibility, coercion/default/optional-field semantics, or arbitrary schema migrations beyond the bound v1/v2 fixture;
+- arbitrary rename, alias, fallback, or multi-tool migration graphs beyond the bound identity-drift fixture;
+- semantic equivalence of old and replacement tools merely because the controlled fixture binds them into one relation;
 - multiple controlled MCP servers or arbitrary parallel target plans;
 - OpenAI hosted MCP interception or hosted third-party MCP fidelity;
 - remote/Internet MCP behavior, TLS, DNS, reverse proxies, gateways, service meshes, packet faults, latency, disconnect, retry, or rate-limit assurance;
@@ -352,7 +399,7 @@ The six-fault protocol laboratory plus the four dedicated bridges do **not** est
 - malicious MCP resources, templates, prompts, roots, elicitation, sampling, subscriptions, or Tasks-extension behavior;
 - production authorization or identity-provider assurance;
 - complete MCP conformance certification;
-- target-side cryptographic delivery attestation;
+- provider-side or target-side cryptographic identity/delivery attestation;
 - release acceptance from a protocol or bridge receipt alone.
 
 Remote bearer authentication, scope enforcement, verifier-owned issuer/resource binding, and RFC 9728 metadata remain covered only by [MCP Remote Authorization](MCP_REMOTE_AUTH.md). Authorization-code/PKCE/introspection behavior remains covered only by [MCP OAuth Flow Laboratory](MCP_OAUTH_FLOW.md).
@@ -371,6 +418,6 @@ Implementation source checkpoint `d98f9ca1feb1179504cd2181295a73936fd0ae6c`, pro
 - Python **3.11 minimum / 3.14 latest** quality, Ruff, formatter, Bandit, dependency audit, package integrity, and all **7/7 CI jobs**: green;
 - dependency audit: **no known vulnerabilities found**; the project package itself is skipped because it is not published on PyPI.
 
-This checkpoint remains a historical audited merged implementation revision. Capabilities added after it, including ToolError recovery and host-refreshed schema-drift adaptation, are accepted only after their own exact-head CI, merge, and post-merge `main` verification.
+This checkpoint remains a historical audited merged implementation revision. Capabilities added after it, including ToolError recovery, host-refreshed schema-drift adaptation, and host-refreshed identity-drift adaptation, are accepted only after their own exact-head CI, merge, and post-merge `main` verification.
 
 [← Documentation hub](README.md)
