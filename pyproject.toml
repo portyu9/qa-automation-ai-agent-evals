@@ -60,7 +60,7 @@ packages = ["src/agent_evals"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
-addopts = "-q --strict-markers --disable-warnings -m 'not openai and not mcp and not mcp_remote and not mcp_oauth'"
+addopts = "-q --strict-markers -m 'not openai and not mcp and not mcp_remote and not mcp_oauth'"
 markers = [
   "integration: deterministic integration tests",
   "live: tests requiring a live model/provider",
