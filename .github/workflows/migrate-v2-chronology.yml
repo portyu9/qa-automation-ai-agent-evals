@@ -1,13 +1,9 @@
 name: Migrate MCP drift chronology tests
-
 on:
   push:
-    branches:
-      - fix/mcp-post-mutation-stale-discovery
-
+    branches: [fix/mcp-post-mutation-stale-discovery]
 permissions:
   contents: write
-
 jobs:
   migrate:
     if: github.actor != 'github-actions[bot]'
@@ -21,15 +17,14 @@ jobs:
         with:
           python-version: '3.11'
           cache: pip
-      - name: Install verification dependencies
-        run: python -m pip install --disable-pip-version-check -e '.[dev,openai,mcp]'
-      - name: Migrate seven-leg chronology contract
+      - run: python -m pip install --disable-pip-version-check -e '.[dev,openai,mcp]'
+      - name: Migrate seven-leg chronology
         run: |
           python - <<'PY'
           from pathlib import Path
           import re
 
-          targets = [
+          paths = [
               Path('tests/unit/test_mcp_agent_identity_bridge.py'),
               Path('tests/unit/test_mcp_agent_identity_bridge_boundaries.py'),
               Path('tests/unit/test_mcp_agent_schema_bridge.py'),
@@ -37,100 +32,77 @@ jobs:
               Path('tests/integration/test_openai_mcp_tool_schema_drift_adapter.py'),
               Path('tests/integration/test_openai_mcp_tool_identity_drift_adapter.py'),
           ]
+          counts = {'normal': 0, 'dict': 0, 'inverted': 0, 'assert': 0, 'residual': 0}
 
-          keyword_normal = re.compile(
-              r'(?m)^(?P<i>[ \t]*)initial_list_ordinal=0,\n'
-              r'(?P=i)(?P<m>schema_swap_ordinal|identity_swap_ordinal)=1,\n'
-              r'(?P=i)stale_call_ordinal=2,\n'
-              r'(?P=i)cache_invalidation_ordinal=3,\n'
-              r'(?P=i)refreshed_list_ordinal=4,\n'
-              r'(?P=i)recovery_call_ordinal=5,'
-          )
-          keyword_inverted_refresh = re.compile(
-              r'(?m)^(?P<i>[ \t]*)initial_list_ordinal=0,\n'
-              r'(?P=i)(?P<m>schema_swap_ordinal|identity_swap_ordinal)=1,\n'
-              r'(?P=i)stale_call_ordinal=2,\n'
-              r'(?P=i)cache_invalidation_ordinal=4,\n'
-              r'(?P=i)refreshed_list_ordinal=3,\n'
-              r'(?P=i)recovery_call_ordinal=5,'
-          )
-          dict_normal = re.compile(
-              r'(?m)^(?P<i>[ \t]*)"initial_list_ordinal": 0,\n'
-              r'(?P=i)"(?P<m>schema_swap_ordinal|identity_swap_ordinal)": 1,\n'
-              r'(?P=i)"stale_call_ordinal": 2,\n'
-              r'(?P=i)"cache_invalidation_ordinal": 3,\n'
-              r'(?P=i)"refreshed_list_ordinal": 4,\n'
-              r'(?P=i)"recovery_call_ordinal": 5,'
-          )
-          assertion = re.compile(
-              r'(?m)^(?P<i>[ \t]*)delivery\.payload\["initial_list_ordinal"\],\n'
-              r'(?P=i)delivery\.payload\["(?P<m>schema_swap_ordinal|identity_swap_ordinal)"\],\n'
-              r'(?P=i)delivery\.payload\["stale_call_ordinal"\],\n'
-              r'(?P=i)delivery\.payload\["cache_invalidation_ordinal"\],\n'
-              r'(?P=i)delivery\.payload\["refreshed_list_ordinal"\],\n'
-              r'(?P=i)delivery\.payload\["recovery_call_ordinal"\],\n'
-              r'(?P<close>[ \t]*)\] == \[0, 1, 2, 3, 4, 5\]'
-          )
+          def block(kind: str, mutation: str, inverted: bool = False) -> tuple[re.Pattern[str], str]:
+              if kind == 'kw':
+                  key = lambda n: n
+                  sep = '='
+              else:
+                  key = lambda n: f'"{n}"'
+                  sep = ': '
+              inv, ref = ((5, 4) if inverted else (4, 5))
+              pattern = re.compile(
+                  rf'(?m)^(?P<i>[ \t]*){re.escape(key("initial_list_ordinal"))}{re.escape(sep)}0,\n'
+                  rf'(?P=i){re.escape(key(mutation))}{re.escape(sep)}1,\n'
+                  rf'(?P=i){re.escape(key("stale_call_ordinal"))}{re.escape(sep)}2,\n'
+                  rf'(?P=i){re.escape(key("cache_invalidation_ordinal"))}{re.escape(sep)}{4 if inverted else 3},\n'
+                  rf'(?P=i){re.escape(key("refreshed_list_ordinal"))}{re.escape(sep)}{3 if inverted else 4},\n'
+                  rf'(?P=i){re.escape(key("recovery_call_ordinal"))}{re.escape(sep)}5,'
+              )
+              replacement = (
+                  rf'\g<i>{key("initial_list_ordinal")}{sep}0,\n'
+                  rf'\g<i>{key(mutation)}{sep}1,\n'
+                  rf'\g<i>{key("cached_list_ordinal")}{sep}2,\n'
+                  rf'\g<i>{key("stale_call_ordinal")}{sep}3,\n'
+                  rf'\g<i>{key("cache_invalidation_ordinal")}{sep}{inv},\n'
+                  rf'\g<i>{key("refreshed_list_ordinal")}{sep}{ref},\n'
+                  rf'\g<i>{key("recovery_call_ordinal")}{sep}6,'
+              )
+              return pattern, replacement
 
-          counts = {'keyword': 0, 'inverted': 0, 'dict': 0, 'assertion': 0, 'residual': 0}
-          for path in targets:
+          for path in paths:
               text = path.read_text()
+              for mutation in ('schema_swap_ordinal', 'identity_swap_ordinal'):
+                  for kind in ('kw', 'dict'):
+                      pat, repl = block(kind, mutation)
+                      text, n = pat.subn(repl, text)
+                      counts['dict' if kind == 'dict' else 'normal'] += n
+                  pat, repl = block('kw', mutation, inverted=True)
+                  text, n = pat.subn(repl, text)
+                  counts['inverted'] += n
 
-              def normal_repl(match: re.Match[str]) -> str:
-                  i, m = match.group('i'), match.group('m')
-                  return (
-                      f'{i}initial_list_ordinal=0,\n{i}{m}=1,\n{i}cached_list_ordinal=2,\n'
-                      f'{i}stale_call_ordinal=3,\n{i}cache_invalidation_ordinal=4,\n'
-                      f'{i}refreshed_list_ordinal=5,\n{i}recovery_call_ordinal=6,'
+              for mutation in ('schema_swap_ordinal', 'identity_swap_ordinal'):
+                  pat = re.compile(
+                      rf'(?m)^(?P<i>[ \t]*)delivery\.payload\["initial_list_ordinal"\],\n'
+                      rf'(?P=i)delivery\.payload\["{mutation}"\],\n'
+                      rf'(?P=i)delivery\.payload\["stale_call_ordinal"\],\n'
+                      rf'(?P=i)delivery\.payload\["cache_invalidation_ordinal"\],\n'
+                      rf'(?P=i)delivery\.payload\["refreshed_list_ordinal"\],\n'
+                      rf'(?P=i)delivery\.payload\["recovery_call_ordinal"\],\n'
+                      rf'(?P<c>[ \t]*)\] == \[0, 1, 2, 3, 4, 5\]'
                   )
-
-              def inverted_repl(match: re.Match[str]) -> str:
-                  i, m = match.group('i'), match.group('m')
-                  return (
-                      f'{i}initial_list_ordinal=0,\n{i}{m}=1,\n{i}cached_list_ordinal=2,\n'
-                      f'{i}stale_call_ordinal=3,\n{i}cache_invalidation_ordinal=5,\n'
-                      f'{i}refreshed_list_ordinal=4,\n{i}recovery_call_ordinal=6,'
+                  repl = (
+                      rf'\g<i>delivery.payload["initial_list_ordinal"],\n'
+                      rf'\g<i>delivery.payload["{mutation}"],\n'
+                      rf'\g<i>delivery.payload["cached_list_ordinal"],\n'
+                      rf'\g<i>delivery.payload["stale_call_ordinal"],\n'
+                      rf'\g<i>delivery.payload["cache_invalidation_ordinal"],\n'
+                      rf'\g<i>delivery.payload["refreshed_list_ordinal"],\n'
+                      rf'\g<i>delivery.payload["recovery_call_ordinal"],\n'
+                      rf'\g<c>] == [0, 1, 2, 3, 4, 5, 6]'
                   )
+                  text, n = pat.subn(repl, text)
+                  counts['assert'] += n
 
-              def dict_repl(match: re.Match[str]) -> str:
-                  i, m = match.group('i'), match.group('m')
-                  return (
-                      f'{i}"initial_list_ordinal": 0,\n{i}"{m}": 1,\n{i}"cached_list_ordinal": 2,\n'
-                      f'{i}"stale_call_ordinal": 3,\n{i}"cache_invalidation_ordinal": 4,\n'
-                      f'{i}"refreshed_list_ordinal": 5,\n{i}"recovery_call_ordinal": 6,'
-                  )
-
-              text, n = keyword_inverted_refresh.subn(inverted_repl, text)
-              counts['inverted'] += n
-              text, n = keyword_normal.subn(normal_repl, text)
-              counts['keyword'] += n
-              text, n = dict_normal.subn(dict_repl, text)
-              counts['dict'] += n
-
-              def assertion_repl(match: re.Match[str]) -> str:
-                  i, m, close = match.group('i'), match.group('m'), match.group('close')
-                  return (
-                      f'{i}delivery.payload["initial_list_ordinal"],\n'
-                      f'{i}delivery.payload["{m}"],\n'
-                      f'{i}delivery.payload["cached_list_ordinal"],\n'
-                      f'{i}delivery.payload["stale_call_ordinal"],\n'
-                      f'{i}delivery.payload["cache_invalidation_ordinal"],\n'
-                      f'{i}delivery.payload["refreshed_list_ordinal"],\n'
-                      f'{i}delivery.payload["recovery_call_ordinal"],\n'
-                      f'{close}] == [0, 1, 2, 3, 4, 5, 6]'
-                  )
-
-              text, n = assertion.subn(assertion_repl, text)
-              counts['assertion'] += n
-
-              # Remaining negative constructors can intentionally use non-baseline ordinal values.
-              # Give them the new required cached observation without rewriting the deliberate fault.
+              # Add the required field to remaining standalone negative constructors only.
               lines = text.splitlines(keepends=True)
-              out: list[str] = []
+              out = []
               for idx, line in enumerate(lines):
                   out.append(line)
-                  kw = re.match(r'^(?P<i>[ \t]*)(schema_swap_ordinal|identity_swap_ordinal)=(?P<v>[^,]+),\s*$', line.rstrip('\n'))
-                  dk = re.match(r'^(?P<i>[ \t]*)"(schema_swap_ordinal|identity_swap_ordinal)": (?P<v>[^,]+),\s*$', line.rstrip('\n'))
+                  stripped = line.rstrip('\n')
+                  kw = re.match(r'^(?P<i>[ \t]*)(schema_swap_ordinal|identity_swap_ordinal)=[^,]+,\s*$', stripped)
+                  dk = re.match(r'^(?P<i>[ \t]*)"(schema_swap_ordinal|identity_swap_ordinal)": [^,]+,\s*$', stripped)
                   nxt = lines[idx + 1] if idx + 1 < len(lines) else ''
                   if kw and 'cached_list_ordinal' not in nxt:
                       out.append(f"{kw.group('i')}cached_list_ordinal=2,\n")
@@ -139,73 +111,41 @@ jobs:
                       out.append(f"{dk.group('i')}\"cached_list_ordinal\": 2,\n")
                       counts['residual'] += 1
               text = ''.join(out)
-
-              text = text.replace(
-                  'agent-evals/mcp-agent-tool-schema-drift-receipt/v1',
-                  'agent-evals/mcp-agent-tool-schema-drift-receipt/v2',
-              ).replace(
-                  'agent-evals/mcp-agent-tool-identity-drift-receipt/v1',
-                  'agent-evals/mcp-agent-tool-identity-drift-receipt/v2',
-              )
+              text = text.replace('agent-evals/mcp-agent-tool-schema-drift-receipt/v1', 'agent-evals/mcp-agent-tool-schema-drift-receipt/v2')
+              text = text.replace('agent-evals/mcp-agent-tool-identity-drift-receipt/v1', 'agent-evals/mcp-agent-tool-identity-drift-receipt/v2')
               path.write_text(text)
 
-          if counts['keyword'] < 10:
-              raise SystemExit(f"expected >=10 normal keyword migrations, got {counts}")
-          if counts['dict'] < 2:
-              raise SystemExit(f"expected >=2 dictionary migrations, got {counts}")
-          if counts['inverted'] != 2:
-              raise SystemExit(f"expected 2 deliberate inverted-refresh migrations, got {counts}")
-          if counts['assertion'] != 2:
-              raise SystemExit(f"expected 2 integration assertion migrations, got {counts}")
+          assert counts['normal'] >= 10, counts
+          assert counts['dict'] >= 2, counts
+          assert counts['inverted'] == 2, counts
+          assert counts['assert'] == 2, counts
 
-          identity = Path('tests/unit/test_mcp_agent_identity_bridge_boundaries.py')
-          text = identity.read_text()
-          marker = 'def test_protocol_receipt_rejects_cached_discovery_not_after_identity_swap('
-          if marker not in text:
-              text += '''\n\n@pytest.mark.parametrize("cached_list_ordinal", [0, 1])\ndef test_protocol_receipt_rejects_cached_discovery_not_after_identity_swap(\n    cached_list_ordinal: int,\n) -> None:\n    with pytest.raises(ValueError, match="chronology"):\n        create_identity_drift_protocol_receipt(\n            fault=_fault(),\n            ttl_ms=60_000,\n            original_tool_name=_OLD,\n            replacement_tool_name=_NEW,\n            stale_protocol_text=_STALE_TEXT,\n            protocol_recovery_text=_RECOVERY_TEXT,\n            initial_list_ordinal=0,\n            identity_swap_ordinal=1,\n            cached_list_ordinal=cached_list_ordinal,\n            stale_call_ordinal=3,\n            cache_invalidation_ordinal=4,\n            refreshed_list_ordinal=5,\n            recovery_call_ordinal=6,\n        )\n'''
-          identity.write_text(text)
+          additions = {
+              Path('tests/unit/test_mcp_agent_identity_bridge_boundaries.py'): '''\n\n@pytest.mark.parametrize("cached_list_ordinal", [0, 1])\ndef test_protocol_receipt_rejects_cached_discovery_not_after_identity_swap(cached_list_ordinal: int) -> None:\n    with pytest.raises(ValueError, match="chronology"):\n        create_identity_drift_protocol_receipt(\n            fault=_fault(), ttl_ms=60_000, original_tool_name=_OLD, replacement_tool_name=_NEW,\n            stale_protocol_text=_STALE_TEXT, protocol_recovery_text=_RECOVERY_TEXT,\n            initial_list_ordinal=0, identity_swap_ordinal=1, cached_list_ordinal=cached_list_ordinal,\n            stale_call_ordinal=3, cache_invalidation_ordinal=4, refreshed_list_ordinal=5, recovery_call_ordinal=6,\n        )\n''',
+              Path('tests/unit/test_mcp_agent_schema_bridge.py'): '''\n\n@pytest.mark.parametrize("cached_list_ordinal", [0, 1])\ndef test_schema_drift_protocol_receipt_rejects_cached_discovery_not_after_schema_swap(cached_list_ordinal: int) -> None:\n    with pytest.raises(ValueError, match="chronology"):\n        create_schema_drift_protocol_receipt(\n            fault=fault(), ttl_ms=_TTL_MS, initial_schema=initial_schema(), cached_schema=initial_schema(),\n            refreshed_schema=replacement_schema(), stale_protocol_text=_STALE_TEXT, protocol_recovery_text=_RECOVERY_TEXT,\n            initial_list_ordinal=0, schema_swap_ordinal=1, cached_list_ordinal=cached_list_ordinal,\n            stale_call_ordinal=3, cache_invalidation_ordinal=4, refreshed_list_ordinal=5, recovery_call_ordinal=6,\n        )\n''',
+          }
+          for path, addition in additions.items():
+              text = path.read_text()
+              marker = addition.split('def ', 1)[1].split('(', 1)[0]
+              if marker not in text:
+                  path.write_text(text + addition)
 
-          schema = Path('tests/unit/test_mcp_agent_schema_bridge.py')
-          text = schema.read_text()
-          marker = 'def test_schema_drift_protocol_receipt_rejects_cached_discovery_not_after_schema_swap('
-          if marker not in text:
-              text += '''\n\n@pytest.mark.parametrize("cached_list_ordinal", [0, 1])\ndef test_schema_drift_protocol_receipt_rejects_cached_discovery_not_after_schema_swap(\n    cached_list_ordinal: int,\n) -> None:\n    with pytest.raises(ValueError, match="chronology"):\n        create_schema_drift_protocol_receipt(\n            fault=fault(),\n            ttl_ms=_TTL_MS,\n            initial_schema=initial_schema(),\n            cached_schema=initial_schema(),\n            refreshed_schema=replacement_schema(),\n            stale_protocol_text=_STALE_TEXT,\n            protocol_recovery_text=_RECOVERY_TEXT,\n            initial_list_ordinal=0,\n            schema_swap_ordinal=1,\n            cached_list_ordinal=cached_list_ordinal,\n            stale_call_ordinal=3,\n            cache_invalidation_ordinal=4,\n            refreshed_list_ordinal=5,\n            recovery_call_ordinal=6,\n        )\n'''
-          schema.write_text(text)
-
-          # Structural postcondition: every mutation ordinal in these tests must now be
-          # immediately followed by the required cached-list ordinal.
-          for path in targets:
+          for path in paths:
               lines = path.read_text().splitlines()
               for idx, line in enumerate(lines):
-                  if re.search(r'(schema_swap_ordinal|identity_swap_ordinal)["\]]?\s*[:=]', line):
-                      if idx + 1 >= len(lines) or 'cached_list_ordinal' not in lines[idx + 1]:
-                          raise SystemExit(f'missing cached-list ordinal after mutation in {path}:{idx + 1}')
+                  standalone = re.match(r'^[ \t]*(?:"?(?:schema_swap_ordinal|identity_swap_ordinal)"?)(?:=|: )[^,]+,\s*$', line)
+                  if standalone and (idx + 1 >= len(lines) or 'cached_list_ordinal' not in lines[idx + 1]):
+                      raise SystemExit(f'missing cached-list ordinal after mutation field in {path}:{idx + 1}')
           PY
-          ruff format tests/unit/test_mcp_agent_identity_bridge.py \
-            tests/unit/test_mcp_agent_identity_bridge_boundaries.py \
-            tests/unit/test_mcp_agent_schema_bridge.py \
-            tests/unit/test_mcp_protocol_delivery_schema_drift.py \
-            tests/integration/test_openai_mcp_tool_schema_drift_adapter.py \
-            tests/integration/test_openai_mcp_tool_identity_drift_adapter.py
+          ruff format tests/unit/test_mcp_agent_identity_bridge.py tests/unit/test_mcp_agent_identity_bridge_boundaries.py tests/unit/test_mcp_agent_schema_bridge.py tests/unit/test_mcp_protocol_delivery_schema_drift.py tests/integration/test_openai_mcp_tool_schema_drift_adapter.py tests/integration/test_openai_mcp_tool_identity_drift_adapter.py
       - name: Verify migrated contracts
         env:
           OPENAI_AGENTS_DISABLE_TRACING: '1'
           OPENAI_AGENTS_TRACE_INCLUDE_SENSITIVE_DATA: '0'
         run: |
-          ruff check tests/unit/test_mcp_agent_identity_bridge.py \
-            tests/unit/test_mcp_agent_identity_bridge_boundaries.py \
-            tests/unit/test_mcp_agent_schema_bridge.py \
-            tests/unit/test_mcp_protocol_delivery_schema_drift.py \
-            tests/integration/test_openai_mcp_tool_schema_drift_adapter.py \
-            tests/integration/test_openai_mcp_tool_identity_drift_adapter.py
-          pytest \
-            tests/unit/test_mcp_agent_identity_bridge.py \
-            tests/unit/test_mcp_agent_identity_bridge_boundaries.py \
-            tests/unit/test_mcp_agent_schema_bridge.py \
-            tests/unit/test_mcp_protocol_delivery_schema_drift.py
-          pytest -m openai \
-            tests/integration/test_openai_mcp_tool_schema_drift_adapter.py \
-            tests/integration/test_openai_mcp_tool_identity_drift_adapter.py
+          ruff check tests/unit/test_mcp_agent_identity_bridge.py tests/unit/test_mcp_agent_identity_bridge_boundaries.py tests/unit/test_mcp_agent_schema_bridge.py tests/unit/test_mcp_protocol_delivery_schema_drift.py tests/integration/test_openai_mcp_tool_schema_drift_adapter.py tests/integration/test_openai_mcp_tool_identity_drift_adapter.py
+          pytest tests/unit/test_mcp_agent_identity_bridge.py tests/unit/test_mcp_agent_identity_bridge_boundaries.py tests/unit/test_mcp_agent_schema_bridge.py tests/unit/test_mcp_protocol_delivery_schema_drift.py
+          pytest -m openai tests/integration/test_openai_mcp_tool_schema_drift_adapter.py tests/integration/test_openai_mcp_tool_identity_drift_adapter.py
       - name: Commit migration and remove helper
         run: |
           rm .github/workflows/migrate-v2-chronology.yml
