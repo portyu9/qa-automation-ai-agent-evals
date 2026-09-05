@@ -152,7 +152,7 @@ For stale-cache and both drift bridges, refresh is deliberately **host-owned**: 
 | [MCP_REMOTE_AUTH.md](MCP_REMOTE_AUTH.md) | How is the isolated loopback Streamable HTTP resource-server bearer/scope/verifier boundary tested over real TCP? |
 | [MCP_OAUTH_FLOW.md](MCP_OAUTH_FLOW.md) | How does the separated two-origin loopback OAuth flow verify discovery, compatibility DCR, PKCE, exact issuer/resource binding, exchange, introspection, and protected MCP use? |
 | [EVIDENCE_AND_REPLAY.md](EVIDENCE_AND_REPLAY.md) | How are local evidence records committed, reverified, and replayed without overstating provenance, including typed metadata/result/error/stale-cache/schema/identity `PROTOCOL_DELIVERY` revalidation? |
-| [ASSURANCE_REPORTS.md](ASSURANCE_REPORTS.md) | How does AssuranceReport v2 keep deterministic oracle authority separate from optional semantic receipts while rederiving trial verdicts, reliability, and release gates? |
+| [ASSURANCE_REPORTS.md](ASSURANCE_REPORTS.md) | How does AssuranceReport v3 keep deterministic oracle authority separate from optional semantic receipts while rederiving trial verdicts, reliability from exact statistical configuration, and release gates? |
 | [METAMORPHIC_TESTING.md](METAMORPHIC_TESTING.md) | Which behavioral relations can be verified without brittle golden outputs? |
 | [STATISTICAL_ASSURANCE.md](STATISTICAL_ASSURANCE.md) | How is nondeterministic behavior quantified without overstating certainty? |
 | [SECURITY.md](SECURITY.md) | Which threats and trust boundaries are actually controlled, and which claims remain external? |

@@ -17,9 +17,9 @@ from agent_evals.semantic.models import SemanticDecision
 from agent_evals.semantic.receipt import SemanticJudgmentReceipt
 from agent_evals.statistics.reliability import ReliabilityReport
 
-_REPORT_SCHEMA: Literal["agent-evals/assurance-report/v2"] = "agent-evals/assurance-report/v2"
+_REPORT_SCHEMA: Literal["agent-evals/assurance-report/v3"] = "agent-evals/assurance-report/v3"
 _EVIDENCE_SCHEMA: Literal["agent-evals/trial-evidence/v2"] = "agent-evals/trial-evidence/v2"
-_REPORT_DOMAIN = b"agent-evals/assurance-report/v2\0"
+_REPORT_DOMAIN = b"agent-evals/assurance-report/v3\0"
 _RESOLVED_VERDICTS = frozenset({TrialVerdict.PASS, TrialVerdict.FAIL})
 
 
@@ -131,12 +131,13 @@ class ReliabilitySnapshot(BaseModel):
     failures: int = Field(ge=0, strict=True)
     blocked: int = Field(ge=0, strict=True)
     inconclusive: int = Field(ge=0, strict=True)
-    success_rate: float = Field(ge=0.0, le=1.0, strict=True)
-    wilson_low: float = Field(ge=0.0, le=1.0, strict=True)
-    wilson_high: float = Field(ge=0.0, le=1.0, strict=True)
-    pass_at_k: float = Field(ge=0.0, le=1.0, strict=True)
-    pass_power_k: float = Field(ge=0.0, le=1.0, strict=True)
+    success_rate: float = Field(ge=0.0, le=1.0, allow_inf_nan=False, strict=True)
+    wilson_low: float = Field(ge=0.0, le=1.0, allow_inf_nan=False, strict=True)
+    wilson_high: float = Field(ge=0.0, le=1.0, allow_inf_nan=False, strict=True)
+    pass_at_k: float = Field(ge=0.0, le=1.0, allow_inf_nan=False, strict=True)
+    pass_power_k: float = Field(ge=0.0, le=1.0, allow_inf_nan=False, strict=True)
     k: int = Field(ge=1, strict=True)
+    confidence_z: float = Field(gt=0.0, allow_inf_nan=False, strict=True)
 
     @classmethod
     def from_reliability(cls, report: ReliabilityReport) -> Self:
@@ -153,6 +154,7 @@ class ReliabilitySnapshot(BaseModel):
             pass_at_k=report.pass_at_k,
             pass_power_k=report.pass_power_k,
             k=report.k,
+            confidence_z=report.confidence_z,
         )
 
 
@@ -185,7 +187,7 @@ class AssuranceReport(BaseModel):
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    schema_version: Literal["agent-evals/assurance-report/v2"] = _REPORT_SCHEMA
+    schema_version: Literal["agent-evals/assurance-report/v3"] = _REPORT_SCHEMA
     evidence_schema: Literal["agent-evals/trial-evidence/v2"] = _EVIDENCE_SCHEMA
     subject_identity: str = Field(pattern=r"^[0-9a-f]{64}$")
     scenario_identity: str = Field(pattern=r"^[0-9a-f]{64}$")
@@ -243,6 +245,7 @@ class AssuranceReport(BaseModel):
         recomputed_reliability = ReliabilityReport.from_verdicts(
             verdicts,
             k=session.reliability.k,
+            confidence_z=session.reliability.confidence_z,
         )
         if recomputed_reliability != session.reliability:
             raise ValueError("session reliability does not recompute from its trial verdicts")
@@ -295,6 +298,7 @@ class AssuranceReport(BaseModel):
         recomputed_reliability = ReliabilityReport.from_verdicts(
             tuple(record.verdict for record in self.trials),
             k=self.reliability.k,
+            confidence_z=self.reliability.confidence_z,
         )
         if ReliabilitySnapshot.from_reliability(recomputed_reliability) != self.reliability:
             raise ValueError("assurance report reliability does not recompute from trial verdicts")
