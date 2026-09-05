@@ -75,9 +75,7 @@ def test_authority_monotonicity_rejects_retained_grant_tool_expansion() -> None:
 
 
 def test_authority_monotonicity_rejects_delegated_approval_weakening() -> None:
-    baseline = _root_policy(
-        _grant(tools=frozenset({"read"}), approvals=frozenset({"read"}))
-    )
+    baseline = _root_policy(_grant(tools=frozenset({"read"}), approvals=frozenset({"read"})))
     transformed = _root_policy(_grant(tools=frozenset({"read"}), approvals=frozenset()))
 
     result = authority_does_not_expand(baseline, transformed)
