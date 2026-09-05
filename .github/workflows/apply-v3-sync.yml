@@ -1,0 +1,68 @@
+name: Apply assurance v3 synchronization
+
+on:
+  push:
+    branches:
+      - fix/statistical-assurance-boundaries
+    paths:
+      - .github/workflows/apply-v3-sync.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: fix/statistical-assurance-boundaries
+      - name: Synchronize v3 claims and regression name
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          replacements = {
+              Path("README.md"): [
+                  (
+                      "| **Assurance reports** | v2 self-validating artifacts keeping deterministic oracle snapshots and optional semantic receipts as separate authority classes while rederiving trial verdicts, reliability, release policy, gate result, and report root |",
+                      "| **Assurance reports** | v3 self-validating artifacts preserving deterministic/semantic authority separation while rederiving trial verdicts, reliability from exact `k` + `confidence_z`, release policy, gate result, and report root |",
+                  ),
+              ],
+              Path("docs/README.md"): [
+                  (
+                      "| [ASSURANCE_REPORTS.md](ASSURANCE_REPORTS.md) | How does AssuranceReport v2 keep deterministic oracle authority separate from optional semantic receipts while rederiving trial verdicts, reliability, and release gates? |",
+                      "| [ASSURANCE_REPORTS.md](ASSURANCE_REPORTS.md) | How does AssuranceReport v3 keep deterministic oracle authority separate from optional semantic receipts while rederiving trial verdicts, reliability from exact statistical configuration, and release gates? |",
+                  ),
+              ],
+              Path("tests/unit/test_assurance_semantic.py"): [
+                  (
+                      "def test_assurance_report_v2_keeps_semantic_failure_noncritical() -> None:",
+                      "def test_assurance_report_v3_keeps_semantic_failure_noncritical() -> None:",
+                  ),
+                  (
+                      '    assert report.schema_version == "agent-evals/assurance-report/v2"',
+                      '    assert report.schema_version == "agent-evals/assurance-report/v3"',
+                  ),
+              ],
+          }
+
+          for path, pairs in replacements.items():
+              text = path.read_text()
+              for old, new in pairs:
+                  count = text.count(old)
+                  if count != 1:
+                      raise SystemExit(f"expected exactly one match in {path}: {old!r}; found {count}")
+                  text = text.replace(old, new)
+              path.write_text(text)
+          PY
+      - name: Commit synchronized files
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add README.md docs/README.md tests/unit/test_assurance_semantic.py
+          git diff --cached --check
+          git commit -m "docs: synchronize assurance report v3"
+          git push origin HEAD:fix/statistical-assurance-boundaries
