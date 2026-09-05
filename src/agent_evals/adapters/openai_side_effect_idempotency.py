@@ -135,9 +135,7 @@ class OpenAIAgentsSideEffectIdempotencyAdapter(OpenAIAgentsAdapter):
                 else None
             )
             decoded, arguments_error = _decode_arguments(arguments, contract=contract)
-            arguments_sha256 = (
-                canonical_json_sha256(decoded) if decoded is not None else None
-            )
+            arguments_sha256 = canonical_json_sha256(decoded) if decoded is not None else None
             key_sha256 = (
                 canonical_json_sha256(decoded[contract.key_argument])
                 if decoded is not None and contract.key_argument in decoded
@@ -281,9 +279,7 @@ class OpenAIAgentsSideEffectIdempotencyAdapter(OpenAIAgentsAdapter):
                     key_sha256=observation.key_sha256,
                     before_effect_sha256=observation.before_effect_sha256,
                     after_effect_sha256=observation.after_effect_sha256,
-                    mutated=(
-                        observation.before_effect_sha256 != observation.after_effect_sha256
-                    ),
+                    mutated=(observation.before_effect_sha256 != observation.after_effect_sha256),
                 )
             )
 

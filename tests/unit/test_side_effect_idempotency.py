@@ -63,9 +63,7 @@ def _receipt(*, second_mutates: bool = False) -> SideEffectIdempotencyReceipt:
     spec = _spec()
     empty = canonical_json_sha256({"effects": []})
     once = canonical_json_sha256({"effects": [{"operation_id": "op-7"}]})
-    twice = canonical_json_sha256(
-        {"effects": [{"operation_id": "op-7"}, {"operation_id": "op-7"}]}
-    )
+    twice = canonical_json_sha256({"effects": [{"operation_id": "op-7"}, {"operation_id": "op-7"}]})
     return SideEffectIdempotencyReceipt.create(
         scenario_identity=_scenario().identity,
         contract=spec,

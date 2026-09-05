@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
 from typing import Any
 
@@ -28,9 +27,7 @@ def verify_side_effect_observation(
 ) -> SideEffectIdempotencyReceipt | None:
     """Revalidate one exact duplicate-attempt observation without rerunning side effects."""
     observations = [
-        event
-        for event in evidence.events
-        if event.kind is EvidenceKind.SIDE_EFFECT_OBSERVATION
+        event for event in evidence.events if event.kind is EvidenceKind.SIDE_EFFECT_OBSERVATION
     ]
     contract = scenario.side_effect_idempotency
     if contract is None:
@@ -46,9 +43,13 @@ def verify_side_effect_observation(
         )
     observation = observations[0]
     if observation.critical:
-        raise SideEffectObservationError("side-effect observation evidence must remain non-critical")
+        raise SideEffectObservationError(
+            "side-effect observation evidence must remain non-critical"
+        )
     if observation.source != expected_event_source():
-        raise SideEffectObservationError("side-effect observation evidence source is not recognized")
+        raise SideEffectObservationError(
+            "side-effect observation evidence source is not recognized"
+        )
 
     try:
         receipt = SideEffectIdempotencyReceipt.model_validate(observation.payload)
@@ -70,7 +71,9 @@ def verify_side_effect_observation(
             "side-effect receipt contract identity does not match scenario"
         )
     if receipt.tool != contract.tool:
-        raise SideEffectObservationError("side-effect receipt tool identity does not match scenario")
+        raise SideEffectObservationError(
+            "side-effect receipt tool identity does not match scenario"
+        )
     if receipt.logical_operation_identity != contract.logical_operation_identity:
         raise SideEffectObservationError(
             "side-effect receipt logical-operation identity does not match scenario"
@@ -79,8 +82,7 @@ def verify_side_effect_observation(
     requests = [
         event
         for event in evidence.events
-        if event.kind is EvidenceKind.TOOL_REQUEST
-        and event.payload.get("tool") == contract.tool
+        if event.kind is EvidenceKind.TOOL_REQUEST and event.payload.get("tool") == contract.tool
     ]
     if len(requests) != contract.attempts:
         raise SideEffectObservationError(
@@ -88,7 +90,9 @@ def verify_side_effect_observation(
         )
 
     results: list[EvidenceEvent] = []
-    for index, (request, attempt) in enumerate(zip(requests, receipt.attempts, strict=True), start=1):
+    for index, (request, attempt) in enumerate(
+        zip(requests, receipt.attempts, strict=True), start=1
+    ):
         call_id = request.payload.get("call_id")
         if call_id != attempt.call_id:
             raise SideEffectObservationError(

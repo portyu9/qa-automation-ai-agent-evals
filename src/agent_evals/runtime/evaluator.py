@@ -14,11 +14,6 @@ from agent_evals.evidence.approval_intent import ApprovalIntentError, verify_app
 from agent_evals.evidence.models import EvidenceEvent, EvidenceKind, TrialEvidence, TrialVerdict
 from agent_evals.mcp.delivery import ProtocolDeliveryError, verify_protocol_delivery
 from agent_evals.oracles.deterministic import OracleResult, OutcomeOracle, PolicyOracle
-from agent_evals.side_effect.oracle import SideEffectIdempotencyOracle
-from agent_evals.side_effect.verification import (
-    SideEffectObservationError,
-    verify_side_effect_observation,
-)
 from agent_evals.retrieval.verification import RetrievalDeliveryError, verify_retrieval_delivery
 from agent_evals.semantic.judge import (
     SemanticJudge,
@@ -31,6 +26,11 @@ from agent_evals.semantic.verification import (
     SemanticJudgmentError,
     append_semantic_judgment,
     verify_semantic_judgment,
+)
+from agent_evals.side_effect.oracle import SideEffectIdempotencyOracle
+from agent_evals.side_effect.verification import (
+    SideEffectObservationError,
+    verify_side_effect_observation,
 )
 
 

@@ -85,7 +85,9 @@ class SideEffectIdempotencyReceipt(BaseModel):
         contract: SideEffectIdempotencySpec,
         attempts: tuple[SideEffectAttemptDigest, SideEffectAttemptDigest],
     ) -> SideEffectIdempotencyReceipt:
-        if any(attempt.arguments_sha256 != contract.expected_arguments_sha256 for attempt in attempts):
+        if any(
+            attempt.arguments_sha256 != contract.expected_arguments_sha256 for attempt in attempts
+        ):
             raise SideEffectReceiptError(
                 "observed side-effect attempts do not match scenario-bound canonical arguments"
             )

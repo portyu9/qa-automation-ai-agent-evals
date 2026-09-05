@@ -19,9 +19,7 @@ class SideEffectIdempotencyOracle:
             return OracleResult(name="side-effect-idempotency", verdict=TrialVerdict.PASS)
 
         events = [
-            event
-            for event in evidence.events
-            if event.kind is EvidenceKind.SIDE_EFFECT_OBSERVATION
+            event for event in evidence.events if event.kind is EvidenceKind.SIDE_EFFECT_OBSERVATION
         ]
         if len(events) != 1:
             return OracleResult(

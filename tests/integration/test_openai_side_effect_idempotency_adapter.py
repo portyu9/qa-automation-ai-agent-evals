@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from collections.abc import Callable
-
 import pytest
 
 from agent_evals.adapters.openai_side_effect_idempotency import (
@@ -166,7 +164,8 @@ async def test_openai_side_effect_bridge_observes_two_callbacks_but_only_one_mut
     target = [
         event
         for event in events
-        if event.kind in {
+        if event.kind
+        in {
             EvidenceKind.TOOL_REQUEST,
             EvidenceKind.TOOL_RESULT,
             EvidenceKind.SIDE_EFFECT_OBSERVATION,
