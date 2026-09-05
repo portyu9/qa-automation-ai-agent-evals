@@ -14,6 +14,7 @@ from agent_evals.evidence.approval_intent import ApprovalIntentError, verify_app
 from agent_evals.evidence.models import EvidenceEvent, EvidenceKind, TrialEvidence, TrialVerdict
 from agent_evals.mcp.delivery import ProtocolDeliveryError, verify_protocol_delivery
 from agent_evals.oracles.deterministic import OracleResult, OutcomeOracle, PolicyOracle
+from agent_evals.retrieval.verification import RetrievalDeliveryError, verify_retrieval_delivery
 from agent_evals.semantic.judge import (
     SemanticJudge,
     SemanticJudgeConfigurationError,
@@ -163,6 +164,20 @@ class TrialRunner:
                     evidence,
                     source="evaluator:protocol-delivery",
                     code="protocol_delivery_unverified",
+                    reason=str(exc),
+                ),
+                oracle_results=(),
+                verdict=TrialVerdict.BLOCKED,
+            )
+
+        try:
+            verify_retrieval_delivery(scenario, evidence)
+        except RetrievalDeliveryError as exc:
+            return EvaluatedTrial(
+                evidence=self._append_evaluation_error(
+                    evidence,
+                    source="evaluator:retrieval-delivery",
+                    code="retrieval_delivery_unverified",
                     reason=str(exc),
                 ),
                 oracle_results=(),

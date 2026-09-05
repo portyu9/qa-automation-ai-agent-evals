@@ -1,6 +1,6 @@
 # ƳƤ AI Agent Evaluation & Assurance Framework — Documentation
 
-This documentation is organized by the question a reviewer is trying to answer. The framework keeps **subject identity**, **scenario/adversarial identity**, **approval-intent evidence**, **evaluation-precondition evidence**, **MCP protocol-fault evidence**, **MCP→agent bridge evidence**, **MCP resource-server authorization evidence**, **MCP OAuth-flow evidence**, **subject evidence**, **deterministic authority**, **calibrated semantic-judgment evidence**, **persistence integrity**, **session derivation**, and **statistical inference** separate. A statement from one domain never silently becomes proof in another.
+This documentation is organized by the question a reviewer is trying to answer. The framework keeps **subject identity**, **scenario/adversarial identity**, **approval-intent evidence**, **evaluation-precondition evidence**, **retrieval-delivery evidence**, **MCP protocol-fault evidence**, **MCP→agent bridge evidence**, **MCP resource-server authorization evidence**, **MCP OAuth-flow evidence**, **subject evidence**, **deterministic authority**, **calibrated semantic-judgment evidence**, **persistence integrity**, **session derivation**, and **statistical inference** separate. A statement from one domain never silently becomes proof in another.
 
 ## Review paths
 
@@ -25,6 +25,8 @@ Semantic PASS              ≠ external state, authorization, or safety proof
 Semantic calibration       ≠ universal judge correctness
 Semantic ABSTAIN           ≠ PASS or FAIL
 Attack channel label        ≠ delivery evidence
+Retrieval contract          ≠ model-visible retrieval delivery
+Controlled poison in top-k  ≠ behavioral PASS or FAIL
 Environment availability    ≠ environment consumption
 Handoff observation         ≠ delegated authority
 Raw handoff count           ≠ accepted authority epoch
@@ -131,6 +133,7 @@ The schema-drift bridge is intentionally host-refreshed: the harness owns the li
 | [HANDOFF_AUTHORITY.md](HANDOFF_AUTHORITY.md) | How are native OpenAI handoffs authorized as a scenario-bound directed graph, how is run-item agent provenance bound, and how is authority forced to attenuate across each observed hop? |
 | [APPROVAL_INTENT.md](APPROVAL_INTENT.md) | How is one native OpenAI HITL approve/reject decision bound to the exact pending invocation, accepted delegated-authority path, same-run continuation, and deterministic failure semantics? |
 | [ADVERSARIAL_TESTING.md](ADVERSARIAL_TESTING.md) | How are red-team stimuli made deterministic, how is delivery required before grading, and what does an adversarial receipt still not prove? |
+| [RETRIEVAL_ASSURANCE.md](RETRIEVAL_ASSURANCE.md) | How are corpus/query/ranker/poison identity, deterministic ranking, exact model-visible retrieval delivery, replay, and production-RAG non-claims kept separate? |
 | [OPENAI_ADAPTER.md](OPENAI_ADAPTER.md) | How are OpenAI Agents SDK events normalized; how do handoff authority and exact native HITL approval bind run-local provenance; how do metadata/result/ToolError/schema-drift stdio bridges close; how does the calibrated no-tools semantic judge use the public SDK model boundary; and why does neither provider nor protocol become the oracle? |
 | [MCP_LAB.md](MCP_LAB.md) | How are six deterministic MCP faults observed, and which four exact fault families currently have explicit agent bridges? |
 | [MCP_REMOTE_AUTH.md](MCP_REMOTE_AUTH.md) | How is the isolated loopback Streamable HTTP resource-server bearer/scope/verifier boundary tested over real TCP? |
@@ -151,6 +154,7 @@ Use the evidence contract that matches the boundary actually observed:
 | native handoff path with delegated authority | `TrialEvidence` + exact scenario `AuthorityPolicy` / `HandoffAuthorityGrant` graph | cryptographic agent identity, provider-side enforcement, or distributed delegation |
 | native OpenAI HITL interruption and exact approve/reject continuation | `ApprovalIntentSpec` + `ApprovalIntentReceipt` / `APPROVAL_DECISION` + normalized continuation evidence | human identity, enterprise approval attestation, production IAM, or target-side authorization |
 | OpenAI local/SDK adversarial injection | `AttackDeliveryReceipt` | target-side attestation or automatic PASS |
+| evaluator-owned deterministic retrieval ranking and exact model-visible delivery | `RetrievalContractSpec` + `RetrievalDeliveryReceipt` / `RETRIEVAL_DELIVERY` | hosted vector-search correctness, citation correctness, production RAG lifecycle, or behavioral PASS |
 | standalone MCP fault observation | `MCPFaultReceipt` | agent consumption or behavior |
 | controlled MCP result correlated to exact OpenAI call | `MCPAgentToolResultReceipt` + `PROTOCOL_DELIVERY` | safe behavior or release acceptance |
 | controlled MCP ToolError followed by one verified causal retry/recovery | `MCPAgentToolErrorRecoveryReceipt` + `PROTOCOL_DELIVERY` | generic retry correctness, safe behavior, or release acceptance |

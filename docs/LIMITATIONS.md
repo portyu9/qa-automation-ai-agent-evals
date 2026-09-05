@@ -8,7 +8,7 @@ This document is intentionally strict. Repository claims must never become stron
 
 The OpenAI integration is pinned to `openai-agents==0.22.0`. CI exercises the real SDK runner/tool/handoff/approval/context loop deterministically with `agents.testing.ScriptedModel` and no provider API call.
 
-The SDK tier covers all seven generic adversarial channel categories at scoped local/SDK boundaries. A separate `OpenAIAgentsHandoffAuthorityAdapter` exercises run-local native handoff authority attenuation. `OpenAIAgentsHITLApprovalAdapter` exercises one exact native `ToolApprovalItem` → evaluator decision → same-`RunState` continuation relation. Four additional adapters exercise exact official-MCP-stdio/OpenAI SDK paths: one `TOOL_METADATA_POISON` discovery → model-visible target-definition bridge, one `TOOL_RESULT_POISON` same-call bridge, one causal `TOOL_ERROR` → same-argument retry → benign recovery bridge, and one host-refreshed `TOOL_SCHEMA_DRIFT` adaptation bridge. `OpenAIAgentsSemanticJudge` separately exercises one concrete public SDK `Model` through a no-tools, one-turn evaluator boundary under deterministic `ScriptedModel` integration.
+The SDK tier covers all seven generic adversarial channel categories at scoped local/SDK boundaries. A separate `OpenAIAgentsRetrievalAdapter` closes one evaluator-owned deterministic retrieval-delivery relation. A separate `OpenAIAgentsHandoffAuthorityAdapter` exercises run-local native handoff authority attenuation. `OpenAIAgentsHITLApprovalAdapter` exercises one exact native `ToolApprovalItem` → evaluator decision → same-`RunState` continuation relation. Four additional adapters exercise exact official-MCP-stdio/OpenAI SDK paths: one `TOOL_METADATA_POISON` discovery → model-visible target-definition bridge, one `TOOL_RESULT_POISON` same-call bridge, one causal `TOOL_ERROR` → same-argument retry → benign recovery bridge, and one host-refreshed `TOOL_SCHEMA_DRIFT` adaptation bridge. `OpenAIAgentsSemanticJudge` separately exercises one concrete public SDK `Model` through a no-tools, one-turn evaluator boundary under deterministic `ScriptedModel` integration.
 
 None of this establishes live-model quality, production-provider availability, provider-side delivery attestation, authenticated human approval, production IAM, or credentialed end-to-end assurance.
 
@@ -73,6 +73,14 @@ The memory mode uses a fresh per-trial client-side SDK `Session` and one prior u
 The resource mode places exact canonical fixture JSON in one structured SDK `input_file.file_data` field with evaluator-owned filename `agent-evals-resource.json`.
 
 It does not claim OpenAI hosted File Search, vector stores, embeddings, RAG retrieval/ranking/chunking/filtering/citations, `file_id`, `file_url`, browser pages, databases, object stores, production document repositories, MCP resource servers, or provider-side file parsing/retention attestation.
+
+The repository now has a **separate** deterministic retrieval-assurance domain. That feature does not retroactively widen this generic `RESOURCE` injector.
+
+### Deterministic retrieval assurance is not production RAG assurance
+
+`RetrievalContractSpec`, the evaluator-owned lexical ranker, `RetrievalDeliveryReceipt`, and `OpenAIAgentsRetrievalAdapter` establish one reproducible corpus/query/ranker/optional-poison → exact model-visible result relation. The ranker uses NFKC/casefold Unicode-alphanumeric tokenization, integer scoring, stable tie-breaking, and canonical JSON specifically to make the assurance primitive reproducible.
+
+This does **not** establish hosted File Search or vector-store correctness; embedding or ANN quality; production chunking, ingestion, deletion, metadata-filter, reranking, hybrid-search, or query-rewrite behavior; citation correctness/completeness; external tenant isolation; browser/search retrieval; live-provider behavior; remote retrieval availability; universal RAG poisoning assurance; or model attention, interpretation, obedience, resistance, or safety. A controlled poison entering top-k is a verified retrieval relation, not a behavioral verdict. See [Retrieval Provenance and Poisoning Assurance](RETRIEVAL_ASSURANCE.md).
 
 ### Native SDK `HANDOFF` is context poisoning, not rerouting
 

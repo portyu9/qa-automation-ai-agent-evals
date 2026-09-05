@@ -112,7 +112,7 @@ Any failed layer prevents the bytes from becoming trusted evaluation evidence.
 - requested `SubjectFingerprint.identity` equals the recorded subject identity;
 - requested `EvaluationScenario.identity` equals the recorded scenario identity.
 
-A mismatch raises `ReplayIdentityError` at the adapter boundary. When all identities match, replay returns the recorded events, terminal state, output, timing, usage, and cost observations unchanged. Running that adapter through `TrialRunner` therefore re-applies evaluator-owned semantic receipt checks plus the deterministic policy and outcome oracles to the same evidence envelope.
+A mismatch raises `ReplayIdentityError` at the adapter boundary. When all identities match, replay returns the recorded events, terminal state, output, timing, usage, and cost observations unchanged. Running that adapter through `TrialRunner` therefore re-applies evaluator-owned retrieval-delivery verification, approval/protocol/semantic receipt checks where configured, plus the deterministic policy and outcome oracles to the same evidence envelope.
 
 For an unchanged evidence model, a successful exact-identity replay reproduces the original `evidence_root`.
 
@@ -145,6 +145,14 @@ If an exact rejected invocation does reach executable `TOOL_REQUEST` evidence, t
 Malformed/root-invalid receipts, decision/request ordering errors, changed arguments/resource, authority epoch/path mismatch, duplicate/missing continuation, or ambiguous result identity become `approval_intent_unverified / EVALUATION_ERROR / BLOCKED`.
 
 Replay does **not** recreate a human review, authenticated approver, or SDK interruption. It rechecks whether the historical normalized evidence still proves the exact evaluator-owned approval relation. See [Native HITL Approval Intent](APPROVAL_INTENT.md).
+
+## Retrieval-delivery receipts are semantically revalidated
+
+A persisted `RETRIEVAL_DELIVERY` event is not trusted merely because the surrounding evidence envelope hashes correctly. When a scenario carries `RetrievalContractSpec`, `TrialRunner` requires exactly one retrieval delivery and rederives it from the scenario-owned base corpus, exact query, ranker profile, optional poison relation, target call identity, and persisted model-visible result.
+
+The verifier requires one exact target `TOOL_REQUEST`, strict duplicate-key-rejecting JSON arguments containing only the bound query, one matching `TOOL_RESULT`, and strict `TOOL_REQUEST < RETRIEVAL_DELIVERY < TOOL_RESULT` chronology. It reconstructs the expected baseline/active ranking and `RetrievalDeliveryReceipt`; mismatch, ambiguity, malformed receipt/root, foreign source, changed scenario identity, or an unreconstructable model-visible result becomes `retrieval_delivery_unverified / EVALUATION_ERROR / BLOCKED`.
+
+Replay does not rerun retrieval. Because retrieval behavior-bearing material participates in `EvaluationScenario.identity`, changing corpus/query/ranker/poison configuration invalidates exact-identity replay before old evidence can be treated as current. See [Retrieval Provenance and Poisoning Assurance](RETRIEVAL_ASSURANCE.md).
 
 ## Protocol-delivery receipts are semantically revalidated
 
@@ -183,6 +191,7 @@ Replay does **not** answer:
 - did a specific human, service, or machine originally produce these bytes?;
 - would nondeterministic behavior reproduce on another attempt?;
 - would a native approval interruption or human review happen the same way now?;
+- would an evaluator-owned or external retrieval system produce the same ranking/context now?;
 - would an MCP server still expose the same result, error, schema, cache state, or authorization behavior now?;
 - would a host perform the same schema-drift cache invalidation now?
 

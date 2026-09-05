@@ -82,6 +82,7 @@ omit = [
   "src/agent_evals/adapters/openai_mcp_tool_metadata.py",
   "src/agent_evals/adapters/openai_mcp_tool_result.py",
   "src/agent_evals/adapters/openai_mcp_tool_schema_drift.py",
+  "src/agent_evals/adapters/openai_retrieval.py",
   "src/agent_evals/mcp/_loopback.py",
   "src/agent_evals/mcp/lab.py",
   "src/agent_evals/mcp/oauth_flow.py",

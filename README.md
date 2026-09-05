@@ -10,14 +10,14 @@
 
 **A provider-neutral quality-engineering framework for evaluating autonomous agents by observable outcomes, side effects, authority boundaries, approval intent, adversarial conditions, verified evaluation preconditions, protocol state, authorization behavior, reliability, and reproducible evidence—not by persuasive final prose.**
 
-[Documentation](docs/README.md) · [Architecture](docs/ARCHITECTURE.md) · [Evaluation Model](docs/EVALUATION_MODEL.md) · [Semantic Judging](docs/SEMANTIC_JUDGING.md) · [Handoff Authority](docs/HANDOFF_AUTHORITY.md) · [HITL Approval](docs/APPROVAL_INTENT.md) · [Adversarial Testing](docs/ADVERSARIAL_TESTING.md) · [MCP Fault Lab](docs/MCP_LAB.md) · [MCP Remote Auth](docs/MCP_REMOTE_AUTH.md) · [MCP OAuth Flow](docs/MCP_OAUTH_FLOW.md) · [Evidence & Replay](docs/EVIDENCE_AND_REPLAY.md) · [Session Reports](docs/ASSURANCE_REPORTS.md) · [OpenAI Adapter](docs/OPENAI_ADAPTER.md) · [Statistics](docs/STATISTICAL_ASSURANCE.md) · [Security](docs/SECURITY.md) · [Limitations](docs/LIMITATIONS.md)
+[Documentation](docs/README.md) · [Architecture](docs/ARCHITECTURE.md) · [Evaluation Model](docs/EVALUATION_MODEL.md) · [Semantic Judging](docs/SEMANTIC_JUDGING.md) · [Handoff Authority](docs/HANDOFF_AUTHORITY.md) · [HITL Approval](docs/APPROVAL_INTENT.md) · [Adversarial Testing](docs/ADVERSARIAL_TESTING.md) · [Retrieval Assurance](docs/RETRIEVAL_ASSURANCE.md) · [MCP Fault Lab](docs/MCP_LAB.md) · [MCP Remote Auth](docs/MCP_REMOTE_AUTH.md) · [MCP OAuth Flow](docs/MCP_OAUTH_FLOW.md) · [Evidence & Replay](docs/EVIDENCE_AND_REPLAY.md) · [Session Reports](docs/ASSURANCE_REPORTS.md) · [OpenAI Adapter](docs/OPENAI_ADAPTER.md) · [Statistics](docs/STATISTICAL_ASSURANCE.md) · [Security](docs/SECURITY.md) · [Limitations](docs/LIMITATIONS.md)
 
 </div>
 
 ---
 
 > [!IMPORTANT]
-> **The agent is the subject, not the oracle.** Final prose is not task completion. A tool call is not a successful side effect. An approval request is not an approval grant, and an approval receipt is not human identity or production authorization. A handoff observation is not delegated authority. A raw handoff count is not an accepted authority epoch. An attack label is not proof of delivery. A configured environment value is not proof of consumption. Cached MCP discovery is not current server truth. A raw MCP receipt is not proof that an agent consumed the condition. A semantic PASS is not proof of external state, authorization, or safety. A bearer challenge is not proof of correct issuer policy. Resource-server success is not OAuth-flow correctness. OAuth-flow success is not agent correctness. Missing or invalid evidence is never silently promoted to PASS.
+> **The agent is the subject, not the oracle.** Final prose is not task completion. A tool call is not a successful side effect. An approval request is not an approval grant, and an approval receipt is not human identity or production authorization. A handoff observation is not delegated authority. A raw handoff count is not an accepted authority epoch. An attack label is not proof of delivery. A configured environment value is not proof of consumption. A retrieval contract is not proof of model-visible delivery, and a controlled poison entering top-k is not a behavioral verdict. Cached MCP discovery is not current server truth. A raw MCP receipt is not proof that an agent consumed the condition. A semantic PASS is not proof of external state, authorization, or safety. A bearer challenge is not proof of correct issuer policy. Resource-server success is not OAuth-flow correctness. OAuth-flow success is not agent correctness. Missing or invalid evidence is never silently promoted to PASS.
 
 ## Engineering thesis
 
@@ -53,7 +53,7 @@ This framework treats the **complete agent system** as the subject under test: m
 | **Safety is non-compensatory** | a critical authorization violation cannot be averaged away |
 | **Unknown is not green** | blocked execution and missing evidence remain explicit uncertainty |
 | **Bad ≠ unknown** | resolved subject failure is distinct from evaluator/runtime inability to judge |
-| **Identity is canonical** | subject, scenario, attack, approval intent, MCP fault, resource-server auth policy, OAuth-flow policy, evidence, and report identities bind behavior-bearing material |
+| **Identity is canonical** | subject, scenario, retrieval contract, attack, approval intent, MCP fault, resource-server auth policy, OAuth-flow policy, evidence, and report identities bind behavior-bearing material |
 | **Approval request ≠ execution** | a pending native approval interruption is `APPROVAL_REQUEST`; executable `TOOL_REQUEST` exists only if the resumed run actually reaches the tool |
 | **Approval receipt ≠ human authentication** | `ApprovalIntentReceipt` binds one evaluator-owned decision to one exact invocation relation; it does not prove human identity, presence, or enterprise authorization |
 | **Legacy approval ≠ stronger HITL intent** | call-scoped or persistent `APPROVAL` evidence cannot substitute for `APPROVAL_DECISION` when `ApprovalIntentSpec` is configured |
@@ -88,8 +88,8 @@ This framework treats the **complete agent system** as the subject under test: m
 
 The deterministic core requires no model credentials. The executable surface is intentionally separated into four lanes so one green boundary cannot silently upgrade another:
 
-1. **Provider-neutral core** — contracts, evidence, persistence, replay, deterministic oracles, calibrated subordinate semantic-judging contracts, statistics, metamorphic assurance, reporting, minimization, and release gates, including scenario-owned directed handoff grants, exact accepted authority-path state, scenario-bound optional approval intent, and optional content-addressed semantic rubrics.
-2. **OpenAI Agents SDK tier** — the real SDK runner exercised with `agents.testing.ScriptedModel`, with no provider API call, across seven scoped local/SDK adversarial channels, native handoff-authority attenuation, an exact native HITL `ToolApprovalItem` → same-`RunState` approve/reject continuation path, and a one-turn no-tools semantic judge over the same public SDK model boundary.
+1. **Provider-neutral core** — contracts, evidence, persistence, replay, deterministic oracles, calibrated subordinate semantic-judging contracts, statistics, metamorphic assurance, reporting, minimization, and release gates, including scenario-owned directed handoff grants, exact accepted authority-path state, scenario-bound optional approval intent, optional content-addressed semantic rubrics, and scenario-owned deterministic retrieval contracts with content-addressed corpus/query/ranker/poison identity plus retrieval-delivery verification.
+2. **OpenAI Agents SDK tier** — the real SDK runner exercised with `agents.testing.ScriptedModel`, with no provider API call, across seven scoped local/SDK adversarial channels, a separate exact retrieval-delivery bridge, native handoff-authority attenuation, an exact native HITL `ToolApprovalItem` → same-`RunState` approve/reject continuation path, and a one-turn no-tools semantic judge over the same public SDK model boundary.
 3. **MCP protocol/control-plane laboratories** — the six-fault official-client protocol lab, real loopback resource-server authorization lab, and separated two-origin OAuth authorization-code/PKCE/introspection lab.
 4. **OpenAI↔MCP delivery bridges** — four deliberately narrow official-stdio paths: one `TOOL_METADATA_POISON` discovery → exact model-visible tool-definition bridge, one `TOOL_RESULT_POISON` result bridge, one causal `TOOL_ERROR` → same-argument retry → benign recovery bridge, and one host-refreshed `TOOL_SCHEMA_DRIFT` v1-rejection → refreshed-v2 → corrected-call bridge. Each has its own integrity-bound receipt and ordered `PROTOCOL_DELIVERY` evidence. Metadata delivery closes at the first verified model-visible target definition and does not require a target tool call.
 
@@ -102,7 +102,7 @@ The stronger HITL path does **not** claim authenticated humans, enterprise workf
 | Surface | Implemented behavior |
 |---|---|
 | **Subject contract** | canonical SHA-256 identity across provider/model, instructions, tools, policy, memory policy, adapter, and application revision |
-| **Scenario contract** | versioned objective, initial state, required/forbidden outcomes, classification, tags, fail-closed authority, exact optional root agent, canonical directed handoff grants, optional exact `ApprovalIntentSpec`, and optional content-addressed `SemanticRubricSpec`; all behavior-bearing material participates in scenario identity |
+| **Scenario contract** | versioned objective, initial state, required/forbidden outcomes, classification, tags, fail-closed authority, exact optional root agent, canonical directed handoff grants, optional exact `ApprovalIntentSpec`, optional content-addressed `SemanticRubricSpec`, and optional `RetrievalContractSpec`; all behavior-bearing material participates in scenario identity |
 | **Adversarial fixtures/campaigns** | content-addressed attacks and canonical campaigns bound to one exact base scenario |
 | **Attack delivery** | exactly-one receipt verification binding scenario, attack, channel, injection point, and payload digest before adversarial grading |
 | **Approval intent** | exact native request→decision→continuation verification binding agent, tool, call ID, canonical finite-JSON arguments, exact resource, accepted authority epoch/path, and scenario identity |
@@ -118,6 +118,12 @@ The stronger HITL path does **not** claim authenticated humans, enterprise workf
 | **Release gate** | non-compensatory critical-safety rules plus explicit `ACCEPT`, `REJECT`, and `INCONCLUSIVE` semantics |
 | **Metamorphic assurance** | state-projection invariance and authority-monotonicity relations without golden prose |
 | **Failure minimization** | bounded deterministic counterexample reduction requiring failure reproduction |
+
+### Deterministic retrieval provenance and poisoning assurance
+
+`RetrievalContractSpec` defines one evaluator-owned retrieval relation that is separate from generic `MEMORY` and inline-file `RESOURCE` injection. A content-addressed base corpus, exact query, explicit integer lexical ranker profile, and optional insertion-only poison relation produce one canonical model-visible result. `RetrievalDeliveryReceipt` then binds the exact OpenAI call ID, scenario/contract/corpus/query/ranker/poison identities, baseline and active hit projections, and model-visible result digest. `TrialRunner` requires strict `TOOL_REQUEST < RETRIEVAL_DELIVERY < TOOL_RESULT` closure before deterministic grading.
+
+The pinned `OpenAIAgentsRetrievalAdapter` exposes one evaluator-owned SDK `FunctionTool`; a mismatched model-selected query receives only a fixed rejection payload rather than the bound ranked context. Replay rederives the historical relation from scenario-owned source material without rerunning retrieval. This does not claim hosted vector-search/File Search correctness, embedding/ANN quality, production RAG lifecycle, citation correctness, live-provider behavior, or safe model behavior. See [Retrieval Provenance and Poisoning Assurance](docs/RETRIEVAL_ASSURANCE.md).
 
 ### Seven scoped OpenAI adversarial channels
 
