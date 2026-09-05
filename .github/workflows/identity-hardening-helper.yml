@@ -27,29 +27,13 @@ jobs:
 
           path = Path('src/agent_evals/adapters/openai_mcp_tool_identity_drift.py')
           text = path.read_text()
-          text = text.replace('import json\n', 'import json\nimport math\n', 1)
-          old = '''def _normalized_request_arguments(event: EvidenceEvent) -> dict[str, Any]:
-              arguments = event.payload.get("arguments")
-              if not isinstance(arguments, str) or not arguments:
-                  raise AdapterPreconditionError(
-                      code="mcp_identity_agent_arguments_missing",
-                      reason="normalized identity-drift request lacks serialized arguments",
-                  )
-              try:
-                  parsed = json.loads(arguments)
-              except json.JSONDecodeError as exc:
-                  raise AdapterPreconditionError(
-                      code="mcp_identity_agent_arguments_invalid",
-                      reason="normalized identity-drift request arguments are not valid JSON",
-                  ) from exc
-              if not isinstance(parsed, dict) or any(not isinstance(key, str) for key in parsed):
-                  raise AdapterPreconditionError(
-                      code="mcp_identity_agent_arguments_invalid",
-                      reason="normalized identity-drift request arguments are not a string-keyed object",
-                  )
-              return parsed
-          '''.replace('          ', '')
-          new = '''def _normalized_request_arguments(event: EvidenceEvent) -> dict[str, Any]:
+          if 'import math\n' not in text:
+              text = text.replace('import json\n', 'import json\nimport math\n', 1)
+          start_marker = 'def _normalized_request_arguments(event: EvidenceEvent) -> dict[str, Any]:\n'
+          end_marker = '\ndef _result_is_error(result: object) -> bool:\n'
+          start = text.index(start_marker)
+          end = text.index(end_marker, start)
+          replacement = '''def _normalized_request_arguments(event: EvidenceEvent) -> dict[str, Any]:
               arguments = event.payload.get("arguments")
               if not isinstance(arguments, str) or not arguments:
                   raise AdapterPreconditionError(
@@ -77,9 +61,7 @@ jobs:
               except (json.JSONDecodeError, ValueError) as exc:
                   raise AdapterPreconditionError(
                       code="mcp_identity_agent_arguments_invalid",
-                      reason=(
-                          "normalized identity-drift request arguments are not strict finite JSON"
-                      ),
+                      reason="normalized identity-drift request arguments are not strict finite JSON",
                   ) from exc
               if not isinstance(parsed, dict) or any(not isinstance(key, str) for key in parsed):
                   raise AdapterPreconditionError(
@@ -103,9 +85,7 @@ jobs:
                   return any(_contains_non_finite_json(item) for item in value.values())
               return False
           '''.replace('          ', '')
-          if old not in text:
-              raise SystemExit('expected normalized argument parser block not found')
-          path.write_text(text.replace(old, new, 1))
+          path.write_text(text[:start] + replacement + text[end:])
           PY
       - name: Install pinned formatter
         run: python -m pip install --disable-pip-version-check 'ruff==0.16.5'
