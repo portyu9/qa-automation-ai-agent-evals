@@ -180,7 +180,9 @@ async def test_openai_agent_observes_host_refreshed_stale_tool_removal_and_repla
     assert delivery.payload["scenario_identity"] == scenario().identity
     assert delivery.payload["tool_name"] == _TOOL
     assert delivery.payload["stale_call_id"] == "call_stale_cache"
-    assert delivery.payload["ttl_ms"] == _TTL_MS
+    assert delivery.payload["mcp_cache_hint_ttl_ms"] == _TTL_MS
+    assert "ttl_ms" not in delivery.payload
+    assert fault().payload["ttl_ms"] == _TTL_MS
     assert delivery.payload["protocol_receipt"]["kind"] == MCPFaultKind.TOOL_LIST_STALE_CACHE.value
     assert delivery.payload["protocol_receipt"]["protocol_version"] == "2026-07-28"
     assert [
