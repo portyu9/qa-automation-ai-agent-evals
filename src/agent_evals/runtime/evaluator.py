@@ -14,6 +14,11 @@ from agent_evals.evidence.approval_intent import ApprovalIntentError, verify_app
 from agent_evals.evidence.models import EvidenceEvent, EvidenceKind, TrialEvidence, TrialVerdict
 from agent_evals.mcp.delivery import ProtocolDeliveryError, verify_protocol_delivery
 from agent_evals.oracles.deterministic import OracleResult, OutcomeOracle, PolicyOracle
+from agent_evals.side_effect.oracle import SideEffectIdempotencyOracle
+from agent_evals.side_effect.verification import (
+    SideEffectObservationError,
+    verify_side_effect_observation,
+)
 from agent_evals.retrieval.verification import RetrievalDeliveryError, verify_retrieval_delivery
 from agent_evals.semantic.judge import (
     SemanticJudge,
@@ -53,7 +58,7 @@ class TrialRunner:
     """
 
     def __init__(self, *, semantic_judge: SemanticJudge | None = None) -> None:
-        self._oracles = (PolicyOracle(), OutcomeOracle())
+        self._oracles = (PolicyOracle(), SideEffectIdempotencyOracle(), OutcomeOracle())
         self._semantic_judge = semantic_judge
 
     async def run(
@@ -178,6 +183,20 @@ class TrialRunner:
                     evidence,
                     source="evaluator:retrieval-delivery",
                     code="retrieval_delivery_unverified",
+                    reason=str(exc),
+                ),
+                oracle_results=(),
+                verdict=TrialVerdict.BLOCKED,
+            )
+
+        try:
+            verify_side_effect_observation(scenario, evidence)
+        except SideEffectObservationError as exc:
+            return EvaluatedTrial(
+                evidence=self._append_evaluation_error(
+                    evidence,
+                    source="evaluator:side-effect-observation",
+                    code="side_effect_observation_unverified",
                     reason=str(exc),
                 ),
                 oracle_results=(),

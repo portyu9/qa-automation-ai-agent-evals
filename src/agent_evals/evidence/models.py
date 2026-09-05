@@ -17,6 +17,7 @@ class EvidenceKind(StrEnum):
     ATTACK_DELIVERY = "attack_delivery"
     PROTOCOL_DELIVERY = "protocol_delivery"
     RETRIEVAL_DELIVERY = "retrieval_delivery"
+    SIDE_EFFECT_OBSERVATION = "side_effect_observation"
     TOOL_REQUEST = "tool_request"
     TOOL_RESULT = "tool_result"
     HANDOFF = "handoff"
