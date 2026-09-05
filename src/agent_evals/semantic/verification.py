@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import hmac
+
 from agent_evals.contracts.models import EvaluationScenario
 from agent_evals.evidence.models import EvidenceEvent, EvidenceKind, TrialEvidence
+from agent_evals.semantic.models import SemanticJudgeInput
 from agent_evals.semantic.receipt import SemanticJudgmentReceipt
 
 SEMANTIC_JUDGMENT_SOURCE = "evaluator:semantic-judge"
@@ -63,6 +66,21 @@ def verify_semantic_judgment(
     if receipt.subject_evidence_root != subject_evidence.evidence_root:
         raise SemanticJudgmentError(
             "semantic judgment does not bind the exact pre-judgment subject evidence root"
+        )
+    if subject_evidence.final_output is None:
+        raise SemanticJudgmentError(
+            "recorded semantic judgment requires the exact candidate final output"
+        )
+
+    expected_input = SemanticJudgeInput(
+        objective=scenario.objective,
+        rubric=rubric,
+        candidate_output=subject_evidence.final_output,
+    )
+    if not hmac.compare_digest(receipt.judge_input_sha256, expected_input.digest):
+        raise SemanticJudgmentError(
+            "semantic judgment input digest does not match the exact scenario objective, rubric, "
+            "and candidate output"
         )
     return receipt
 
