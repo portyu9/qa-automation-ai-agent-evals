@@ -102,7 +102,9 @@ class MCPAgentToolStaleCacheReceipt(BaseModel):
         if initial_names != (tool_name,):
             raise ValueError("initial model-visible controlled tool set must contain only target")
         if refreshed_names:
-            raise ValueError("refreshed model-visible controlled tool set must prove target absence")
+            raise ValueError(
+                "refreshed model-visible controlled tool set must prove target absence"
+            )
         initial_model_tool_names_sha256 = _sha256_json(initial_names)
         refreshed_model_tool_names_sha256 = _sha256_json(refreshed_names)
 
@@ -353,7 +355,9 @@ def _canonical_arguments(value: Mapping[str, object] | None) -> dict[str, object
 
 def _extract_single_text_output(value: object) -> str:
     if not isinstance(value, Mapping):
-        raise ValueError("agent MCP stale-tool rejection must be one model-visible text output object")
+        raise ValueError(
+            "agent MCP stale-tool rejection must be one model-visible text output object"
+        )
     if set(value) != {"type", "text"}:
         raise ValueError("agent MCP stale-tool rejection must contain exactly 'type' and 'text'")
     text = value.get("text")
