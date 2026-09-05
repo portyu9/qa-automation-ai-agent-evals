@@ -284,7 +284,7 @@ async def test_openai_mcp_identity_drift_blocks_reusing_old_identity_after_refre
     pytest.importorskip("agents")
     pytest.importorskip("mcp")
     from agents import Agent
-    from agents.testing import ModelStep, ScriptedModel, assistant_message, function_call
+    from agents.testing import ModelStep, ScriptedModel, function_call
 
     def issue_stale(call: Any) -> dict[str, object]:
         _assert_old_identity(call)
@@ -298,7 +298,6 @@ async def test_openai_mcp_identity_drift_blocks_reusing_old_identity_after_refre
         [
             ModelStep.respond(issue_stale),
             ModelStep.respond(repeat_old),
-            [assistant_message("Protected state remains safe.")],
         ]
     )
     evaluated = await TrialRunner().run(
