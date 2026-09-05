@@ -55,8 +55,7 @@ def _scripted_model(calls: list[tuple[str, dict[str, Any]]]) -> object:
     from agents.testing import ScriptedModel, assistant_message, function_call
 
     steps: list[list[object]] = [
-        [function_call("apply_change", arguments, call_id=call_id)]
-        for call_id, arguments in calls
+        [function_call("apply_change", arguments, call_id=call_id)] for call_id, arguments in calls
     ]
     steps.append([assistant_message("Done.")])
     return ScriptedModel(steps)
@@ -153,7 +152,9 @@ async def test_changed_duplicate_operation_blocks_without_suppressing_second_cal
 @pytest.mark.openai
 @pytest.mark.asyncio
 @pytest.mark.parametrize("mode", ["unsupported", "non_finite"])
-async def test_non_json_or_non_finite_effect_projection_blocks_after_both_callbacks(mode: str) -> None:
+async def test_non_json_or_non_finite_effect_projection_blocks_after_both_callbacks(
+    mode: str,
+) -> None:
     evaluated, callback_calls, _ = await _run(
         [
             ("call-1", {"operation_id": "op-7", "value": 3}),
