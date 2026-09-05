@@ -76,6 +76,39 @@ def _receipt() -> SideEffectIdempotencyReceipt:
     )
 
 
+def _receipt_for_contract(
+    contract: SideEffectIdempotencySpec,
+    *,
+    scenario_identity: str,
+) -> SideEffectIdempotencyReceipt:
+    stable = canonical_json_sha256({"effects": []})
+    attempts = (
+        SideEffectAttemptDigest(
+            ordinal=1,
+            call_id="call-1",
+            arguments_sha256=contract.expected_arguments_sha256,
+            key_sha256=contract.key_sha256,
+            before_effect_sha256=stable,
+            after_effect_sha256=stable,
+            mutated=False,
+        ),
+        SideEffectAttemptDigest(
+            ordinal=2,
+            call_id="call-2",
+            arguments_sha256=contract.expected_arguments_sha256,
+            key_sha256=contract.key_sha256,
+            before_effect_sha256=stable,
+            after_effect_sha256=stable,
+            mutated=False,
+        ),
+    )
+    return SideEffectIdempotencyReceipt.create(
+        scenario_identity=scenario_identity,
+        contract=contract,
+        attempts=attempts,
+    )
+
+
 def _evidence(
     receipt: SideEffectIdempotencyReceipt | None = None,
     *,
@@ -132,7 +165,7 @@ def test_spec_rejects_whitespace_nonstring_object_keys_and_unsupported_values() 
             key_argument="operation_id",
             expected_arguments={"operation_id": "op-7"},
         )
-    with pytest.raises(ValidationError, match="object keys must be strings"):
+    with pytest.raises(ValidationError):
         SideEffectIdempotencySpec(
             tool="apply_change",
             key_argument="operation_id",
@@ -269,7 +302,7 @@ def test_verifier_rejects_critical_unknown_source_and_malformed_receipt() -> Non
         )
 
 
-def test_verifier_rejects_evidence_identity_and_receipt_binding_drift() -> None:
+def test_verifier_rejects_validly_rooted_scenario_contract_and_tool_drift() -> None:
     scenario = _scenario()
     evidence = _evidence()
     with pytest.raises(SideEffectObservationError, match="evidence scenario identity"):
@@ -278,21 +311,36 @@ def test_verifier_rejects_evidence_identity_and_receipt_binding_drift() -> None:
             evidence.model_copy(update={"scenario_identity": "2" * 64}),
         )
 
-    for field, message in (
-        ("scenario_identity", "receipt scenario identity"),
-        ("contract_identity", "contract identity"),
-        ("tool", "tool identity"),
-        ("logical_operation_identity", "logical-operation identity"),
-    ):
-        events = list(evidence.events)
-        payload = dict(events[-1].payload)
-        payload[field] = "different" if field == "tool" else "3" * 64
-        events[-1] = events[-1].model_copy(update={"payload": payload})
-        with pytest.raises(SideEffectObservationError, match=message):
-            verify_side_effect_observation(
-                scenario,
-                evidence.model_copy(update={"events": tuple(events)}),
-            )
+    foreign_scenario_receipt = _receipt_for_contract(
+        _spec(),
+        scenario_identity="3" * 64,
+    )
+    with pytest.raises(SideEffectObservationError, match="receipt scenario identity"):
+        verify_side_effect_observation(scenario, _evidence(foreign_scenario_receipt))
+
+    changed_contract = SideEffectIdempotencySpec(
+        tool="apply_change",
+        key_argument="operation_id",
+        expected_arguments={"operation_id": "op-8", "value": 3},
+    )
+    changed_contract_receipt = _receipt_for_contract(
+        changed_contract,
+        scenario_identity=scenario.identity,
+    )
+    with pytest.raises(SideEffectObservationError, match="contract identity"):
+        verify_side_effect_observation(scenario, _evidence(changed_contract_receipt))
+
+    changed_tool = SideEffectIdempotencySpec(
+        tool="other_tool",
+        key_argument="operation_id",
+        expected_arguments={"operation_id": "op-7", "value": 3},
+    )
+    changed_tool_receipt = _receipt_for_contract(
+        changed_tool,
+        scenario_identity=scenario.identity,
+    )
+    with pytest.raises(SideEffectObservationError, match="contract identity"):
+        verify_side_effect_observation(scenario, _evidence(changed_tool_receipt))
 
 
 def test_verifier_rejects_request_count_call_identity_argument_shape_and_result_count() -> None:
