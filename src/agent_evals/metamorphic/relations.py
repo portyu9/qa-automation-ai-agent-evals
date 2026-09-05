@@ -190,9 +190,7 @@ def _grant_expansion_reasons(
 
     extra_tools = transformed.allowed_tools - baseline.allowed_tools
     if extra_tools:
-        reasons.append(
-            f"delegated tools broadened for {transition}: {sorted(extra_tools)!r}"
-        )
+        reasons.append(f"delegated tools broadened for {transition}: {sorted(extra_tools)!r}")
 
     retained_tools = transformed.allowed_tools & baseline.allowed_tools
     weakened_approval = (
