@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import copy
 import json
+import math
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import replace
 from typing import Any, cast
@@ -829,19 +830,50 @@ def _normalized_request_arguments(event: EvidenceEvent) -> dict[str, Any]:
             code="mcp_identity_agent_arguments_missing",
             reason="normalized identity-drift request lacks serialized arguments",
         )
+
+    def reject_constant(value: str) -> None:
+        raise ValueError(f"non-finite JSON constant: {value}")
+
+    def reject_duplicate_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+        result: dict[str, Any] = {}
+        for key, value in pairs:
+            if key in result:
+                raise ValueError(f"duplicate JSON object key: {key}")
+            result[key] = value
+        return result
+
     try:
-        parsed = json.loads(arguments)
-    except json.JSONDecodeError as exc:
+        parsed = json.loads(
+            arguments,
+            parse_constant=reject_constant,
+            object_pairs_hook=reject_duplicate_keys,
+        )
+    except (json.JSONDecodeError, ValueError) as exc:
         raise AdapterPreconditionError(
             code="mcp_identity_agent_arguments_invalid",
-            reason="normalized identity-drift request arguments are not valid JSON",
+            reason="normalized identity-drift request arguments are not strict finite JSON",
         ) from exc
     if not isinstance(parsed, dict) or any(not isinstance(key, str) for key in parsed):
         raise AdapterPreconditionError(
             code="mcp_identity_agent_arguments_invalid",
             reason="normalized identity-drift request arguments are not a string-keyed object",
         )
+    if _contains_non_finite_json(parsed):
+        raise AdapterPreconditionError(
+            code="mcp_identity_agent_arguments_invalid",
+            reason="normalized identity-drift request arguments contain non-finite numbers",
+        )
     return parsed
+
+
+def _contains_non_finite_json(value: object) -> bool:
+    if isinstance(value, float):
+        return not math.isfinite(value)
+    if isinstance(value, list):
+        return any(_contains_non_finite_json(item) for item in value)
+    if isinstance(value, dict):
+        return any(_contains_non_finite_json(item) for item in value.values())
+    return False
 
 
 def _result_is_error(result: object) -> bool:
