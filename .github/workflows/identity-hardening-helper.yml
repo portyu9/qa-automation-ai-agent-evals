@@ -1,0 +1,131 @@
+name: Identity hardening helper
+
+on:
+  push:
+    branches: [feat/mcp-tool-identity-drift]
+
+permissions:
+  contents: write
+
+jobs:
+  harden:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: feat/mcp-tool-identity-drift
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: '3.11'
+      - name: Patch strict normalized argument parsing
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('src/agent_evals/adapters/openai_mcp_tool_identity_drift.py')
+          text = path.read_text()
+          text = text.replace('import json\n', 'import json\nimport math\n', 1)
+          old = '''def _normalized_request_arguments(event: EvidenceEvent) -> dict[str, Any]:
+              arguments = event.payload.get("arguments")
+              if not isinstance(arguments, str) or not arguments:
+                  raise AdapterPreconditionError(
+                      code="mcp_identity_agent_arguments_missing",
+                      reason="normalized identity-drift request lacks serialized arguments",
+                  )
+              try:
+                  parsed = json.loads(arguments)
+              except json.JSONDecodeError as exc:
+                  raise AdapterPreconditionError(
+                      code="mcp_identity_agent_arguments_invalid",
+                      reason="normalized identity-drift request arguments are not valid JSON",
+                  ) from exc
+              if not isinstance(parsed, dict) or any(not isinstance(key, str) for key in parsed):
+                  raise AdapterPreconditionError(
+                      code="mcp_identity_agent_arguments_invalid",
+                      reason="normalized identity-drift request arguments are not a string-keyed object",
+                  )
+              return parsed
+          '''.replace('          ', '')
+          new = '''def _normalized_request_arguments(event: EvidenceEvent) -> dict[str, Any]:
+              arguments = event.payload.get("arguments")
+              if not isinstance(arguments, str) or not arguments:
+                  raise AdapterPreconditionError(
+                      code="mcp_identity_agent_arguments_missing",
+                      reason="normalized identity-drift request lacks serialized arguments",
+                  )
+
+              def reject_constant(value: str) -> None:
+                  raise ValueError(f"non-finite JSON constant: {value}")
+
+              def reject_duplicate_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+                  result: dict[str, Any] = {}
+                  for key, value in pairs:
+                      if key in result:
+                          raise ValueError(f"duplicate JSON object key: {key}")
+                      result[key] = value
+                  return result
+
+              try:
+                  parsed = json.loads(
+                      arguments,
+                      parse_constant=reject_constant,
+                      object_pairs_hook=reject_duplicate_keys,
+                  )
+              except (json.JSONDecodeError, ValueError) as exc:
+                  raise AdapterPreconditionError(
+                      code="mcp_identity_agent_arguments_invalid",
+                      reason=(
+                          "normalized identity-drift request arguments are not strict finite JSON"
+                      ),
+                  ) from exc
+              if not isinstance(parsed, dict) or any(not isinstance(key, str) for key in parsed):
+                  raise AdapterPreconditionError(
+                      code="mcp_identity_agent_arguments_invalid",
+                      reason="normalized identity-drift request arguments are not a string-keyed object",
+                  )
+              if _contains_non_finite_json(parsed):
+                  raise AdapterPreconditionError(
+                      code="mcp_identity_agent_arguments_invalid",
+                      reason="normalized identity-drift request arguments contain non-finite numbers",
+                  )
+              return parsed
+
+
+          def _contains_non_finite_json(value: object) -> bool:
+              if isinstance(value, float):
+                  return not math.isfinite(value)
+              if isinstance(value, list):
+                  return any(_contains_non_finite_json(item) for item in value)
+              if isinstance(value, dict):
+                  return any(_contains_non_finite_json(item) for item in value.values())
+              return False
+          '''.replace('          ', '')
+          if old not in text:
+              raise SystemExit('expected normalized argument parser block not found')
+          path.write_text(text.replace(old, new, 1))
+          PY
+      - name: Install pinned formatter
+        run: python -m pip install --disable-pip-version-check 'ruff==0.16.5'
+      - name: Format changed Python files
+        run: >-
+          ruff format
+          src/agent_evals/adapters/openai_mcp_tool_identity_drift.py
+          tests/unit/test_mcp_agent_identity_bridge.py
+          tests/unit/test_mcp_agent_identity_bridge_boundaries.py
+          tests/integration/test_openai_mcp_tool_identity_drift_adapter.py
+      - name: Commit hardened implementation
+        run: |
+          if git diff --quiet; then
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src/agent_evals/adapters/openai_mcp_tool_identity_drift.py \
+            tests/unit/test_mcp_agent_identity_bridge.py \
+            tests/unit/test_mcp_agent_identity_bridge_boundaries.py \
+            tests/integration/test_openai_mcp_tool_identity_drift_adapter.py
+          git commit -m 'test: harden MCP identity-drift trust boundaries'
+          git push origin HEAD:feat/mcp-tool-identity-drift
