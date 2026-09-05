@@ -50,7 +50,7 @@ Ownership is intentionally non-overlapping:
 
 The hidden removal control is filtered from the model-visible MCP tool set. If it leaks into agent-visible discovery, evaluation blocks.
 
-## Controlled v1 contract
+## Controlled fault contract
 
 The existing stale-cache fault payload remains authoritative:
 
@@ -60,7 +60,7 @@ The existing stale-cache fault payload remains authoritative:
 }
 ```
 
-`ttl_ms` may vary within the existing positive bounded contract. The target name remains `fault.tool_name`. The controlled callable schema remains `query: string`, and the one stale request is bound to:
+`fault.payload["ttl_ms"]` is the positive bounded **MCP server-advertised cache-hint value**. The cross-domain bridge copies that same value into `mcp_cache_hint_ttl_ms`; the different name is deliberate ownership notation, not a transformed duration. It does **not** assert that the Agents SDK honors, waits for, or automatically expires cache entries according to that duration. Host-cache behavior is evidenced separately by `cache_tools_list=True`, the observed cached post-removal discovery, and evaluator-owned `invalidate_tools_cache()`. The target name remains `fault.tool_name`. The controlled callable schema remains `query: string`, and the one stale request is bound to:
 
 ```json
 {"query":"stale"}
@@ -103,11 +103,11 @@ A protocol/model rejection mismatch, missing call identity, ambiguous output sha
 
 `MCPAgentToolStaleCacheReceipt` binds:
 
-- receipt schema/version;
+- exact bridge schema `agent-evals/mcp-agent-tool-stale-cache-receipt/v2`;
 - exact scenario identity;
 - a freshly revalidated nested stale-cache `MCPFaultReceipt`;
 - exact target tool name;
-- positive bounded TTL;
+- positive bounded MCP cache-hint value as `mcp_cache_hint_ttl_ms`;
 - stale OpenAI call ID;
 - canonical stale-argument digest;
 - exact live protocol rejection digest;
@@ -119,7 +119,7 @@ A protocol/model rejection mismatch, missing call identity, ambiguous output sha
 
 Raw rejection text and raw call arguments are not duplicated in the durable bridge receipt where digests suffice.
 
-The nested `MCPFaultReceipt` keeps the existing standalone protocol meaning: target initially present, target still present in cached discovery after live removal, forced/fresh discovery proves target absent, and the configured TTL is bound. The bridge receipt adds the cross-domain facts that standalone protocol evidence cannot establish.
+The nested `MCPFaultReceipt` keeps the existing standalone protocol meaning: target initially present, target still present in cached discovery after live removal, forced/fresh discovery proves target absent, and the server-advertised MCP cache-hint TTL is bound as protocol material. The bridge receipt adds cross-domain facts that standalone protocol evidence cannot establish; it does not upgrade that hint into evidence of host-side elapsed-time expiry.
 
 ## Normalized evidence closure
 
@@ -160,7 +160,7 @@ Evaluator/provenance uncertainty becomes `EVALUATION_ERROR / BLOCKED`. Provider/
 
 The adapter blocks for conditions including:
 
-- wrong fault kind or malformed TTL;
+- wrong fault kind or malformed MCP cache-hint TTL;
 - wrong negotiated MCP revision;
 - preconfigured MCP servers or prefixed MCP naming;
 - local target/control collisions;
@@ -196,7 +196,7 @@ The pinned deterministic SDK integration proves:
 - ordinary deterministic state/policy can still decide `PASS`;
 - historical replay reproduces the same evidence root/verdict without rerunning MCP/OpenAI.
 
-Negative deterministic coverage includes no target call and attempted reuse of the removed target after refreshed absence. Provider-neutral tests additionally cover discovery mismatch, refreshed-target leakage, changed arguments, rejection mismatch, TTL/chronology/root tampering, scenario mismatch, replay argument/result tampering, and delivery moved before its stale result.
+Negative deterministic coverage includes no target call and attempted reuse of the removed target after refreshed absence. Provider-neutral tests additionally cover discovery mismatch, refreshed-target leakage, changed arguments, rejection mismatch, MCP cache-hint TTL/chronology/root tampering, scenario mismatch, replay argument/result tampering, and delivery moved before its stale result.
 
 ## Non-claims
 
@@ -205,7 +205,7 @@ This contract does **not** establish:
 - model-initiated MCP refresh;
 - automatic `notifications/tools/list_changed` handling;
 - generic cache invalidation policy or cache-coherence correctness;
-- arbitrary TTL races, shared/distributed caches, or cross-process cache propagation;
+- automatic Agents SDK expiry from the MCP cache hint, arbitrary TTL races, shared/distributed caches, or cross-process cache propagation;
 - automatic behavioral recovery after tool retirement;
 - generic deprecation/retirement migration;
 - schema or identity migration beyond their separate contracts;

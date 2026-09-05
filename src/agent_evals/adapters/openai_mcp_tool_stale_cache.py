@@ -158,7 +158,7 @@ class _MCPToolStaleCacheRecorder:
         self._refreshed_list_ordinal: int | None = None
 
     @property
-    def ttl_ms(self) -> int:
+    def mcp_cache_hint_ttl_ms(self) -> int:
         payload = self._fault.payload
         if not isinstance(payload, dict):
             raise AdapterPreconditionError(
@@ -169,7 +169,7 @@ class _MCPToolStaleCacheRecorder:
         if isinstance(ttl_ms, bool) or not isinstance(ttl_ms, int) or ttl_ms <= 0:
             raise AdapterPreconditionError(
                 code="mcp_stale_cache_fault_payload_invalid",
-                reason="stale-cache fault TTL is not a positive integer",
+                reason="stale-cache MCP cache-hint TTL is not a positive integer",
             )
         return ttl_ms
 
@@ -391,7 +391,7 @@ class _MCPToolStaleCacheRecorder:
         try:
             return create_stale_cache_protocol_receipt(
                 fault=self._fault,
-                ttl_ms=self.ttl_ms,
+                ttl_ms=self.mcp_cache_hint_ttl_ms,
                 initial_tool_names=self.initial_protocol_names,
                 cached_tool_names=self.cached_protocol_names,
                 refreshed_tool_names=self.refreshed_protocol_names,
@@ -494,7 +494,7 @@ def _attach_verified_stale_cache_bridge(
             protocol_receipt=protocol_receipt,
             tool_name=fault.tool_name,
             stale_call_id=call_id,
-            ttl_ms=recorder.ttl_ms,
+            mcp_cache_hint_ttl_ms=recorder.mcp_cache_hint_ttl_ms,
             stale_arguments=recorder.stale_arguments,
             stale_protocol_text=recorder.stale_protocol_text,
             agent_error_output=recorder.model_error_output,

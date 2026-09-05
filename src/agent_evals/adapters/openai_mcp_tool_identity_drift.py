@@ -174,7 +174,7 @@ class _MCPToolIdentityDriftRecorder:
         self._recovery_call_ordinal: int | None = None
 
     @property
-    def ttl_ms(self) -> int:
+    def mcp_cache_hint_ttl_ms(self) -> int:
         payload = self._fault.payload
         if not isinstance(payload, dict):
             raise AdapterPreconditionError(
@@ -185,7 +185,7 @@ class _MCPToolIdentityDriftRecorder:
         if isinstance(ttl_ms, bool) or not isinstance(ttl_ms, int) or ttl_ms <= 0:
             raise AdapterPreconditionError(
                 code="mcp_identity_fault_payload_invalid",
-                reason="identity-drift fault TTL is not a positive integer",
+                reason="identity-drift MCP cache-hint TTL is not a positive integer",
             )
         return ttl_ms
 
@@ -437,7 +437,7 @@ class _MCPToolIdentityDriftRecorder:
         try:
             return create_identity_drift_protocol_receipt(
                 fault=self._fault,
-                ttl_ms=self.ttl_ms,
+                ttl_ms=self.mcp_cache_hint_ttl_ms,
                 original_tool_name=self._fault.tool_name,
                 replacement_tool_name=self._replacement_tool_name,
                 stale_protocol_text=self.stale_protocol_text,
@@ -573,7 +573,7 @@ def _attach_verified_identity_bridge(
             replacement_tool_name=replacement_tool_name,
             stale_call_id=call_ids[0],
             recovery_call_id=call_ids[1],
-            ttl_ms=recorder.ttl_ms,
+            mcp_cache_hint_ttl_ms=recorder.mcp_cache_hint_ttl_ms,
             stale_arguments=recorder.stale_arguments,
             recovery_arguments=recorder.recovery_arguments,
             stale_protocol_text=recorder.stale_protocol_text,

@@ -216,6 +216,9 @@ async def test_openai_agent_adapts_to_refreshed_mcp_tool_identity_and_replay() -
     assert delivery.payload["replacement_tool_name"] == _NEW
     assert delivery.payload["stale_call_id"] == "call_identity_stale"
     assert delivery.payload["recovery_call_id"] == "call_identity_recovery"
+    assert delivery.payload["mcp_cache_hint_ttl_ms"] == _TTL_MS
+    assert "ttl_ms" not in delivery.payload
+    assert fault().payload["ttl_ms"] == _TTL_MS
     assert delivery.payload["protocol_receipt"]["kind"] == MCPFaultKind.TOOL_IDENTITY_DRIFT.value
     assert delivery.payload["protocol_receipt"]["protocol_version"] == "2026-07-28"
     assert [

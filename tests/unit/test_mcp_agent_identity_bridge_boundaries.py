@@ -53,7 +53,7 @@ def _create_bridge(**overrides: Any) -> MCPAgentToolIdentityDriftReceipt:
         "replacement_tool_name": _NEW,
         "stale_call_id": "call-old",
         "recovery_call_id": "call-new",
-        "ttl_ms": 60_000,
+        "mcp_cache_hint_ttl_ms": 60_000,
         "stale_arguments": {"query": "stale"},
         "recovery_arguments": {"query": "fresh"},
         "stale_protocol_text": _STALE_TEXT,

@@ -34,7 +34,7 @@ The adapter accepts only `MCPFaultKind.TOOL_IDENTITY_DRIFT` with the existing co
 }
 ```
 
-`fault.tool_name` is the exact original identity. The replacement name must be a distinct nonblank string already bound by `fault.identity`.
+`fault.payload["ttl_ms"]` is the MCP server-advertised cache-hint value. The cross-domain receipt binds the same value as `mcp_cache_hint_ttl_ms`; this does not assert host-side TTL expiry. Host caching is evidenced independently by `cache_tools_list=True`, cached post-rename discovery, and evaluator-owned `invalidate_tools_cache()`. `fault.tool_name` is the exact original identity. The replacement name must be a distinct nonblank string already bound by `fault.identity`.
 
 The v1 fixture intentionally keeps the callable argument shape stable (`query: string`) so the assurance isolates **identity adaptation** rather than mixing rename and schema migration.
 
@@ -88,7 +88,7 @@ It binds:
 
 - `TOOL_IDENTITY_DRIFT` fault identity;
 - MCP protocol revision `2026-07-28`;
-- configured TTL;
+- MCP server-advertised cache-hint TTL from `fault.payload["ttl_ms"]`;
 - exact original and replacement identities;
 - stale unknown-tool rejection digest;
 - deterministic replacement-result digest;
@@ -103,8 +103,10 @@ The protocol receipt remains protocol evidence. It does not itself establish age
 
 The receipt includes or derives bindings for:
 
+- exact bridge schema `agent-evals/mcp-agent-tool-identity-drift-receipt/v3`;
 - scenario identity;
 - revalidated protocol receipt and protocol-receipt root;
+- the MCP cache-hint value as `mcp_cache_hint_ttl_ms`;
 - exact original and replacement tool names;
 - domain-separated original/replacement identity digests;
 - stale and recovery OpenAI call IDs;
@@ -121,7 +123,7 @@ Raw rejection text and deterministic recovery text are not duplicated into durab
 
 Evaluator/provenance uncertainty becomes `EVALUATION_ERROR / BLOCKED`. Examples include:
 
-- wrong fault kind, malformed TTL, or malformed/unbound replacement identity;
+- wrong fault kind, malformed MCP cache-hint TTL, or malformed/unbound replacement identity;
 - protocol revision drift;
 - preconfigured MCP servers, prefixed MCP naming, unresolved/non-public model boundary, or local name collisions;
 - hidden evaluator control-tool exposure;
@@ -177,6 +179,7 @@ This assurance does **not** establish:
 
 - model-initiated MCP refresh;
 - automatic `notifications/tools/list_changed` handling;
+- automatic Agents SDK expiry according to the MCP cache-hint TTL;
 - arbitrary rename, alias, fallback, or multi-tool migration graphs;
 - simultaneous schema + identity migration beyond the isolated v1 contract;
 - semantic equivalence of the old and replacement tools outside the controlled harness relation;
