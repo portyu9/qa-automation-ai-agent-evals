@@ -173,10 +173,13 @@ Before subject grading, the evaluator dispatches each known protocol-delivery so
 | `bridge:mcp-agent:tool-metadata` | `MCPAgentToolMetadataReceipt` | exact discovery-description/model-visible-definition binding, target schema-digest equality, and pre-behavior delivery chronology |
 | `bridge:mcp-agent:tool-result` | `MCPAgentToolResultReceipt` | exact result-bridge identity and model-visible output binding |
 | `bridge:mcp-agent:tool-error-recovery` | `MCPAgentToolErrorRecoveryReceipt` | exact error/retry identities, causal chronology, argument and recovery bindings |
+| `bridge:mcp-agent:tool-stale-cache` | `MCPAgentToolStaleCacheReceipt` | exact stale target request/result identity, strict bound arguments, protocol/model rejection digest equality, target-present→target-absent model relation, and request < result < delivery chronology |
 | `bridge:mcp-agent:tool-schema-drift` | `MCPAgentToolSchemaDriftReceipt` | exact schema/argument/observation digests, strict protocol chronology, and host-refreshed adaptation binding |
 | `bridge:mcp-agent:tool-identity-drift` | `MCPAgentToolIdentityDriftReceipt` | exact original→replacement identity binding, model-visible identity-set digests, strict call/result and protocol chronology, argument/rejection/recovery bindings |
 
 The metadata replay verifier does not recreate MCP discovery or a model request. It rechecks the typed receipt's exact `TOOL_METADATA_POISON` kind, protocol revision and `tools/list:<tool>:description` observation point, description digest relation, tool identity, schema-digest relation, scenario identity, semantic root, and chronology. Leading pre-model `ATTACK_DELIVERY` is permitted, but metadata `PROTOCOL_DELIVERY` appearing after normalized model/agent behavior fails closed.
+
+The stale-cache replay verifier does not reconnect to MCP or recreate removal/cache invalidation. It revalidates the nested stale-cache protocol receipt, scenario/tool/TTL binding, target-present and target-absent model digests, exact stale call ID and argument digest, exact protocol/model rejection digest, strict six-step protocol chronology, and the persisted normalized request < result < delivery relation. See [MCP Stale-Cache Tool-Removal Assurance](MCP_STALE_CACHE.md).
 
 The schema-drift replay verifier does not recreate a refresh. It checks that the historical receipt still proves the exact recorded relation: bound v1/cached/v2 schema digests, stale/recovery argument digests, matching protocol/model-visible observations, distinct call identities, strict `initial-list < swap < stale-call < cache-invalidation < refreshed-list < recovery-call` chronology, and a valid domain-separated root.
 
@@ -205,7 +208,7 @@ Replay does **not** answer:
 - would the same two callbacks or effect-reader snapshots produce the same side-effect relation now?;
 - would an evaluator-owned or external retrieval system produce the same ranking/context now?;
 - would an MCP server still expose the same result, error, schema, tool identity, cache state, or authorization behavior now?;
-- would a host perform the same schema- or identity-drift cache invalidation now?
+- would a host perform the same stale-cache, schema-drift, or identity-drift invalidation now?
 
 Those questions require fresh execution, fresh environment observation, or authenticated provenance—not replay.
 
