@@ -44,10 +44,14 @@ class OpenAIAgentsMCPToolIdentityDriftAdapter:
         tracing_disabled: bool = True,
     ) -> None:
         if fault.kind is not MCPFaultKind.TOOL_IDENTITY_DRIFT:
-            raise ValueError("OpenAI MCP identity-drift bridge requires a TOOL_IDENTITY_DRIFT fault")
+            raise ValueError(
+                "OpenAI MCP identity-drift bridge requires a TOOL_IDENTITY_DRIFT fault"
+            )
         replacement = _replacement_tool_name(fault)
         if _CONTROL_TOOL in {fault.tool_name, replacement}:
-            raise ValueError("MCP identity-drift target must not collide with evaluator control tool")
+            raise ValueError(
+                "MCP identity-drift target must not collide with evaluator control tool"
+            )
         self._agent = agent
         self._stdio_params = _validated_stdio_params(stdio_params)
         self._fault = fault
@@ -399,7 +403,10 @@ class _MCPToolIdentityDriftRecorder:
                 code="mcp_identity_recovery_before_refresh",
                 reason="replacement call occurred before refreshed identity discovery",
             )
-        if self._post_invalidation_lists == 0 or self._refreshed_protocol_names != expected_replacement:
+        if (
+            self._post_invalidation_lists == 0
+            or self._refreshed_protocol_names != expected_replacement
+        ):
             raise AdapterPreconditionError(
                 code="mcp_identity_refreshed_discovery_mismatch",
                 reason="host refresh did not expose exactly the replacement MCP identity",
@@ -651,7 +658,9 @@ def _new_observed_model(delegate: object, recorder: _MCPToolIdentityDriftRecorde
     try:
         from agents.models.interface import Model
     except ImportError as exc:  # pragma: no cover
-        raise RuntimeError("install the 'openai' extra to use MCP identity-drift assurance") from exc
+        raise RuntimeError(
+            "install the 'openai' extra to use MCP identity-drift assurance"
+        ) from exc
 
     if not isinstance(delegate, Model):
         raise AdapterPreconditionError(

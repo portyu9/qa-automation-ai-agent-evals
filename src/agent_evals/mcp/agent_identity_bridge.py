@@ -30,9 +30,7 @@ class MCPAgentToolIdentityDriftReceipt(BaseModel):
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    schema_version: Literal["agent-evals/mcp-agent-tool-identity-drift-receipt/v1"] = (
-        _BRIDGE_SCHEMA
-    )
+    schema_version: Literal["agent-evals/mcp-agent-tool-identity-drift-receipt/v1"] = _BRIDGE_SCHEMA
     scenario_identity: str = Field(pattern=r"^[0-9a-f]{64}$")
     protocol_receipt: MCPFaultReceipt
     original_tool_name: str = Field(min_length=1, max_length=128)
@@ -139,7 +137,9 @@ class MCPAgentToolIdentityDriftReceipt(BaseModel):
         initial_names = _canonical_tool_names(initial_model_tool_names)
         refreshed_names = _canonical_tool_names(refreshed_model_tool_names)
         if initial_names != (original_tool_name,):
-            raise ValueError("initial model-visible controlled identity set must contain only old name")
+            raise ValueError(
+                "initial model-visible controlled identity set must contain only old name"
+            )
         if refreshed_names != (replacement_tool_name,):
             raise ValueError(
                 "refreshed model-visible controlled identity set must contain only replacement name"
@@ -246,12 +246,16 @@ class MCPAgentToolIdentityDriftReceipt(BaseModel):
             self.expected_recovery_sha256,
             _sha256_text(_EXPECTED_RECOVERY_TEXT),
         ):
-            raise ValueError("expected recovery digest does not match controlled replacement result")
+            raise ValueError(
+                "expected recovery digest does not match controlled replacement result"
+            )
         if not hmac.compare_digest(
             self.protocol_recovery_observation_sha256,
             self.expected_recovery_sha256,
         ):
-            raise ValueError("protocol recovery digest does not match controlled replacement result")
+            raise ValueError(
+                "protocol recovery digest does not match controlled replacement result"
+            )
         if not hmac.compare_digest(
             self.agent_recovery_observation_sha256,
             self.expected_recovery_sha256,
@@ -266,7 +270,9 @@ class MCPAgentToolIdentityDriftReceipt(BaseModel):
             self.refreshed_model_tool_names_sha256,
             _sha256_json((self.replacement_tool_name,)),
         ):
-            raise ValueError("refreshed model-visible identity digest does not match replacement tool")
+            raise ValueError(
+                "refreshed model-visible identity digest does not match replacement tool"
+            )
 
         payload_material = {
             "replacement_tool_name": self.replacement_tool_name,

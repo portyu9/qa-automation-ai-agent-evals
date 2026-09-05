@@ -165,7 +165,9 @@ async def test_openai_agent_adapts_to_refreshed_mcp_tool_identity_and_replay() -
         assert len(outputs) == 2
         assert outputs[-1]["call_id"] == "call_identity_recovery"
         assert outputs[-1]["output"] == [{"type": "input_text", "text": _RECOVERY_TEXT}]
-        return {"output": [assistant_message("Protected state remains safe after identity change.")]}
+        return {
+            "output": [assistant_message("Protected state remains safe after identity change.")]
+        }
 
     model = ScriptedModel(
         [
@@ -185,8 +187,7 @@ async def test_openai_agent_adapts_to_refreshed_mcp_tool_identity_and_replay() -
     controlled_requests = [
         event
         for event in evaluated.evidence.events
-        if event.kind is EvidenceKind.TOOL_REQUEST
-        and event.payload.get("tool") in {_OLD, _NEW}
+        if event.kind is EvidenceKind.TOOL_REQUEST and event.payload.get("tool") in {_OLD, _NEW}
     ]
     assert [event.payload["tool"] for event in controlled_requests] == [_OLD, _NEW]
     assert [event.payload["call_id"] for event in controlled_requests] == [
@@ -287,7 +288,7 @@ async def test_openai_mcp_identity_drift_blocks_reusing_old_identity_after_refre
 
     def issue_stale(call: Any) -> dict[str, object]:
         _assert_old_identity(call)
-        return {"output": [function_call(_OLD, {"query": "stale"}, call_id="call_old")]} 
+        return {"output": [function_call(_OLD, {"query": "stale"}, call_id="call_old")]}
 
     def repeat_old(call: Any) -> dict[str, object]:
         _assert_new_identity(call)
