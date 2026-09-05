@@ -1,0 +1,165 @@
+name: Migrate MCP drift chronology tests
+
+on:
+  push:
+    branches:
+      - fix/mcp-post-mutation-stale-discovery
+
+permissions:
+  contents: write
+
+jobs:
+  migrate:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: fix/mcp-post-mutation-stale-discovery
+          fetch-depth: 0
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: '3.11'
+          cache: pip
+      - name: Install verification dependencies
+        run: python -m pip install --disable-pip-version-check -e '.[dev,openai,mcp]'
+      - name: Migrate seven-leg chronology contract
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+
+          targets = [
+              Path('tests/unit/test_mcp_agent_identity_bridge.py'),
+              Path('tests/unit/test_mcp_agent_identity_bridge_boundaries.py'),
+              Path('tests/unit/test_mcp_agent_schema_bridge.py'),
+              Path('tests/unit/test_mcp_protocol_delivery_schema_drift.py'),
+              Path('tests/integration/test_openai_mcp_tool_schema_drift_adapter.py'),
+              Path('tests/integration/test_openai_mcp_tool_identity_drift_adapter.py'),
+          ]
+
+          chronology = re.compile(
+              r'(?m)^(?P<i>[ \t]*)initial_list_ordinal=0,\n'
+              r'(?P=i)(?P<m>schema_swap_ordinal|identity_swap_ordinal)=1,\n'
+              r'(?P=i)stale_call_ordinal=2,\n'
+              r'(?P=i)cache_invalidation_ordinal=3,\n'
+              r'(?P=i)refreshed_list_ordinal=4,\n'
+              r'(?P=i)recovery_call_ordinal=5,'
+          )
+
+          assertion = re.compile(
+              r'(?m)^(?P<i>[ \t]*)delivery\.payload\["initial_list_ordinal"\],\n'
+              r'(?P=i)delivery\.payload\["(?P<m>schema_swap_ordinal|identity_swap_ordinal)"\],\n'
+              r'(?P=i)delivery\.payload\["stale_call_ordinal"\],\n'
+              r'(?P=i)delivery\.payload\["cache_invalidation_ordinal"\],\n'
+              r'(?P=i)delivery\.payload\["refreshed_list_ordinal"\],\n'
+              r'(?P=i)delivery\.payload\["recovery_call_ordinal"\],\n'
+              r'(?P<close>[ \t]*)\] == \[0, 1, 2, 3, 4, 5\]'
+          )
+
+          total_chronology = 0
+          total_assertions = 0
+          for path in targets:
+              text = path.read_text()
+
+              def replace_chronology(match: re.Match[str]) -> str:
+                  indent = match.group('i')
+                  mutation = match.group('m')
+                  return (
+                      f'{indent}initial_list_ordinal=0,\n'
+                      f'{indent}{mutation}=1,\n'
+                      f'{indent}cached_list_ordinal=2,\n'
+                      f'{indent}stale_call_ordinal=3,\n'
+                      f'{indent}cache_invalidation_ordinal=4,\n'
+                      f'{indent}refreshed_list_ordinal=5,\n'
+                      f'{indent}recovery_call_ordinal=6,'
+                  )
+
+              text, count = chronology.subn(replace_chronology, text)
+              total_chronology += count
+
+              def replace_assertion(match: re.Match[str]) -> str:
+                  indent = match.group('i')
+                  mutation = match.group('m')
+                  close = match.group('close')
+                  return (
+                      f'{indent}delivery.payload["initial_list_ordinal"],\n'
+                      f'{indent}delivery.payload["{mutation}"],\n'
+                      f'{indent}delivery.payload["cached_list_ordinal"],\n'
+                      f'{indent}delivery.payload["stale_call_ordinal"],\n'
+                      f'{indent}delivery.payload["cache_invalidation_ordinal"],\n'
+                      f'{indent}delivery.payload["refreshed_list_ordinal"],\n'
+                      f'{indent}delivery.payload["recovery_call_ordinal"],\n'
+                      f'{close}] == [0, 1, 2, 3, 4, 5, 6]'
+                  )
+
+              text, count = assertion.subn(replace_assertion, text)
+              total_assertions += count
+              text = text.replace(
+                  'agent-evals/mcp-agent-tool-schema-drift-receipt/v1',
+                  'agent-evals/mcp-agent-tool-schema-drift-receipt/v2',
+              ).replace(
+                  'agent-evals/mcp-agent-tool-identity-drift-receipt/v1',
+                  'agent-evals/mcp-agent-tool-identity-drift-receipt/v2',
+              )
+              path.write_text(text)
+
+          if total_chronology < 12:
+              raise SystemExit(f'expected at least 12 chronology migrations, got {total_chronology}')
+          if total_assertions != 2:
+              raise SystemExit(f'expected exactly 2 integration assertion migrations, got {total_assertions}')
+
+          identity = Path('tests/unit/test_mcp_agent_identity_bridge_boundaries.py')
+          text = identity.read_text()
+          marker = 'def test_protocol_receipt_rejects_cached_discovery_not_after_identity_swap() -> None:'
+          if marker not in text:
+              text += '''\n\n@pytest.mark.parametrize("cached_list_ordinal", [0, 1])\ndef test_protocol_receipt_rejects_cached_discovery_not_after_identity_swap(\n    cached_list_ordinal: int,\n) -> None:\n    with pytest.raises(ValueError, match="chronology"):\n        create_identity_drift_protocol_receipt(\n            fault=_fault(),\n            ttl_ms=60_000,\n            original_tool_name=_OLD,\n            replacement_tool_name=_NEW,\n            stale_protocol_text=_STALE_TEXT,\n            protocol_recovery_text=_RECOVERY_TEXT,\n            initial_list_ordinal=0,\n            identity_swap_ordinal=1,\n            cached_list_ordinal=cached_list_ordinal,\n            stale_call_ordinal=3,\n            cache_invalidation_ordinal=4,\n            refreshed_list_ordinal=5,\n            recovery_call_ordinal=6,\n        )\n'''
+          identity.write_text(text)
+
+          schema = Path('tests/unit/test_mcp_agent_schema_bridge.py')
+          text = schema.read_text()
+          marker = 'def test_schema_drift_protocol_receipt_rejects_cached_discovery_not_after_schema_swap('
+          if marker not in text:
+              text += '''\n\n@pytest.mark.parametrize("cached_list_ordinal", [0, 1])\ndef test_schema_drift_protocol_receipt_rejects_cached_discovery_not_after_schema_swap(\n    cached_list_ordinal: int,\n) -> None:\n    with pytest.raises(ValueError, match="chronology"):\n        create_schema_drift_protocol_receipt(\n            fault=fault(),\n            ttl_ms=_TTL_MS,\n            initial_schema=initial_schema(),\n            cached_schema=initial_schema(),\n            refreshed_schema=replacement_schema(),\n            stale_protocol_text=_STALE_TEXT,\n            protocol_recovery_text=_RECOVERY_TEXT,\n            initial_list_ordinal=0,\n            schema_swap_ordinal=1,\n            cached_list_ordinal=cached_list_ordinal,\n            stale_call_ordinal=3,\n            cache_invalidation_ordinal=4,\n            refreshed_list_ordinal=5,\n            recovery_call_ordinal=6,\n        )\n'''
+          schema.write_text(text)
+
+          for path in targets:
+              text = path.read_text()
+              if 'schema_swap_ordinal=1,\n' in text and 'stale_call_ordinal=2,' in text:
+                  raise SystemExit(f'old schema chronology remains in {path}')
+              if 'identity_swap_ordinal=1,\n' in text and 'stale_call_ordinal=2,' in text:
+                  raise SystemExit(f'old identity chronology remains in {path}')
+          PY
+          ruff format tests/unit/test_mcp_agent_identity_bridge.py \
+            tests/unit/test_mcp_agent_identity_bridge_boundaries.py \
+            tests/unit/test_mcp_agent_schema_bridge.py \
+            tests/unit/test_mcp_protocol_delivery_schema_drift.py \
+            tests/integration/test_openai_mcp_tool_schema_drift_adapter.py \
+            tests/integration/test_openai_mcp_tool_identity_drift_adapter.py
+      - name: Verify migrated contracts
+        env:
+          OPENAI_AGENTS_DISABLE_TRACING: '1'
+          OPENAI_AGENTS_TRACE_INCLUDE_SENSITIVE_DATA: '0'
+        run: |
+          ruff check tests/unit/test_mcp_agent_identity_bridge.py \
+            tests/unit/test_mcp_agent_identity_bridge_boundaries.py \
+            tests/unit/test_mcp_agent_schema_bridge.py \
+            tests/unit/test_mcp_protocol_delivery_schema_drift.py \
+            tests/integration/test_openai_mcp_tool_schema_drift_adapter.py \
+            tests/integration/test_openai_mcp_tool_identity_drift_adapter.py
+          pytest \
+            tests/unit/test_mcp_agent_identity_bridge.py \
+            tests/unit/test_mcp_agent_identity_bridge_boundaries.py \
+            tests/unit/test_mcp_agent_schema_bridge.py \
+            tests/unit/test_mcp_protocol_delivery_schema_drift.py
+          pytest -m openai \
+            tests/integration/test_openai_mcp_tool_schema_drift_adapter.py \
+            tests/integration/test_openai_mcp_tool_identity_drift_adapter.py
+      - name: Commit migration and remove helper
+        run: |
+          rm .github/workflows/migrate-v2-chronology.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add tests .github/workflows/migrate-v2-chronology.yml
+          git commit -m 'test: enforce post-mutation cached discovery chronology'
+          git push origin HEAD:fix/mcp-post-mutation-stale-discovery
