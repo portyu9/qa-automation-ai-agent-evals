@@ -1,0 +1,174 @@
+name: Apply post-mutation stale-discovery fix
+
+on:
+  push:
+    branches: [fix/mcp-post-mutation-stale-discovery]
+    paths: [.github/workflows/apply-post-mutation-fix.yml]
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: fix/mcp-post-mutation-stale-discovery
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: "3.11"
+      - run: python -m pip install --disable-pip-version-check 'ruff==0.16.5'
+      - name: Apply assertion-backed source patch
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace(path: str, old: str, new: str, expected: int = 1) -> None:
+              p = Path(path)
+              text = p.read_text()
+              actual = text.count(old)
+              if actual != expected:
+                  raise SystemExit(f'{path}: expected {expected} occurrences, found {actual}: {old!r}')
+              p.write_text(text.replace(old, new))
+
+          schema_bridge = 'src/agent_evals/mcp/agent_schema_bridge.py'
+          identity_bridge = 'src/agent_evals/mcp/agent_identity_bridge.py'
+          schema_adapter = 'src/agent_evals/adapters/openai_mcp_tool_schema_drift.py'
+          identity_adapter = 'src/agent_evals/adapters/openai_mcp_tool_identity_drift.py'
+
+          replace(schema_bridge,
+                  'agent-evals/mcp-agent-tool-schema-drift-receipt/v1',
+                  'agent-evals/mcp-agent-tool-schema-drift-receipt/v2', 3)
+          replace(schema_bridge,
+                  '    schema_swap_ordinal: StrictInt = Field(ge=0)\n    stale_call_ordinal:',
+                  '    schema_swap_ordinal: StrictInt = Field(ge=0)\n    cached_list_ordinal: StrictInt = Field(ge=0)\n    stale_call_ordinal:')
+          replace(schema_bridge,
+                  '        schema_swap_ordinal: int,\n        stale_call_ordinal: int,',
+                  '        schema_swap_ordinal: int,\n        cached_list_ordinal: int,\n        stale_call_ordinal: int,', 2)
+          replace(schema_bridge,
+                  '            schema_swap_ordinal,\n            stale_call_ordinal,',
+                  '            schema_swap_ordinal,\n            cached_list_ordinal,\n            stale_call_ordinal,', 2)
+          replace(schema_bridge,
+                  '            self.schema_swap_ordinal,\n            self.stale_call_ordinal,',
+                  '            self.schema_swap_ordinal,\n            self.cached_list_ordinal,\n            self.stale_call_ordinal,')
+          replace(schema_bridge,
+                  '            "schema_swap_ordinal": schema_swap_ordinal,\n            "stale_call_ordinal": stale_call_ordinal,',
+                  '            "schema_swap_ordinal": schema_swap_ordinal,\n            "cached_list_ordinal": cached_list_ordinal,\n            "stale_call_ordinal": stale_call_ordinal,')
+          replace(schema_bridge,
+                  '        "cached-old:call-rejects-old:host-refresh-new:call-succeeds-new"',
+                  '        "swap-then-cached-old:call-rejects-old:host-refresh-new:call-succeeds-new"')
+          replace(schema_bridge,
+                  '    ordinals: tuple[int, int, int, int, int, int],',
+                  '    ordinals: tuple[int, int, int, int, int, int, int],')
+          replace(schema_bridge,
+                  '            "cache_invalidation_ordinal": ordinals[3],\n            "cached_schema_sha256": cached_schema_sha256,',
+                  '            "cache_invalidation_ordinal": ordinals[4],\n            "cached_list_ordinal": ordinals[2],\n            "cached_schema_sha256": cached_schema_sha256,')
+          replace(schema_bridge,
+                  '            "recovery_call_ordinal": ordinals[5],\n            "refreshed_list_ordinal": ordinals[4],',
+                  '            "recovery_call_ordinal": ordinals[6],\n            "refreshed_list_ordinal": ordinals[5],')
+          replace(schema_bridge,
+                  '            "stale_call_ordinal": ordinals[2],',
+                  '            "stale_call_ordinal": ordinals[3],')
+          replace(schema_bridge,
+                  'def _require_protocol_chronology(ordinals: tuple[int, int, int, int, int, int]) -> None:',
+                  'def _require_protocol_chronology(\n    ordinals: tuple[int, int, int, int, int, int, int],\n) -> None:')
+          replace(schema_bridge,
+                  '            "MCP schema-drift protocol chronology must be initial-list < swap < stale-call < "\n            "cache-invalidation < refreshed-list < recovery-call"',
+                  '            "MCP schema-drift protocol chronology must be initial-list < swap < cached-list < "\n            "stale-call < cache-invalidation < refreshed-list < recovery-call"')
+
+          replace(identity_bridge,
+                  'agent-evals/mcp-agent-tool-identity-drift-receipt/v1',
+                  'agent-evals/mcp-agent-tool-identity-drift-receipt/v2', 3)
+          replace(identity_bridge,
+                  '    identity_swap_ordinal: StrictInt = Field(ge=0)\n    stale_call_ordinal:',
+                  '    identity_swap_ordinal: StrictInt = Field(ge=0)\n    cached_list_ordinal: StrictInt = Field(ge=0)\n    stale_call_ordinal:')
+          replace(identity_bridge,
+                  '        identity_swap_ordinal: int,\n        stale_call_ordinal: int,',
+                  '        identity_swap_ordinal: int,\n        cached_list_ordinal: int,\n        stale_call_ordinal: int,', 2)
+          replace(identity_bridge,
+                  '            identity_swap_ordinal,\n            stale_call_ordinal,',
+                  '            identity_swap_ordinal,\n            cached_list_ordinal,\n            stale_call_ordinal,', 2)
+          replace(identity_bridge,
+                  '            self.identity_swap_ordinal,\n            self.stale_call_ordinal,',
+                  '            self.identity_swap_ordinal,\n            self.cached_list_ordinal,\n            self.stale_call_ordinal,')
+          replace(identity_bridge,
+                  '            "identity_swap_ordinal": identity_swap_ordinal,\n            "stale_call_ordinal": stale_call_ordinal,',
+                  '            "identity_swap_ordinal": identity_swap_ordinal,\n            "cached_list_ordinal": cached_list_ordinal,\n            "stale_call_ordinal": stale_call_ordinal,')
+          replace(identity_bridge,
+                  '        "cached-old:call-rejects-old:host-refresh-new:call-succeeds-new"',
+                  '        "swap-then-cached-old:call-rejects-old:host-refresh-new:call-succeeds-new"')
+          replace(identity_bridge,
+                  '    ordinals: tuple[int, int, int, int, int, int],',
+                  '    ordinals: tuple[int, int, int, int, int, int, int],')
+          replace(identity_bridge,
+                  '            "cache_invalidation_ordinal": ordinals[3],\n            "initial_list_ordinal": ordinals[0],',
+                  '            "cache_invalidation_ordinal": ordinals[4],\n            "cached_list_ordinal": ordinals[2],\n            "initial_list_ordinal": ordinals[0],')
+          replace(identity_bridge,
+                  '            "recovery_call_ordinal": ordinals[5],\n            "refreshed_list_ordinal": ordinals[4],',
+                  '            "recovery_call_ordinal": ordinals[6],\n            "refreshed_list_ordinal": ordinals[5],')
+          replace(identity_bridge,
+                  '            "stale_call_ordinal": ordinals[2],',
+                  '            "stale_call_ordinal": ordinals[3],')
+          replace(identity_bridge,
+                  'def _require_protocol_chronology(ordinals: tuple[int, int, int, int, int, int]) -> None:',
+                  'def _require_protocol_chronology(\n    ordinals: tuple[int, int, int, int, int, int, int],\n) -> None:')
+          replace(identity_bridge,
+                  '            "MCP identity-drift protocol chronology must be initial-list < swap < stale-call < "\n            "cache-invalidation < refreshed-list < recovery-call"',
+                  '            "MCP identity-drift protocol chronology must be initial-list < swap < cached-list < "\n            "stale-call < cache-invalidation < refreshed-list < recovery-call"')
+
+          replace(schema_adapter,
+                  '        self._schema_swap_ordinal: int | None = None\n        self._stale_call_ordinal:',
+                  '        self._schema_swap_ordinal: int | None = None\n        self._cached_list_ordinal: int | None = None\n        self._stale_call_ordinal:')
+          replace(schema_adapter,
+                  '    def stale_call_ordinal(self) -> int:\n        return self._require_ordinal(self._stale_call_ordinal, "stale call")',
+                  '    def cached_list_ordinal(self) -> int:\n        return self._require_ordinal(self._cached_list_ordinal, "post-swap cached discovery")\n\n    @property\n    def stale_call_ordinal(self) -> int:\n        return self._require_ordinal(self._stale_call_ordinal, "stale call")')
+          replace(schema_adapter,
+                  '''        if self._target_calls == 1:\n            cached_tools = await self._original_list_tools()\n            self._cached_schema = _exact_target_schema(cached_tools, self._fault.tool_name)\n\n            control_result = await _invoke_call_tool(\n                self._original_call_tool,\n                _CONTROL_TOOL,\n                {},\n                None,\n            )''',
+                  '''        if self._target_calls == 1:\n            control_result = await _invoke_call_tool(\n                self._original_call_tool,\n                _CONTROL_TOOL,\n                {},\n                None,\n            )''')
+          replace(schema_adapter,
+                  '''            if not self._control_failed:\n                self._schema_swap_ordinal = self._mark()\n\n            self._stale_arguments = copy.deepcopy(arguments)''',
+                  '''            if not self._control_failed:\n                self._schema_swap_ordinal = self._mark()\n                cached_tools = await self._original_list_tools()\n                self._cached_schema = _exact_target_schema(cached_tools, self._fault.tool_name)\n                self._cached_list_ordinal = self._mark()\n\n            self._stale_arguments = copy.deepcopy(arguments)''')
+          replace(schema_adapter,
+                  'reason="host cache did not preserve the initial target schema before replacement",',
+                  'reason="host cache did not preserve the initial target schema after live replacement",')
+          replace(schema_adapter,
+                  '                schema_swap_ordinal=self.schema_swap_ordinal,\n                stale_call_ordinal=',
+                  '                schema_swap_ordinal=self.schema_swap_ordinal,\n                cached_list_ordinal=self.cached_list_ordinal,\n                stale_call_ordinal=')
+          replace(schema_adapter,
+                  '            schema_swap_ordinal=recorder.schema_swap_ordinal,\n            stale_call_ordinal=',
+                  '            schema_swap_ordinal=recorder.schema_swap_ordinal,\n            cached_list_ordinal=recorder.cached_list_ordinal,\n            stale_call_ordinal=')
+
+          replace(identity_adapter,
+                  '        self._identity_swap_ordinal: int | None = None\n        self._stale_call_ordinal:',
+                  '        self._identity_swap_ordinal: int | None = None\n        self._cached_list_ordinal: int | None = None\n        self._stale_call_ordinal:')
+          replace(identity_adapter,
+                  '    def stale_call_ordinal(self) -> int:\n        return self._require_ordinal(self._stale_call_ordinal, "stale old-name call")',
+                  '    def cached_list_ordinal(self) -> int:\n        return self._require_ordinal(self._cached_list_ordinal, "post-swap cached discovery")\n\n    @property\n    def stale_call_ordinal(self) -> int:\n        return self._require_ordinal(self._stale_call_ordinal, "stale old-name call")')
+          replace(identity_adapter,
+                  '''            cached_tools = await self._original_list_tools()\n            self._cached_protocol_names = _controlled_names(\n                cached_tools,\n                original_tool_name=self._fault.tool_name,\n                replacement_tool_name=self._replacement_tool_name,\n            )\n\n            control_result = await _invoke_call_tool(''',
+                  '''            control_result = await _invoke_call_tool(''')
+          replace(identity_adapter,
+                  '''            if not self._control_failed:\n                self._identity_swap_ordinal = self._mark()\n\n            self._stale_arguments = copy.deepcopy(arguments)''',
+                  '''            if not self._control_failed:\n                self._identity_swap_ordinal = self._mark()\n                cached_tools = await self._original_list_tools()\n                self._cached_protocol_names = _controlled_names(\n                    cached_tools,\n                    original_tool_name=self._fault.tool_name,\n                    replacement_tool_name=self._replacement_tool_name,\n                )\n                self._cached_list_ordinal = self._mark()\n\n            self._stale_arguments = copy.deepcopy(arguments)''')
+          replace(identity_adapter,
+                  'reason="host cache did not preserve the original identity before live replacement",',
+                  'reason="host cache did not preserve the original identity after live replacement",')
+          replace(identity_adapter,
+                  '                identity_swap_ordinal=self.identity_swap_ordinal,\n                stale_call_ordinal=',
+                  '                identity_swap_ordinal=self.identity_swap_ordinal,\n                cached_list_ordinal=self.cached_list_ordinal,\n                stale_call_ordinal=')
+          replace(identity_adapter,
+                  '            identity_swap_ordinal=recorder.identity_swap_ordinal,\n            stale_call_ordinal=',
+                  '            identity_swap_ordinal=recorder.identity_swap_ordinal,\n            cached_list_ordinal=recorder.cached_list_ordinal,\n            stale_call_ordinal=')
+          PY
+          ruff format \
+            src/agent_evals/mcp/agent_schema_bridge.py \
+            src/agent_evals/mcp/agent_identity_bridge.py \
+            src/agent_evals/adapters/openai_mcp_tool_schema_drift.py \
+            src/agent_evals/adapters/openai_mcp_tool_identity_drift.py
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git rm .github/workflows/apply-post-mutation-fix.yml
+          git add src/agent_evals
+          git commit -m 'fix: prove post-mutation stale MCP discovery'
+          git push
