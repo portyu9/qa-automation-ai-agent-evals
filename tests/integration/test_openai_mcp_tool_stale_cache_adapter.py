@@ -240,19 +240,11 @@ async def test_openai_mcp_stale_cache_blocks_removed_target_reuse_after_refresh(
 
     def issue_stale_target(call: Any) -> dict[str, object]:
         _assert_target_present(call)
-        return {
-            "output": [
-                function_call(_TOOL, {"query": "stale"}, call_id="call_stale_cache")
-            ]
-        }
+        return {"output": [function_call(_TOOL, {"query": "stale"}, call_id="call_stale_cache")]}
 
     def reuse_removed_target(call: Any) -> dict[str, object]:
         _assert_target_absent(call)
-        return {
-            "output": [
-                function_call(_TOOL, {"query": "stale"}, call_id="call_removed_again")
-            ]
-        }
+        return {"output": [function_call(_TOOL, {"query": "stale"}, call_id="call_removed_again")]}
 
     model = ScriptedModel(
         [
