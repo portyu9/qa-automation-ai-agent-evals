@@ -89,7 +89,7 @@ def test_direct_reliability_construction_rejects_count_drift() -> None:
         k=2,
     )
 
-    with pytest.raises(ValueError, match="resolved_trials must equal passes \+ failures"):
+    with pytest.raises(ValueError, match=r"resolved_trials must equal passes \+ failures"):
         replace(report, failures=0)
 
 
