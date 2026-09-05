@@ -194,15 +194,9 @@ async def test_replay_rejects_semantic_evidence_after_deterministic_failure() ->
         scenario=scenario,
         trial_id="semantic-invalid-precedence",
     )
-    tampered = live.evidence.model_copy(
-        update={"final_state": {"unexpected": "state"}}
-    )
-    failing_scenario = scenario.model_copy(
-        update={"required_outcomes": {"required": "value"}}
-    )
-    rebound = tampered.model_copy(
-        update={"scenario_identity": failing_scenario.identity}
-    )
+    tampered = live.evidence.model_copy(update={"final_state": {"unexpected": "state"}})
+    failing_scenario = scenario.model_copy(update={"required_outcomes": {"required": "value"}})
+    rebound = tampered.model_copy(update={"scenario_identity": failing_scenario.identity})
 
     replayed = await TrialRunner().run(
         EvidenceReplayAdapter(rebound),
