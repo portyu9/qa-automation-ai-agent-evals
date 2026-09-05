@@ -103,9 +103,7 @@ def test_bridge_create_rejects_empty_expected_recovery() -> None:
         ("retry_arguments", {1: "7"}, "keys must be strings"),
     ],
 )
-def test_bridge_create_rejects_malformed_arguments(
-    field: str, value: object, message: str
-) -> None:
+def test_bridge_create_rejects_malformed_arguments(field: str, value: object, message: str) -> None:
     with pytest.raises(ValueError, match=message):
         _create_bridge(**{field: value})
 
