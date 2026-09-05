@@ -47,6 +47,13 @@ jobs:
               prefix, n = re.subn(r'(?<!["\'])\bttl_ms\b(?!["\'])', 'mcp_cache_hint_ttl_ms', prefix)
               if n < 8:
                   raise SystemExit(f'{path}: too few bridge TTL identifier migrations: {n}')
+              # Helper function parameter names remain protocol-domain ttl_ms. Only the value
+              # crossing from the agent bridge is renamed to make ownership explicit.
+              helper_kw = 'mcp_cache_hint_ttl_ms=mcp_cache_hint_ttl_ms'
+              helper_count = prefix.count(helper_kw)
+              if helper_count < 3:
+                  raise SystemExit(f'{path}: expected at least 3 protocol helper TTL calls, got {helper_count}')
+              prefix = prefix.replace(helper_kw, 'ttl_ms=mcp_cache_hint_ttl_ms')
               old_unsigned = '"ttl_ms": mcp_cache_hint_ttl_ms,'
               if prefix.count(old_unsigned) != 1:
                   raise SystemExit(f'{path}: expected exactly one bridge unsigned TTL field')
