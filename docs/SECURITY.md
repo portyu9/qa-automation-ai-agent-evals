@@ -37,9 +37,9 @@ Implemented controls include:
 - platform-stable deterministic retrieval ranking and exact `TOOL_REQUEST < RETRIEVAL_DELIVERY < TOOL_RESULT` closure;
 - official MCP `2026-07-28` protocol observations using pinned `mcp==2.1.1`;
 - six dedicated official-stdio/OpenAI bridges using a fresh `MCPServerStdio` subprocess per trial and pinned `openai-agents==0.22.0`;
-- exact call-ID and request/result chronology binding for result, retry, schema-drift, and identity-drift bridges;
-- hidden evaluator controls filtered from model-visible MCP tools for schema and identity mutation;
-- direct public model-boundary observation where metadata/schema/identity visibility is part of the assurance claim;
+- exact call-ID and request/result chronology binding for result, retry, stale-cache, schema-drift, and identity-drift bridges;
+- hidden evaluator controls filtered from model-visible MCP tools for stale-cache removal plus schema and identity mutation;
+- direct public model-boundary observation where metadata/stale-cache/schema/identity visibility or delivery is part of the assurance claim;
 - typed `PROTOCOL_DELIVERY` semantic revalidation before grading and on replay;
 - real loopback TCP resource-server authorization and separated OAuth AS/RS laboratories;
 - integrity-verified local evidence persistence with no-clobber publication and exact-identity replay;

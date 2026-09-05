@@ -190,7 +190,7 @@ tool_schema_drift
 tool_identity_drift
 ```
 
-All six fault kinds have explicit agent bridges. `tool_list_stale_cache` now proves only one exact host-refreshed removal-delivery relation; it does not imply generic cache coherence, model-owned refresh, or behavioral recovery. The metadata bridge proves exact model-visible exposure, not attention, interpretation, compliance, resistance, or safe behavior. The metadata bridge proves exact model-visible exposure, not attention, interpretation, compliance, resistance, or safe behavior.
+All six fault kinds have explicit agent bridges. `tool_list_stale_cache` now proves only one exact host-refreshed removal-delivery relation; it does not imply generic cache coherence, model-owned refresh, or behavioral recovery. The metadata bridge proves exact model-visible exposure, not attention, interpretation, compliance, resistance, or safe behavior.
 
 The schema- and identity-drift bridges are not blanket promotions of cache semantics. Their ownership is explicit: the harness owns the live mutation, the evaluator/host adapter owns cache invalidation, the official MCP session supplies the first fresh post-invalidation listing, the pinned Agents SDK converts that listing into model tool definitions, and the agent is credited only for changing its next target call after the replacement contract/identity becomes model-visible. Neither path claims model-initiated refresh or automatic `tools/list_changed` handling.
 

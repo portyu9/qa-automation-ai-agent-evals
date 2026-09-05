@@ -312,8 +312,8 @@ It establishes one exact host-refreshed identity-adaptation relation. It does no
 The implemented bridges do not claim:
 
 - model attention to, interpretation of, compliance with, or resistance to MCP metadata poison after verified exposure;
-- agent behavior for generic stale-cache behavior beyond the protocol-only `tool_list_stale_cache` laboratory;
-- arbitrary MCP result/error/schema/identity behavior outside the exact controlled contracts;
+- generic stale-cache/coherence behavior beyond the exact controlled host-refreshed `tool_list_stale_cache` removal-delivery contract;
+- arbitrary MCP result/error/stale-cache/schema/identity behavior outside the exact controlled contracts;
 - generic retry policy, exponential backoff, jitter, retry budgets, idempotency, or side-effect safety;
 - more than one ToolError retry;
 - model-initiated MCP refresh or automatic `tools/list_changed` handling;

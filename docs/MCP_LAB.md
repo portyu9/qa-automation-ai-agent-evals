@@ -19,7 +19,7 @@ Six separate deterministic integration paths consume selected fault contracts th
 - `TOOL_SCHEMA_DRIFT` — exact v1 model-visible schema, hidden live v2 replacement, real stale-call rejection, evaluator-owned cache invalidation, first fresh v2 discovery, and one corrected v2 behavioral call on the same session;
 - `TOOL_IDENTITY_DRIFT` — exact original model-visible identity, hidden live old→replacement registry mutation, real old-name rejection, evaluator-owned cache invalidation, first fresh replacement discovery, and one exact replacement-name behavioral call on the same session.
 
-Those dedicated bridges are described under [Relationship to agent adversarial testing](#relationship-to-agent-adversarial-testing), in [MCP Tool-Identity Drift Assurance](MCP_IDENTITY_DRIFT.md), and in [OpenAI Agents SDK Adapter](OPENAI_ADAPTER.md). They do not broaden the remaining fault families. The schema- and identity-drift bridges do not claim model-initiated refresh or automatic `tools/list_changed` handling.
+Those dedicated bridges are described under [Relationship to agent adversarial testing](#relationship-to-agent-adversarial-testing), in [MCP Stale-Cache Tool-Removal Assurance](MCP_STALE_CACHE.md), in [MCP Tool-Identity Drift Assurance](MCP_IDENTITY_DRIFT.md), and in [OpenAI Agents SDK Adapter](OPENAI_ADAPTER.md). They do not broaden one another or the standalone protocol receipts. The stale-cache, schema-drift, and identity-drift bridges do not claim model-initiated refresh or automatic `tools/list_changed` handling.
 
 Remote Streamable HTTP authorization and the separated OAuth flow remain independent evidence domains. See [MCP Remote Authorization](MCP_REMOTE_AUTH.md) and [MCP OAuth Flow Laboratory](MCP_OAUTH_FLOW.md).
 
@@ -384,14 +384,14 @@ initial-list < swap < stale-call < cache-invalidation < refreshed-list < recover
 
 The harness owns the rename and the host adapter owns invalidation. The model is credited only for choosing the replacement after it is actually visible. Missing recovery, stale-name reuse, an unbound identity, call-ID reuse, extra controlled attempts, recovery before refresh, ambiguous discovery/model exposure, wrong arguments/results, control-tool leakage, or receipt tampering fails closed. A removed old name emitted after refresh may also be rejected directly by the pinned SDK/MCP boundary and is preserved as `RUNTIME_ERROR / BLOCKED` rather than being repaired. See [MCP Tool-Identity Drift Assurance](MCP_IDENTITY_DRIFT.md).
 
-All five bridges establish delivery/recovery/adaptation preconditions only. They do not assert safe subject behavior; deterministic policy/outcome oracles still decide PASS/FAIL.
+All six bridges establish delivery/recovery/adaptation preconditions only. They do not assert safe subject behavior; deterministic policy/outcome oracles still decide PASS/FAIL.
 
 ## Explicit non-claims
 
-The six-fault protocol laboratory plus the five dedicated bridges do **not** establish:
+The six-fault protocol laboratory plus the six dedicated bridges do **not** establish:
 
 - model attention to, interpretation of, compliance with, or resistance to a verified `tool_metadata_poison` description;
-- agent behavior for generic stale-cache behavior beyond the protocol-only stale-cache laboratory;
+- generic stale-cache/coherence behavior beyond the exact controlled host-refreshed removal-delivery contract;
 - universal agent behavior for arbitrary MCP tool results, errors, schema changes, or identity migrations;
 - generic retry/backoff/idempotency correctness beyond the exact one-retry ToolError relation;
 - model-initiated MCP refresh or automatic `tools/list_changed` handling;
