@@ -196,7 +196,7 @@ class _MCPToolSchemaDriftRecorder:
         return self._recovery_text
 
     @property
-    def ttl_ms(self) -> int:
+    def mcp_cache_hint_ttl_ms(self) -> int:
         payload = self._fault.payload
         if not isinstance(payload, dict):
             raise AdapterPreconditionError(
@@ -207,7 +207,7 @@ class _MCPToolSchemaDriftRecorder:
         if isinstance(ttl_ms, bool) or not isinstance(ttl_ms, int) or ttl_ms <= 0:
             raise AdapterPreconditionError(
                 code="mcp_schema_fault_payload_invalid",
-                reason="schema-drift fault TTL is not a positive integer",
+                reason="schema-drift MCP cache-hint TTL is not a positive integer",
             )
         return ttl_ms
 
@@ -369,7 +369,7 @@ class _MCPToolSchemaDriftRecorder:
         try:
             return create_schema_drift_protocol_receipt(
                 fault=self._fault,
-                ttl_ms=self.ttl_ms,
+                ttl_ms=self.mcp_cache_hint_ttl_ms,
                 initial_schema=self.initial_schema,
                 cached_schema=self.cached_schema,
                 refreshed_schema=self.refreshed_schema,
@@ -483,7 +483,7 @@ def _attach_verified_schema_bridge(
             agent_tool_name=fault.tool_name,
             stale_call_id=call_ids[0],
             recovery_call_id=call_ids[1],
-            ttl_ms=recorder.ttl_ms,
+            mcp_cache_hint_ttl_ms=recorder.mcp_cache_hint_ttl_ms,
             initial_schema=recorder.initial_schema,
             cached_schema=recorder.cached_schema,
             refreshed_schema=recorder.refreshed_schema,

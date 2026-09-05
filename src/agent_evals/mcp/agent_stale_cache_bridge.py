@@ -14,10 +14,10 @@ from pydantic import BaseModel, ConfigDict, Field, StrictInt, field_validator, m
 from agent_evals.evidence.models import EvidenceEvent, EvidenceKind
 from agent_evals.mcp.models import MCPFaultKind, MCPFaultReceipt, MCPFaultSpec
 
-_BRIDGE_SCHEMA: Literal["agent-evals/mcp-agent-tool-stale-cache-receipt/v1"] = (
-    "agent-evals/mcp-agent-tool-stale-cache-receipt/v1"
+_BRIDGE_SCHEMA: Literal["agent-evals/mcp-agent-tool-stale-cache-receipt/v2"] = (
+    "agent-evals/mcp-agent-tool-stale-cache-receipt/v2"
 )
-_BRIDGE_DOMAIN = b"agent-evals/mcp-agent-tool-stale-cache-receipt/v1\0"
+_BRIDGE_DOMAIN = b"agent-evals/mcp-agent-tool-stale-cache-receipt/v2\0"
 _PROTOCOL_VERSION = "2026-07-28"
 _EVENT_SOURCE = "bridge:mcp-agent:tool-stale-cache"
 _EXPECTED_STALE_ARGUMENTS = {"query": "stale"}
@@ -29,12 +29,12 @@ class MCPAgentToolStaleCacheReceipt(BaseModel):
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    schema_version: Literal["agent-evals/mcp-agent-tool-stale-cache-receipt/v1"] = _BRIDGE_SCHEMA
+    schema_version: Literal["agent-evals/mcp-agent-tool-stale-cache-receipt/v2"] = _BRIDGE_SCHEMA
     scenario_identity: str = Field(pattern=r"^[0-9a-f]{64}$")
     protocol_receipt: MCPFaultReceipt
     tool_name: str = Field(min_length=1, max_length=128)
     stale_call_id: str = Field(min_length=1, max_length=256)
-    ttl_ms: StrictInt = Field(gt=0, le=_MAX_CACHE_TTL_MS)
+    mcp_cache_hint_ttl_ms: StrictInt = Field(gt=0, le=_MAX_CACHE_TTL_MS)
     stale_arguments_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     stale_protocol_observation_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     agent_error_observation_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
@@ -57,7 +57,7 @@ class MCPAgentToolStaleCacheReceipt(BaseModel):
         protocol_receipt: MCPFaultReceipt,
         tool_name: str,
         stale_call_id: str,
-        ttl_ms: int,
+        mcp_cache_hint_ttl_ms: int,
         stale_arguments: Mapping[str, object] | None,
         stale_protocol_text: str,
         agent_error_output: object,
@@ -75,7 +75,7 @@ class MCPAgentToolStaleCacheReceipt(BaseModel):
         _require_stale_cache_fault(
             fault=fault,
             receipt=validated_protocol,
-            ttl_ms=ttl_ms,
+            ttl_ms=mcp_cache_hint_ttl_ms,
         )
         _validate_identity_text(tool_name, label="tool name")
         _validate_identity_text(stale_call_id, label="stale call ID")
@@ -120,7 +120,7 @@ class MCPAgentToolStaleCacheReceipt(BaseModel):
         _require_protocol_observation(
             validated_protocol,
             tool_name=tool_name,
-            ttl_ms=ttl_ms,
+            ttl_ms=mcp_cache_hint_ttl_ms,
         )
 
         unsigned = {
@@ -129,7 +129,7 @@ class MCPAgentToolStaleCacheReceipt(BaseModel):
             "protocol_receipt": validated_protocol.model_dump(mode="json"),
             "tool_name": tool_name,
             "stale_call_id": stale_call_id,
-            "ttl_ms": ttl_ms,
+            "mcp_cache_hint_ttl_ms": mcp_cache_hint_ttl_ms,
             "stale_arguments_sha256": stale_arguments_sha256,
             "stale_protocol_observation_sha256": stale_protocol_sha256,
             "agent_error_observation_sha256": agent_error_sha256,
@@ -167,7 +167,7 @@ class MCPAgentToolStaleCacheReceipt(BaseModel):
         if self.tool_name != self.protocol_receipt.tool_name:
             raise ValueError("stale-cache tool name does not match verified MCP protocol receipt")
 
-        expected_payload_sha256 = _sha256_json({"ttl_ms": self.ttl_ms})
+        expected_payload_sha256 = _sha256_json({"ttl_ms": self.mcp_cache_hint_ttl_ms})
         if not hmac.compare_digest(
             self.protocol_receipt.payload_sha256,
             expected_payload_sha256,
@@ -206,7 +206,7 @@ class MCPAgentToolStaleCacheReceipt(BaseModel):
         _require_protocol_observation(
             self.protocol_receipt,
             tool_name=self.tool_name,
-            ttl_ms=self.ttl_ms,
+            ttl_ms=self.mcp_cache_hint_ttl_ms,
         )
 
         expected_root = _receipt_root(self.model_dump(mode="json", exclude={"receipt_root"}))

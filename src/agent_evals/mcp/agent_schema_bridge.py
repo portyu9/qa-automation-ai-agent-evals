@@ -14,10 +14,10 @@ from pydantic import BaseModel, ConfigDict, Field, StrictInt, field_validator, m
 from agent_evals.evidence.models import EvidenceEvent, EvidenceKind
 from agent_evals.mcp.models import MCPFaultKind, MCPFaultReceipt, MCPFaultSpec
 
-_BRIDGE_SCHEMA: Literal["agent-evals/mcp-agent-tool-schema-drift-receipt/v2"] = (
-    "agent-evals/mcp-agent-tool-schema-drift-receipt/v2"
+_BRIDGE_SCHEMA: Literal["agent-evals/mcp-agent-tool-schema-drift-receipt/v3"] = (
+    "agent-evals/mcp-agent-tool-schema-drift-receipt/v3"
 )
-_BRIDGE_DOMAIN = b"agent-evals/mcp-agent-tool-schema-drift-receipt/v2\0"
+_BRIDGE_DOMAIN = b"agent-evals/mcp-agent-tool-schema-drift-receipt/v3\0"
 _PROTOCOL_VERSION = "2026-07-28"
 _EVENT_SOURCE = "bridge:mcp-agent:tool-schema-drift"
 _INITIAL_REQUIRED = {"query": "string"}
@@ -40,13 +40,13 @@ class MCPAgentToolSchemaDriftReceipt(BaseModel):
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    schema_version: Literal["agent-evals/mcp-agent-tool-schema-drift-receipt/v2"] = _BRIDGE_SCHEMA
+    schema_version: Literal["agent-evals/mcp-agent-tool-schema-drift-receipt/v3"] = _BRIDGE_SCHEMA
     scenario_identity: str = Field(pattern=r"^[0-9a-f]{64}$")
     protocol_receipt: MCPFaultReceipt
     agent_tool_name: str = Field(min_length=1, max_length=128)
     stale_call_id: str = Field(min_length=1, max_length=256)
     recovery_call_id: str = Field(min_length=1, max_length=256)
-    ttl_ms: StrictInt = Field(gt=0, le=86_400_000)
+    mcp_cache_hint_ttl_ms: StrictInt = Field(gt=0, le=86_400_000)
     initial_schema_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     cached_schema_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     refreshed_schema_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
@@ -76,7 +76,7 @@ class MCPAgentToolSchemaDriftReceipt(BaseModel):
         agent_tool_name: str,
         stale_call_id: str,
         recovery_call_id: str,
-        ttl_ms: int,
+        mcp_cache_hint_ttl_ms: int,
         initial_schema: Mapping[str, object],
         cached_schema: Mapping[str, object],
         refreshed_schema: Mapping[str, object],
@@ -96,7 +96,9 @@ class MCPAgentToolSchemaDriftReceipt(BaseModel):
     ) -> Self:
         """Create a receipt only after protocol and agent schema-drift relations both close."""
         validated_protocol = _revalidate_protocol_receipt(protocol_receipt)
-        _require_schema_drift_fault(fault=fault, receipt=validated_protocol, ttl_ms=ttl_ms)
+        _require_schema_drift_fault(
+            fault=fault, receipt=validated_protocol, ttl_ms=mcp_cache_hint_ttl_ms
+        )
         _validate_identity_text(agent_tool_name, label="agent tool name")
         _validate_identity_text(stale_call_id, label="stale call ID")
         _validate_identity_text(recovery_call_id, label="recovery call ID")
@@ -170,7 +172,7 @@ class MCPAgentToolSchemaDriftReceipt(BaseModel):
         _require_protocol_chronology(ordinals)
 
         observation = _protocol_observation(
-            ttl_ms=ttl_ms,
+            ttl_ms=mcp_cache_hint_ttl_ms,
             initial_schema_sha256=initial_schema_sha256,
             cached_schema_sha256=cached_schema_sha256,
             refreshed_schema_sha256=refreshed_schema_sha256,
@@ -191,7 +193,7 @@ class MCPAgentToolSchemaDriftReceipt(BaseModel):
             "agent_tool_name": agent_tool_name,
             "stale_call_id": stale_call_id,
             "recovery_call_id": recovery_call_id,
-            "ttl_ms": ttl_ms,
+            "mcp_cache_hint_ttl_ms": mcp_cache_hint_ttl_ms,
             "initial_schema_sha256": initial_schema_sha256,
             "cached_schema_sha256": cached_schema_sha256,
             "refreshed_schema_sha256": refreshed_schema_sha256,
@@ -289,7 +291,7 @@ class MCPAgentToolSchemaDriftReceipt(BaseModel):
         )
         _require_protocol_chronology(ordinals)
         expected_observation = _protocol_observation(
-            ttl_ms=self.ttl_ms,
+            ttl_ms=self.mcp_cache_hint_ttl_ms,
             initial_schema_sha256=self.initial_schema_sha256,
             cached_schema_sha256=self.cached_schema_sha256,
             refreshed_schema_sha256=self.refreshed_schema_sha256,

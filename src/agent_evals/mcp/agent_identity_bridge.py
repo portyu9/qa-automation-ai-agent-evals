@@ -14,10 +14,10 @@ from pydantic import BaseModel, ConfigDict, Field, StrictInt, field_validator, m
 from agent_evals.evidence.models import EvidenceEvent, EvidenceKind
 from agent_evals.mcp.models import MCPFaultKind, MCPFaultReceipt, MCPFaultSpec
 
-_BRIDGE_SCHEMA: Literal["agent-evals/mcp-agent-tool-identity-drift-receipt/v2"] = (
-    "agent-evals/mcp-agent-tool-identity-drift-receipt/v2"
+_BRIDGE_SCHEMA: Literal["agent-evals/mcp-agent-tool-identity-drift-receipt/v3"] = (
+    "agent-evals/mcp-agent-tool-identity-drift-receipt/v3"
 )
-_BRIDGE_DOMAIN = b"agent-evals/mcp-agent-tool-identity-drift-receipt/v2\0"
+_BRIDGE_DOMAIN = b"agent-evals/mcp-agent-tool-identity-drift-receipt/v3\0"
 _PROTOCOL_VERSION = "2026-07-28"
 _EVENT_SOURCE = "bridge:mcp-agent:tool-identity-drift"
 _EXPECTED_STALE_ARGUMENTS = {"query": "stale"}
@@ -30,14 +30,14 @@ class MCPAgentToolIdentityDriftReceipt(BaseModel):
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    schema_version: Literal["agent-evals/mcp-agent-tool-identity-drift-receipt/v2"] = _BRIDGE_SCHEMA
+    schema_version: Literal["agent-evals/mcp-agent-tool-identity-drift-receipt/v3"] = _BRIDGE_SCHEMA
     scenario_identity: str = Field(pattern=r"^[0-9a-f]{64}$")
     protocol_receipt: MCPFaultReceipt
     original_tool_name: str = Field(min_length=1, max_length=128)
     replacement_tool_name: str = Field(min_length=1, max_length=128)
     stale_call_id: str = Field(min_length=1, max_length=256)
     recovery_call_id: str = Field(min_length=1, max_length=256)
-    ttl_ms: StrictInt = Field(gt=0, le=86_400_000)
+    mcp_cache_hint_ttl_ms: StrictInt = Field(gt=0, le=86_400_000)
     stale_arguments_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     recovery_arguments_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     stale_protocol_observation_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
@@ -67,7 +67,7 @@ class MCPAgentToolIdentityDriftReceipt(BaseModel):
         replacement_tool_name: str,
         stale_call_id: str,
         recovery_call_id: str,
-        ttl_ms: int,
+        mcp_cache_hint_ttl_ms: int,
         stale_arguments: Mapping[str, object] | None,
         recovery_arguments: Mapping[str, object] | None,
         stale_protocol_text: str,
@@ -89,7 +89,7 @@ class MCPAgentToolIdentityDriftReceipt(BaseModel):
         _require_identity_drift_fault(
             fault=fault,
             receipt=validated_protocol,
-            ttl_ms=ttl_ms,
+            ttl_ms=mcp_cache_hint_ttl_ms,
             replacement_tool_name=replacement_tool_name,
         )
         _validate_identity_text(original_tool_name, label="original tool name")
@@ -160,7 +160,7 @@ class MCPAgentToolIdentityDriftReceipt(BaseModel):
         )
         _require_protocol_chronology(ordinals)
         observation = _protocol_observation(
-            ttl_ms=ttl_ms,
+            ttl_ms=mcp_cache_hint_ttl_ms,
             original_tool_name=original_tool_name,
             replacement_tool_name=replacement_tool_name,
             stale_protocol_observation_sha256=stale_protocol_sha256,
@@ -181,7 +181,7 @@ class MCPAgentToolIdentityDriftReceipt(BaseModel):
             "replacement_tool_name": replacement_tool_name,
             "stale_call_id": stale_call_id,
             "recovery_call_id": recovery_call_id,
-            "ttl_ms": ttl_ms,
+            "mcp_cache_hint_ttl_ms": mcp_cache_hint_ttl_ms,
             "stale_arguments_sha256": stale_arguments_sha256,
             "recovery_arguments_sha256": recovery_arguments_sha256,
             "stale_protocol_observation_sha256": stale_protocol_sha256,
@@ -280,7 +280,7 @@ class MCPAgentToolIdentityDriftReceipt(BaseModel):
 
         payload_material = {
             "replacement_tool_name": self.replacement_tool_name,
-            "ttl_ms": self.ttl_ms,
+            "ttl_ms": self.mcp_cache_hint_ttl_ms,
         }
         if not hmac.compare_digest(
             self.protocol_receipt.payload_sha256,
@@ -299,7 +299,7 @@ class MCPAgentToolIdentityDriftReceipt(BaseModel):
         )
         _require_protocol_chronology(ordinals)
         expected_observation = _protocol_observation(
-            ttl_ms=self.ttl_ms,
+            ttl_ms=self.mcp_cache_hint_ttl_ms,
             original_tool_name=self.original_tool_name,
             replacement_tool_name=self.replacement_tool_name,
             stale_protocol_observation_sha256=self.stale_protocol_observation_sha256,
