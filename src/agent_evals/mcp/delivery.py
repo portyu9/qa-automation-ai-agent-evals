@@ -107,7 +107,9 @@ def verify_protocol_delivery(evidence: TrialEvidence) -> tuple[ProtocolDeliveryR
             _verify_metadata_delivery_chronology(evidence, delivery_sequence=event.sequence)
         elif event.source == _TOOL_STALE_CACHE_SOURCE:
             if not isinstance(receipt, MCPAgentToolStaleCacheReceipt):
-                raise ProtocolDeliveryError("stale-cache delivery did not parse as its typed receipt")
+                raise ProtocolDeliveryError(
+                    "stale-cache delivery did not parse as its typed receipt"
+                )
             _verify_stale_cache_delivery_chronology(
                 evidence,
                 receipt=receipt,
