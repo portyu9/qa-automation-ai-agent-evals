@@ -9,12 +9,14 @@ from pydantic import ValidationError
 from agent_evals.evidence.models import EvidenceKind, TrialEvidence
 from agent_evals.mcp.agent_bridge import MCPAgentToolResultReceipt
 from agent_evals.mcp.agent_error_bridge import MCPAgentToolErrorRecoveryReceipt
+from agent_evals.mcp.agent_identity_bridge import MCPAgentToolIdentityDriftReceipt
 from agent_evals.mcp.agent_metadata_bridge import MCPAgentToolMetadataReceipt
 from agent_evals.mcp.agent_schema_bridge import MCPAgentToolSchemaDriftReceipt
 
 _TOOL_RESULT_SOURCE = "bridge:mcp-agent:tool-result"
 _TOOL_ERROR_RECOVERY_SOURCE = "bridge:mcp-agent:tool-error-recovery"
 _TOOL_SCHEMA_DRIFT_SOURCE = "bridge:mcp-agent:tool-schema-drift"
+_TOOL_IDENTITY_DRIFT_SOURCE = "bridge:mcp-agent:tool-identity-drift"
 _TOOL_METADATA_SOURCE = "bridge:mcp-agent:tool-metadata"
 _METADATA_BEHAVIOR_KINDS = frozenset(
     {
@@ -37,6 +39,7 @@ ProtocolDeliveryReceipt: TypeAlias = (
     MCPAgentToolResultReceipt
     | MCPAgentToolErrorRecoveryReceipt
     | MCPAgentToolSchemaDriftReceipt
+    | MCPAgentToolIdentityDriftReceipt
     | MCPAgentToolMetadataReceipt
 )
 
@@ -62,6 +65,7 @@ def verify_protocol_delivery(evidence: TrialEvidence) -> tuple[ProtocolDeliveryR
             type[MCPAgentToolResultReceipt]
             | type[MCPAgentToolErrorRecoveryReceipt]
             | type[MCPAgentToolSchemaDriftReceipt]
+            | type[MCPAgentToolIdentityDriftReceipt]
             | type[MCPAgentToolMetadataReceipt]
         )
         if event.source == _TOOL_RESULT_SOURCE:
@@ -70,6 +74,8 @@ def verify_protocol_delivery(evidence: TrialEvidence) -> tuple[ProtocolDeliveryR
             receipt_type = MCPAgentToolErrorRecoveryReceipt
         elif event.source == _TOOL_SCHEMA_DRIFT_SOURCE:
             receipt_type = MCPAgentToolSchemaDriftReceipt
+        elif event.source == _TOOL_IDENTITY_DRIFT_SOURCE:
+            receipt_type = MCPAgentToolIdentityDriftReceipt
         elif event.source == _TOOL_METADATA_SOURCE:
             receipt_type = MCPAgentToolMetadataReceipt
         else:

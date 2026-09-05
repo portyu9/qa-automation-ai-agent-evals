@@ -6,59 +6,60 @@ This documentation is organized by the question a reviewer is trying to answer. 
 
 | Reviewer goal | Recommended path |
 |---|---|
-| Architecture / principal engineering | [Architecture](ARCHITECTURE.md) → [Evaluation Model](EVALUATION_MODEL.md) → [Calibrated Semantic Judging](SEMANTIC_JUDGING.md) → [Handoff Authority](HANDOFF_AUTHORITY.md) → [Native HITL Approval Intent](APPROVAL_INTENT.md) → [Adversarial Testing](ADVERSARIAL_TESTING.md) → [OpenAI Adapter](OPENAI_ADAPTER.md) → [MCP Fault Lab](MCP_LAB.md) → [MCP Remote Authorization](MCP_REMOTE_AUTH.md) → [MCP OAuth Flow](MCP_OAUTH_FLOW.md) → [Evidence & Replay](EVIDENCE_AND_REPLAY.md) → [Session Reports](ASSURANCE_REPORTS.md) → [Metamorphic Testing](METAMORPHIC_TESTING.md) → [Statistical Assurance](STATISTICAL_ASSURANCE.md) → [Limitations](LIMITATIONS.md) |
-| QA / AI evaluation engineering | [Evaluation Model](EVALUATION_MODEL.md) → [Calibrated Semantic Judging](SEMANTIC_JUDGING.md) → [Handoff Authority](HANDOFF_AUTHORITY.md) → [Native HITL Approval Intent](APPROVAL_INTENT.md) → [Adversarial Testing](ADVERSARIAL_TESTING.md) → [OpenAI Adapter](OPENAI_ADAPTER.md) → [MCP Fault Lab](MCP_LAB.md) → [Evidence & Replay](EVIDENCE_AND_REPLAY.md) → [Session Reports](ASSURANCE_REPORTS.md) → [Metamorphic Testing](METAMORPHIC_TESTING.md) → [Statistical Assurance](STATISTICAL_ASSURANCE.md) → [Architecture](ARCHITECTURE.md) |
-| Security / red team | [Security](SECURITY.md) → [Handoff Authority](HANDOFF_AUTHORITY.md) → [Native HITL Approval Intent](APPROVAL_INTENT.md) → [Adversarial Testing](ADVERSARIAL_TESTING.md) → [MCP Fault Lab](MCP_LAB.md) → [OpenAI Adapter](OPENAI_ADAPTER.md) → [MCP Remote Authorization](MCP_REMOTE_AUTH.md) → [MCP OAuth Flow](MCP_OAUTH_FLOW.md) → [Evidence & Replay](EVIDENCE_AND_REPLAY.md) → [Limitations](LIMITATIONS.md) |
-| Adoption / code review | [Architecture](ARCHITECTURE.md) → [Handoff Authority](HANDOFF_AUTHORITY.md) → [Native HITL Approval Intent](APPROVAL_INTENT.md) → [OpenAI Adapter](OPENAI_ADAPTER.md) → [MCP Fault Lab](MCP_LAB.md) → repository tests → [Evidence & Replay](EVIDENCE_AND_REPLAY.md) → [Security](SECURITY.md) → [Limitations](LIMITATIONS.md) |
+| Architecture / principal engineering | [Architecture](ARCHITECTURE.md) → [Evaluation Model](EVALUATION_MODEL.md) → [Calibrated Semantic Judging](SEMANTIC_JUDGING.md) → [Handoff Authority](HANDOFF_AUTHORITY.md) → [Native HITL Approval Intent](APPROVAL_INTENT.md) → [Adversarial Testing](ADVERSARIAL_TESTING.md) → [OpenAI Adapter](OPENAI_ADAPTER.md) → [MCP Fault Lab](MCP_LAB.md) → [MCP Identity Drift](MCP_IDENTITY_DRIFT.md) → [MCP Remote Authorization](MCP_REMOTE_AUTH.md) → [MCP OAuth Flow](MCP_OAUTH_FLOW.md) → [Evidence & Replay](EVIDENCE_AND_REPLAY.md) → [Session Reports](ASSURANCE_REPORTS.md) → [Metamorphic Testing](METAMORPHIC_TESTING.md) → [Statistical Assurance](STATISTICAL_ASSURANCE.md) → [Limitations](LIMITATIONS.md) |
+| QA / AI evaluation engineering | [Evaluation Model](EVALUATION_MODEL.md) → [Calibrated Semantic Judging](SEMANTIC_JUDGING.md) → [Handoff Authority](HANDOFF_AUTHORITY.md) → [Native HITL Approval Intent](APPROVAL_INTENT.md) → [Adversarial Testing](ADVERSARIAL_TESTING.md) → [OpenAI Adapter](OPENAI_ADAPTER.md) → [MCP Fault Lab](MCP_LAB.md) → [MCP Identity Drift](MCP_IDENTITY_DRIFT.md) → [Evidence & Replay](EVIDENCE_AND_REPLAY.md) → [Session Reports](ASSURANCE_REPORTS.md) → [Metamorphic Testing](METAMORPHIC_TESTING.md) → [Statistical Assurance](STATISTICAL_ASSURANCE.md) → [Architecture](ARCHITECTURE.md) |
+| Security / red team | [Security](SECURITY.md) → [Handoff Authority](HANDOFF_AUTHORITY.md) → [Native HITL Approval Intent](APPROVAL_INTENT.md) → [Adversarial Testing](ADVERSARIAL_TESTING.md) → [MCP Fault Lab](MCP_LAB.md) → [MCP Identity Drift](MCP_IDENTITY_DRIFT.md) → [OpenAI Adapter](OPENAI_ADAPTER.md) → [MCP Remote Authorization](MCP_REMOTE_AUTH.md) → [MCP OAuth Flow](MCP_OAUTH_FLOW.md) → [Evidence & Replay](EVIDENCE_AND_REPLAY.md) → [Limitations](LIMITATIONS.md) |
+| Adoption / code review | [Architecture](ARCHITECTURE.md) → [Handoff Authority](HANDOFF_AUTHORITY.md) → [Native HITL Approval Intent](APPROVAL_INTENT.md) → [OpenAI Adapter](OPENAI_ADAPTER.md) → [MCP Fault Lab](MCP_LAB.md) → [MCP Identity Drift](MCP_IDENTITY_DRIFT.md) → repository tests → [Evidence & Replay](EVIDENCE_AND_REPLAY.md) → [Security](SECURITY.md) → [Limitations](LIMITATIONS.md) |
 
 ## Cross-cutting invariants
 
 ```text
-Agent claim                 ≠ environment outcome
-Tool request                ≠ successful side effect
-Approval request            ≠ approval grant
-Approval decision receipt   ≠ human identity or external authorization
+Agent claim                   ≠ environment outcome
+Tool request                  ≠ successful side effect
+Approval request              ≠ approval grant
+Approval decision receipt     ≠ human identity or external authorization
 Duplicate-looking tool result ≠ proof of idempotent physical effect
-Legacy approval             ≠ stronger native HITL approval decision
-Provider availability       ≠ subject correctness
-Model confidence            ≠ grading authority
-Semantic PASS              ≠ external state, authorization, or safety proof
-Semantic calibration       ≠ universal judge correctness
-Semantic ABSTAIN           ≠ PASS or FAIL
-Attack channel label        ≠ delivery evidence
-Retrieval contract          ≠ model-visible retrieval delivery
-Controlled poison in top-k  ≠ behavioral PASS or FAIL
-Environment availability    ≠ environment consumption
-Handoff observation         ≠ delegated authority
-Raw handoff count           ≠ accepted authority epoch
-Same handoff depth          ≠ same authority path
-Root authority              ≠ child authority after handoff
-SDK agent name              ≠ cryptographic/global identity
-MCP fault configuration     ≠ MCP client observation
-Cached MCP discovery        ≠ current MCP server contract
-Current MCP contract        ≠ cached client discovery
-Cache invalidation          ≠ model-owned refresh
-Refreshed discovery         ≠ correct agent adaptation
-Raw MCP protocol receipt    ≠ agent behavioral assurance
-Verified MCP bridge         ≠ automatic PASS
-Bearer authentication       ≠ verifier-owned issuer/resource policy
-Resource-server success     ≠ OAuth-flow correctness
-OAuth-flow success          ≠ agent correctness
-Remote-auth receipt         ≠ OAuth-flow receipt
-OAuth-flow receipt          ≠ agent behavioral assurance
-Delivery receipt            ≠ target-side attestation
-Unverified delivery         ≠ behavioral FAIL
-Single passing trial        ≠ reliability
-Raw percentage delta        ≠ statistically established change
-Exact trajectory mismatch   ≠ failure unless the trajectory is contractual
-Blocked execution           ≠ behavioral FAIL
-Inconclusive evidence       ≠ PASS
-Critical safety violation   ≠ compensable score loss
-Narrower-looking policy     ≠ proven authority reduction
-Stored hash                 ≠ authenticated publisher
-Evidence replay             ≠ fresh execution or fresh injection
-Serialized gate result      ≠ trusted without recomputation
-Assurance report root       ≠ signed attestation
+Legacy approval               ≠ stronger native HITL approval decision
+Provider availability         ≠ subject correctness
+Model confidence              ≠ grading authority
+Semantic PASS                 ≠ external state, authorization, or safety proof
+Semantic calibration          ≠ universal judge correctness
+Semantic ABSTAIN              ≠ PASS or FAIL
+Attack channel label          ≠ delivery evidence
+Retrieval contract            ≠ model-visible retrieval delivery
+Controlled poison in top-k    ≠ behavioral PASS or FAIL
+Environment availability      ≠ environment consumption
+Handoff observation           ≠ delegated authority
+Raw handoff count             ≠ accepted authority epoch
+Same handoff depth            ≠ same authority path
+Root authority                ≠ child authority after handoff
+SDK agent name                ≠ cryptographic/global identity
+MCP fault configuration       ≠ MCP client observation
+Cached MCP discovery          ≠ current MCP server contract
+Current MCP contract          ≠ cached client discovery
+Cache invalidation            ≠ model-owned refresh
+Refreshed discovery           ≠ correct agent adaptation
+Replacement tool name         ≠ cryptographic/global tool identity
+Raw MCP protocol receipt      ≠ agent behavioral assurance
+Verified MCP bridge           ≠ automatic PASS
+Bearer authentication         ≠ verifier-owned issuer/resource policy
+Resource-server success       ≠ OAuth-flow correctness
+OAuth-flow success            ≠ agent correctness
+Remote-auth receipt           ≠ OAuth-flow receipt
+OAuth-flow receipt            ≠ agent behavioral assurance
+Delivery receipt              ≠ target-side attestation
+Unverified delivery           ≠ behavioral FAIL
+Single passing trial          ≠ reliability
+Raw percentage delta          ≠ statistically established change
+Exact trajectory mismatch     ≠ failure unless the trajectory is contractual
+Blocked execution             ≠ behavioral FAIL
+Inconclusive evidence         ≠ PASS
+Critical safety violation     ≠ compensable score loss
+Narrower-looking policy       ≠ proven authority reduction
+Stored hash                   ≠ authenticated publisher
+Evidence replay               ≠ fresh execution or fresh injection
+Serialized gate result        ≠ trusted without recomputation
+Assurance report root         ≠ signed attestation
 ```
 
 For native handoffs, the distinction is deliberately scenario-owned rather than receipt-owned:
@@ -104,31 +105,35 @@ The MCP distinction is especially important:
 MCPFaultReceipt
     = verified protocol observation
 
+MCPAgentToolMetadataReceipt
+    = exact verified discovery-description/schema → model-visible-definition relation
+
 MCPAgentToolResultReceipt
-    = verified correlation between one bound MCP tool result
-      and one exact OpenAI agent tool call/result
+    = exact verified protocol result → one OpenAI call/result relation
 
 MCPAgentToolErrorRecoveryReceipt
-    = verified causal error → retry → recovery relation binding one
-      MCP ToolError observation to two distinct OpenAI call identities
+    = exact causal error → retry → recovery relation with distinct calls
 
 MCPAgentToolSchemaDriftReceipt
-    = verified host-refreshed v1 rejection → v2 discovery → corrected-call
-      relation with strict protocol chronology and distinct OpenAI call identities
+    = exact host-refreshed v1 rejection → v2 discovery → corrected-call relation
+
+MCPAgentToolIdentityDriftReceipt
+    = exact host-refreshed original-name rejection → replacement-only discovery/model
+      visibility → exact replacement-name call relation
 
 Trial PASS / FAIL
-    = deterministic subject grading after required delivery evidence closes
+    = deterministic subject grading after required bridge evidence closes
 ```
 
-Four MCP fault families currently have explicit agent bridges: `MCPFaultKind.TOOL_METADATA_POISON`, `MCPFaultKind.TOOL_RESULT_POISON`, `MCPFaultKind.TOOL_ERROR`, and `MCPFaultKind.TOOL_SCHEMA_DRIFT`. `TOOL_LIST_STALE_CACHE` and `TOOL_IDENTITY_DRIFT` remain protocol-only with respect to agent behavior. Metadata delivery closes at the first verified model-visible target definition; it does not require a target call or establish attention, interpretation, or safe behavior.
+Five MCP fault families have explicit agent bridges: `TOOL_METADATA_POISON`, `TOOL_RESULT_POISON`, `TOOL_ERROR`, `TOOL_SCHEMA_DRIFT`, and `TOOL_IDENTITY_DRIFT`. `TOOL_LIST_STALE_CACHE` remains protocol-only with respect to agent behavior. Metadata delivery closes at exact model-visible target definition; schema/identity adaptation closes only after the complete host-refreshed multi-step relation. None establishes attention, safe behavior, or automatic PASS.
 
-The schema-drift bridge is intentionally host-refreshed: the harness owns the live schema replacement, the evaluator/host adapter owns one cache invalidation, the official MCP session supplies the first fresh post-invalidation v2 discovery, and the model is credited only for changing the subsequent call after v2 becomes visible. It does not claim model-initiated refresh or automatic `tools/list_changed` handling.
+For both drift bridges the refresh is deliberately **host-owned**: the harness owns the live mutation, the evaluator/host adapter owns cache invalidation, the official MCP session owns refreshed discovery, and the model is credited only for changing its next call after the replacement contract/identity becomes visible. Neither path claims model-initiated refresh or automatic `tools/list_changed` handling.
 
 ## Current documentation set
 
 | Document | Primary question |
 |---|---|
-| [ARCHITECTURE.md](ARCHITECTURE.md) | Where do identity, adversarial derivation, protocol faults, the MCP→agent bridges, resource-server authorization, OAuth-flow assurance, evidence, grading, persistence, reporting, and release authority live? |
+| [ARCHITECTURE.md](ARCHITECTURE.md) | Where do identity, adversarial derivation, protocol faults, five MCP→agent bridges, authorization/OAuth, evidence, grading, persistence, reporting, and release authority live? |
 | [EVALUATION_MODEL.md](EVALUATION_MODEL.md) | What exactly constitutes a task, trial, outcome, policy violation, semantic judgment, and verdict? |
 | [SEMANTIC_JUDGING.md](SEMANTIC_JUDGING.md) | How are rubrics, judge profiles, calibration, bounded inputs, semantic receipts, deterministic precedence, replay, and OpenAI SDK judge behavior kept evidence-bound? |
 | [HANDOFF_AUTHORITY.md](HANDOFF_AUTHORITY.md) | How are native OpenAI handoffs authorized as a scenario-bound directed graph, how is run-item agent provenance bound, and how is authority forced to attenuate across each observed hop? |
@@ -136,11 +141,12 @@ The schema-drift bridge is intentionally host-refreshed: the harness owns the li
 | [SIDE_EFFECT_IDEMPOTENCY.md](SIDE_EFFECT_IDEMPOTENCY.md) | How are two exact attempts to one logical operation bound to independently observed effect digests, reverified on replay, and graded without suppressing bad subject behavior? |
 | [ADVERSARIAL_TESTING.md](ADVERSARIAL_TESTING.md) | How are red-team stimuli made deterministic, how is delivery required before grading, and what does an adversarial receipt still not prove? |
 | [RETRIEVAL_ASSURANCE.md](RETRIEVAL_ASSURANCE.md) | How are corpus/query/ranker/poison identity, deterministic ranking, exact model-visible retrieval delivery, replay, and production-RAG non-claims kept separate? |
-| [OPENAI_ADAPTER.md](OPENAI_ADAPTER.md) | How are OpenAI Agents SDK events normalized; how do handoff authority and exact native HITL approval bind run-local provenance; how do metadata/result/ToolError/schema-drift stdio bridges close; how does the calibrated no-tools semantic judge use the public SDK model boundary; and why does neither provider nor protocol become the oracle? |
-| [MCP_LAB.md](MCP_LAB.md) | How are six deterministic MCP faults observed, and which four exact fault families currently have explicit agent bridges? |
+| [OPENAI_ADAPTER.md](OPENAI_ADAPTER.md) | How are OpenAI SDK events normalized and how do native handoff/HITL/idempotency plus metadata/result/ToolError/schema/identity MCP bridges and the calibrated semantic judge preserve exact trust boundaries? |
+| [MCP_LAB.md](MCP_LAB.md) | How are six deterministic MCP faults observed, and which five exact fault families have explicit agent bridges? |
+| [MCP_IDENTITY_DRIFT.md](MCP_IDENTITY_DRIFT.md) | How is one live old→replacement MCP tool rename bound across protocol discovery, real stale rejection, host refresh, exact model-visible identity transition, replacement call, receipt, replay, and non-claims? |
 | [MCP_REMOTE_AUTH.md](MCP_REMOTE_AUTH.md) | How is the isolated loopback Streamable HTTP resource-server bearer/scope/verifier boundary tested over real TCP? |
 | [MCP_OAUTH_FLOW.md](MCP_OAUTH_FLOW.md) | How does the separated two-origin loopback OAuth flow verify discovery, compatibility DCR, PKCE, exact issuer/resource binding, exchange, introspection, and protected MCP use? |
-| [EVIDENCE_AND_REPLAY.md](EVIDENCE_AND_REPLAY.md) | How are local evidence records committed, reverified, and replayed without overstating provenance, including persisted protocol-delivery, approval-intent, and semantic-judgment receipt revalidation without fresh semantic inference? |
+| [EVIDENCE_AND_REPLAY.md](EVIDENCE_AND_REPLAY.md) | How are local evidence records committed, reverified, and replayed without overstating provenance, including typed metadata/result/error/schema/identity `PROTOCOL_DELIVERY` revalidation? |
 | [ASSURANCE_REPORTS.md](ASSURANCE_REPORTS.md) | How does AssuranceReport v2 keep deterministic oracle authority separate from optional semantic receipts while rederiving trial verdicts, reliability, and release gates? |
 | [METAMORPHIC_TESTING.md](METAMORPHIC_TESTING.md) | Which behavioral relations can be verified without brittle golden outputs? |
 | [STATISTICAL_ASSURANCE.md](STATISTICAL_ASSURANCE.md) | How is nondeterministic behavior quantified without overstating certainty? |
@@ -159,9 +165,11 @@ Use the evidence contract that matches the boundary actually observed:
 | OpenAI local/SDK adversarial injection | `AttackDeliveryReceipt` | target-side attestation or automatic PASS |
 | evaluator-owned deterministic retrieval ranking and exact model-visible delivery | `RetrievalContractSpec` + `RetrievalDeliveryReceipt` / `RETRIEVAL_DELIVERY` | hosted vector-search correctness, citation correctness, production RAG lifecycle, or behavioral PASS |
 | standalone MCP fault observation | `MCPFaultReceipt` | agent consumption or behavior |
+| exact MCP metadata discovery bound to model-visible target definition | `MCPAgentToolMetadataReceipt` + `PROTOCOL_DELIVERY` | model attention, safe behavior, or release acceptance |
 | controlled MCP result correlated to exact OpenAI call | `MCPAgentToolResultReceipt` + `PROTOCOL_DELIVERY` | safe behavior or release acceptance |
 | controlled MCP ToolError followed by one verified causal retry/recovery | `MCPAgentToolErrorRecoveryReceipt` + `PROTOCOL_DELIVERY` | generic retry correctness, safe behavior, or release acceptance |
 | controlled live schema replacement followed by host refresh and exact corrected agent call | `MCPAgentToolSchemaDriftReceipt` + `PROTOCOL_DELIVERY` | model-owned refresh, arbitrary schema migration, safe behavior, or release acceptance |
+| controlled live identity replacement followed by host refresh, exact replacement model visibility, and exact replacement-name call | `MCPAgentToolIdentityDriftReceipt` + `PROTOCOL_DELIVERY` | model-owned refresh, arbitrary rename migration, global tool identity, safe behavior, or release acceptance |
 | loopback MCP resource authorization | `MCPRemoteAuthReceipt` | OAuth issuance correctness or agent behavior |
 | separated loopback OAuth flow | `MCPOAuthFlowReceipt` | production IdP assurance or agent behavior |
 | persisted agent trial with semantic judgment | terminal `SEMANTIC_JUDGMENT` + `SemanticJudgmentReceipt` inside `TrialEvidence` | deterministic state/safety proof, current-model liveness, or authority to rescue deterministic failure |
@@ -184,7 +192,7 @@ The explicit relations are important precisely because the framework refuses to 
 
 ## MCP agent-bridge scope in one paragraph
 
-The repository implements four deliberately narrow official-MCP-stdio ↔ OpenAI-agent assurance paths. `OpenAIAgentsMCPToolMetadataAdapter` closes exact discovery-to-model-visible metadata exposure without requiring a call. `OpenAIAgentsMCPToolResultAdapter` verifies one `TOOL_RESULT_POISON` call, correlates the exact protocol result to one stable OpenAI call ID and model-visible result, and verifies benign recovery afterward on the same live session. `OpenAIAgentsMCPToolErrorRecoveryAdapter` verifies one real `TOOL_ERROR`, the exact model-visible SDK error output, then requires exactly one same-argument retry with a distinct call ID **after** the first result is visible in normalized chronology; that retry must return the configured benign result on the same live MCP session. `OpenAIAgentsMCPToolSchemaDriftAdapter` verifies one bound v1 schema, performs an evaluator-only hidden live v2 swap after model selection, requires real stale-call rejection, invalidates the host cache only after rejection, requires the first fresh post-invalidation discovery to expose v2, and then accepts only one exact corrected v2 behavioral call with a distinct ID and bound same-session result. Each multi-step bridge emits `PROTOCOL_DELIVERY` only when its full relation closes. None establishes behavioral PASS by itself, and none covers hosted/remote/Internet MCP, live-provider behavior, arbitrary schema migration, generic retry/cache policy, authorization, or target-side attestation.
+The repository implements **five deliberately narrow official-MCP-stdio ↔ OpenAI-agent assurance paths**. `OpenAIAgentsMCPToolMetadataAdapter` closes exact discovery-to-model-visible metadata exposure without requiring a call. `OpenAIAgentsMCPToolResultAdapter` correlates one controlled result to one stable OpenAI call/result and checks post-run same-session recovery. `OpenAIAgentsMCPToolErrorRecoveryAdapter` requires a real model-visible error followed causally by one same-argument retry with a distinct call ID and same-session recovery. `OpenAIAgentsMCPToolSchemaDriftAdapter` verifies model-visible v1, hidden live v2 replacement, real stale rejection, host invalidation, fresh v2 discovery, then one exact corrected v2 call. `OpenAIAgentsMCPToolIdentityDriftAdapter` verifies model-visible original identity, hidden live old→replacement mutation, real stale-name rejection, host invalidation, replacement-only protocol/model visibility, then one exact replacement-name call. Multi-step bridges emit `PROTOCOL_DELIVERY` only after their full relation closes. None establishes behavioral PASS by itself, and none covers hosted/remote/Internet MCP, live-provider behavior, generic schema/rename migration, model-owned refresh, generic retry/cache policy, authorization, or target-side attestation.
 
 ## Audited implementation checkpoint
 
@@ -200,6 +208,6 @@ Audited merged implementation source checkpoint `d98f9ca1feb1179504cd2181295a739
 - Python **3.11 minimum / 3.14 latest**, Ruff, formatter, Bandit, dependency audit, package integrity, and all **7/7 CI jobs**: green;
 - dependency audit reported **no known vulnerabilities**; the project package itself is skipped because it is not published on PyPI.
 
-This checkpoint remains a historical audited merged baseline. Capabilities added after it, including metadata delivery, ToolError recovery, host-refreshed schema-drift adaptation, native handoff-authority attenuation, native HITL approval-intent binding, and calibrated semantic judging, are accepted only after their own exact-head CI, merge, and post-merge `main` verification; documentation does not retroactively relabel the older checkpoint.
+This checkpoint remains a historical audited merged baseline. Capabilities added after it—including metadata delivery, ToolError recovery, host-refreshed schema drift, host-refreshed identity drift, native handoff authority, native HITL approval intent, retrieval assurance, side-effect idempotency, and calibrated semantic judging—require their own exact-head CI, merge, and post-merge `main` verification; documentation does not retroactively relabel the older checkpoint.
 
 [← Repository README](../README.md)
