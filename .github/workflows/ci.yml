@@ -41,7 +41,9 @@ jobs:
       - name: Mypy
         run: mypy
       - name: Tests
-        run: pytest --cov=agent_evals --cov-branch --cov-report=term-missing
+        run: |
+          pytest --cov=agent_evals --cov-branch --cov-report=term-missing
+          coverage report --fail-under=90
       - name: Bandit
         run: bandit -q -r src
       - name: Dependency audit
