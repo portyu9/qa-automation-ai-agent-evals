@@ -1,0 +1,110 @@
+name: Branch documentation polish
+
+on:
+  push:
+    branches: [feat/mcp-tool-stale-cache-removal]
+
+permissions:
+  contents: write
+
+jobs:
+  polish:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: true
+          fetch-depth: 0
+      - name: Apply exact documentation corrections
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          def transform(path: str, replacements: list[tuple[str, str]]) -> None:
+              file = Path(path)
+              text = file.read_text()
+              before = text
+              for old, new in replacements:
+                  count = text.count(old)
+                  if count != 1:
+                      raise SystemExit(f"expected exactly one anchor in {path}, got {count}: {old[:100]!r}")
+                  text = text.replace(old, new)
+              if text == before:
+                  raise SystemExit(f"no changes produced for {path}")
+              file.write_text(text)
+
+          transform("docs/ARCHITECTURE.md", [
+              (
+                  "The metadata bridge proves exact model-visible exposure, not attention, interpretation, compliance, resistance, or safe behavior. The metadata bridge proves exact model-visible exposure, not attention, interpretation, compliance, resistance, or safe behavior.",
+                  "The metadata bridge proves exact model-visible exposure, not attention, interpretation, compliance, resistance, or safe behavior.",
+              ),
+          ])
+
+          transform("docs/SECURITY.md", [
+              (
+                  "- exact call-ID and request/result chronology binding for result, retry, schema-drift, and identity-drift bridges;",
+                  "- exact call-ID and request/result chronology binding for result, retry, stale-cache, schema-drift, and identity-drift bridges;",
+              ),
+              (
+                  "- hidden evaluator controls filtered from model-visible MCP tools for schema and identity mutation;",
+                  "- hidden evaluator controls filtered from model-visible MCP tools for stale-cache removal plus schema and identity mutation;",
+              ),
+              (
+                  "- direct public model-boundary observation where metadata/schema/identity visibility is part of the assurance claim;",
+                  "- direct public model-boundary observation where metadata/stale-cache/schema/identity visibility or delivery is part of the assurance claim;",
+              ),
+          ])
+
+          transform("docs/MCP_LAB.md", [
+              (
+                  "Those dedicated bridges are described under [Relationship to agent adversarial testing](#relationship-to-agent-adversarial-testing), in [MCP Tool-Identity Drift Assurance](MCP_IDENTITY_DRIFT.md), and in [OpenAI Agents SDK Adapter](OPENAI_ADAPTER.md). They do not broaden the remaining fault families. The schema- and identity-drift bridges do not claim model-initiated refresh or automatic `tools/list_changed` handling.",
+                  "Those dedicated bridges are described under [Relationship to agent adversarial testing](#relationship-to-agent-adversarial-testing), in [MCP Stale-Cache Tool-Removal Assurance](MCP_STALE_CACHE.md), in [MCP Tool-Identity Drift Assurance](MCP_IDENTITY_DRIFT.md), and in [OpenAI Agents SDK Adapter](OPENAI_ADAPTER.md). They do not broaden one another or the standalone protocol receipts. The stale-cache, schema-drift, and identity-drift bridges do not claim model-initiated refresh or automatic `tools/list_changed` handling.",
+              ),
+              (
+                  "All five bridges establish delivery/recovery/adaptation preconditions only. They do not assert safe subject behavior; deterministic policy/outcome oracles still decide PASS/FAIL.",
+                  "All six bridges establish delivery/recovery/adaptation preconditions only. They do not assert safe subject behavior; deterministic policy/outcome oracles still decide PASS/FAIL.",
+              ),
+              (
+                  "The six-fault protocol laboratory plus the five dedicated bridges do **not** establish:",
+                  "The six-fault protocol laboratory plus the six dedicated bridges do **not** establish:",
+              ),
+              (
+                  "- agent behavior for generic stale-cache behavior beyond the protocol-only stale-cache laboratory;",
+                  "- generic stale-cache/coherence behavior beyond the exact controlled host-refreshed removal-delivery contract;",
+              ),
+          ])
+
+          transform("docs/LIMITATIONS.md", [
+              (
+                  "- agent behavior for generic stale-cache behavior beyond the protocol-only `tool_list_stale_cache` laboratory;",
+                  "- generic stale-cache/coherence behavior beyond the exact controlled host-refreshed `tool_list_stale_cache` removal-delivery contract;",
+              ),
+              (
+                  "- arbitrary MCP result/error/schema/identity behavior outside the exact controlled contracts;",
+                  "- arbitrary MCP result/error/stale-cache/schema/identity behavior outside the exact controlled contracts;",
+              ),
+          ])
+
+          transform("docs/README.md", [
+              (
+                  "For both drift bridges the refresh is deliberately **host-owned**: the harness owns the live mutation, the evaluator/host adapter owns cache invalidation, the official MCP session owns refreshed discovery, and the model is credited only for changing its next call after the replacement contract/identity becomes visible. Neither path claims model-initiated refresh or automatic `tools/list_changed` handling.",
+                  "For stale-cache and both drift bridges, refresh is deliberately **host-owned**: the harness owns the live removal/mutation, the evaluator/host adapter owns cache invalidation, and the official MCP session owns refreshed discovery. Stale-cache closes when target absence plus the exact rejection reach the public model boundary; the drift bridges credit the model only for a corrected call after the replacement contract/identity becomes visible. None claims model-initiated refresh or automatic `tools/list_changed` handling.",
+              ),
+              (
+                  "The repository implements **five deliberately narrow official-MCP-stdio ↔ OpenAI-agent assurance paths**. `OpenAIAgentsMCPToolMetadataAdapter` closes exact discovery-to-model-visible metadata exposure without requiring a call. `OpenAIAgentsMCPToolResultAdapter` correlates one controlled result to one stable OpenAI call/result and checks post-run same-session recovery. `OpenAIAgentsMCPToolErrorRecoveryAdapter` requires a real model-visible error followed causally by one same-argument retry with a distinct call ID and same-session recovery. `OpenAIAgentsMCPToolSchemaDriftAdapter` verifies model-visible v1, hidden live v2 replacement, real stale rejection, host invalidation, fresh v2 discovery, then one exact corrected v2 call. `OpenAIAgentsMCPToolIdentityDriftAdapter` verifies model-visible original identity, hidden live old→replacement mutation, real stale-name rejection, host invalidation, replacement-only protocol/model visibility, then one exact replacement-name call. Multi-step bridges emit `PROTOCOL_DELIVERY` only after their full relation closes. None establishes behavioral PASS by itself, and none covers hosted/remote/Internet MCP, live-provider behavior, generic schema/rename migration, model-owned refresh, generic retry/cache policy, authorization, or target-side attestation.",
+                  "The repository implements **six deliberately narrow official-MCP-stdio ↔ OpenAI-agent assurance paths**. `OpenAIAgentsMCPToolMetadataAdapter` closes exact discovery-to-model-visible metadata exposure without requiring a call. `OpenAIAgentsMCPToolResultAdapter` correlates one controlled result to one stable OpenAI call/result and checks post-run same-session recovery. `OpenAIAgentsMCPToolErrorRecoveryAdapter` requires a real model-visible error followed causally by one same-argument retry with a distinct call ID and same-session recovery. `OpenAIAgentsMCPToolStaleCacheAdapter` proves hidden live target removal, still-stale cached discovery, real unknown-tool rejection, host invalidation, first fresh target absence, and exact rejection delivery at the target-absent public model boundary without fabricating a recovery call. `OpenAIAgentsMCPToolSchemaDriftAdapter` verifies model-visible v1, hidden live v2 replacement, real stale rejection, host invalidation, fresh v2 discovery, then one exact corrected v2 call. `OpenAIAgentsMCPToolIdentityDriftAdapter` verifies model-visible original identity, hidden live old→replacement mutation, real stale-name rejection, host invalidation, replacement-only protocol/model visibility, then one exact replacement-name call. Multi-step bridges emit `PROTOCOL_DELIVERY` only after their full relation closes. None establishes behavioral PASS by itself, and none covers hosted/remote/Internet MCP, live-provider behavior, generic cache/schema/rename migration, model-owned refresh, generic retry/cache policy, authorization, or target-side attestation.",
+              ),
+          ])
+          PY
+      - name: Verify diff
+        run: git diff --check
+      - name: Commit corrections
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/
+          git commit -m "docs: finish stale-cache assurance truthfulness sync"
+          git push origin HEAD:feat/mcp-tool-stale-cache-removal
