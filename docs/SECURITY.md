@@ -6,14 +6,15 @@ The repository treats the evaluated agent and all provider/tool/MCP/memory/resou
 
 An adversarial agent trial is not behaviorally gradeable until the controlled evaluation environment closes the exact delivery precondition required by that execution path. Failure to establish that precondition is `BLOCKED` evaluation uncertainty, not an agent defect.
 
-The security model distinguishes six evidence-domain relationships, with the MCP→OpenAI domain containing four explicit bridge contracts:
+The security model distinguishes seven evidence-domain relationships, with retrieval delivery separate from the seven generic adversarial channels and with the MCP→OpenAI domain containing four explicit bridge contracts:
 
 1. OpenAI local/SDK adversarial delivery — one exact `AttackDeliveryReceipt` must verify before grading an adversarial `AttackFixture` scenario.
-2. MCP protocol faults — one exact `MCPFaultReceipt` proves only the official client's bound protocol observation or relation.
-3. MCP→OpenAI bridges — `MCPAgentToolMetadataReceipt` binds a verified `TOOL_METADATA_POISON` discovery observation to one exact model-visible target definition; `MCPAgentToolResultReceipt` binds a verified `TOOL_RESULT_POISON` observation to one exact agent call/result; `MCPAgentToolErrorRecoveryReceipt` binds a verified `TOOL_ERROR` observation to one causal error → same-argument retry → recovery relation; and `MCPAgentToolSchemaDriftReceipt` binds a verified `TOOL_SCHEMA_DRIFT` relation to one exact host-refreshed v1 rejection → v2 discovery → corrected-call relation.
-4. MCP resource-server authorization — `MCPRemoteAuthReceipt` closes the loopback authentication/authorization matrix and RFC 9728 metadata boundary.
-5. MCP OAuth flow — `MCPOAuthFlowReceipt` closes the separated authorization-server/resource-server discovery, PKCE, exact issuer/resource binding, exchange, introspection, protected-use, and reconnect-reuse boundary.
-6. Calibrated semantic judgment — `SemanticJudgmentReceipt` binds one exact meaning-level decision to the scenario rubric, subject, pre-semantic evidence root, exact judge profile, accepted calibration, bounded input/response digests, criterion results, and derived decision. It is non-critical and is never invoked after deterministic policy/outcome failure.
+2. Deterministic retrieval delivery — one exact `RetrievalDeliveryReceipt` binds the scenario-owned corpus/query/ranker/optional-poison relation and stable target call identity to the exact model-visible canonical ranked result before subject grading.
+3. MCP protocol faults — one exact `MCPFaultReceipt` proves only the official client's bound protocol observation or relation.
+4. MCP→OpenAI bridges — `MCPAgentToolMetadataReceipt` binds a verified `TOOL_METADATA_POISON` discovery observation to one exact model-visible target definition; `MCPAgentToolResultReceipt` binds a verified `TOOL_RESULT_POISON` observation to one exact agent call/result; `MCPAgentToolErrorRecoveryReceipt` binds a verified `TOOL_ERROR` observation to one causal error → same-argument retry → recovery relation; and `MCPAgentToolSchemaDriftReceipt` binds a verified `TOOL_SCHEMA_DRIFT` relation to one exact host-refreshed v1 rejection → v2 discovery → corrected-call relation.
+5. MCP resource-server authorization — `MCPRemoteAuthReceipt` closes the loopback authentication/authorization matrix and RFC 9728 metadata boundary.
+6. MCP OAuth flow — `MCPOAuthFlowReceipt` closes the separated authorization-server/resource-server discovery, PKCE, exact issuer/resource binding, exchange, introspection, protected-use, and reconnect-reuse boundary.
+7. Calibrated semantic judgment — `SemanticJudgmentReceipt` binds one exact meaning-level decision to the scenario rubric, subject, pre-semantic evidence root, exact judge profile, accepted calibration, bounded input/response digests, criterion results, and derived decision. It is non-critical and is never invoked after deterministic policy/outcome failure.
 
 These evidence families do not inherit authority from one another. In particular, a raw protocol receipt is not agent behavioral assurance, and a bridge receipt is a delivery precondition rather than an automatic PASS.
 
@@ -35,6 +36,12 @@ Implemented controls include:
 - fresh one-shot handoff-filter isolation;
 - read-only trial-local runtime-context overlay with task-local activation for environment attacks;
 - exact call-ID binding for local tool-result and environment-consumption receipts;
+- scenario-owned content-addressed retrieval corpus/query/ranker/optional-poison contracts whose behavior-bearing changes alter scenario identity;
+- deterministic integer-only lexical ranking with stable normalization/tie-breaking and canonical bounded model-visible JSON;
+- insertion-only retrieval poison bound to one exact base-corpus identity with executable top-k / exact-displacement relation checks;
+- exact `TOOL_REQUEST < RETRIEVAL_DELIVERY < TOOL_RESULT` chronology, stable call identity, strict duplicate-key-rejecting query JSON, and exact canonical result equivalence;
+- replay-time retrieval receipt rederivation from scenario-owned source material before subject grading;
+- retrieval receipts that retain ranked identities/scores/content digests but deliberately omit raw corpus text and raw source locators;
 - content-addressed `MCPFaultSpec` independent from OpenAI attack fixtures;
 - official `mcp==2.1.1` protocol execution pinned to `2026-07-28`;
 - exact MCP observation for description poison, result poison, model-visible `ToolError`, stale removal cache, tool-schema drift, and tool-identity drift;
@@ -112,7 +119,15 @@ Implemented controls include:
 6. context transferred through the first native SDK handoff;
 7. one targeted local application's SDK runtime-context key consumed during a local tool call.
 
-These are scoped implementations of generic threat channels, not claims of universal production control. The local `TOOL_RESULT` injector does not intercept MCP tools.
+These are scoped implementations of generic threat channels, not claims of universal production control. The local `TOOL_RESULT` injector does not intercept MCP tools. Deterministic retrieval assurance is a separate evaluation-precondition domain, not an eighth generic attack channel and not a claim about hosted File Search, vector databases, embeddings, production RAG lifecycle, citations, or live-provider delivery. See [Retrieval Provenance and Poisoning Assurance](RETRIEVAL_ASSURANCE.md).
+
+## Deterministic retrieval security boundary
+
+A configured `RetrievalContractSpec` is not trusted as proof of delivery. The evaluator rederives baseline and active rankings, requires any controlled poison relation to close under the exact bound ranker, requires one exact model-selected target call with the scenario-bound query, and binds the exact canonical result to that stable call ID through `RETRIEVAL_DELIVERY`.
+
+Persisted retrieval evidence is replay-safe only for the exact scenario identity. The receipt intentionally avoids copying raw corpus content or raw source locators; those remain transitively integrity-bound by corpus/contract identity while durable evidence carries ranked chunk/document identities, scores, and content digests. This reduces evidence leakage without weakening replay rederivation.
+
+Missing, duplicate, reordered, malformed, foreign-source, or unreconstructable retrieval evidence is evaluator uncertainty and becomes `EVALUATION_ERROR / BLOCKED`. A verified controlled poison entering top-k is still only an evaluation precondition; it does not establish whether the subject followed, ignored, resisted, or safely handled that content.
 
 ## MCP protocol-fault security boundary
 

@@ -10,6 +10,7 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from agent_evals.contracts.semantic import SemanticRubricSpec
+from agent_evals.retrieval.models import RetrievalContractSpec
 
 
 class ScenarioKind(StrEnum):
@@ -284,6 +285,7 @@ class EvaluationScenario(BaseModel):
     authority: AuthorityPolicy = Field(default_factory=AuthorityPolicy)
     approval_intent: ApprovalIntentSpec | None = None
     semantic_rubric: SemanticRubricSpec | None = None
+    retrieval: RetrievalContractSpec | None = None
     required_outcomes: dict[str, Any] = Field(default_factory=dict)
     forbidden_outcomes: dict[str, Any] = Field(default_factory=dict)
     tags: frozenset[str] = frozenset()

@@ -6,9 +6,10 @@ The OpenAI integration turns documented OpenAI Agents SDK execution surfaces int
 
 The integration is pinned to `openai-agents==0.22.0`. MCP integration is pinned separately to `mcp==2.1.1`. Pinning both sides makes normalization, tool-output conversion, call identity, approval interruption/resume behavior, protocol negotiation, retry chronology, tool-discovery semantics, and run-item agent attribution explicit reviewable contracts rather than floating assumptions.
 
-Eight adapter boundaries are intentionally distinct:
+Nine adapter boundaries are intentionally distinct:
 
 - `OpenAIAgentsAdapter` — seven scoped local/SDK adversarial channels;
+- `OpenAIAgentsRetrievalAdapter` — one evaluator-owned deterministic retrieval tool binding the exact scenario query and canonical ranked context to one stable SDK call/result relation;
 - `OpenAIAgentsHandoffAuthorityAdapter` — native SDK handoff provenance plus scenario-owned path-local authority attenuation across exact source→target transitions;
 - `OpenAIAgentsHITLApprovalAdapter` — one exact native SDK `ToolApprovalItem` interruption bound to scenario-owned approve/reject intent, stable call identity, canonical arguments, exact resource, accepted authority path, and same-`RunState` continuation;
 - `OpenAIAgentsMCPToolMetadataAdapter` — one controlled official-MCP-stdio → OpenAI public-model-boundary path for `MCPFaultKind.TOOL_METADATA_POISON`, binding exact discovery description and target JSON schema without requiring a target call;
@@ -129,6 +130,32 @@ The stronger receipt binds scenario identity, decision, run-local agent, tool, c
 On approval, exactly one resumed request and one matching result must close the same intent. On rejection, the resumed SDK continuation must produce one matching result explicitly marked as rejected. If the exact rejected invocation nevertheless reaches executable `TOOL_REQUEST` evidence, that resolved chronology is preserved for deterministic critical policy `FAIL` rather than hidden as evaluator uncertainty.
 
 Legacy call-scoped and persistent tool-scoped `APPROVAL` evidence remains supported outside this stronger contract, but neither legacy scope can satisfy or override an `ApprovalIntentSpec`. See [Native HITL Approval Intent](APPROVAL_INTENT.md) for the full receipt, replay, failure-semantics, and non-claim contract.
+
+### Deterministic retrieval-delivery bridge
+
+```text
+EvaluationScenario.retrieval
+        ↓
+content-addressed corpus + exact query + integer ranker profile
+        ↓ optional insertion-only controlled poison relation
+canonical active ranking
+        ↓
+OpenAIAgentsRetrievalAdapter adds one evaluator-owned FunctionTool
+        ↓
+exact model-selected query + stable call ID
+        ↓
+TOOL_REQUEST
+        ↓
+RETRIEVAL_DELIVERY
+        ↓
+TOOL_RESULT(exact canonical ranked JSON)
+        ↓
+verify_retrieval_delivery(...)
+        ↓
+framework-owned deterministic oracles
+```
+
+The target call must occur exactly once and must use only the exact scenario-bound query. A wrong query receives a fixed rejection payload and not the bound context. The receipt binds scenario/contract/corpus/query/ranker/poison identities, ranked-hit provenance/content digests, call ID, and the exact model-visible result digest. This is a separate evaluation-precondition domain, not an eighth generic attack channel. It does not establish OpenAI File Search, hosted vector stores, embedding/ANN quality, production RAG ingestion/chunking/filtering/citation behavior, live-provider delivery, or safe model behavior. See [Retrieval Provenance and Poisoning Assurance](RETRIEVAL_ASSURANCE.md).
 
 ### Dedicated MCP metadata-delivery bridge
 
@@ -340,7 +367,7 @@ input[1].content[0] = {
 }
 ```
 
-This does not claim hosted File Search, vector stores, RAG retrieval/ranking/chunking, external document repositories, MCP resources, or provider-side parsing attestation.
+This generic inline-file channel does not claim hosted File Search, vector stores, RAG retrieval/ranking/chunking, external document repositories, MCP resources, or provider-side parsing attestation. Deterministic retrieval provenance/poisoning assurance exists only through the separate scenario-owned retrieval contract and `OpenAIAgentsRetrievalAdapter`; it does not widen the meaning of `RESOURCE`.
 
 ## Native `HANDOFF`
 

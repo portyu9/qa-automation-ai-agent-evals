@@ -21,6 +21,12 @@ Trusted evaluation control plane
 │   ├── first-native-handoff context
 │   └── targeted runtime-context ENVIRONMENT
 ├── attack-delivery verifier
+├── deterministic retrieval assurance
+│   ├── content-addressed corpus/query/ranker/optional-poison contract
+│   ├── platform-stable integer lexical ranking + canonical result
+│   ├── exact OpenAI retrieval call/result binding
+│   ├── RetrievalDeliveryReceipt without raw corpus duplication
+│   └── replay-time semantic rederivation before grading
 ├── deterministic MCP protocol fault laboratory
 │   ├── tools/list description poison
 │   ├── first tools/call result poison
@@ -107,7 +113,7 @@ External content can become evidence or adversarial stimulus. It does not become
 
 ## Identity domains
 
-`SubjectFingerprint` binds provider, model, application revision, instructions, tool schema, policy, memory policy, and adapter identity/version. `EvaluationScenario` binds scenario ID/revision, objective, initial state, authority, required/forbidden outcomes, classification, tags, approval intent, and optional `SemanticRubricSpec`. Rubric criteria, descriptions, ordering, thresholds, and revision therefore participate in scenario identity.
+`SubjectFingerprint` binds provider, model, application revision, instructions, tool schema, policy, memory policy, and adapter identity/version. `EvaluationScenario` binds scenario ID/revision, objective, initial state, authority, required/forbidden outcomes, classification, tags, approval intent, optional `SemanticRubricSpec`, and optional `RetrievalContractSpec`. Rubric criteria, descriptions, ordering, thresholds, and revision therefore participate in scenario identity.
 
 `AttackFixture` and `AdversarialCampaign` add deterministic adversarial identity without changing base authority or redefining success.
 
@@ -170,6 +176,16 @@ verified delivery + deterministic violation   → FAIL
 verified delivery + deterministic closure     → PASS
 ```
 
+For scenario-owned deterministic retrieval:
+
+```text
+retrieval contract configured, delivery missing/invalid → BLOCKED
+verified retrieval delivery + deterministic violation  → FAIL
+verified retrieval delivery + deterministic closure    → PASS
+```
+
+`RETRIEVAL_DELIVERY` binds one exact model-visible retrieval result to its scenario-owned corpus/query/ranker/poison relation and call identity. It is an evaluator precondition, not grading authority, and it does not convert generic `MEMORY` or inline-file `RESOURCE` injection into production RAG assurance.
+
 For any dedicated MCP bridge:
 
 ```text
@@ -193,7 +209,7 @@ No bridge receipt is grading authority. All four are evaluator-owned integrity e
 - native `HANDOFF` — exact canonical JSON appended to first actual SDK handoff context while preserving destination;
 - runtime-context `ENVIRONMENT` — exact canonical JSON returned for one exact string key only during the first matching local `FunctionTool` invocation, with delivery created only on actual value consumption.
 
-These seven categories are not universal production interception claims. The local result injector does not intercept MCP tools; the dedicated MCP bridges are separate adapters and evidence contracts.
+These seven categories are not universal production interception claims. Deterministic retrieval assurance is a separate scenario/evidence domain rather than an eighth generic attack channel. The local result injector does not intercept MCP tools; the dedicated MCP bridges are separate adapters and evidence contracts.
 
 ## MCP protocol-fault boundary
 
