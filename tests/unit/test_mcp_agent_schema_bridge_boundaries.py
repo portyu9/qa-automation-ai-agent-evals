@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from typing import Any
 
 import pytest
@@ -62,6 +63,18 @@ def _replacement_schema() -> dict[str, object]:
         },
         "required": ["customer_id", "include_history"],
     }
+
+
+def _invalid_fault(payload: dict[str, object]) -> MCPFaultSpec:
+    """Bypass MCPFaultSpec validators only to exercise bridge defense-in-depth checks."""
+    return MCPFaultSpec.model_construct(
+        schema_version="agent-evals/mcp-fault/v1",
+        fault_id="schema-drift-invalid-in-memory",
+        revision="1",
+        kind=MCPFaultKind.TOOL_SCHEMA_DRIFT,
+        tool_name=_TOOL,
+        payload_json=json.dumps(payload, sort_keys=True, separators=(",", ":")),
+    )
 
 
 def _protocol_receipt(*, fault: MCPFaultSpec | None = None) -> MCPFaultReceipt:
@@ -257,9 +270,28 @@ def test_bridge_rejects_relation_drift(field: str, value: object, message: str) 
     ("fault", "ttl_ms", "message"),
     [
         (_fault(ttl_ms=59_999), _TTL_MS, "TTL"),
-        (_fault(initial_required={"query": "integer"}), _TTL_MS, "initial contract"),
         (
-            _fault(replacement_required={"customer_id": "integer"}),
+            _invalid_fault(
+                {
+                    "ttl_ms": _TTL_MS,
+                    "initial_required": {"query": "integer"},
+                    "replacement_required": {
+                        "customer_id": "integer",
+                        "include_history": "boolean",
+                    },
+                }
+            ),
+            _TTL_MS,
+            "initial contract",
+        ),
+        (
+            _invalid_fault(
+                {
+                    "ttl_ms": _TTL_MS,
+                    "initial_required": {"query": "string"},
+                    "replacement_required": {"customer_id": "integer"},
+                }
+            ),
             _TTL_MS,
             "replacement contract",
         ),
