@@ -1,3 +1,4 @@
+# Registered branch-only helper; it removes itself after the guarded promotion.
 name: Side-effect promotion helper
 
 on:
