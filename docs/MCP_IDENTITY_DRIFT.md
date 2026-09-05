@@ -185,4 +185,4 @@ This assurance does **not** establish:
 - live-provider model quality or availability;
 - release acceptance merely because `PROTOCOL_DELIVERY` closes.
 
-`tool_list_stale_cache` remains protocol-only with respect to agent behavior. Identity drift is bridged only by this exact host-refreshed official-stdio + pinned-SDK contract.
+Stale-cache removal has its own exact host-refreshed official-stdio + pinned-SDK bridge for removal, rejection, refreshed target absence, and model-visible rejection delivery. Identity drift remains a separate exact old→replacement identity-adaptation contract.
