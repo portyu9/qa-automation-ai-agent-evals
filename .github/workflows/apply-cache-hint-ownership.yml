@@ -47,11 +47,18 @@ jobs:
               prefix, n = re.subn(r'(?<!["\'])\bttl_ms\b(?!["\'])', 'mcp_cache_hint_ttl_ms', prefix)
               if n < 8:
                   raise SystemExit(f'{path}: too few bridge TTL identifier migrations: {n}')
-              helper_kw = 'mcp_cache_hint_ttl_ms=mcp_cache_hint_ttl_ms'
-              helper_count = prefix.count(helper_kw)
-              if helper_count < 2:
-                  raise SystemExit(f'{path}: expected at least 2 protocol helper TTL calls, got {helper_count}')
-              prefix = prefix.replace(helper_kw, 'ttl_ms=mcp_cache_hint_ttl_ms')
+
+              local_kw = 'mcp_cache_hint_ttl_ms=mcp_cache_hint_ttl_ms'
+              receiver_kw = 'mcp_cache_hint_ttl_ms=self.mcp_cache_hint_ttl_ms'
+              local_count = prefix.count(local_kw)
+              receiver_count = prefix.count(receiver_kw)
+              if local_count < 2:
+                  raise SystemExit(f'{path}: expected at least 2 local protocol TTL crossings, got {local_count}')
+              if receiver_count != 1:
+                  raise SystemExit(f'{path}: expected exactly 1 receiver protocol TTL crossing, got {receiver_count}')
+              prefix = prefix.replace(local_kw, 'ttl_ms=mcp_cache_hint_ttl_ms')
+              prefix = prefix.replace(receiver_kw, 'ttl_ms=self.mcp_cache_hint_ttl_ms')
+
               old_unsigned = '"ttl_ms": mcp_cache_hint_ttl_ms,'
               if prefix.count(old_unsigned) != 1:
                   raise SystemExit(f'{path}: expected exactly one bridge unsigned TTL field')
@@ -107,6 +114,8 @@ jobs:
                   raise SystemExit(f'{path}: bare bridge ttl_ms field remains')
               if '"ttl_ms": mcp_cache_hint_ttl_ms,' in prefix:
                   raise SystemExit(f'{path}: bare bridge serialized ttl_ms remains')
+              if 'mcp_cache_hint_ttl_ms=self.mcp_cache_hint_ttl_ms' in prefix:
+                  raise SystemExit(f'{path}: protocol helper receiver keyword remains renamed')
           for path in adapters:
               text = path.read_text()
               if 'def ttl_ms(self) -> int:' in text or '.ttl_ms' in text:
