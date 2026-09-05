@@ -82,7 +82,9 @@ class TrialAssuranceRecord(BaseModel):
             if self.oracle_results:
                 raise ValueError("blocked assurance trial cannot contain completed oracle results")
             if self.semantic_judgment is not None:
-                raise ValueError("blocked assurance trial cannot contain semantic judgment evidence")
+                raise ValueError(
+                    "blocked assurance trial cannot contain semantic judgment evidence"
+                )
             return self
 
         if not self.oracle_results:
@@ -95,9 +97,7 @@ class TrialAssuranceRecord(BaseModel):
         )
         semantic = self.semantic_judgment
         if semantic is not None and deterministic_failed:
-            raise ValueError(
-                "semantic judgment cannot coexist with deterministic oracle failure"
-            )
+            raise ValueError("semantic judgment cannot coexist with deterministic oracle failure")
 
         if semantic is None:
             if self.verdict is TrialVerdict.INCONCLUSIVE:
