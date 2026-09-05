@@ -174,10 +174,13 @@ Before subject grading, the evaluator dispatches each known protocol-delivery so
 | `bridge:mcp-agent:tool-result` | `MCPAgentToolResultReceipt` | exact result-bridge identity and model-visible output binding |
 | `bridge:mcp-agent:tool-error-recovery` | `MCPAgentToolErrorRecoveryReceipt` | exact error/retry identities, causal chronology, argument and recovery bindings |
 | `bridge:mcp-agent:tool-schema-drift` | `MCPAgentToolSchemaDriftReceipt` | exact schema/argument/observation digests, strict protocol chronology, and host-refreshed adaptation binding |
+| `bridge:mcp-agent:tool-identity-drift` | `MCPAgentToolIdentityDriftReceipt` | exact original→replacement identity binding, model-visible identity-set digests, strict call/result and protocol chronology, argument/rejection/recovery bindings |
 
 The metadata replay verifier does not recreate MCP discovery or a model request. It rechecks the typed receipt's exact `TOOL_METADATA_POISON` kind, protocol revision and `tools/list:<tool>:description` observation point, description digest relation, tool identity, schema-digest relation, scenario identity, semantic root, and chronology. Leading pre-model `ATTACK_DELIVERY` is permitted, but metadata `PROTOCOL_DELIVERY` appearing after normalized model/agent behavior fails closed.
 
 The schema-drift replay verifier does not recreate a refresh. It checks that the historical receipt still proves the exact recorded relation: bound v1/cached/v2 schema digests, stale/recovery argument digests, matching protocol/model-visible observations, distinct call identities, strict `initial-list < swap < stale-call < cache-invalidation < refreshed-list < recovery-call` chronology, and a valid domain-separated root.
+
+The identity-drift replay verifier likewise does not reconnect to MCP or recreate a rename/cache refresh. It revalidates the nested `TOOL_IDENTITY_DRIFT` protocol receipt, exact original and replacement identities, initial/refreshed model-visible controlled identity sets, distinct stale/recovery call IDs, strict finite canonical argument digests, protocol/model rejection and recovery digests, the same six-leg protocol chronology, scenario identity, and domain-separated bridge root. A historical receipt therefore proves only that the persisted run contained that exact host-refreshed identity-adaptation relation; it does not assert current MCP registry or model behavior. See [MCP Tool-Identity Drift Assurance](MCP_IDENTITY_DRIFT.md).
 
 Unknown `PROTOCOL_DELIVERY` sources fail closed until an explicit verifier exists. Malformed typed receipts, invalid roots, impossible chronology, or receipt scenario identity that differs from the enclosing `TrialEvidence.scenario_identity` block evaluation instead of being treated as trusted historical evidence.
 
@@ -201,8 +204,8 @@ Replay does **not** answer:
 - would a native approval interruption or human review happen the same way now?;
 - would the same two callbacks or effect-reader snapshots produce the same side-effect relation now?;
 - would an evaluator-owned or external retrieval system produce the same ranking/context now?;
-- would an MCP server still expose the same result, error, schema, cache state, or authorization behavior now?;
-- would a host perform the same schema-drift cache invalidation now?
+- would an MCP server still expose the same result, error, schema, tool identity, cache state, or authorization behavior now?;
+- would a host perform the same schema- or identity-drift cache invalidation now?
 
 Those questions require fresh execution, fresh environment observation, or authenticated provenance—not replay.
 
