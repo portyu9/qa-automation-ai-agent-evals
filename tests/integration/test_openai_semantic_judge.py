@@ -143,7 +143,9 @@ async def test_openai_semantic_judge_uses_public_runner_and_treats_candidate_as_
 
 @pytest.mark.openai
 @pytest.mark.asyncio
-async def test_openai_semantic_judge_rejects_duplicate_json_keys_before_semantic_validation() -> None:
+async def test_openai_semantic_judge_rejects_duplicate_json_keys_before_semantic_validation() -> (
+    None
+):
     pytest.importorskip("agents")
     from agents.testing import ScriptedModel, assistant_message
 
