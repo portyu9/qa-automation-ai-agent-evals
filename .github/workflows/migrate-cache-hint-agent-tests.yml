@@ -41,36 +41,33 @@ jobs:
           direct_keyword_changes = 0
           helper_dict_changes = 0
 
-          def offsets(text: str) -> list[int]:
+          def line_offsets(text: str) -> list[int]:
               starts = [0]
               for i, ch in enumerate(text):
                   if ch == "\n":
                       starts.append(i + 1)
               return starts
 
+          def agent_create(node: ast.Call) -> bool:
+              fn = node.func
+              return (
+                  isinstance(fn, ast.Attribute)
+                  and fn.attr == "create"
+                  and isinstance(fn.value, ast.Name)
+                  and fn.value.id in RECEIPTS
+              )
+
           for path in test_files:
               text = path.read_text()
-              try:
-                  tree = ast.parse(text)
-              except SyntaxError:
-                  continue
-              starts = offsets(text)
+              tree = ast.parse(text)
+              starts = line_offsets(text)
               edits: list[tuple[int, int, str]] = []
 
-              # Direct MCPAgent*Receipt.create(..., ttl_ms=...) calls.
               for node in ast.walk(tree):
-                  if not isinstance(node, ast.Call):
-                      continue
-                  fn = node.func
-                  if not (
-                      isinstance(fn, ast.Attribute)
-                      and fn.attr == "create"
-                      and isinstance(fn.value, ast.Name)
-                      and fn.value.id in RECEIPTS
-                  ):
+                  if not isinstance(node, ast.Call) or not agent_create(node):
                       continue
                   for kw in node.keywords:
-                      if kw.arg != "ttl_ms" or not hasattr(kw, "lineno"):
+                      if kw.arg != "ttl_ms":
                           continue
                       start = starts[kw.lineno - 1] + kw.col_offset
                       if text[start : start + 6] != "ttl_ms":
@@ -78,45 +75,41 @@ jobs:
                       edits.append((start, start + 6, "mcp_cache_hint_ttl_ms"))
                       direct_keyword_changes += 1
 
-              # Helper dictionaries expanded into MCPAgent*Receipt.create(**values/kwargs).
               for func in [n for n in ast.walk(tree) if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))]:
                   expanded_names: set[str] = set()
                   for node in ast.walk(func):
-                      if not isinstance(node, ast.Call):
-                          continue
-                      fn = node.func
-                      if not (
-                          isinstance(fn, ast.Attribute)
-                          and fn.attr == "create"
-                          and isinstance(fn.value, ast.Name)
-                          and fn.value.id in RECEIPTS
-                      ):
+                      if not isinstance(node, ast.Call) or not agent_create(node):
                           continue
                       for kw in node.keywords:
                           if kw.arg is None and isinstance(kw.value, ast.Name):
                               expanded_names.add(kw.value.id)
                   if not expanded_names:
                       continue
+
                   for node in ast.walk(func):
-                      if not isinstance(node, ast.Assign) or len(node.targets) != 1:
+                      target: ast.expr | None = None
+                      value: ast.expr | None = None
+                      if isinstance(node, ast.Assign) and len(node.targets) == 1:
+                          target, value = node.targets[0], node.value
+                      elif isinstance(node, ast.AnnAssign):
+                          target, value = node.target, node.value
+                      if not (
+                          isinstance(target, ast.Name)
+                          and target.id in expanded_names
+                          and isinstance(value, ast.Dict)
+                      ):
                           continue
-                      target = node.targets[0]
-                      if not isinstance(target, ast.Name) or target.id not in expanded_names:
-                          continue
-                      if not isinstance(node.value, ast.Dict):
-                          continue
-                      for key in node.value.keys:
+                      for key in value.keys:
                           if not (isinstance(key, ast.Constant) and key.value == "ttl_ms"):
                               continue
-                          start = starts[key.lineno - 1] + key.col_offset
                           segment = ast.get_source_segment(text, key)
                           if segment not in {'"ttl_ms"', "'ttl_ms'"}:
-                              raise AssertionError(f"unexpected dict key source at {path}:{key.lineno}: {segment!r}")
+                              raise AssertionError(f"unexpected dict key at {path}:{key.lineno}: {segment!r}")
+                          start = starts[key.lineno - 1] + key.col_offset
                           edits.append((start + 1, start + 7, "mcp_cache_hint_ttl_ms"))
                           helper_dict_changes += 1
 
               if edits:
-                  # Reject overlapping edits; then apply from the end of the file.
                   ordered = sorted(edits)
                   for (_, end_a, _), (start_b, _, _) in zip(ordered, ordered[1:]):
                       if end_a > start_b:
@@ -126,14 +119,12 @@ jobs:
                   path.write_text(text)
                   changed.append(path)
 
-          # Known serialized-field mutation fixture in the stale-cache boundary suite.
           boundary = Path("tests/unit/test_mcp_agent_stale_cache_bridge_boundaries.py")
           text = boundary.read_text()
           old = '("ttl_ms", 1, "payload digest does not match bound TTL"),'
           new = '("mcp_cache_hint_ttl_ms", 1, "payload digest does not match bound TTL"),'
           if old in text:
-              text = text.replace(old, new, 1)
-              boundary.write_text(text)
+              boundary.write_text(text.replace(old, new, 1))
               if boundary not in changed:
                   changed.append(boundary)
 
@@ -142,16 +133,21 @@ jobs:
           if helper_dict_changes < 2:
               raise AssertionError(f"too few helper-dict migrations: {helper_dict_changes}")
 
-          # Guard the ownership boundary: protocol helpers and fault payloads must still use ttl_ms.
-          source = "\n".join(p.read_text() for p in test_files)
-          if "create_stale_cache_protocol_receipt(\n" not in source or "ttl_ms=" not in source:
-              raise AssertionError("protocol helper TTL coverage unexpectedly disappeared")
+          # These protocol-domain tokens MUST survive the agent-domain rename.
+          joined = "\n".join(p.read_text() for p in test_files)
+          for token in (
+              "create_stale_cache_protocol_receipt(",
+              "create_schema_drift_protocol_receipt(",
+              "create_identity_drift_protocol_receipt(",
+              'payload={"ttl_ms":',
+          ):
+              if token not in joined:
+                  raise AssertionError(f"protocol ownership guard disappeared: {token}")
 
-          print(f"migrated direct agent keywords: {direct_keyword_changes}")
-          print(f"migrated helper dictionary keys: {helper_dict_changes}")
-          print("changed test files:")
+          print(f"direct agent keyword migrations: {direct_keyword_changes}")
+          print(f"helper dictionary migrations: {helper_dict_changes}")
           for path in changed:
-              print(f"  {path}")
+              print(path)
           PY
       - name: Add explicit ownership contract tests
         run: |
@@ -159,8 +155,10 @@ jobs:
           from __future__ import annotations
 
           import inspect
+          from collections.abc import Callable
 
           import pytest
+          from pydantic import BaseModel
 
           from agent_evals.mcp.agent_identity_bridge import (
               MCPAgentToolIdentityDriftReceipt,
@@ -184,12 +182,13 @@ jobs:
                   MCPAgentToolIdentityDriftReceipt,
               ],
           )
-          def test_agent_receipt_schema_names_mcp_cache_hint_ownership(receipt_type: type[object]) -> None:
-              fields = receipt_type.model_fields  # type: ignore[attr-defined]
-              assert "mcp_cache_hint_ttl_ms" in fields
-              assert "ttl_ms" not in fields
+          def test_agent_receipt_schema_names_mcp_cache_hint_ownership(
+              receipt_type: type[BaseModel],
+          ) -> None:
+              assert "mcp_cache_hint_ttl_ms" in receipt_type.model_fields
+              assert "ttl_ms" not in receipt_type.model_fields
 
-              parameters = inspect.signature(receipt_type.create).parameters  # type: ignore[attr-defined]
+              parameters = inspect.signature(receipt_type.create).parameters
               assert "mcp_cache_hint_ttl_ms" in parameters
               assert "ttl_ms" not in parameters
 
@@ -202,25 +201,20 @@ jobs:
                   create_identity_drift_protocol_receipt,
               ],
           )
-          def test_protocol_helpers_retain_protocol_cache_hint_name(protocol_helper: object) -> None:
-              parameters = inspect.signature(protocol_helper).parameters  # type: ignore[arg-type]
+          def test_protocol_helpers_retain_protocol_cache_hint_name(
+              protocol_helper: Callable[..., object],
+          ) -> None:
+              parameters = inspect.signature(protocol_helper).parameters
               assert "ttl_ms" in parameters
               assert "mcp_cache_hint_ttl_ms" not in parameters
           PY
-      - name: Install and verify migrated contract
+      - name: Verify migrated contract
         run: |
           python -m pip install --disable-pip-version-check -e '.[dev]'
-          ruff format tests/unit/test_mcp_agent_identity_bridge.py tests/unit/test_mcp_agent_identity_bridge_boundaries.py tests/unit/test_mcp_agent_schema_bridge.py tests/unit/test_mcp_agent_schema_bridge_boundaries.py tests/unit/test_mcp_protocol_delivery_schema_drift.py tests/unit/test_mcp_agent_stale_cache_bridge.py tests/unit/test_mcp_agent_stale_cache_bridge_boundaries.py tests/unit/test_mcp_cache_hint_ttl_ownership.py
-          ruff check tests/unit/test_mcp_agent_identity_bridge.py tests/unit/test_mcp_agent_identity_bridge_boundaries.py tests/unit/test_mcp_agent_schema_bridge.py tests/unit/test_mcp_agent_schema_bridge_boundaries.py tests/unit/test_mcp_protocol_delivery_schema_drift.py tests/unit/test_mcp_agent_stale_cache_bridge.py tests/unit/test_mcp_agent_stale_cache_bridge_boundaries.py tests/unit/test_mcp_cache_hint_ttl_ownership.py
-          pytest -q \
-            tests/unit/test_mcp_agent_identity_bridge.py \
-            tests/unit/test_mcp_agent_identity_bridge_boundaries.py \
-            tests/unit/test_mcp_agent_schema_bridge.py \
-            tests/unit/test_mcp_agent_schema_bridge_boundaries.py \
-            tests/unit/test_mcp_protocol_delivery_schema_drift.py \
-            tests/unit/test_mcp_agent_stale_cache_bridge.py \
-            tests/unit/test_mcp_agent_stale_cache_bridge_boundaries.py \
-            tests/unit/test_mcp_cache_hint_ttl_ownership.py
+          ruff format tests/unit/test_mcp_cache_hint_ttl_ownership.py
+          ruff check tests
+          mypy
+          pytest -q
       - name: Commit migration and remove helper
         run: |
           rm .github/workflows/migrate-cache-hint-agent-tests.yml
