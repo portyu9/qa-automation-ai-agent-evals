@@ -14,10 +14,10 @@ from pydantic import BaseModel, ConfigDict, Field, StrictInt, field_validator, m
 from agent_evals.evidence.models import EvidenceEvent, EvidenceKind
 from agent_evals.mcp.models import MCPFaultKind, MCPFaultReceipt, MCPFaultSpec
 
-_BRIDGE_SCHEMA: Literal["agent-evals/mcp-agent-tool-schema-drift-receipt/v1"] = (
-    "agent-evals/mcp-agent-tool-schema-drift-receipt/v1"
+_BRIDGE_SCHEMA: Literal["agent-evals/mcp-agent-tool-schema-drift-receipt/v2"] = (
+    "agent-evals/mcp-agent-tool-schema-drift-receipt/v2"
 )
-_BRIDGE_DOMAIN = b"agent-evals/mcp-agent-tool-schema-drift-receipt/v1\0"
+_BRIDGE_DOMAIN = b"agent-evals/mcp-agent-tool-schema-drift-receipt/v2\0"
 _PROTOCOL_VERSION = "2026-07-28"
 _EVENT_SOURCE = "bridge:mcp-agent:tool-schema-drift"
 _INITIAL_REQUIRED = {"query": "string"}
@@ -40,7 +40,7 @@ class MCPAgentToolSchemaDriftReceipt(BaseModel):
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    schema_version: Literal["agent-evals/mcp-agent-tool-schema-drift-receipt/v1"] = _BRIDGE_SCHEMA
+    schema_version: Literal["agent-evals/mcp-agent-tool-schema-drift-receipt/v2"] = _BRIDGE_SCHEMA
     scenario_identity: str = Field(pattern=r"^[0-9a-f]{64}$")
     protocol_receipt: MCPFaultReceipt
     agent_tool_name: str = Field(min_length=1, max_length=128)
@@ -59,6 +59,7 @@ class MCPAgentToolSchemaDriftReceipt(BaseModel):
     agent_recovery_observation_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     initial_list_ordinal: StrictInt = Field(ge=0)
     schema_swap_ordinal: StrictInt = Field(ge=0)
+    cached_list_ordinal: StrictInt = Field(ge=0)
     stale_call_ordinal: StrictInt = Field(ge=0)
     cache_invalidation_ordinal: StrictInt = Field(ge=0)
     refreshed_list_ordinal: StrictInt = Field(ge=0)
@@ -87,6 +88,7 @@ class MCPAgentToolSchemaDriftReceipt(BaseModel):
         agent_recovery_output: object,
         initial_list_ordinal: int,
         schema_swap_ordinal: int,
+        cached_list_ordinal: int,
         stale_call_ordinal: int,
         cache_invalidation_ordinal: int,
         refreshed_list_ordinal: int,
@@ -159,6 +161,7 @@ class MCPAgentToolSchemaDriftReceipt(BaseModel):
         ordinals = (
             initial_list_ordinal,
             schema_swap_ordinal,
+            cached_list_ordinal,
             stale_call_ordinal,
             cache_invalidation_ordinal,
             refreshed_list_ordinal,
@@ -201,6 +204,7 @@ class MCPAgentToolSchemaDriftReceipt(BaseModel):
             "agent_recovery_observation_sha256": agent_recovery_sha256,
             "initial_list_ordinal": initial_list_ordinal,
             "schema_swap_ordinal": schema_swap_ordinal,
+            "cached_list_ordinal": cached_list_ordinal,
             "stale_call_ordinal": stale_call_ordinal,
             "cache_invalidation_ordinal": cache_invalidation_ordinal,
             "refreshed_list_ordinal": refreshed_list_ordinal,
@@ -277,6 +281,7 @@ class MCPAgentToolSchemaDriftReceipt(BaseModel):
         ordinals = (
             self.initial_list_ordinal,
             self.schema_swap_ordinal,
+            self.cached_list_ordinal,
             self.stale_call_ordinal,
             self.cache_invalidation_ordinal,
             self.refreshed_list_ordinal,
@@ -324,6 +329,7 @@ def create_schema_drift_protocol_receipt(
     protocol_recovery_text: str,
     initial_list_ordinal: int,
     schema_swap_ordinal: int,
+    cached_list_ordinal: int,
     stale_call_ordinal: int,
     cache_invalidation_ordinal: int,
     refreshed_list_ordinal: int,
@@ -352,6 +358,7 @@ def create_schema_drift_protocol_receipt(
     ordinals = (
         initial_list_ordinal,
         schema_swap_ordinal,
+        cached_list_ordinal,
         stale_call_ordinal,
         cache_invalidation_ordinal,
         refreshed_list_ordinal,
@@ -439,7 +446,7 @@ def _require_fault_payload(fault: MCPFaultSpec, *, ttl_ms: int) -> None:
 def _protocol_point(tool_name: str) -> str:
     return (
         f"mcp:{_PROTOCOL_VERSION}:tools/list:agent-schema-drift:{tool_name}:"
-        "cached-old:call-rejects-old:host-refresh-new:call-succeeds-new"
+        "swap-then-cached-old:call-rejects-old:host-refresh-new:call-succeeds-new"
     )
 
 
@@ -451,35 +458,38 @@ def _protocol_observation(
     refreshed_schema_sha256: str,
     stale_protocol_observation_sha256: str,
     protocol_recovery_observation_sha256: str,
-    ordinals: tuple[int, int, int, int, int, int],
+    ordinals: tuple[int, int, int, int, int, int, int],
 ) -> str:
     return _canonical_json(
         {
-            "cache_invalidation_ordinal": ordinals[3],
+            "cache_invalidation_ordinal": ordinals[4],
+            "cached_list_ordinal": ordinals[2],
             "cached_schema_sha256": cached_schema_sha256,
             "initial_list_ordinal": ordinals[0],
             "initial_schema_sha256": initial_schema_sha256,
             "protocol_recovery_observation_sha256": protocol_recovery_observation_sha256,
-            "recovery_call_ordinal": ordinals[5],
-            "refreshed_list_ordinal": ordinals[4],
+            "recovery_call_ordinal": ordinals[6],
+            "refreshed_list_ordinal": ordinals[5],
             "refreshed_schema_sha256": refreshed_schema_sha256,
             "schema_swap_ordinal": ordinals[1],
-            "stale_call_ordinal": ordinals[2],
+            "stale_call_ordinal": ordinals[3],
             "stale_protocol_observation_sha256": stale_protocol_observation_sha256,
             "ttl_ms": ttl_ms,
         }
     )
 
 
-def _require_protocol_chronology(ordinals: tuple[int, int, int, int, int, int]) -> None:
+def _require_protocol_chronology(
+    ordinals: tuple[int, int, int, int, int, int, int],
+) -> None:
     if any(
         isinstance(value, bool) or not isinstance(value, int) or value < 0 for value in ordinals
     ):
         raise ValueError("MCP schema-drift protocol ordinals must be non-negative integers")
     if not all(left < right for left, right in pairwise(ordinals)):
         raise ValueError(
-            "MCP schema-drift protocol chronology must be initial-list < swap < stale-call < "
-            "cache-invalidation < refreshed-list < recovery-call"
+            "MCP schema-drift protocol chronology must be initial-list < swap < cached-list < "
+            "stale-call < cache-invalidation < refreshed-list < recovery-call"
         )
 
 

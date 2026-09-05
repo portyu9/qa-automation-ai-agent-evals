@@ -167,6 +167,7 @@ class _MCPToolIdentityDriftRecorder:
         self._recovery_is_error: bool | None = None
         self._initial_list_ordinal: int | None = None
         self._identity_swap_ordinal: int | None = None
+        self._cached_list_ordinal: int | None = None
         self._stale_call_ordinal: int | None = None
         self._cache_invalidation_ordinal: int | None = None
         self._refreshed_list_ordinal: int | None = None
@@ -229,6 +230,10 @@ class _MCPToolIdentityDriftRecorder:
     @property
     def identity_swap_ordinal(self) -> int:
         return self._require_ordinal(self._identity_swap_ordinal, "identity swap")
+
+    @property
+    def cached_list_ordinal(self) -> int:
+        return self._require_ordinal(self._cached_list_ordinal, "post-swap cached discovery")
 
     @property
     def stale_call_ordinal(self) -> int:
@@ -299,13 +304,6 @@ class _MCPToolIdentityDriftRecorder:
             if tool_name != self._fault.tool_name:
                 return await _invoke_call_tool(self._original_call_tool, tool_name, arguments, meta)
 
-            cached_tools = await self._original_list_tools()
-            self._cached_protocol_names = _controlled_names(
-                cached_tools,
-                original_tool_name=self._fault.tool_name,
-                replacement_tool_name=self._replacement_tool_name,
-            )
-
             control_result = await _invoke_call_tool(
                 self._original_call_tool,
                 _CONTROL_TOOL,
@@ -318,6 +316,13 @@ class _MCPToolIdentityDriftRecorder:
             )
             if not self._control_failed:
                 self._identity_swap_ordinal = self._mark()
+                cached_tools = await self._original_list_tools()
+                self._cached_protocol_names = _controlled_names(
+                    cached_tools,
+                    original_tool_name=self._fault.tool_name,
+                    replacement_tool_name=self._replacement_tool_name,
+                )
+                self._cached_list_ordinal = self._mark()
 
             self._stale_arguments = copy.deepcopy(arguments)
             result = await _invoke_call_tool(self._original_call_tool, tool_name, arguments, meta)
@@ -377,7 +382,7 @@ class _MCPToolIdentityDriftRecorder:
         if self._cached_protocol_names != expected_initial:
             raise AdapterPreconditionError(
                 code="mcp_identity_cached_discovery_mismatch",
-                reason="host cache did not preserve the original identity before live replacement",
+                reason="host cache did not preserve the original identity after live replacement",
             )
         if self._stale_is_error is not True or not self._stale_text:
             raise AdapterPreconditionError(
@@ -439,6 +444,7 @@ class _MCPToolIdentityDriftRecorder:
                 protocol_recovery_text=self.protocol_recovery_text,
                 initial_list_ordinal=self.initial_list_ordinal,
                 identity_swap_ordinal=self.identity_swap_ordinal,
+                cached_list_ordinal=self.cached_list_ordinal,
                 stale_call_ordinal=self.stale_call_ordinal,
                 cache_invalidation_ordinal=self.cache_invalidation_ordinal,
                 refreshed_list_ordinal=self.refreshed_list_ordinal,
@@ -578,6 +584,7 @@ def _attach_verified_identity_bridge(
             refreshed_model_tool_names=recorder.refreshed_model_names,
             initial_list_ordinal=recorder.initial_list_ordinal,
             identity_swap_ordinal=recorder.identity_swap_ordinal,
+            cached_list_ordinal=recorder.cached_list_ordinal,
             stale_call_ordinal=recorder.stale_call_ordinal,
             cache_invalidation_ordinal=recorder.cache_invalidation_ordinal,
             refreshed_list_ordinal=recorder.refreshed_list_ordinal,
