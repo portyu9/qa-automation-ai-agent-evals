@@ -217,10 +217,17 @@ class TrialRunner:
                 verdict=TrialVerdict.BLOCKED,
             )
 
-        oracles = self._oracles
         if scenario.side_effect_idempotency is not None:
-            oracles = (self._oracles[0], SideEffectIdempotencyOracle(), self._oracles[1])
-        oracle_results = tuple(oracle.grade(scenario, evidence) for oracle in oracles)
+            oracle_results = tuple(
+                oracle.grade(scenario, evidence)
+                for oracle in (
+                    self._oracles[0],
+                    SideEffectIdempotencyOracle(),
+                    self._oracles[1],
+                )
+            )
+        else:
+            oracle_results = tuple(oracle.grade(scenario, evidence) for oracle in self._oracles)
         deterministic_failed = any(result.verdict is TrialVerdict.FAIL for result in oracle_results)
 
         try:
