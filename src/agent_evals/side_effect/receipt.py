@@ -11,7 +11,9 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from agent_evals.evidence.models import EvidenceEvent, EvidenceKind
 from agent_evals.side_effect.models import SideEffectIdempotencySpec
 
-_SCHEMA = "agent-evals/side-effect-idempotency-receipt/v1"
+_SCHEMA: Literal["agent-evals/side-effect-idempotency-receipt/v1"] = (
+    "agent-evals/side-effect-idempotency-receipt/v1"
+)
 _EVENT_SOURCE = "bridge:side-effect-idempotency"
 _ROOT_DOMAIN = b"agent-evals/side-effect-idempotency-receipt/v1\0"
 
