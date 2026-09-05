@@ -24,6 +24,7 @@ jobs:
         run: |
           python - <<'PY'
           from pathlib import Path
+          from textwrap import dedent
 
           path = Path('src/agent_evals/adapters/openai_mcp_tool_identity_drift.py')
           text = path.read_text()
@@ -33,7 +34,8 @@ jobs:
           end_marker = '\ndef _result_is_error(result: object) -> bool:\n'
           start = text.index(start_marker)
           end = text.index(end_marker, start)
-          replacement = '''def _normalized_request_arguments(event: EvidenceEvent) -> dict[str, Any]:
+          replacement = dedent('''\
+          def _normalized_request_arguments(event: EvidenceEvent) -> dict[str, Any]:
               arguments = event.payload.get("arguments")
               if not isinstance(arguments, str) or not arguments:
                   raise AdapterPreconditionError(
@@ -84,7 +86,7 @@ jobs:
               if isinstance(value, dict):
                   return any(_contains_non_finite_json(item) for item in value.values())
               return False
-          '''.replace('          ', '')
+          ''')
           path.write_text(text[:start] + replacement + text[end:])
           PY
       - name: Install pinned formatter
