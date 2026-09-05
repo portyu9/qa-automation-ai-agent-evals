@@ -64,7 +64,7 @@ jobs:
           python-version: "3.11"
           cache: pip
       - name: Install OpenAI adapter test dependencies
-        run: python -m pip install --disable-pip-version-check -e '.[dev,openai,mcp]'
+        run: python -m pip install --disable-pip-version-check -e '.[dev,openai,mcp,yaml]'
       - name: Run deterministic SDK adapter tests
         env:
           OPENAI_AGENTS_DISABLE_TRACING: "1"
@@ -87,6 +87,8 @@ jobs:
           tests/integration/test_openai_mcp_tool_schema_drift_contract.py
           tests/integration/test_openai_mcp_tool_identity_drift_adapter.py
           tests/integration/test_openai_mcp_tool_stale_cache_adapter.py
+      - name: Audit complete runtime dependency graph
+        run: pip-audit
 
   mcp-lab:
     name: MCP fault lab / deterministic protocol
