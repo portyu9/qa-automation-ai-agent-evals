@@ -272,20 +272,28 @@ def test_stale_cache_receipt_root_tampering_is_rejected() -> None:
 
 
 def test_stale_cache_protocol_receipt_wrong_boundary_is_rejected() -> None:
-    payload = _protocol_receipt().model_dump(mode="json")
-    payload["injection_point"] = "mcp:2026-07-28:wrong-boundary"
-    payload["receipt_root"] = MCPFaultReceipt.create(
+    observation = json.dumps(
+        {
+            "cached_tool_names": (_TOOL,),
+            "initial_tool_names": (_TOOL,),
+            "refreshed_tool_names": (),
+            "ttl_ms": _TTL_MS,
+        },
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    wrong_boundary = MCPFaultReceipt.create(
         fault=_fault(),
         protocol_version="2026-07-28",
-        injection_point=payload["injection_point"],
-        observed_text="irrelevant",
-    ).receipt_root
+        injection_point="mcp:2026-07-28:wrong-boundary",
+        observed_text=observation,
+    )
 
-    with pytest.raises(ValidationError):
+    with pytest.raises(ValueError, match="unexpected protocol boundary"):
         MCPAgentToolStaleCacheReceipt.create(
             scenario_identity="a" * 64,
             fault=_fault(),
-            protocol_receipt=MCPFaultReceipt.model_construct(**payload),
+            protocol_receipt=wrong_boundary,
             tool_name=_TOOL,
             stale_call_id="call-stale",
             mcp_cache_hint_ttl_ms=_TTL_MS,
