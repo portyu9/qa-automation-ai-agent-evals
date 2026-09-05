@@ -60,6 +60,61 @@ def _bridge(*, scenario_identity: str = "a" * 64) -> MCPAgentToolStaleCacheRecei
     )
 
 
+def _evidence(
+    *,
+    scenario_identity: str = "a" * 64,
+    arguments: str = '{"query":"stale"}',
+    result_text: str = _STALE_TEXT,
+    delivery_payload: dict[str, object] | None = None,
+    delivery_sequence: int = 2,
+) -> TrialEvidence:
+    receipt = _bridge(scenario_identity=scenario_identity)
+    delivery = receipt.to_event(sequence=delivery_sequence)
+    if delivery_payload is not None:
+        delivery = EvidenceEvent(
+            sequence=delivery_sequence,
+            kind=EvidenceKind.PROTOCOL_DELIVERY,
+            source=delivery.source,
+            payload=delivery_payload,
+        )
+
+    request = EvidenceEvent(
+        sequence=0,
+        kind=EvidenceKind.TOOL_REQUEST,
+        source="openai-agents",
+        payload={
+            "tool": _TOOL,
+            "call_id": "call-stale",
+            "arguments": arguments,
+        },
+    )
+    result = EvidenceEvent(
+        sequence=1,
+        kind=EvidenceKind.TOOL_RESULT,
+        source="openai-agents",
+        payload={
+            "tool": _TOOL,
+            "call_id": "call-stale",
+            "output": {"type": "text", "text": result_text},
+        },
+    )
+    if delivery_sequence == 2:
+        events = (request, result, delivery)
+    elif delivery_sequence == 1:
+        delivery = delivery.model_copy(update={"sequence": 1})
+        result = result.model_copy(update={"sequence": 2})
+        events = (request, delivery, result)
+    else:
+        raise ValueError("test helper supports delivery sequence 1 or 2")
+
+    return TrialEvidence(
+        trial_id="stale-cache",
+        subject_identity="b" * 64,
+        scenario_identity=scenario_identity,
+        events=events,
+    )
+
+
 def test_stale_cache_receipt_binds_removal_without_raw_rejection_or_arguments() -> None:
     receipt = _bridge()
 
@@ -249,14 +304,8 @@ def test_stale_cache_protocol_receipt_wrong_boundary_is_rejected() -> None:
 
 
 def test_protocol_delivery_revalidates_stale_cache_receipt_and_scenario() -> None:
-    scenario_identity = "a" * 64
-    receipt = _bridge(scenario_identity=scenario_identity)
-    evidence = TrialEvidence(
-        trial_id="stale-cache",
-        subject_identity="b" * 64,
-        scenario_identity=scenario_identity,
-        events=(receipt.to_event(sequence=0),),
-    )
+    evidence = _evidence()
+    receipt = _bridge()
 
     assert verify_protocol_delivery(evidence) == (receipt,)
 
@@ -267,22 +316,24 @@ def test_protocol_delivery_revalidates_stale_cache_receipt_and_scenario() -> Non
 
 def test_stale_cache_delivery_payload_tampering_fails_closed() -> None:
     receipt = _bridge()
-    event = receipt.to_event(sequence=0)
-    payload = dict(event.payload)
+    payload = receipt.model_dump(mode="json")
     payload["tool_name"] = "tampered"
-    tampered = TrialEvidence(
-        trial_id="stale-cache-tampered",
-        subject_identity="b" * 64,
-        scenario_identity="a" * 64,
-        events=(
-            EvidenceEvent(
-                sequence=0,
-                kind=EvidenceKind.PROTOCOL_DELIVERY,
-                source=event.source,
-                payload=payload,
-            ),
-        ),
-    )
+    tampered = _evidence(delivery_payload=payload)
 
     with pytest.raises(ProtocolDeliveryError, match="malformed or internally inconsistent"):
         verify_protocol_delivery(tampered)
+
+
+def test_stale_cache_replay_rejects_changed_normalized_arguments() -> None:
+    with pytest.raises(ProtocolDeliveryError, match="arguments"):
+        verify_protocol_delivery(_evidence(arguments='{"query":"changed"}'))
+
+
+def test_stale_cache_replay_rejects_changed_normalized_rejection() -> None:
+    with pytest.raises(ProtocolDeliveryError, match="normalized rejection"):
+        verify_protocol_delivery(_evidence(result_text="different rejection"))
+
+
+def test_stale_cache_replay_rejects_delivery_before_stale_result() -> None:
+    with pytest.raises(ProtocolDeliveryError, match="must occur after"):
+        verify_protocol_delivery(_evidence(delivery_sequence=1))
