@@ -119,7 +119,9 @@ def verify_protocol_delivery(evidence: TrialEvidence) -> tuple[ProtocolDeliveryR
             )
         elif event.source == _TOOL_SCHEMA_DRIFT_SOURCE:
             if not isinstance(receipt, MCPAgentToolSchemaDriftReceipt):
-                raise ProtocolDeliveryError("schema-drift delivery parsed as the wrong receipt type")
+                raise ProtocolDeliveryError(
+                    "schema-drift delivery parsed as the wrong receipt type"
+                )
             _verify_schema_drift_delivery(
                 evidence,
                 receipt=receipt,
@@ -127,7 +129,9 @@ def verify_protocol_delivery(evidence: TrialEvidence) -> tuple[ProtocolDeliveryR
             )
         elif event.source == _TOOL_IDENTITY_DRIFT_SOURCE:
             if not isinstance(receipt, MCPAgentToolIdentityDriftReceipt):
-                raise ProtocolDeliveryError("identity-drift delivery parsed as the wrong receipt type")
+                raise ProtocolDeliveryError(
+                    "identity-drift delivery parsed as the wrong receipt type"
+                )
             _verify_identity_drift_delivery(
                 evidence,
                 receipt=receipt,
@@ -172,7 +176,10 @@ def _verify_tool_result_delivery(
     request = requests[0]
     _require_call_id(request, receipt.agent_call_id, phase="tool-result request")
     result = _unique_result(evidence, receipt.agent_call_id, phase="tool-result")
-    if _sha256_text(_single_text_output(result.payload.get("output"))) != receipt.agent_observation_sha256:
+    if (
+        _sha256_text(_single_text_output(result.payload.get("output")))
+        != receipt.agent_observation_sha256
+    ):
         raise ProtocolDeliveryError(
             "MCP tool-result normalized output does not match the receipt-bound observation"
         )
@@ -325,7 +332,9 @@ def _verify_identity_drift_delivery(
         receipt.recovery_arguments_sha256,
         phase="identity-drift recovery request",
     )
-    stale_result = _unique_result(evidence, receipt.stale_call_id, phase="identity-drift stale call")
+    stale_result = _unique_result(
+        evidence, receipt.stale_call_id, phase="identity-drift stale call"
+    )
     recovery_result = _unique_result(
         evidence,
         receipt.recovery_call_id,
@@ -426,9 +435,7 @@ def _require_arguments_digest(
 ) -> None:
     actual_digest = _sha256_json(_strict_json_object(event.payload.get("arguments")))
     if actual_digest != expected_digest:
-        raise ProtocolDeliveryError(
-            f"MCP {phase} arguments do not match the delivery receipt"
-        )
+        raise ProtocolDeliveryError(f"MCP {phase} arguments do not match the delivery receipt")
 
 
 def _require_output_digest(
@@ -439,9 +446,7 @@ def _require_output_digest(
 ) -> None:
     actual_digest = _sha256_text(_single_text_output(event.payload.get("output")))
     if actual_digest != expected_digest:
-        raise ProtocolDeliveryError(
-            f"MCP {phase} output does not match the delivery receipt"
-        )
+        raise ProtocolDeliveryError(f"MCP {phase} output does not match the delivery receipt")
 
 
 def _strict_json_object(value: object) -> dict[str, Any]:
@@ -467,13 +472,9 @@ def _strict_json_object(value: object) -> dict[str, Any]:
         )
         _require_finite_json(parsed)
     except (json.JSONDecodeError, TypeError, ValueError) as exc:
-        raise ProtocolDeliveryError(
-            "normalized MCP arguments are not strict finite JSON"
-        ) from exc
+        raise ProtocolDeliveryError("normalized MCP arguments are not strict finite JSON") from exc
     if not isinstance(parsed, dict) or any(not isinstance(key, str) for key in parsed):
-        raise ProtocolDeliveryError(
-            "normalized MCP arguments are not a string-keyed object"
-        )
+        raise ProtocolDeliveryError("normalized MCP arguments are not a string-keyed object")
     return parsed
 
 
@@ -492,14 +493,10 @@ def _require_finite_json(value: object) -> None:
 
 def _single_text_output(value: object) -> str:
     if not isinstance(value, Mapping) or set(value) != {"type", "text"}:
-        raise ProtocolDeliveryError(
-            "normalized MCP result is not one exact text output object"
-        )
+        raise ProtocolDeliveryError("normalized MCP result is not one exact text output object")
     text = value.get("text")
     if value.get("type") != "text" or not isinstance(text, str):
-        raise ProtocolDeliveryError(
-            "normalized MCP result is not one exact text output object"
-        )
+        raise ProtocolDeliveryError("normalized MCP result is not one exact text output object")
     return text
 
 
