@@ -50,10 +50,12 @@ jobs:
               'from agent_evals.oracles.deterministic import OracleResult, OutcomeOracle, PolicyOracle\nfrom agent_evals.side_effect.oracle import SideEffectIdempotencyOracle\nfrom agent_evals.side_effect.verification import (\n    SideEffectObservationError,\n    verify_side_effect_observation,\n)\n',
           )
           replace_once(
+              'src/agent_evals/runtime/evaluator.py',
               '        self._oracles = (PolicyOracle(), OutcomeOracle())\n',
               '        self._oracles = (PolicyOracle(), SideEffectIdempotencyOracle(), OutcomeOracle())\n',
           )
           replace_once(
+              'src/agent_evals/runtime/evaluator.py',
               '        try:\n            verify_approval_intent(scenario, evidence)\n',
               '        try:\n            verify_side_effect_observation(scenario, evidence)\n        except SideEffectObservationError as exc:\n            return EvaluatedTrial(\n                evidence=self._append_evaluation_error(\n                    evidence,\n                    source="evaluator:side-effect-observation",\n                    code="side_effect_observation_unverified",\n                    reason=str(exc),\n                ),\n                oracle_results=(),\n                verdict=TrialVerdict.BLOCKED,\n            )\n\n        try:\n            verify_approval_intent(scenario, evidence)\n',
           )
