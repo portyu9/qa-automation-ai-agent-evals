@@ -279,7 +279,14 @@ def _validate_record_key(record_key: str) -> None:
 def _ensure_store_directory(path: Path) -> None:
     if path.is_symlink():
         raise EvidenceIntegrityError(f"evidence-store directory cannot be a symlink: {path}")
-    path.mkdir(parents=True, exist_ok=True)
+    try:
+        path.mkdir(parents=True, exist_ok=True)
+    except FileExistsError:
+        # A non-directory may already occupy the path. Inspect it below so callers receive the
+        # store's integrity error rather than a raw filesystem exception.
+        pass
+    except OSError as exc:
+        raise EvidenceIntegrityError(f"cannot create evidence-store directory: {path}") from exc
     try:
         mode = path.lstat().st_mode
     except OSError as exc:
