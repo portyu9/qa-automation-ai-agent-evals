@@ -37,8 +37,7 @@ def _receipt() -> MCPAgentToolErrorRecoveryReceipt:
         fault=fault,
         protocol_version=_PROTOCOL_VERSION,
         injection_point=(
-            f"mcp:{_PROTOCOL_VERSION}:tools/call:{_TOOL}:"
-            "error.content[0].text:message-suffix"
+            f"mcp:{_PROTOCOL_VERSION}:tools/call:{_TOOL}:error.content[0].text:message-suffix"
         ),
         observed_text=_error_text(fault),
     )
@@ -225,9 +224,7 @@ def test_replay_rejects_malformed_normalized_output(result_index: int, output: o
         (3, "changed recovery", "ToolError recovery output"),
     ],
 )
-def test_replay_rejects_changed_result_text(
-    result_index: int, text: str, message: str
-) -> None:
+def test_replay_rejects_changed_result_text(result_index: int, text: str, message: str) -> None:
     bridge = _receipt()
     events = _valid_events(bridge)
     call_id = bridge.error_call_id if result_index == 1 else bridge.retry_call_id
