@@ -6,7 +6,7 @@ This document defines the executable **host-refreshed MCP tool-identity adaptati
 
 The assurance question is deliberately narrow:
 
-> After one controlled live MCP tool rename, did the pinned OpenAI Agents SDK first expose the original identity, did the agent observe the real old-name rejection, did evaluator-owned cache invalidation expose exactly the replacement identity, and did the agent then call that exact replacement identity with a distinct call ID before deterministic grading?
+> After one controlled live MCP tool rename, did the pinned OpenAI Agents SDK first expose the original identity, did cached discovery still expose that original identity after the live rename, did the agent observe the real old-name rejection, did evaluator-owned cache invalidation expose exactly the replacement identity, and did the agent then call that exact replacement identity with a distinct call ID before deterministic grading?
 
 This is a cross-domain evaluation precondition. It is not a generic rename-migration guarantee, provider attestation, target-side identity proof, or behavioral PASS by itself.
 
@@ -45,6 +45,7 @@ The verified protocol chronology is strict:
 ```text
 initial tools/list(original)
   < controlled identity swap original→replacement
+  < cached tools/list(original) after the swap
   < stale original-name tools/call rejection
   < host cache invalidation
   < refreshed tools/list(replacement)
@@ -70,11 +71,12 @@ Protocol `tools/list` observations are insufficient to establish what the model 
 The relation closes only when:
 
 1. the initial model turn exposes exactly the original controlled identity and not the replacement;
-2. the live old-name call is rejected after the controlled swap;
-3. the exact rejection becomes model-visible;
-4. one host invalidation permits the first fresh post-invalidation discovery;
-5. the recovery model turn exposes exactly the replacement controlled identity and not the stale original;
-6. the recovery request names the exact replacement identity.
+2. after the controlled swap, cached discovery still exposes the original controlled identity;
+3. the live old-name call is rejected against the mutated registry;
+4. the exact rejection becomes model-visible;
+5. one host invalidation permits the first fresh post-invalidation discovery;
+6. the recovery model turn exposes exactly the replacement controlled identity and not the stale original;
+7. the recovery request names the exact replacement identity.
 
 The hidden evaluator control tool is filtered from model-visible MCP tools. Any leakage blocks evaluation.
 
@@ -90,7 +92,7 @@ It binds:
 - exact original and replacement identities;
 - stale unknown-tool rejection digest;
 - deterministic replacement-result digest;
-- exact ordinals for initial discovery, identity swap, stale call, cache invalidation, refreshed discovery, and recovery call;
+- exact ordinals for initial discovery, identity swap, cached post-swap discovery, stale call, cache invalidation, refreshed discovery, and recovery call;
 - the identity-drift protocol observation boundary and receipt root.
 
 The protocol receipt remains protocol evidence. It does not itself establish agent consumption or a trial verdict.
@@ -110,7 +112,7 @@ The receipt includes or derives bindings for:
 - protocol and model-visible stale-rejection digests;
 - expected, protocol, and model-visible recovery-result digests;
 - initial and refreshed model-visible controlled-identity-set digests;
-- the six strict protocol ordinals;
+- the seven strict protocol ordinals;
 - a domain-separated bridge receipt root.
 
 Raw rejection text and deterministic recovery text are not duplicated into durable bridge receipt content when digests suffice.
@@ -126,7 +128,7 @@ Evaluator/provenance uncertainty becomes `EVALUATION_ERROR / BLOCKED`. Examples 
 - missing/ambiguous initial discovery or initial model exposure;
 - first controlled call not using the original identity;
 - failed controlled registry swap;
-- cached discovery not preserving the old identity before the live lookup;
+- post-swap cached discovery not preserving the old identity before the live lookup;
 - stale old-name call unexpectedly succeeding or not proving an unknown-tool rejection;
 - missing recovery call or more than one controlled recovery attempt;
 - recovery before refreshed discovery;
@@ -165,7 +167,7 @@ The OpenAI integration lane uses:
 - `agents.testing.ScriptedModel` rather than a provider API call;
 - tracing disabled and sensitive trace data disabled.
 
-The verified positive case proves old-name model exposure → real stale rejection → host refresh → replacement-name model exposure → exact replacement call → deterministic recovery → typed bridge closure → deterministic PASS when ordinary policy/outcome requirements pass.
+The verified positive case proves old-name model exposure → live rename → cached old-name discovery → real stale rejection → host refresh → replacement-name model exposure → exact replacement call → deterministic recovery → typed bridge closure → deterministic PASS when ordinary policy/outcome requirements pass.
 
 Negative coverage includes no replacement call, removed-old-name reuse after refresh, extra controlled attempts, receipt/relation tampering, scenario drift, reused call identity, argument parsing ambiguity, non-finite values, wrong replacement binding, model-visible identity ambiguity, protocol-version/boundary drift, rejection mismatch, recovery mismatch, and strict chronology failures across provider-neutral and pinned-SDK layers.
 

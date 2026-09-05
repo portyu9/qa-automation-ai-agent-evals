@@ -17,8 +17,8 @@ Twelve adapter boundaries are intentionally distinct:
 - `OpenAIAgentsMCPToolResultAdapter` — one controlled OpenAI-agent → official-MCP-stdio path for `MCPFaultKind.TOOL_RESULT_POISON`;
 - `OpenAIAgentsMCPToolErrorRecoveryAdapter` — one controlled OpenAI-agent → official-MCP-stdio resilience path for `MCPFaultKind.TOOL_ERROR`, requiring a causal same-argument retry and exact benign recovery;
 - `OpenAIAgentsMCPToolStaleCacheAdapter` — one controlled official-MCP-stdio/OpenAI path for `MCPFaultKind.TOOL_LIST_STALE_CACHE`, requiring live target removal, cached post-removal target presence, a real unknown-tool rejection, evaluator-owned cache invalidation, first fresh target absence, and exact rejection delivery at the target-absent public model boundary;
-- `OpenAIAgentsMCPToolSchemaDriftAdapter` — one controlled OpenAI-agent → official-MCP-stdio schema-adaptation path for `MCPFaultKind.TOOL_SCHEMA_DRIFT`, requiring a real stale-call rejection, evaluator-owned cache invalidation, first fresh v2 discovery, and one exact corrected behavioral call;
-- `OpenAIAgentsMCPToolIdentityDriftAdapter` — one controlled OpenAI-agent → official-MCP-stdio identity-adaptation path for `MCPFaultKind.TOOL_IDENTITY_DRIFT`, requiring exact old-name model exposure, a real old-name rejection after the live rename, evaluator-owned cache invalidation, exact replacement-only model exposure, and one exact replacement-name behavioral call;
+- `OpenAIAgentsMCPToolSchemaDriftAdapter` — one controlled OpenAI-agent → official-MCP-stdio schema-adaptation path for `MCPFaultKind.TOOL_SCHEMA_DRIFT`, requiring cached post-swap v1 discovery, a real stale-call rejection, evaluator-owned cache invalidation, first fresh v2 discovery, and one exact corrected behavioral call;
+- `OpenAIAgentsMCPToolIdentityDriftAdapter` — one controlled OpenAI-agent → official-MCP-stdio identity-adaptation path for `MCPFaultKind.TOOL_IDENTITY_DRIFT`, requiring exact old-name model exposure, cached post-rename old-name discovery, a real old-name rejection after the live rename, evaluator-owned cache invalidation, exact replacement-only model exposure, and one exact replacement-name behavioral call;
 - `OpenAIAgentsSemanticJudge` — one optional subordinate no-tools, one-turn evaluator over a concrete public SDK `Model`, accepting only canonical bounded semantic input and strict JSON output under an exact calibrated judge profile.
 
 Importing `agent_evals` does not import either optional provider stack or require those optional dependencies.
@@ -318,6 +318,8 @@ TOOL_REQUEST(stale_call_id; v1 arguments)
         ↓
 evaluator-only hidden live schema swap to v2
         ↓
+cached tools/list still exposes v1 after the live swap
+        ↓
 real MCP v2 validation rejects stale v1 arguments
         ↓
 TOOL_RESULT(stale_call_id; exact model-visible rejection)
@@ -355,6 +357,8 @@ model receives exact original tool identity
 TOOL_REQUEST(stale_call_id; original name)
         ↓
 evaluator-only hidden live old→replacement registry swap
+        ↓
+cached tools/list still exposes the original identity after the live swap
         ↓
 real MCP lookup rejects the removed original name
         ↓

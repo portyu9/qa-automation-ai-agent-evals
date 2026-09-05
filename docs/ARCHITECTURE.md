@@ -68,23 +68,25 @@ Trusted evaluation control plane
 │   ├── TOOL_SCHEMA_DRIFT host-refreshed adaptation bridge
 │   │   ├── model receives bound v1 target schema
 │   │   ├── evaluator-only hidden live swap to v2
+│   │   ├── cached post-swap tools/list still exposes v1
 │   │   ├── real MCP rejection of stale v1 arguments
 │   │   ├── host-owned cache invalidation after rejection
 │   │   ├── first fresh post-invalidation tools/list exposes v2
 │   │   ├── distinct stale/recovery OpenAI call IDs
 │   │   ├── exact bound v1/v2 arguments and recovery result
-│   │   ├── strict six-step protocol chronology
+│   │   ├── strict seven-step protocol chronology
 │   │   └── MCPAgentToolSchemaDriftReceipt
 │   └── TOOL_IDENTITY_DRIFT host-refreshed adaptation bridge
 │       ├── model initially receives exact original identity
 │       ├── evaluator-only hidden live old→replacement registry swap
+│       ├── cached post-swap tools/list still exposes the original identity
 │       ├── real MCP unknown-tool rejection for removed old name
 │       ├── host-owned cache invalidation after rejection
 │       ├── first fresh post-invalidation tools/list exposes replacement only
 │       ├── public model boundary exposes replacement and no stale original
 │       ├── distinct stale/recovery OpenAI call IDs
 │       ├── exact canonical arguments and deterministic recovery result
-│       ├── strict six-step protocol chronology
+│       ├── strict seven-step protocol chronology
 │       └── MCPAgentToolIdentityDriftReceipt
 │
 │   all six paths use a fresh official MCPServerStdio subprocess per trial
@@ -172,8 +174,8 @@ Six receipt types bridge selected MCP protocol observations into agent-trial evi
 - `MCPAgentToolResultReceipt` binds one verified MCP `TOOL_RESULT_POISON` observation to one exact agent scenario, tool name, call ID, and model-visible output;
 - `MCPAgentToolErrorRecoveryReceipt` binds one verified MCP `TOOL_ERROR` observation to one exact causal two-call agent relation: error call, model-visible error result, distinct same-argument retry call, and exact benign recovery;
 - `MCPAgentToolStaleCacheReceipt` binds one verified MCP `TOOL_LIST_STALE_CACHE` discovery relation to one exact host-refreshed removal-delivery relation: initial model-visible target, hidden live removal, cached target, real unknown-tool rejection, host invalidation, first fresh target absence, and exact target-absent model-boundary rejection delivery;
-- `MCPAgentToolSchemaDriftReceipt` binds one verified MCP `TOOL_SCHEMA_DRIFT` relation to one exact host-refreshed two-call agent relation: v1 discovery, hidden live replacement, stale-call rejection, host cache invalidation, first fresh v2 discovery, distinct corrected call, and exact replacement result;
-- `MCPAgentToolIdentityDriftReceipt` binds one verified MCP `TOOL_IDENTITY_DRIFT` relation to one exact host-refreshed identity transition: original model-visible identity, hidden old→replacement swap, real stale-name rejection, host cache invalidation, first fresh replacement discovery, replacement-only model exposure, distinct replacement call, and exact recovery result.
+- `MCPAgentToolSchemaDriftReceipt` binds one verified MCP `TOOL_SCHEMA_DRIFT` relation to one exact host-refreshed two-call agent relation: v1 discovery, hidden live replacement, post-mutation cached v1 discovery, stale-call rejection, host cache invalidation, first fresh v2 discovery, distinct corrected call, and exact replacement result;
+- `MCPAgentToolIdentityDriftReceipt` binds one verified MCP `TOOL_IDENTITY_DRIFT` relation to one exact host-refreshed identity transition: original model-visible identity, hidden old→replacement swap, post-mutation cached original-name discovery, real stale-name rejection, host cache invalidation, first fresh replacement discovery, replacement-only model exposure, distinct replacement call, and exact recovery result.
 
 These identities answer different questions and do not inherit authority from one another.
 
