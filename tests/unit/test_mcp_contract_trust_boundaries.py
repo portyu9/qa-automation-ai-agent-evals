@@ -251,8 +251,8 @@ def test_probe_models_accept_matching_receipt_and_optional_absence(
     with_receipt = probe_type.model_validate({**base, "receipt": matching.model_dump(mode="json")})
     without_receipt = probe_type.model_validate({**base, "receipt": None})
 
-    assert getattr(with_receipt, "receipt") == matching
-    assert getattr(without_receipt, "receipt") is None
+    assert with_receipt.receipt == matching
+    assert without_receipt.receipt is None
 
 
 @pytest.mark.parametrize(("probe_type", "kwargs_factory"), _PROBE_CASES)
