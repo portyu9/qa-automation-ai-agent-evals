@@ -131,14 +131,14 @@ The harness owns removal; the host owns invalidation; the MCP session owns disco
 
 ### Schema-drift adaptation bridge
 
-`OpenAIAgentsMCPToolSchemaDriftAdapter` implements one host-refreshed v1→v2 contract. The first model turn must receive exact v1. Only after the model selects v1-shaped arguments does a hidden evaluator control replace the live target with v2 before real MCP validation. The stale v1 call must then be rejected by real v2 validation.
+`OpenAIAgentsMCPToolSchemaDriftAdapter` implements one host-refreshed v1→v2 contract. The first model turn must receive exact v1. Only after the model selects v1-shaped arguments does a hidden evaluator control replace the live target with v2. A post-mutation cached `tools/list` must still expose exact v1 before the stale call reaches real MCP validation, where v2 must reject the stale v1 arguments.
 
 The host invalidates cached discovery only after that rejection. The first fresh post-invalidation `tools/list` must expose exact v2 before recovery. The recovery request uses distinct call identity, exact bound v2 arguments, and exact same-session replacement result.
 
 Protocol chronology must satisfy:
 
 ```text
-initial-list < schema-swap < stale-call < cache-invalidation < refreshed-list < recovery-call
+initial-list < schema-swap < cached-list < stale-call < cache-invalidation < refreshed-list < recovery-call
 ```
 
 `MCPAgentToolSchemaDriftReceipt` binds schema, argument, rejection/recovery, call-identity, and chronology digests without duplicating raw controlled content. `PROTOCOL_DELIVERY` closes only after the recovery result.
@@ -149,7 +149,7 @@ The harness owns schema mutation; the host adapter owns invalidation; the offici
 
 `OpenAIAgentsMCPToolIdentityDriftAdapter` applies the same ownership discipline to one exact old→replacement tool identity relation while keeping the callable schema stable.
 
-The initial protocol and public model boundaries must expose exactly the original controlled identity. After the model selects that old name, a hidden evaluator control atomically removes the original tool and adds the exact bound replacement identity before the real MCP lookup. The removed old name must produce a real unknown-tool rejection.
+The initial protocol and public model boundaries must expose exactly the original controlled identity. After the model selects that old name, a hidden evaluator control atomically removes the original tool and adds the exact bound replacement identity. A post-mutation cached `tools/list` must still expose the original identity before the real MCP lookup, where the removed old name must produce a real unknown-tool rejection.
 
 Only after that rejection does the host invalidate MCP discovery. The first fresh post-invalidation listing must contain exactly the replacement controlled identity; the recovery model boundary must likewise expose the replacement and no stale original identity. The second controlled request must use the exact replacement name, a distinct stable OpenAI call ID, strict finite canonical arguments matching the live invocation, and the exact deterministic recovery result on the same session.
 
@@ -162,10 +162,10 @@ request(original) < result(rejection) < request(replacement) < result(recovery)
 Protocol chronology:
 
 ```text
-initial-list < identity-swap < stale-call < cache-invalidation < refreshed-list < recovery-call
+initial-list < identity-swap < cached-list < stale-call < cache-invalidation < refreshed-list < recovery-call
 ```
 
-`MCPAgentToolIdentityDriftReceipt` binds the nested protocol receipt, exact original/replacement identities and compact identity digests, model-visible initial/refreshed identity-set digests, distinct call IDs, argument digests, protocol/model rejection and recovery digests, all six ordinals, scenario identity, and a domain-separated root. Raw rejection/recovery bodies and raw arguments are not duplicated when digests suffice.
+`MCPAgentToolIdentityDriftReceipt` binds the nested protocol receipt, exact original/replacement identities and compact identity digests, model-visible initial/refreshed identity-set digests, distinct call IDs, argument digests, protocol/model rejection and recovery digests, all seven ordinals, scenario identity, and a domain-separated root. Raw rejection/recovery bodies and raw arguments are not duplicated when digests suffice.
 
 A removed old identity emitted after refresh can be rejected directly by the pinned SDK/MCP boundary before another model turn. The evaluator preserves that runtime failure as `RUNTIME_ERROR / BLOCKED`; it does not repair the subject or synthesize a continuation.
 

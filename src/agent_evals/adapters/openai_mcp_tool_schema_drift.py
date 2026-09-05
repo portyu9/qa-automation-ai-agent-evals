@@ -151,6 +151,7 @@ class _MCPToolSchemaDriftRecorder:
         self._recovery_is_error: bool | None = None
         self._initial_list_ordinal: int | None = None
         self._schema_swap_ordinal: int | None = None
+        self._cached_list_ordinal: int | None = None
         self._stale_call_ordinal: int | None = None
         self._cache_invalidation_ordinal: int | None = None
         self._refreshed_list_ordinal: int | None = None
@@ -219,6 +220,10 @@ class _MCPToolSchemaDriftRecorder:
         return self._require_ordinal(self._schema_swap_ordinal, "schema swap")
 
     @property
+    def cached_list_ordinal(self) -> int:
+        return self._require_ordinal(self._cached_list_ordinal, "post-swap cached discovery")
+
+    @property
     def stale_call_ordinal(self) -> int:
         return self._require_ordinal(self._stale_call_ordinal, "stale call")
 
@@ -266,9 +271,6 @@ class _MCPToolSchemaDriftRecorder:
 
         self._target_calls += 1
         if self._target_calls == 1:
-            cached_tools = await self._original_list_tools()
-            self._cached_schema = _exact_target_schema(cached_tools, self._fault.tool_name)
-
             control_result = await _invoke_call_tool(
                 self._original_call_tool,
                 _CONTROL_TOOL,
@@ -281,6 +283,9 @@ class _MCPToolSchemaDriftRecorder:
             )
             if not self._control_failed:
                 self._schema_swap_ordinal = self._mark()
+                cached_tools = await self._original_list_tools()
+                self._cached_schema = _exact_target_schema(cached_tools, self._fault.tool_name)
+                self._cached_list_ordinal = self._mark()
 
             self._stale_arguments = copy.deepcopy(arguments)
             result = await _invoke_call_tool(self._original_call_tool, tool_name, arguments, meta)
@@ -337,7 +342,7 @@ class _MCPToolSchemaDriftRecorder:
         if self._cached_schema is None:
             raise AdapterPreconditionError(
                 code="mcp_schema_cached_contract_missing",
-                reason="host cache did not preserve the initial target schema before replacement",
+                reason="host cache did not preserve the initial target schema after live replacement",
             )
         if self._stale_is_error is not True or not self._stale_text:
             raise AdapterPreconditionError(
@@ -372,6 +377,7 @@ class _MCPToolSchemaDriftRecorder:
                 protocol_recovery_text=self.protocol_recovery_text,
                 initial_list_ordinal=self.initial_list_ordinal,
                 schema_swap_ordinal=self.schema_swap_ordinal,
+                cached_list_ordinal=self.cached_list_ordinal,
                 stale_call_ordinal=self.stale_call_ordinal,
                 cache_invalidation_ordinal=self.cache_invalidation_ordinal,
                 refreshed_list_ordinal=self.refreshed_list_ordinal,
@@ -489,6 +495,7 @@ def _attach_verified_schema_bridge(
             agent_recovery_output=results[1].payload.get("output"),
             initial_list_ordinal=recorder.initial_list_ordinal,
             schema_swap_ordinal=recorder.schema_swap_ordinal,
+            cached_list_ordinal=recorder.cached_list_ordinal,
             stale_call_ordinal=recorder.stale_call_ordinal,
             cache_invalidation_ordinal=recorder.cache_invalidation_ordinal,
             refreshed_list_ordinal=recorder.refreshed_list_ordinal,

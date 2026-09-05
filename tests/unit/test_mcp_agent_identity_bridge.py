@@ -39,10 +39,11 @@ def _protocol_receipt() -> MCPFaultReceipt:
         protocol_recovery_text=_RECOVERY_TEXT,
         initial_list_ordinal=0,
         identity_swap_ordinal=1,
-        stale_call_ordinal=2,
-        cache_invalidation_ordinal=3,
-        refreshed_list_ordinal=4,
-        recovery_call_ordinal=5,
+        cached_list_ordinal=2,
+        stale_call_ordinal=3,
+        cache_invalidation_ordinal=4,
+        refreshed_list_ordinal=5,
+        recovery_call_ordinal=6,
     )
 
 
@@ -66,10 +67,11 @@ def _bridge(*, scenario_identity: str = "a" * 64) -> MCPAgentToolIdentityDriftRe
         refreshed_model_tool_names=(_NEW,),
         initial_list_ordinal=0,
         identity_swap_ordinal=1,
-        stale_call_ordinal=2,
-        cache_invalidation_ordinal=3,
-        refreshed_list_ordinal=4,
-        recovery_call_ordinal=5,
+        cached_list_ordinal=2,
+        stale_call_ordinal=3,
+        cache_invalidation_ordinal=4,
+        refreshed_list_ordinal=5,
+        recovery_call_ordinal=6,
     )
 
 
@@ -147,10 +149,11 @@ def test_identity_drift_protocol_receipt_requires_strict_chronology() -> None:
             protocol_recovery_text=_RECOVERY_TEXT,
             initial_list_ordinal=0,
             identity_swap_ordinal=1,
-            stale_call_ordinal=2,
-            cache_invalidation_ordinal=4,
-            refreshed_list_ordinal=3,
-            recovery_call_ordinal=5,
+            cached_list_ordinal=2,
+            stale_call_ordinal=3,
+            cache_invalidation_ordinal=5,
+            refreshed_list_ordinal=4,
+            recovery_call_ordinal=6,
         )
 
 
@@ -175,10 +178,11 @@ def test_identity_drift_receipt_rejects_reused_call_identity() -> None:
             refreshed_model_tool_names=(_NEW,),
             initial_list_ordinal=0,
             identity_swap_ordinal=1,
-            stale_call_ordinal=2,
-            cache_invalidation_ordinal=3,
-            refreshed_list_ordinal=4,
-            recovery_call_ordinal=5,
+            cached_list_ordinal=2,
+            stale_call_ordinal=3,
+            cache_invalidation_ordinal=4,
+            refreshed_list_ordinal=5,
+            recovery_call_ordinal=6,
         )
 
 
@@ -203,10 +207,11 @@ def test_identity_drift_receipt_rejects_model_visible_identity_drift_mismatch() 
             refreshed_model_tool_names=(_OLD, _NEW),
             initial_list_ordinal=0,
             identity_swap_ordinal=1,
-            stale_call_ordinal=2,
-            cache_invalidation_ordinal=3,
-            refreshed_list_ordinal=4,
-            recovery_call_ordinal=5,
+            cached_list_ordinal=2,
+            stale_call_ordinal=3,
+            cache_invalidation_ordinal=4,
+            refreshed_list_ordinal=5,
+            recovery_call_ordinal=6,
         )
 
 
@@ -231,10 +236,11 @@ def test_identity_drift_receipt_rejects_replacement_name_not_bound_to_fault() ->
             refreshed_model_tool_names=("unbound_replacement",),
             initial_list_ordinal=0,
             identity_swap_ordinal=1,
-            stale_call_ordinal=2,
-            cache_invalidation_ordinal=3,
-            refreshed_list_ordinal=4,
-            recovery_call_ordinal=5,
+            cached_list_ordinal=2,
+            stale_call_ordinal=3,
+            cache_invalidation_ordinal=4,
+            refreshed_list_ordinal=5,
+            recovery_call_ordinal=6,
         )
 
 

@@ -16,8 +16,8 @@ Six separate deterministic integration paths consume selected fault contracts th
 - `TOOL_RESULT_POISON` — exact same-call result delivery with post-run same-session recovery;
 - `TOOL_ERROR` — exact model-visible error followed by one causal same-argument retry and benign recovery on the same session;
 - `TOOL_LIST_STALE_CACHE` — exact initial target exposure, hidden live removal, cached post-removal target discovery, real unknown-tool rejection, evaluator-owned cache invalidation, first fresh target-absent discovery, and exact target-absent public-model exposure carrying the same rejection;
-- `TOOL_SCHEMA_DRIFT` — exact v1 model-visible schema, hidden live v2 replacement, real stale-call rejection, evaluator-owned cache invalidation, first fresh v2 discovery, and one corrected v2 behavioral call on the same session;
-- `TOOL_IDENTITY_DRIFT` — exact original model-visible identity, hidden live old→replacement registry mutation, real old-name rejection, evaluator-owned cache invalidation, first fresh replacement discovery, and one exact replacement-name behavioral call on the same session.
+- `TOOL_SCHEMA_DRIFT` — exact v1 model-visible schema, hidden live v2 replacement, cached post-mutation v1 discovery, real stale-call rejection, evaluator-owned cache invalidation, first fresh v2 discovery, and one corrected v2 behavioral call on the same session;
+- `TOOL_IDENTITY_DRIFT` — exact original model-visible identity, hidden live old→replacement registry mutation, cached post-mutation original-name discovery, real old-name rejection, evaluator-owned cache invalidation, first fresh replacement discovery, and one exact replacement-name behavioral call on the same session.
 
 Those dedicated bridges are described under [Relationship to agent adversarial testing](#relationship-to-agent-adversarial-testing), in [MCP Stale-Cache Tool-Removal Assurance](MCP_STALE_CACHE.md), in [MCP Tool-Identity Drift Assurance](MCP_IDENTITY_DRIFT.md), and in [OpenAI Agents SDK Adapter](OPENAI_ADAPTER.md). They do not broaden one another or the standalone protocol receipts. The stale-cache, schema-drift, and identity-drift bridges do not claim model-initiated refresh or automatic `tools/list_changed` handling.
 
@@ -58,8 +58,8 @@ The six agent bridges do not invalidate this rule. They add **fault-specific pro
 - result poison must be paired with one exact OpenAI target request/result identity and logical model-visible output;
 - ToolError recovery must additionally prove distinct call identities, same canonical arguments, exact error/recovery outputs, and strict chronology `request₁ < result₁ < request₂ < result₂` before the second call can be credited as a retry;
 - stale-cache removal delivery must additionally prove initial model-visible target presence, hidden live removal, cached post-removal target presence, real unknown-tool rejection, one host invalidation, first fresh target absence, exact rejection delivery to the target-absent public model boundary, one stable call identity, exact bound arguments, and no extra controlled target request;
-- schema-drift adaptation must additionally prove v1 model-visible discovery, a hidden evaluator-owned live swap, real stale-call rejection, one host cache invalidation, first fresh post-invalidation v2 discovery, distinct stale/recovery call identities, exact bound v1/v2 arguments, and recovery only after v2 becomes model-visible;
-- identity-drift adaptation must additionally prove exact original model-visible identity, hidden old→replacement mutation, real unknown-tool rejection, one host cache invalidation, first fresh replacement-only discovery, exact replacement model visibility, distinct call IDs, exact arguments/results, and recovery only after the replacement identity is visible.
+- schema-drift adaptation must additionally prove v1 model-visible discovery, a hidden evaluator-owned live swap, cached post-mutation v1 discovery, real stale-call rejection, one host cache invalidation, first fresh post-invalidation v2 discovery, distinct stale/recovery call identities, exact bound v1/v2 arguments, and recovery only after v2 becomes model-visible;
+- identity-drift adaptation must additionally prove exact original model-visible identity, hidden old→replacement mutation, cached post-mutation original-name discovery, real unknown-tool rejection, one host cache invalidation, first fresh replacement-only discovery, exact replacement model visibility, distinct call IDs, exact arguments/results, and recovery only after the replacement identity is visible.
 
 ## Protocol paths
 
@@ -101,7 +101,7 @@ initial required schema      = {query: string}
 replacement required schema  = {customer_id: integer, include_history: boolean}
 ```
 
-The standalone protocol proof requires old discovery, current-server rejection of old arguments, refreshed new discovery, and successful new-schema invocation. The cache is never treated as the call validator.
+The standalone protocol proof requires initial old discovery, the live schema mutation, cached old discovery after that mutation, current-server rejection of old arguments, refreshed new discovery, and successful new-schema invocation. The cache is never treated as the call validator.
 
 The agent bridge adds a separate behavioral relation. Its hidden server-side swap occurs only after the model has selected the v1-shaped call, and the host invalidates cached discovery only after the real stale-call rejection. That design prevents the model from being credited for a refresh action it did not perform.
 
@@ -162,7 +162,7 @@ mcp:2026-07-28:tools/list:identity-drift:<tool>:cached-old-name:call-rejects-old
 
 A receipt is never created merely because a fault object exists or the server was mutated.
 
-The stale-cache agent bridge additionally binds the live rejection, exact stale call identity/arguments, target-present→target-absent public-model transition, and strict removal/cache/invalidation ordinals. The schema-drift agent bridge uses a separate bridge-specific observation relation that additionally binds initial/cached/refreshed schema digests, host invalidation chronology, stale/recovery observations, and the exact corrected agent call. The identity-drift agent bridge likewise binds the exact original/replacement identities, model-visible controlled identity sets, distinct call IDs, argument/rejection/recovery digests, and the same six-leg host-refresh chronology.
+The stale-cache agent bridge additionally binds the live rejection, exact stale call identity/arguments, target-present→target-absent public-model transition, and strict removal/cache/invalidation ordinals. The schema-drift agent bridge uses a separate bridge-specific observation relation that additionally binds initial/cached/refreshed schema digests, host invalidation chronology, stale/recovery observations, and the exact corrected agent call. The identity-drift agent bridge likewise binds the exact original/replacement identities, model-visible controlled identity sets, distinct call IDs, argument/rejection/recovery digests, and the same seven-leg host-refresh chronology.
 
 ## Isolation and recovery
 

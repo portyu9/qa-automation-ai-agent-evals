@@ -36,10 +36,11 @@ def _protocol_receipt() -> MCPFaultReceipt:
         protocol_recovery_text=_RECOVERY_TEXT,
         initial_list_ordinal=0,
         identity_swap_ordinal=1,
-        stale_call_ordinal=2,
-        cache_invalidation_ordinal=3,
-        refreshed_list_ordinal=4,
-        recovery_call_ordinal=5,
+        cached_list_ordinal=2,
+        stale_call_ordinal=3,
+        cache_invalidation_ordinal=4,
+        refreshed_list_ordinal=5,
+        recovery_call_ordinal=6,
     )
 
 
@@ -63,10 +64,11 @@ def _create_bridge(**overrides: Any) -> MCPAgentToolIdentityDriftReceipt:
         "refreshed_model_tool_names": (_NEW,),
         "initial_list_ordinal": 0,
         "identity_swap_ordinal": 1,
-        "stale_call_ordinal": 2,
-        "cache_invalidation_ordinal": 3,
-        "refreshed_list_ordinal": 4,
-        "recovery_call_ordinal": 5,
+        "cached_list_ordinal": 2,
+        "stale_call_ordinal": 3,
+        "cache_invalidation_ordinal": 4,
+        "refreshed_list_ordinal": 5,
+        "recovery_call_ordinal": 6,
     }
     values.update(overrides)
     return MCPAgentToolIdentityDriftReceipt.create(**values)
@@ -156,10 +158,11 @@ def test_protocol_receipt_rejects_wrong_fault_kind() -> None:
             protocol_recovery_text=_RECOVERY_TEXT,
             initial_list_ordinal=0,
             identity_swap_ordinal=1,
-            stale_call_ordinal=2,
-            cache_invalidation_ordinal=3,
-            refreshed_list_ordinal=4,
-            recovery_call_ordinal=5,
+            cached_list_ordinal=2,
+            stale_call_ordinal=3,
+            cache_invalidation_ordinal=4,
+            refreshed_list_ordinal=5,
+            recovery_call_ordinal=6,
         )
 
 
@@ -187,10 +190,11 @@ def test_protocol_receipt_rejects_invalid_controlled_relation(
         "protocol_recovery_text": _RECOVERY_TEXT,
         "initial_list_ordinal": 0,
         "identity_swap_ordinal": 1,
-        "stale_call_ordinal": 2,
-        "cache_invalidation_ordinal": 3,
-        "refreshed_list_ordinal": 4,
-        "recovery_call_ordinal": 5,
+        "cached_list_ordinal": 2,
+        "stale_call_ordinal": 3,
+        "cache_invalidation_ordinal": 4,
+        "refreshed_list_ordinal": 5,
+        "recovery_call_ordinal": 6,
     }
     values.update(overrides)
     with pytest.raises(ValueError, match=message):
@@ -216,3 +220,25 @@ def test_bridge_rejects_protocol_receipt_wrong_revision_and_boundary() -> None:
     )
     with pytest.raises(ValueError, match="unexpected protocol boundary"):
         _create_bridge(protocol_receipt=wrong_boundary)
+
+
+@pytest.mark.parametrize("cached_list_ordinal", [0, 1])
+def test_protocol_receipt_rejects_cached_discovery_not_after_identity_swap(
+    cached_list_ordinal: int,
+) -> None:
+    with pytest.raises(ValueError, match="chronology"):
+        create_identity_drift_protocol_receipt(
+            fault=_fault(),
+            ttl_ms=60_000,
+            original_tool_name=_OLD,
+            replacement_tool_name=_NEW,
+            stale_protocol_text=_STALE_TEXT,
+            protocol_recovery_text=_RECOVERY_TEXT,
+            initial_list_ordinal=0,
+            identity_swap_ordinal=1,
+            cached_list_ordinal=cached_list_ordinal,
+            stale_call_ordinal=3,
+            cache_invalidation_ordinal=4,
+            refreshed_list_ordinal=5,
+            recovery_call_ordinal=6,
+        )

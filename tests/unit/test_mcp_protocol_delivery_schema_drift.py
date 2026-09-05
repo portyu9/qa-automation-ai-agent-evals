@@ -64,10 +64,11 @@ def receipt() -> MCPAgentToolSchemaDriftReceipt:
         protocol_recovery_text=_RECOVERY_TEXT,
         initial_list_ordinal=0,
         schema_swap_ordinal=1,
-        stale_call_ordinal=2,
-        cache_invalidation_ordinal=3,
-        refreshed_list_ordinal=4,
-        recovery_call_ordinal=5,
+        cached_list_ordinal=2,
+        stale_call_ordinal=3,
+        cache_invalidation_ordinal=4,
+        refreshed_list_ordinal=5,
+        recovery_call_ordinal=6,
     )
     return MCPAgentToolSchemaDriftReceipt.create(
         scenario_identity=_SCENARIO,
@@ -88,10 +89,11 @@ def receipt() -> MCPAgentToolSchemaDriftReceipt:
         agent_recovery_output={"type": "text", "text": _RECOVERY_TEXT},
         initial_list_ordinal=0,
         schema_swap_ordinal=1,
-        stale_call_ordinal=2,
-        cache_invalidation_ordinal=3,
-        refreshed_list_ordinal=4,
-        recovery_call_ordinal=5,
+        cached_list_ordinal=2,
+        stale_call_ordinal=3,
+        cache_invalidation_ordinal=4,
+        refreshed_list_ordinal=5,
+        recovery_call_ordinal=6,
     )
 
 
