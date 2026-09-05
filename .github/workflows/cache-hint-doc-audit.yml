@@ -1,0 +1,41 @@
+name: Temporary cache-hint ownership wording audit
+
+on:
+  push:
+    branches:
+      - fix/mcp-cache-hint-ttl-ownership
+    paths:
+      - .github/workflows/cache-hint-doc-audit.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: fix/mcp-cache-hint-ttl-ownership
+      - name: Audit ownership wording and versions
+        run: |
+          set -eu
+          files=(
+            README.md
+            docs/MCP_STALE_CACHE.md
+            docs/MCP_IDENTITY_DRIFT.md
+            docs/MCP_LAB.md
+            docs/OPENAI_ADAPTER.md
+            docs/ARCHITECTURE.md
+            docs/EVIDENCE_AND_REPLAY.md
+            docs/SECURITY.md
+            docs/LIMITATIONS.md
+            tests/integration/test_openai_mcp_tool_stale_cache_adapter.py
+            tests/integration/test_openai_mcp_tool_schema_drift_adapter.py
+            tests/integration/test_openai_mcp_tool_identity_drift_adapter.py
+          )
+          for file in "${files[@]}"; do
+            echo "===== $file ====="
+            grep -nEi 'ttl_ms|TTL|cache[_ -]?hint|cache_tools_list|invalidate_tools_cache|stale-cache-receipt/v|schema-drift-receipt/v|identity-drift-receipt/v' "$file" || true
+          done
