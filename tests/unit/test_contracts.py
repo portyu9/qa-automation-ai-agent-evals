@@ -9,6 +9,7 @@ from agent_evals.contracts.models import (
     ScenarioKind,
     SubjectFingerprint,
 )
+from agent_evals.contracts.semantic import SemanticCriterionSpec, SemanticRubricSpec
 
 
 def fingerprint() -> SubjectFingerprint:
@@ -22,6 +23,25 @@ def fingerprint() -> SubjectFingerprint:
         memory_policy={"retention": "trial"},
         adapter="scripted",
         adapter_version="1",
+    )
+
+
+def semantic_rubric(
+    *,
+    revision: str = "1",
+    description: str = "The answer stays grounded in the supplied facts.",
+    minimum_score: int = 3,
+) -> SemanticRubricSpec:
+    return SemanticRubricSpec(
+        rubric_id="answer-quality",
+        revision=revision,
+        criteria=(
+            SemanticCriterionSpec(
+                criterion_id="grounded",
+                description=description,
+                minimum_score=minimum_score,
+            ),
+        ),
     )
 
 
@@ -80,6 +100,33 @@ def test_scenario_identity_is_independent_of_set_and_prefix_input_order() -> Non
         tags=frozenset({"a", "z"}),
     )
     assert first.identity == second.identity
+
+
+def test_scenario_identity_binds_optional_semantic_rubric_material() -> None:
+    deterministic_only = EvaluationScenario(
+        scenario_id="semantic.identity",
+        revision="1",
+        kind=ScenarioKind.CAPABILITY,
+        objective="Answer accurately.",
+    )
+    first = deterministic_only.model_copy(update={"semantic_rubric": semantic_rubric()})
+    same = deterministic_only.model_copy(update={"semantic_rubric": semantic_rubric()})
+    changed_revision = deterministic_only.model_copy(
+        update={"semantic_rubric": semantic_rubric(revision="2")}
+    )
+    changed_description = deterministic_only.model_copy(
+        update={"semantic_rubric": semantic_rubric(description="The answer is fully grounded.")}
+    )
+    changed_threshold = deterministic_only.model_copy(
+        update={"semantic_rubric": semantic_rubric(minimum_score=4)}
+    )
+
+    assert deterministic_only.semantic_rubric is None
+    assert first.identity == same.identity
+    assert deterministic_only.identity != first.identity
+    assert first.identity != changed_revision.identity
+    assert first.identity != changed_description.identity
+    assert first.identity != changed_threshold.identity
 
 
 def test_authority_policy_is_fail_closed() -> None:

@@ -8,11 +8,21 @@ This document is intentionally strict. Repository claims must never become stron
 
 The OpenAI integration is pinned to `openai-agents==0.22.0`. CI exercises the real SDK runner/tool/handoff/approval/context loop deterministically with `agents.testing.ScriptedModel` and no provider API call.
 
-The SDK tier covers all seven generic adversarial channel categories at scoped local/SDK boundaries. A separate `OpenAIAgentsHandoffAuthorityAdapter` exercises run-local native handoff authority attenuation. `OpenAIAgentsHITLApprovalAdapter` exercises one exact native `ToolApprovalItem` → evaluator decision → same-`RunState` continuation relation. Four additional adapters exercise exact official-MCP-stdio/OpenAI SDK paths: one `TOOL_METADATA_POISON` discovery → model-visible target-definition bridge, one `TOOL_RESULT_POISON` same-call bridge, one causal `TOOL_ERROR` → same-argument retry → benign recovery bridge, and one host-refreshed `TOOL_SCHEMA_DRIFT` adaptation bridge.
+The SDK tier covers all seven generic adversarial channel categories at scoped local/SDK boundaries. A separate `OpenAIAgentsHandoffAuthorityAdapter` exercises run-local native handoff authority attenuation. `OpenAIAgentsHITLApprovalAdapter` exercises one exact native `ToolApprovalItem` → evaluator decision → same-`RunState` continuation relation. Four additional adapters exercise exact official-MCP-stdio/OpenAI SDK paths: one `TOOL_METADATA_POISON` discovery → model-visible target-definition bridge, one `TOOL_RESULT_POISON` same-call bridge, one causal `TOOL_ERROR` → same-argument retry → benign recovery bridge, and one host-refreshed `TOOL_SCHEMA_DRIFT` adaptation bridge. `OpenAIAgentsSemanticJudge` separately exercises one concrete public SDK `Model` through a no-tools, one-turn evaluator boundary under deterministic `ScriptedModel` integration.
 
 None of this establishes live-model quality, production-provider availability, provider-side delivery attestation, authenticated human approval, production IAM, or credentialed end-to-end assurance.
 
 Terminal application state remains independently observed; provider output is not the state oracle.
+
+### Semantic judging is calibrated subordinate evidence, not deterministic truth
+
+`SemanticRubricSpec`, `SemanticJudgeProfile`, `SemanticCalibrationReceipt`, and `SemanticJudgmentReceipt` create a bounded meaning-level grading path. They do not make model judgment deterministic, universally correct, or safety-authoritative. The runtime calls a fresh semantic judge only after deterministic policy/outcome PASS; deterministic failure therefore cannot be rescued by semantic PASS and the candidate output is not disclosed through this semantic path after deterministic failure.
+
+Calibration is exact-profile empirical evidence, not certification. The default acceptance policy requires balanced support, zero false PASS, zero abstention, zero judge failure, and explicit `judge-prompt-injection` coverage, but those gates do not prove universal prompt-injection resistance or correctness on unseen distributions. Model, model-revision label, evaluator prompt, adapter, response schema, or behavior-configuration drift changes profile identity and invalidates calibration reuse.
+
+Semantic FAIL is non-critical and contributes to reliability failure counts; ABSTAIN becomes `INCONCLUSIVE`; malformed/unavailable/untrusted semantic evaluation becomes `BLOCKED`. A persisted semantic receipt can be replayed and revalidated without a fresh model call, but replay does not establish current judge liveness or reproducibility. Receipt/report hashes are integrity identities, not provider attestations or signatures.
+
+The optional OpenAI judge test exercises the pinned SDK public `Model`/`Runner` interface with `agents.testing.ScriptedModel`; it does not call a live provider, prove provider-side model revision, establish human-equivalent review, or prove that candidate-output prompt injection is solved in general. See [Calibrated Semantic Judging](SEMANTIC_JUDGING.md).
 
 ### Seven generic channels do not mean universal interception
 

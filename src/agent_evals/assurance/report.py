@@ -13,16 +13,18 @@ from agent_evals.evidence.models import TrialVerdict
 from agent_evals.gates.release import GateDecision, GateResult, ReleaseGate, ReleasePolicy
 from agent_evals.oracles.deterministic import OracleResult
 from agent_evals.runtime.session import EvaluationSessionResult
+from agent_evals.semantic.models import SemanticDecision
+from agent_evals.semantic.receipt import SemanticJudgmentReceipt
 from agent_evals.statistics.reliability import ReliabilityReport
 
-_REPORT_SCHEMA: Literal["agent-evals/assurance-report/v1"] = "agent-evals/assurance-report/v1"
+_REPORT_SCHEMA: Literal["agent-evals/assurance-report/v2"] = "agent-evals/assurance-report/v2"
 _EVIDENCE_SCHEMA: Literal["agent-evals/trial-evidence/v2"] = "agent-evals/trial-evidence/v2"
-_REPORT_DOMAIN = b"agent-evals/assurance-report/v1\0"
+_REPORT_DOMAIN = b"agent-evals/assurance-report/v2\0"
 _RESOLVED_VERDICTS = frozenset({TrialVerdict.PASS, TrialVerdict.FAIL})
 
 
 class OracleSnapshot(BaseModel):
-    """Serialized deterministic oracle result used to rederive a resolved trial verdict."""
+    """Serialized deterministic oracle result used to rederive one trial verdict."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -44,9 +46,14 @@ class OracleSnapshot(BaseModel):
 class TrialAssuranceRecord(BaseModel):
     """Bound trial facts sufficient to rederive report-level assurance conclusions.
 
-    The evidence root identifies the exact trial evidence. Oracle snapshots preserve the grading
-    outputs used by the runtime. This model verifies their internal verdict relationship, but it
-    does not rerun an oracle from the evidence root alone.
+    Deterministic oracle snapshots and semantic judgment are deliberately separate authority
+    classes. A semantic result may only exist after all deterministic oracles pass, may never be
+    critical, and can only narrow a deterministic PASS into FAIL or INCONCLUSIVE. It cannot rescue
+    a deterministic failure.
+
+    The evidence root identifies the exact final trial evidence. A semantic receipt separately
+    binds the exact pre-semantic evidence root; reconstructing and verifying that relation requires
+    the evidence/replay path because the report does not duplicate the full event stream.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -55,9 +62,11 @@ class TrialAssuranceRecord(BaseModel):
     evidence_root: str = Field(pattern=r"^[0-9a-f]{64}$")
     verdict: TrialVerdict
     oracle_results: tuple[OracleSnapshot, ...] = ()
+    semantic_judgment: SemanticJudgmentReceipt | None = None
 
     @property
     def critical_violations(self) -> int:
+        """Critical authority remains deterministic; semantic FAIL is never counted here."""
         return sum(
             result.critical and result.verdict is TrialVerdict.FAIL
             for result in self.oracle_results
@@ -69,20 +78,45 @@ class TrialAssuranceRecord(BaseModel):
         if len(set(oracle_names)) != len(oracle_names):
             raise ValueError("assurance trial oracle names must be unique")
 
-        if self.verdict in _RESOLVED_VERDICTS:
-            if not self.oracle_results:
-                raise ValueError("resolved assurance trial requires deterministic oracle results")
-            if any(result.verdict not in _RESOLVED_VERDICTS for result in self.oracle_results):
-                raise ValueError("resolved assurance trial has a non-resolved oracle verdict")
-            expected = (
-                TrialVerdict.FAIL
-                if any(result.verdict is TrialVerdict.FAIL for result in self.oracle_results)
-                else TrialVerdict.PASS
+        if self.verdict is TrialVerdict.BLOCKED:
+            if self.oracle_results:
+                raise ValueError("blocked assurance trial cannot contain completed oracle results")
+            if self.semantic_judgment is not None:
+                raise ValueError(
+                    "blocked assurance trial cannot contain semantic judgment evidence"
+                )
+            return self
+
+        if not self.oracle_results:
+            raise ValueError("non-blocked assurance trial requires deterministic oracle results")
+        if any(result.verdict not in _RESOLVED_VERDICTS for result in self.oracle_results):
+            raise ValueError("non-blocked assurance trial has a non-resolved oracle verdict")
+
+        deterministic_failed = any(
+            result.verdict is TrialVerdict.FAIL for result in self.oracle_results
+        )
+        semantic = self.semantic_judgment
+        if semantic is not None and deterministic_failed:
+            raise ValueError("semantic judgment cannot coexist with deterministic oracle failure")
+
+        if semantic is None:
+            if self.verdict is TrialVerdict.INCONCLUSIVE:
+                raise ValueError(
+                    "inconclusive assurance trial requires an abstaining semantic judgment"
+                )
+            expected = TrialVerdict.FAIL if deterministic_failed else TrialVerdict.PASS
+        else:
+            if semantic.decision is SemanticDecision.ABSTAIN:
+                expected = TrialVerdict.INCONCLUSIVE
+            elif semantic.decision is SemanticDecision.FAIL:
+                expected = TrialVerdict.FAIL
+            else:
+                expected = TrialVerdict.PASS
+
+        if self.verdict is not expected:
+            raise ValueError(
+                "assurance trial verdict does not recompute from oracle results and semantic grading"
             )
-            if self.verdict is not expected:
-                raise ValueError("assurance trial verdict does not recompute from oracle results")
-        elif self.verdict is TrialVerdict.BLOCKED and self.oracle_results:
-            raise ValueError("blocked assurance trial cannot contain completed oracle results")
         return self
 
 
@@ -138,18 +172,20 @@ class GateSnapshot(BaseModel):
 class AssuranceReport(BaseModel):
     """Reproducible session report whose derived claims are verified on every load.
 
-    Evidence roots, runtime oracle snapshots, and terminal trial verdicts are the bound trial
-    facts. Resolved trial verdicts are rederived from their oracle snapshots. Reliability and
-    release-gate fields are then recomputed from those validated trial facts and the frozen policy.
+    Evidence roots, deterministic oracle snapshots, optional semantic judgment receipts, and
+    terminal trial verdicts are the bound trial facts. Trial verdicts are rederived with strict
+    deterministic-over-semantic precedence. Reliability and release-gate fields are then
+    recomputed from those validated trial facts and the frozen release policy.
 
     The report root detects unacknowledged content changes. It is not a signature, MAC, trusted
     timestamp, publisher identity, or proof that the referenced evidence was honestly produced.
-    Re-running deterministic oracles against the exact evidence requires the evidence/replay path.
+    Re-running deterministic oracles and reconstructing a semantic receipt's pre-judgment evidence
+    root requires the evidence/replay path.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    schema_version: Literal["agent-evals/assurance-report/v1"] = _REPORT_SCHEMA
+    schema_version: Literal["agent-evals/assurance-report/v2"] = _REPORT_SCHEMA
     evidence_schema: Literal["agent-evals/trial-evidence/v2"] = _EVIDENCE_SCHEMA
     subject_identity: str = Field(pattern=r"^[0-9a-f]{64}$")
     scenario_identity: str = Field(pattern=r"^[0-9a-f]{64}$")
@@ -185,6 +221,13 @@ class AssuranceReport(BaseModel):
             if evidence.trial_id in trial_ids:
                 raise ValueError("session contains duplicate trial IDs")
             trial_ids.add(evidence.trial_id)
+            semantic = (
+                SemanticJudgmentReceipt.model_validate(
+                    trial.semantic_judgment.model_dump(mode="json")
+                )
+                if trial.semantic_judgment is not None
+                else None
+            )
             record = TrialAssuranceRecord(
                 trial_id=evidence.trial_id,
                 evidence_root=evidence.evidence_root,
@@ -192,6 +235,7 @@ class AssuranceReport(BaseModel):
                 oracle_results=tuple(
                     OracleSnapshot.from_oracle(result) for result in trial.oracle_results
                 ),
+                semantic_judgment=semantic,
             )
             records.append(record)
             verdicts.append(record.verdict)
@@ -238,6 +282,15 @@ class AssuranceReport(BaseModel):
         trial_ids = [record.trial_id for record in self.trials]
         if len(set(trial_ids)) != len(trial_ids):
             raise ValueError("assurance report trial IDs must be unique")
+
+        for record in self.trials:
+            semantic = record.semantic_judgment
+            if semantic is None:
+                continue
+            if semantic.subject_identity != self.subject_identity:
+                raise ValueError("semantic judgment subject identity does not match report")
+            if semantic.scenario_identity != self.scenario_identity:
+                raise ValueError("semantic judgment scenario identity does not match report")
 
         recomputed_reliability = ReliabilityReport.from_verdicts(
             tuple(record.verdict for record in self.trials),

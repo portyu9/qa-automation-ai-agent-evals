@@ -6,7 +6,7 @@ The OpenAI integration turns documented OpenAI Agents SDK execution surfaces int
 
 The integration is pinned to `openai-agents==0.22.0`. MCP integration is pinned separately to `mcp==2.1.1`. Pinning both sides makes normalization, tool-output conversion, call identity, approval interruption/resume behavior, protocol negotiation, retry chronology, tool-discovery semantics, and run-item agent attribution explicit reviewable contracts rather than floating assumptions.
 
-Seven adapter boundaries are intentionally distinct:
+Eight adapter boundaries are intentionally distinct:
 
 - `OpenAIAgentsAdapter` — seven scoped local/SDK adversarial channels;
 - `OpenAIAgentsHandoffAuthorityAdapter` — native SDK handoff provenance plus scenario-owned path-local authority attenuation across exact source→target transitions;
@@ -15,10 +15,29 @@ Seven adapter boundaries are intentionally distinct:
 - `OpenAIAgentsMCPToolResultAdapter` — one controlled OpenAI-agent → official-MCP-stdio path for `MCPFaultKind.TOOL_RESULT_POISON`;
 - `OpenAIAgentsMCPToolErrorRecoveryAdapter` — one controlled OpenAI-agent → official-MCP-stdio resilience path for `MCPFaultKind.TOOL_ERROR`, requiring a causal same-argument retry and exact benign recovery;
 - `OpenAIAgentsMCPToolSchemaDriftAdapter` — one controlled OpenAI-agent → official-MCP-stdio schema-adaptation path for `MCPFaultKind.TOOL_SCHEMA_DRIFT`, requiring a real stale-call rejection, evaluator-owned cache invalidation, first fresh v2 discovery, and one exact corrected behavioral call.
+- `OpenAIAgentsSemanticJudge` — one optional subordinate no-tools, one-turn evaluator over a concrete public SDK `Model`, accepting only canonical bounded semantic input and strict JSON output under an exact calibrated judge profile.
 
 Importing `agent_evals` does not import either optional provider stack or require those optional dependencies.
 
 ## Trust boundary
+
+### Calibrated semantic judge
+
+`OpenAIAgentsSemanticJudge` is not an agent-under-test adapter and does not own state, policy, approval, protocol, or release truth. `TrialRunner` reaches it only after deterministic policy/outcome PASS and only when the scenario carries an exact semantic rubric and the live judge profile matches an accepted calibration receipt.
+
+```text
+SemanticJudgeInput(objective + rubric + candidate_output)
+        ↓ canonical JSON user message
+fixed evaluator-owned prompt + concrete public SDK Model + tools=[]
+        ↓ Runner.run(..., max_turns=1)
+strict bounded JSON object
+        ↓ duplicate-key / non-finite / schema validation
+SemanticJudgeResponse
+        ↓ evaluator rederives criterion thresholds + overall decision
+SemanticJudgmentReceipt bound to exact pre-semantic evidence root
+```
+
+The fixed profile content-addresses model name/revision, prompt digest, adapter/version, response schema, canonical-JSON input encoding, one-turn bound, output-size bound, and disabled sensitive tracing. Candidate output is treated as untrusted data; deterministic `ScriptedModel` integration verifies prompt-injection-like candidate text remains in the JSON data field. This is evaluator-boundary hardening, not a universal prompt-injection-resistance claim. See [Calibrated Semantic Judging](SEMANTIC_JUDGING.md).
 
 ### Seven local/SDK adversarial channels
 

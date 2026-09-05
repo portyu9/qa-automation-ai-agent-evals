@@ -6,13 +6,14 @@ The repository treats the evaluated agent and all provider/tool/MCP/memory/resou
 
 An adversarial agent trial is not behaviorally gradeable until the controlled evaluation environment closes the exact delivery precondition required by that execution path. Failure to establish that precondition is `BLOCKED` evaluation uncertainty, not an agent defect.
 
-The security model distinguishes five evidence-domain relationships, with the MCP→OpenAI domain containing three explicit bridge contracts:
+The security model distinguishes six evidence-domain relationships, with the MCP→OpenAI domain containing four explicit bridge contracts:
 
 1. OpenAI local/SDK adversarial delivery — one exact `AttackDeliveryReceipt` must verify before grading an adversarial `AttackFixture` scenario.
 2. MCP protocol faults — one exact `MCPFaultReceipt` proves only the official client's bound protocol observation or relation.
-3. MCP→OpenAI bridges — `MCPAgentToolResultReceipt` binds a verified `TOOL_RESULT_POISON` observation to one exact agent call/result; `MCPAgentToolErrorRecoveryReceipt` binds a verified `TOOL_ERROR` observation to one causal error → same-argument retry → recovery relation; and `MCPAgentToolSchemaDriftReceipt` binds a verified `TOOL_SCHEMA_DRIFT` relation to one exact host-refreshed v1 rejection → v2 discovery → corrected-call relation.
+3. MCP→OpenAI bridges — `MCPAgentToolMetadataReceipt` binds a verified `TOOL_METADATA_POISON` discovery observation to one exact model-visible target definition; `MCPAgentToolResultReceipt` binds a verified `TOOL_RESULT_POISON` observation to one exact agent call/result; `MCPAgentToolErrorRecoveryReceipt` binds a verified `TOOL_ERROR` observation to one causal error → same-argument retry → recovery relation; and `MCPAgentToolSchemaDriftReceipt` binds a verified `TOOL_SCHEMA_DRIFT` relation to one exact host-refreshed v1 rejection → v2 discovery → corrected-call relation.
 4. MCP resource-server authorization — `MCPRemoteAuthReceipt` closes the loopback authentication/authorization matrix and RFC 9728 metadata boundary.
 5. MCP OAuth flow — `MCPOAuthFlowReceipt` closes the separated authorization-server/resource-server discovery, PKCE, exact issuer/resource binding, exchange, introspection, protected-use, and reconnect-reuse boundary.
+6. Calibrated semantic judgment — `SemanticJudgmentReceipt` binds one exact meaning-level decision to the scenario rubric, subject, pre-semantic evidence root, exact judge profile, accepted calibration, bounded input/response digests, criterion results, and derived decision. It is non-critical and is never invoked after deterministic policy/outcome failure.
 
 These evidence families do not inherit authority from one another. In particular, a raw protocol receipt is not agent behavioral assurance, and a bridge receipt is a delivery precondition rather than an automatic PASS.
 
@@ -43,6 +44,7 @@ Implemented controls include:
 - fresh official `MCPServerStdio` subprocess per bridged trial;
 - rejection of preconfigured MCP servers, prefixed target naming, and local target-name collisions when they would make provenance ambiguous;
 - negotiated MCP protocol verification from the connected session;
+- dedicated `OpenAIAgentsMCPToolMetadataAdapter` for exact `TOOL_METADATA_POISON` discovery → first public model-visible target-definition binding, including exact description/schema digest equality without requiring target invocation;
 - dedicated `OpenAIAgentsMCPToolResultAdapter` for one exact `TOOL_RESULT_POISON` same-call bridge;
 - exactly-one behavioral target-call requirement for that result bridge;
 - exact OpenAI request/result call-ID pairing and logical output equivalence;
@@ -89,6 +91,13 @@ Implemented controls include:
 - credential exclusion from OAuth probe/receipt serialization;
 - separate MCP protocol, resource-server auth, and OAuth-flow CI jobs;
 - integrity-verified local evidence persistence and exact historical replay;
+- scenario-owned content-addressed semantic rubrics whose behavior-bearing changes alter scenario identity;
+- exact content-addressed semantic judge profiles and accepted calibration receipts with separate false-PASS rate/count, abstention, judge-failure, balanced-support, and required `judge-prompt-injection` coverage gates;
+- deterministic policy/outcome short-circuit before semantic model invocation;
+- bounded semantic judge input containing only objective, rubric, and candidate output rather than arbitrary evidence domains;
+- terminal non-critical semantic receipt binding the exact pre-semantic evidence root;
+- replay revalidation of persisted semantic receipts without a fresh judge call;
+- `AssuranceReport` v2 separation of deterministic critical authority from optional semantic judgment;
 - pinned GitHub Actions and read-only workflow permissions.
 
 ## Seven scoped OpenAI local/SDK attack surfaces
