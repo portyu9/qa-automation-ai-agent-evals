@@ -84,6 +84,7 @@ jobs:
           tests/integration/test_openai_mcp_tool_schema_drift_adapter.py
           tests/integration/test_openai_mcp_tool_schema_drift_contract.py
           tests/integration/test_openai_mcp_tool_identity_drift_adapter.py
+          tests/integration/test_openai_mcp_tool_stale_cache_adapter.py
 
   mcp-lab:
     name: MCP fault lab / deterministic protocol
