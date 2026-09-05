@@ -36,12 +36,14 @@ The same principle applies to coding agents (tests/build state), research agents
 
 ## Grading precedence
 
-The runtime has two deterministic oracles:
+The baseline runtime has two deterministic oracles:
 
 1. policy oracle;
 2. outcome oracle.
 
-When a scenario has no semantic rubric, those oracles preserve the existing deterministic-only behavior: any oracle failure yields `FAIL`; otherwise the trial yields `PASS`.
+Ordinary scenarios retain that historical surface. When `EvaluationScenario.side_effect_idempotency` is configured, successful side-effect-observation verification inserts a third deterministic oracle **between** them: `PolicyOracle → SideEffectIdempotencyOracle → OutcomeOracle`. The side-effect oracle is critical when a verified duplicate logical-operation attempt produces a second observable physical mutation or when the scenario requires a first mutation and none occurs.
+
+When a scenario has no semantic rubric, the active deterministic oracle set remains authoritative: any oracle failure yields `FAIL`; otherwise the trial yields `PASS`.
 
 When `EvaluationScenario.semantic_rubric` is configured, semantic grading is subordinate to those deterministic results:
 
@@ -50,7 +52,7 @@ adapter evidence
     ↓
 verified delivery / approval / protocol preconditions
     ↓
-PolicyOracle + OutcomeOracle
+PolicyOracle + optional SideEffectIdempotencyOracle + OutcomeOracle
     ├─ any deterministic FAIL ───────────────→ FAIL
     │                                         semantic judge is not called
     └─ deterministic PASS
@@ -65,7 +67,7 @@ PolicyOracle + OutcomeOracle
 
 A semantic result cannot rescue a deterministic failure. The runtime intentionally short-circuits semantic invocation when policy or outcome grading has already failed. This is stronger than merely choosing the deterministic result after both graders run: the subordinate judge receives no subject output for a deterministically failed trial.
 
-Provider/runtime failure, unverifiable evaluation preconditions, malformed semantic evidence, missing semantic-judge authority, or judge execution failure instead become `BLOCKED`, because the framework lacks sufficient trusted evidence to decide the configured evaluation contract.
+Provider/runtime failure, unverifiable evaluation preconditions (including an enabled side-effect observation relation), malformed semantic evidence, missing semantic-judge authority, or judge execution failure instead become `BLOCKED`, because the framework lacks sufficient trusted evidence to decide the configured evaluation contract.
 
 ## Semantic rubric identity
 
@@ -149,7 +151,7 @@ The enum is implemented now. Full scenario packs for every class are not claimed
 
 Event sequences must be contiguous from zero. This prevents a normalized trace from silently presenting reordered causal history as if it were original execution order.
 
-For policy assertions such as approval-before-mutation, and for semantic receipt binding to pre-semantic evidence, event ordering is part of correctness and is evaluated directly.
+For policy assertions such as approval-before-mutation, for two-attempt side-effect chronology (`request1 < result1 < request2 < result2 < observation`), and for semantic receipt binding to pre-semantic evidence, event ordering is part of correctness and is evaluated directly.
 
 ## Criticality
 
@@ -164,6 +166,6 @@ Examples that should normally be modeled as critical include:
 - sandbox escape;
 - authorization-policy violation.
 
-The current `PolicyOracle` marks policy failure critical. More specialized deterministic critical oracles can extend the same release semantics without granting semantic models critical release authority.
+The current `PolicyOracle` marks policy failure critical. `SideEffectIdempotencyOracle` is also critical when its scenario-owned contract is enabled and verified evidence proves duplicate physical mutation or a missing required first effect. More specialized deterministic critical oracles can extend the same release semantics without granting semantic models critical release authority.
 
 See [Semantic Judging](SEMANTIC_JUDGING.md), [Evidence Persistence and Replay](EVIDENCE_AND_REPLAY.md), and [Session Assurance Reports](ASSURANCE_REPORTS.md) for the corresponding trust boundaries.

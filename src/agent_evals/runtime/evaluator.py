@@ -27,6 +27,11 @@ from agent_evals.semantic.verification import (
     append_semantic_judgment,
     verify_semantic_judgment,
 )
+from agent_evals.side_effect.oracle import SideEffectIdempotencyOracle
+from agent_evals.side_effect.verification import (
+    SideEffectObservationError,
+    verify_side_effect_observation,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -185,6 +190,20 @@ class TrialRunner:
             )
 
         try:
+            verify_side_effect_observation(scenario, evidence)
+        except SideEffectObservationError as exc:
+            return EvaluatedTrial(
+                evidence=self._append_evaluation_error(
+                    evidence,
+                    source="evaluator:side-effect-observation",
+                    code="side_effect_observation_unverified",
+                    reason=str(exc),
+                ),
+                oracle_results=(),
+                verdict=TrialVerdict.BLOCKED,
+            )
+
+        try:
             verify_approval_intent(scenario, evidence)
         except ApprovalIntentError as exc:
             return EvaluatedTrial(
@@ -198,7 +217,17 @@ class TrialRunner:
                 verdict=TrialVerdict.BLOCKED,
             )
 
-        oracle_results = tuple(oracle.grade(scenario, evidence) for oracle in self._oracles)
+        if scenario.side_effect_idempotency is not None:
+            oracle_results = tuple(
+                oracle.grade(scenario, evidence)
+                for oracle in (
+                    self._oracles[0],
+                    SideEffectIdempotencyOracle(),
+                    self._oracles[1],
+                )
+            )
+        else:
+            oracle_results = tuple(oracle.grade(scenario, evidence) for oracle in self._oracles)
         deterministic_failed = any(result.verdict is TrialVerdict.FAIL for result in oracle_results)
 
         try:

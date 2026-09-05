@@ -1,6 +1,6 @@
 # ƳƤ AI Agent Evaluation & Assurance Framework — Documentation
 
-This documentation is organized by the question a reviewer is trying to answer. The framework keeps **subject identity**, **scenario/adversarial identity**, **approval-intent evidence**, **evaluation-precondition evidence**, **retrieval-delivery evidence**, **MCP protocol-fault evidence**, **MCP→agent bridge evidence**, **MCP resource-server authorization evidence**, **MCP OAuth-flow evidence**, **subject evidence**, **deterministic authority**, **calibrated semantic-judgment evidence**, **persistence integrity**, **session derivation**, and **statistical inference** separate. A statement from one domain never silently becomes proof in another.
+This documentation is organized by the question a reviewer is trying to answer. The framework keeps **subject identity**, **scenario/adversarial identity**, **approval-intent evidence**, **side-effect observation evidence**, **evaluation-precondition evidence**, **retrieval-delivery evidence**, **MCP protocol-fault evidence**, **MCP→agent bridge evidence**, **MCP resource-server authorization evidence**, **MCP OAuth-flow evidence**, **subject evidence**, **deterministic authority**, **calibrated semantic-judgment evidence**, **persistence integrity**, **session derivation**, and **statistical inference** separate. A statement from one domain never silently becomes proof in another.
 
 ## Review paths
 
@@ -18,6 +18,7 @@ Agent claim                 ≠ environment outcome
 Tool request                ≠ successful side effect
 Approval request            ≠ approval grant
 Approval decision receipt   ≠ human identity or external authorization
+Duplicate-looking tool result ≠ proof of idempotent physical effect
 Legacy approval             ≠ stronger native HITL approval decision
 Provider availability       ≠ subject correctness
 Model confidence            ≠ grading authority
@@ -132,6 +133,7 @@ The schema-drift bridge is intentionally host-refreshed: the harness owns the li
 | [SEMANTIC_JUDGING.md](SEMANTIC_JUDGING.md) | How are rubrics, judge profiles, calibration, bounded inputs, semantic receipts, deterministic precedence, replay, and OpenAI SDK judge behavior kept evidence-bound? |
 | [HANDOFF_AUTHORITY.md](HANDOFF_AUTHORITY.md) | How are native OpenAI handoffs authorized as a scenario-bound directed graph, how is run-item agent provenance bound, and how is authority forced to attenuate across each observed hop? |
 | [APPROVAL_INTENT.md](APPROVAL_INTENT.md) | How is one native OpenAI HITL approve/reject decision bound to the exact pending invocation, accepted delegated-authority path, same-run continuation, and deterministic failure semantics? |
+| [SIDE_EFFECT_IDEMPOTENCY.md](SIDE_EFFECT_IDEMPOTENCY.md) | How are two exact attempts to one logical operation bound to independently observed effect digests, reverified on replay, and graded without suppressing bad subject behavior? |
 | [ADVERSARIAL_TESTING.md](ADVERSARIAL_TESTING.md) | How are red-team stimuli made deterministic, how is delivery required before grading, and what does an adversarial receipt still not prove? |
 | [RETRIEVAL_ASSURANCE.md](RETRIEVAL_ASSURANCE.md) | How are corpus/query/ranker/poison identity, deterministic ranking, exact model-visible retrieval delivery, replay, and production-RAG non-claims kept separate? |
 | [OPENAI_ADAPTER.md](OPENAI_ADAPTER.md) | How are OpenAI Agents SDK events normalized; how do handoff authority and exact native HITL approval bind run-local provenance; how do metadata/result/ToolError/schema-drift stdio bridges close; how does the calibrated no-tools semantic judge use the public SDK model boundary; and why does neither provider nor protocol become the oracle? |
@@ -153,6 +155,7 @@ Use the evidence contract that matches the boundary actually observed:
 |---|---|---|
 | native handoff path with delegated authority | `TrialEvidence` + exact scenario `AuthorityPolicy` / `HandoffAuthorityGrant` graph | cryptographic agent identity, provider-side enforcement, or distributed delegation |
 | native OpenAI HITL interruption and exact approve/reject continuation | `ApprovalIntentSpec` + `ApprovalIntentReceipt` / `APPROVAL_DECISION` + normalized continuation evidence | human identity, enterprise approval attestation, production IAM, or target-side authorization |
+| two exact local OpenAI tool attempts to one logical operation | `SideEffectIdempotencySpec` + `SideEffectIdempotencyReceipt` / `SIDE_EFFECT_OBSERVATION` + exact request/result chronology | distributed exactly-once execution, durable deduplication, concurrency/crash safety, or external-target enforcement |
 | OpenAI local/SDK adversarial injection | `AttackDeliveryReceipt` | target-side attestation or automatic PASS |
 | evaluator-owned deterministic retrieval ranking and exact model-visible delivery | `RetrievalContractSpec` + `RetrievalDeliveryReceipt` / `RETRIEVAL_DELIVERY` | hosted vector-search correctness, citation correctness, production RAG lifecycle, or behavioral PASS |
 | standalone MCP fault observation | `MCPFaultReceipt` | agent consumption or behavior |
@@ -174,6 +177,10 @@ The explicit relations are important precisely because the framework refuses to 
 ## Native HITL approval intent in one paragraph
 
 `OpenAIAgentsHITLApprovalAdapter` exercises the pinned SDK's real `ToolApprovalItem` → `RunState.approve(...)` / `RunState.reject(...)` → same-`RunState` resume path under `agents.testing.ScriptedModel`. `ApprovalIntentReceipt` binds the scenario decision to the exact run-local agent, tool, stable call ID, canonical finite-JSON argument digest, normalized resource, accepted authority epoch, exact accepted handoff-path hash, and approval-request sequence. Approval requires exactly one matching executable request/result after resume; clean rejection requires explicit matching rejection-result evidence and no protected executable request. If a rejected invocation nevertheless executes, that resolved evidence is preserved for critical policy `FAIL`. Legacy call-scoped and persistent approvals cannot downgrade the stronger requirement. See [Native HITL Approval Intent](APPROVAL_INTENT.md).
+
+## Side-effect idempotency in one paragraph
+
+`OpenAIAgentsSideEffectIdempotencyAdapter` wraps a copied local `FunctionTool` only to sample evaluator-owned effect state immediately before and after the real subject callback. Both callbacks execute, their output/exception behavior is preserved, and two distinct OpenAI call identities plus strict equal arguments must close one continuous two-attempt receipt. `TrialRunner` revalidates the receipt before `SideEffectIdempotencyOracle` can grade it. A verified second physical mutation is critical `FAIL`; missing or contradictory observation/provenance is `BLOCKED`. Replay rechecks the historical receipt without rerunning either callback or the effect reader. See [Side-Effect Idempotency Assurance](SIDE_EFFECT_IDEMPOTENCY.md).
 
 ## MCP agent-bridge scope in one paragraph
 
