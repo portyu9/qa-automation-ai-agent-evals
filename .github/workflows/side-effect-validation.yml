@@ -1,3 +1,4 @@
+# Temporary branch-only validation; remove before the final PR candidate.
 name: Side-effect assurance validation
 
 on:
