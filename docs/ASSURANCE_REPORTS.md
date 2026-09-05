@@ -2,13 +2,13 @@
 
 ## Purpose
 
-`AssuranceReport` is a self-validating session-level artifact for review, CI handoff, and later audit. Version `agent-evals/assurance-report/v2` binds the `agent-evals/trial-evidence/v2` schema and exact trial evidence roots used by one evaluation session to deterministic oracle snapshots, optional subordinate semantic judgments, reliability calculation, frozen release policy, and the release-gate decision derived from that session.
+`AssuranceReport` is a self-validating session-level artifact for review, CI handoff, and later audit. Version `agent-evals/assurance-report/v3` binds the `agent-evals/trial-evidence/v2` schema and exact trial evidence roots used by one evaluation session to deterministic oracle snapshots, optional subordinate semantic judgments, fully reproducible reliability configuration, frozen release policy, and the release-gate decision derived from that session.
 
 The report is deliberately **not** another grading authority. It preserves conclusions and verifies their internal derivation whenever the artifact is loaded.
 
 ## Authority separation
 
-Assurance Report v2 makes two grading classes explicit instead of collapsing them into one score:
+Assurance Report v3 keeps two grading classes explicit instead of collapsing them into one score:
 
 1. **deterministic oracle snapshots** — policy and outcome conclusions derived from normalized evidence;
 2. **optional semantic judgment receipt** — a calibrated meaning-level judgment that may exist only after deterministic PASS.
@@ -26,7 +26,7 @@ deterministic oracle snapshots
              ├─ PASS ────────────────────────→ trial PASS
              ├─ FAIL ────────────────────────→ trial FAIL, non-critical
              └─ ABSTAIN ─────────────────────→ trial INCONCLUSIVE
-        ↓ recomputed
+        ↓ recomputed with exact k + confidence_z
 reliability statistics
         ↓ + frozen ReleasePolicy
 release-gate decision + reasons
@@ -54,16 +54,35 @@ The final `TrialEvidence.evidence_root` necessarily differs from the pre-semanti
 
 At session level the report records:
 
-- assurance-report schema version `agent-evals/assurance-report/v2`;
+- assurance-report schema version `agent-evals/assurance-report/v3`;
 - bound `TrialEvidence` schema version;
 - exact subject identity;
 - exact scenario identity;
 - the frozen `ReleasePolicy`;
-- the reliability snapshot;
+- the reliability snapshot, including exact `k` and Wilson `confidence_z`;
 - release-gate decision and reasons;
 - a domain-separated `report_root` over all report content except the root itself.
 
 Binding the evidence schema matters because an evidence root is meaningful only with the serialization and hashing semantics that define it. A future incompatible `TrialEvidence` format therefore cannot be silently interpreted as v2 evidence inside this report format.
+
+Binding `confidence_z` matters for the same reason at the statistical layer. The Wilson lower and upper bounds are not reproducible from verdict counts and `k` alone when callers intentionally select a non-default confidence contract.
+
+## Why v3 exists
+
+Assurance Report v2 introduced the explicit subordinate semantic-judgment authority class. Its reliability snapshot recorded `k` but did not record the configurable Wilson `confidence_z` accepted by `ReliabilityReport.from_verdicts(...)`.
+
+That omission meant a session using a valid non-default z value could compute a valid in-memory reliability report but could not round-trip through a self-validating assurance artifact: report derivation had no persisted parameter with which to reproduce the interval and therefore fell back to the default.
+
+Version 3 closes that gap by:
+
+- preserving `confidence_z` as behavior-bearing statistical configuration;
+- including it in `ReliabilitySnapshot`;
+- rederiving Wilson bounds with the exact recorded value on construction and load;
+- including the value in the canonical report content and therefore in `report_root`;
+- using the separate domain `agent-evals/assurance-report/v3\0`;
+- rejecting v2 artifacts rather than silently interpreting them under v3 hashing or derivation semantics.
+
+No `TrialEvidence` schema migration is implied; v3 still binds `agent-evals/trial-evidence/v2`.
 
 ## What is recomputed on every load
 
@@ -80,12 +99,12 @@ Pydantic model validation is not merely schema parsing. A loaded report must sat
 9. semantic receipt scenario identity matches the report scenario;
 10. the trial verdict recomputes from deterministic results plus optional semantic decision using strict precedence;
 11. `INCONCLUSIVE` requires an abstaining semantic judgment;
-12. reliability recomputes from the validated trial verdicts using the recorded `k`;
+12. reliability recomputes from the validated trial verdicts using the recorded `k` **and** recorded `confidence_z`;
 13. critical-violation count recomputes from **failed critical deterministic oracle snapshots only**;
 14. the release-gate decision and reasons recompute from reliability, deterministic critical violations, and the frozen policy;
-15. the canonical report root matches the complete report content.
+15. the canonical v3 report root matches the complete report content.
 
-A schema-valid JSON object that forges a semantic decision, trial verdict, success rate, Wilson interval, gate decision, gate reasons, critical flag, evidence root, policy threshold, or report root therefore fails validation unless all lower-level bound relations also remain valid.
+A schema-valid JSON object that forges a semantic decision, trial verdict, success rate, Wilson interval, confidence parameter, gate decision, gate reasons, critical flag, evidence root, policy threshold, or report root therefore fails validation unless all lower-level bound relations also remain valid.
 
 ## Generation from a session
 
@@ -98,7 +117,7 @@ A schema-valid JSON object that forges a semantic decision, trial verdict, succe
 - deterministic oracle names must be unique within each non-blocked trial;
 - deterministic and semantic precedence must rederive each trial verdict;
 - any semantic receipt must revalidate under its own contract;
-- the session's `ReliabilityReport` must recompute from its trial verdicts.
+- the session's `ReliabilityReport` must recompute from its trial verdicts using the same `k` and `confidence_z`.
 
 Only then is the release gate evaluated and the report root produced.
 
@@ -120,10 +139,17 @@ serialized = report.model_dump_json(indent=2)
 
 # Parsing performs derivation checks again; it is not a passive JSON load.
 verified = AssuranceReport.model_validate_json(serialized)
-assert verified.schema_version == "agent-evals/assurance-report/v2"
+assert verified.schema_version == "agent-evals/assurance-report/v3"
 assert verified.evidence_schema == "agent-evals/trial-evidence/v2"
+assert verified.reliability.confidence_z == report.reliability.confidence_z
 assert verified.report_root == report.report_root
 ```
+
+## Reliability integrity before release gating
+
+The persisted report is not the first place statistical values are checked. `ReliabilityReport` itself validates direct construction: count totals must reconcile, all derived metrics must exactly recompute from counts plus `k` and `confidence_z`, and stored floating-point values must be finite.
+
+`ReleaseGate.decide(...)` requires an exact `ReliabilityReport` and invokes its integrity validation again immediately before applying release thresholds. This matters because release authority must not depend on caller discipline, static typing, or a stale cached percentage. Even an object whose frozen dataclass protection was deliberately bypassed is rejected if its stored statistics no longer recompute.
 
 ## Semantic FAIL and criticality
 
@@ -148,9 +174,9 @@ That separation is intentional:
 - `LocalEvidenceStore` verifies and returns the actual persisted `TrialEvidence`;
 - `EvidenceReplayAdapter` can submit those historical observations through deterministic grading again under exact identity;
 - if semantic evidence is present, replay reconstructs the pre-semantic envelope and revalidates the historical semantic receipt **without calling a fresh semantic model**;
-- `AssuranceReport` verifies session-level derivation from its bound grading facts, evidence schema, evidence roots, optional semantic receipts, reliability, and release policy.
+- `AssuranceReport` verifies session-level derivation from its bound grading facts, evidence schema, evidence roots, optional semantic receipts, exact statistical configuration, reliability, and release policy.
 
-Therefore the report can answer, "Does this stored session conclusion internally follow from the grading facts and policy it contains?" It cannot by itself answer, "Would the deterministic or semantic evaluators produce those same observations if run again now?" The latter requires fresh execution, not report parsing.
+Therefore the report can answer, "Does this stored session conclusion internally follow from the grading facts, statistical contract, and policy it contains?" It cannot by itself answer, "Would the deterministic or semantic evaluators produce those same observations if run again now?" The latter requires fresh execution, not report parsing.
 
 ## Integrity boundary
 
@@ -171,7 +197,7 @@ An actor who can coherently rewrite an unsigned report can recompute ordinary ha
 
 ## Why derived values are still stored
 
-Reliability and gate results are included because they are useful review surfaces and make artifacts self-contained for humans and CI. They are not trusted merely because they are serialized. Validation always recomputes them from lower-level bound inputs.
+Reliability and gate results are included because they are useful review surfaces and make artifacts self-contained for humans and CI. They are not trusted merely because they are serialized. Validation always recomputes them from lower-level bound inputs and exact statistical configuration.
 
 The same rule applies to semantic decisions: the receipt stores the structured criterion results and derived decision, but validation rechecks rubric identity, threshold semantics, response digest, calibration/profile identity, and the receipt root.
 
