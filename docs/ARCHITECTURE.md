@@ -29,6 +29,11 @@ Trusted evaluation control plane
 │   ├── tool-schema drift across cached discovery / call validation / refresh
 │   └── tool-identity drift across cached discovery / stale lookup / refresh
 ├── controlled OpenAI↔MCP bridges
+│   ├── TOOL_METADATA_POISON discovery/model-visible-definition bridge
+│   │   ├── exact official tools/list target description + JSON schema
+│   │   ├── first public model-visible target definition observation
+│   │   ├── description/schema digest equality without requiring a target call
+│   │   └── MCPAgentToolMetadataReceipt
 │   ├── TOOL_RESULT_POISON same-call bridge
 │   │   ├── exactly one behavioral target call
 │   │   ├── MCPFaultReceipt for first controlled result
@@ -55,7 +60,7 @@ Trusted evaluation control plane
 │       ├── strict six-step protocol chronology
 │       └── MCPAgentToolSchemaDriftReceipt
 │
-│   all three paths use a fresh official MCPServerStdio subprocess per trial
+│   all four paths use a fresh official MCPServerStdio subprocess per trial
 │   and require negotiated MCP 2026-07-28
 ├── protocol-delivery semantic verifier
 ├── MCP resource-server authorization laboratory
@@ -78,6 +83,13 @@ Trusted evaluation control plane
 ├── evidence normalization and persistence verification
 ├── exact-identity replay
 ├── deterministic policy and outcome oracles
+├── optional calibrated semantic judging
+│   ├── scenario-owned content-addressed SemanticRubricSpec
+│   ├── exact content-addressed SemanticJudgeProfile
+│   ├── accepted SemanticCalibrationReceipt with false-PASS/abstention/failure/coverage gates
+│   ├── bounded objective + rubric + candidate-output judge input
+│   ├── deterministic-failure short circuit before model invocation
+│   └── terminal non-critical SemanticJudgmentReceipt bound to pre-semantic evidence root
 ├── statistical assurance
 ├── assurance-report verification
 └── release gate
@@ -95,7 +107,7 @@ External content can become evidence or adversarial stimulus. It does not become
 
 ## Identity domains
 
-`SubjectFingerprint` binds provider, model, application revision, instructions, tool schema, policy, memory policy, and adapter identity/version. `EvaluationScenario` binds scenario ID/revision, objective, initial state, authority, required/forbidden outcomes, classification, and tags.
+`SubjectFingerprint` binds provider, model, application revision, instructions, tool schema, policy, memory policy, and adapter identity/version. `EvaluationScenario` binds scenario ID/revision, objective, initial state, authority, required/forbidden outcomes, classification, tags, approval intent, and optional `SemanticRubricSpec`. Rubric criteria, descriptions, ordering, thresholds, and revision therefore participate in scenario identity.
 
 `AttackFixture` and `AdversarialCampaign` add deterministic adversarial identity without changing base authority or redefining success.
 
@@ -108,8 +120,9 @@ MCPRemoteAuthPolicy    → MCPRemoteAuthReceipt
 MCPOAuthFlowPolicy     → MCPOAuthFlowReceipt
 ```
 
-Three receipt types bridge selected MCP protocol observations into agent-trial evidence without creating new fault identities:
+Four receipt types bridge selected MCP protocol observations into agent-trial evidence without creating new fault identities:
 
+- `MCPAgentToolMetadataReceipt` binds one verified MCP `TOOL_METADATA_POISON` discovery description/schema to the first exact public model-visible target definition without requiring invocation;
 - `MCPAgentToolResultReceipt` binds one verified MCP `TOOL_RESULT_POISON` observation to one exact agent scenario, tool name, call ID, and model-visible output;
 - `MCPAgentToolErrorRecoveryReceipt` binds one verified MCP `TOOL_ERROR` observation to one exact causal two-call agent relation: error call, model-visible error result, distinct same-argument retry call, and exact benign recovery;
 - `MCPAgentToolSchemaDriftReceipt` binds one verified MCP `TOOL_SCHEMA_DRIFT` relation to one exact host-refreshed two-call agent relation: v1 discovery, hidden live replacement, stale-call rejection, host cache invalidation, first fresh v2 discovery, distinct corrected call, and exact replacement result.
@@ -129,7 +142,7 @@ tool_schema_drift
 tool_identity_drift
 ```
 
-`tool_result_poison`, `tool_error`, and `tool_schema_drift` currently have explicit agent bridges. `tool_metadata_poison`, `tool_list_stale_cache`, and `tool_identity_drift` remain protocol-only with respect to agent behavior.
+`tool_metadata_poison`, `tool_result_poison`, `tool_error`, and `tool_schema_drift` currently have explicit agent bridges. `tool_list_stale_cache` and `tool_identity_drift` remain protocol-only with respect to agent behavior. The metadata bridge proves exact model-visible exposure, not attention, interpretation, compliance, resistance, or safe behavior.
 
 The schema-drift bridge is not a blanket promotion of cache semantics. Its host/model ownership is explicit: the harness owns the live schema swap, the evaluator/host adapter owns one cache invalidation, the official MCP session supplies the first fresh post-invalidation listing, the pinned Agents SDK converts that listing into model tool definitions, and the agent is credited only for changing its second target call after v2 becomes model-visible. It does **not** claim model-initiated refresh or automatic `tools/list_changed` handling.
 
@@ -166,7 +179,7 @@ verified bridge + deterministic violation     → FAIL
 verified bridge + deterministic closure       → PASS
 ```
 
-No bridge receipt is grading authority. All three are evaluator-owned integrity evidence used to establish preconditions before deterministic subject grading.
+No bridge receipt is grading authority. All four are evaluator-owned integrity evidence used to establish preconditions before deterministic subject grading. Likewise, a semantic judgment is not deterministic state or safety authority: it is evaluated only after those deterministic oracles pass and may only narrow that success to non-critical FAIL or INCONCLUSIVE.
 
 ## Seven OpenAI local/SDK channel boundaries
 

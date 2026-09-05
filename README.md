@@ -10,14 +10,14 @@
 
 **A provider-neutral quality-engineering framework for evaluating autonomous agents by observable outcomes, side effects, authority boundaries, approval intent, adversarial conditions, verified evaluation preconditions, protocol state, authorization behavior, reliability, and reproducible evidence—not by persuasive final prose.**
 
-[Documentation](docs/README.md) · [Architecture](docs/ARCHITECTURE.md) · [Evaluation Model](docs/EVALUATION_MODEL.md) · [Handoff Authority](docs/HANDOFF_AUTHORITY.md) · [HITL Approval](docs/APPROVAL_INTENT.md) · [Adversarial Testing](docs/ADVERSARIAL_TESTING.md) · [MCP Fault Lab](docs/MCP_LAB.md) · [MCP Remote Auth](docs/MCP_REMOTE_AUTH.md) · [MCP OAuth Flow](docs/MCP_OAUTH_FLOW.md) · [Evidence & Replay](docs/EVIDENCE_AND_REPLAY.md) · [Session Reports](docs/ASSURANCE_REPORTS.md) · [OpenAI Adapter](docs/OPENAI_ADAPTER.md) · [Statistics](docs/STATISTICAL_ASSURANCE.md) · [Security](docs/SECURITY.md) · [Limitations](docs/LIMITATIONS.md)
+[Documentation](docs/README.md) · [Architecture](docs/ARCHITECTURE.md) · [Evaluation Model](docs/EVALUATION_MODEL.md) · [Semantic Judging](docs/SEMANTIC_JUDGING.md) · [Handoff Authority](docs/HANDOFF_AUTHORITY.md) · [HITL Approval](docs/APPROVAL_INTENT.md) · [Adversarial Testing](docs/ADVERSARIAL_TESTING.md) · [MCP Fault Lab](docs/MCP_LAB.md) · [MCP Remote Auth](docs/MCP_REMOTE_AUTH.md) · [MCP OAuth Flow](docs/MCP_OAUTH_FLOW.md) · [Evidence & Replay](docs/EVIDENCE_AND_REPLAY.md) · [Session Reports](docs/ASSURANCE_REPORTS.md) · [OpenAI Adapter](docs/OPENAI_ADAPTER.md) · [Statistics](docs/STATISTICAL_ASSURANCE.md) · [Security](docs/SECURITY.md) · [Limitations](docs/LIMITATIONS.md)
 
 </div>
 
 ---
 
 > [!IMPORTANT]
-> **The agent is the subject, not the oracle.** Final prose is not task completion. A tool call is not a successful side effect. An approval request is not an approval grant, and an approval receipt is not human identity or production authorization. A handoff observation is not delegated authority. A raw handoff count is not an accepted authority epoch. An attack label is not proof of delivery. A configured environment value is not proof of consumption. Cached MCP discovery is not current server truth. A raw MCP receipt is not proof that an agent consumed the condition. A bearer challenge is not proof of correct issuer policy. Resource-server success is not OAuth-flow correctness. OAuth-flow success is not agent correctness. Missing or invalid evidence is never silently promoted to PASS.
+> **The agent is the subject, not the oracle.** Final prose is not task completion. A tool call is not a successful side effect. An approval request is not an approval grant, and an approval receipt is not human identity or production authorization. A handoff observation is not delegated authority. A raw handoff count is not an accepted authority epoch. An attack label is not proof of delivery. A configured environment value is not proof of consumption. Cached MCP discovery is not current server truth. A raw MCP receipt is not proof that an agent consumed the condition. A semantic PASS is not proof of external state, authorization, or safety. A bearer challenge is not proof of correct issuer policy. Resource-server success is not OAuth-flow correctness. OAuth-flow success is not agent correctness. Missing or invalid evidence is never silently promoted to PASS.
 
 ## Engineering thesis
 
@@ -35,6 +35,7 @@ State proves.
 Policy constrains.
 Evidence persists.
 Replay regrades.
+Calibrated semantic judges may narrow deterministic success; they never override deterministic failure.
 Statistics quantify reliability.
 Release gates decide.
 Reports rederive.
@@ -75,7 +76,9 @@ This framework treats the **complete agent system** as the subject under test: m
 | **Evaluator failure ≠ subject failure** | unavailable/unverifiable controlled delivery, approval relation, or provenance becomes `EVALUATION_ERROR / BLOCKED` |
 | **Provider failure ≠ evaluator failure** | provider/runtime exceptions remain `RUNTIME_ERROR / BLOCKED` |
 | **Evidence is reverified** | persisted bytes must pass schema, identity, hash, semantic-root, and scenario-required receipt checks before reuse |
-| **Replay is historical** | replay regrades recorded evidence; it does not pretend to re-execute the subject, approval interruption, or human review |
+| **Replay is historical** | replay regrades recorded evidence; persisted semantic receipts are revalidated without a fresh model call, and replay does not pretend to re-execute the subject, approval interruption, or human review |
+| **Semantic judgment is subordinate** | deterministic policy/outcome failure short-circuits semantic invocation; semantic PASS cannot rescue it, semantic FAIL is non-critical, and ABSTAIN remains `INCONCLUSIVE` |
+| **Calibration is identity-bound** | judge prompt/model/configuration drift invalidates calibration reuse; aggregate accuracy cannot substitute for false-PASS, abstention, judge-failure, and adversarial-coverage gates |
 | **Nondeterminism is measured** | repeated trials produce uncertainty bounds instead of one-shot certainty |
 | **Release authority is deterministic** | critical state/safety evidence cannot be overridden by future semantic graders |
 
@@ -85,8 +88,8 @@ This framework treats the **complete agent system** as the subject under test: m
 
 The deterministic core requires no model credentials. The executable surface is intentionally separated into four lanes so one green boundary cannot silently upgrade another:
 
-1. **Provider-neutral core** — contracts, evidence, persistence, replay, deterministic oracles, statistics, metamorphic assurance, reporting, minimization, and release gates, including scenario-owned directed handoff grants, exact accepted authority-path state, and scenario-bound optional approval intent.
-2. **OpenAI Agents SDK tier** — the real SDK runner exercised with `agents.testing.ScriptedModel`, with no provider API call, across seven scoped local/SDK adversarial channels, native handoff-authority attenuation, and an exact native HITL `ToolApprovalItem` → same-`RunState` approve/reject continuation path.
+1. **Provider-neutral core** — contracts, evidence, persistence, replay, deterministic oracles, calibrated subordinate semantic-judging contracts, statistics, metamorphic assurance, reporting, minimization, and release gates, including scenario-owned directed handoff grants, exact accepted authority-path state, scenario-bound optional approval intent, and optional content-addressed semantic rubrics.
+2. **OpenAI Agents SDK tier** — the real SDK runner exercised with `agents.testing.ScriptedModel`, with no provider API call, across seven scoped local/SDK adversarial channels, native handoff-authority attenuation, an exact native HITL `ToolApprovalItem` → same-`RunState` approve/reject continuation path, and a one-turn no-tools semantic judge over the same public SDK model boundary.
 3. **MCP protocol/control-plane laboratories** — the six-fault official-client protocol lab, real loopback resource-server authorization lab, and separated two-origin OAuth authorization-code/PKCE/introspection lab.
 4. **OpenAI↔MCP delivery bridges** — four deliberately narrow official-stdio paths: one `TOOL_METADATA_POISON` discovery → exact model-visible tool-definition bridge, one `TOOL_RESULT_POISON` result bridge, one causal `TOOL_ERROR` → same-argument retry → benign recovery bridge, and one host-refreshed `TOOL_SCHEMA_DRIFT` v1-rejection → refreshed-v2 → corrected-call bridge. Each has its own integrity-bound receipt and ordered `PROTOCOL_DELIVERY` evidence. Metadata delivery closes at the first verified model-visible target definition and does not require a target tool call.
 
@@ -99,18 +102,19 @@ The stronger HITL path does **not** claim authenticated humans, enterprise workf
 | Surface | Implemented behavior |
 |---|---|
 | **Subject contract** | canonical SHA-256 identity across provider/model, instructions, tools, policy, memory policy, adapter, and application revision |
-| **Scenario contract** | versioned objective, initial state, required/forbidden outcomes, classification, tags, fail-closed authority, exact optional root agent, canonical directed handoff grants, and optional exact `ApprovalIntentSpec` whose decision participates in scenario identity |
+| **Scenario contract** | versioned objective, initial state, required/forbidden outcomes, classification, tags, fail-closed authority, exact optional root agent, canonical directed handoff grants, optional exact `ApprovalIntentSpec`, and optional content-addressed `SemanticRubricSpec`; all behavior-bearing material participates in scenario identity |
 | **Adversarial fixtures/campaigns** | content-addressed attacks and canonical campaigns bound to one exact base scenario |
 | **Attack delivery** | exactly-one receipt verification binding scenario, attack, channel, injection point, and payload digest before adversarial grading |
 | **Approval intent** | exact native request→decision→continuation verification binding agent, tool, call ID, canonical finite-JSON arguments, exact resource, accepted authority epoch/path, and scenario identity |
 | **Evidence** | immutable ordered events plus a domain-separated evidence root |
 | **Local evidence store** | strict manifest, bounded reads, symlink rejection, no-clobber publication, payload hash, semantic-root verification |
-| **Replay** | exact trial/subject/scenario historical regrading including delivery-receipt, approval-intent, and scenario-bound handoff-authority semantic revalidation |
+| **Replay** | exact trial/subject/scenario historical regrading including delivery-receipt, approval-intent, handoff-authority, and persisted semantic-judgment revalidation; replay never silently calls a fresh semantic model |
 | **Outcome oracle** | independently validates required and forbidden terminal state |
 | **Policy oracle** | fail-closed tools/resources, legacy call/persistent approvals, stronger native approval decisions, approval-request authority, global budgets, active-agent chronology, directed handoff grants, path-local attenuation, delegated per-agent budgets, and explicit policy violations |
 | **Reliability** | resolved success rate, Wilson interval, empirical `pass@k`/`pass^k`; unresolved attempts stay separate |
 | **Differential evaluation** | exact paired McNemar/binomial comparison over resolved trials |
-| **Assurance reports** | self-validating artifacts binding evidence roots, oracle snapshots, reliability, release policy, gate result, and report root |
+| **Semantic judging** | optional scenario-owned rubric, exact judge-profile/calibration authority, bounded PASS/FAIL/ABSTAIN response, terminal non-critical receipt bound to the pre-semantic evidence root, and deterministic short-circuit precedence |
+| **Assurance reports** | v2 self-validating artifacts keeping deterministic oracle snapshots and optional semantic receipts as separate authority classes while rederiving trial verdicts, reliability, release policy, gate result, and report root |
 | **Release gate** | non-compensatory critical-safety rules plus explicit `ACCEPT`, `REJECT`, and `INCONCLUSIVE` semantics |
 | **Metamorphic assurance** | state-projection invariance and authority-monotonicity relations without golden prose |
 | **Failure minimization** | bounded deterministic counterexample reduction requiring failure reproduction |

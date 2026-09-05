@@ -116,6 +116,14 @@ A mismatch raises `ReplayIdentityError` at the adapter boundary. When all identi
 
 For an unchanged evidence model, a successful exact-identity replay reproduces the original `evidence_root`.
 
+## Semantic judgments are historically revalidated
+
+A persisted terminal `SEMANTIC_JUDGMENT` event is not trusted merely because its enclosing evidence envelope hashes correctly. Replay reconstructs the exact `TrialEvidence` that existed before that event, rederives its evidence root, and requires the embedded `SemanticJudgmentReceipt.subject_evidence_root` to match it. The receipt then revalidates exact scenario/subject identity, embedded rubric identity, judge profile, accepted calibration identity, bounded input digest, structured-response digest, criterion threshold semantics, derived decision, and outer receipt root.
+
+The semantic event must be unique, terminal, emitted from the known evaluator source, and non-critical. If deterministic policy/outcome replay fails, historical semantic evidence cannot coexist with or rescue that failure. If deterministic replay passes, historical semantic PASS/FAIL/ABSTAIN is rederived as PASS/non-critical FAIL/INCONCLUSIVE respectively.
+
+Replay does **not** call a semantic model when a valid historical semantic receipt is present. It proves only that the recorded semantic relation remains internally valid for the exact recorded evidence and scenario identity; it does not establish current provider liveness or that the judge would return the same response today. See [Calibrated Semantic Judging](SEMANTIC_JUDGING.md).
+
 ## Native approval-intent receipts are semantically revalidated
 
 A persisted `APPROVAL_DECISION` event is not trusted merely because the surrounding `TrialEvidence` has a valid payload hash/evidence root or because `ApprovalIntentReceipt` passes structural validation.
@@ -168,7 +176,8 @@ Replay answers:
 Replay does **not** answer:
 
 - can the provider execute successfully now?;
-- would the model make the same decision now?;
+- would the subject model make the same decision now?;
+- would a semantic judge produce the same judgment now?;
 - does a remote side effect still exist now?;
 - is an external dependency currently healthy?;
 - did a specific human, service, or machine originally produce these bytes?;
