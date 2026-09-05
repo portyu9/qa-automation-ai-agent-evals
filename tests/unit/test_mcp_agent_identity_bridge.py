@@ -161,7 +161,7 @@ def test_identity_drift_receipt_rejects_model_visible_identity_drift_mismatch() 
 
 
 def test_identity_drift_receipt_rejects_replacement_name_not_bound_to_fault() -> None:
-    with pytest.raises(ValueError, match="replacement name"):
+    with pytest.raises(ValueError, match="unexpected protocol boundary"):
         MCPAgentToolIdentityDriftReceipt.create(
             scenario_identity="a" * 64,
             fault=_fault(),
