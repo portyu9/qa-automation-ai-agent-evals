@@ -76,6 +76,8 @@ jobs:
           tests/integration/test_openai_hitl_approval_adapter.py
           tests/integration/test_openai_semantic_judge.py
           tests/integration/test_openai_retrieval_adapter.py
+          tests/integration/test_openai_side_effect_idempotency_adapter.py
+          tests/integration/test_openai_side_effect_idempotency_fail_closed.py
           tests/integration/test_openai_mcp_tool_result_adapter.py
           tests/integration/test_openai_mcp_tool_error_recovery_adapter.py
           tests/integration/test_openai_mcp_tool_metadata_adapter.py
