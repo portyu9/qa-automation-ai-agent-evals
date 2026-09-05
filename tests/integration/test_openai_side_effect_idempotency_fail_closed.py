@@ -65,6 +65,7 @@ async def _run(
     calls: list[tuple[str, dict[str, Any]]],
     *,
     effect_reader_mode: str = "normal",
+    require_model_complete: bool = True,
 ) -> tuple[object, int, list[dict[str, Any]]]:
     pytest.importorskip("agents")
     from agents import Agent
@@ -101,7 +102,8 @@ async def _run(
         scenario=_scenario(),
         trial_id="side-effect-fail-closed",
     )
-    model.assert_complete()  # type: ignore[attr-defined]
+    if require_model_complete:
+        model.assert_complete()  # type: ignore[attr-defined]
     return evaluated, callback_calls, effects
 
 
@@ -125,22 +127,20 @@ async def test_three_target_calls_block_after_all_subject_callbacks_execute() ->
 
 @pytest.mark.openai
 @pytest.mark.asyncio
-async def test_missing_sdk_call_identity_blocks_after_subject_callbacks_execute() -> None:
+async def test_missing_sdk_call_identity_blocks_before_subject_callback_execution() -> None:
     evaluated, callback_calls, _ = await _run(
         [
             ("", {"operation_id": "op-7", "value": 3}),
             ("call-2", {"operation_id": "op-7", "value": 3}),
-        ]
+        ],
+        require_model_complete=False,
     )
 
-    assert callback_calls == 2
+    assert callback_calls == 0
     assert evaluated.verdict is TrialVerdict.BLOCKED  # type: ignore[attr-defined]
     event = evaluated.evidence.events[-1]  # type: ignore[attr-defined]
-    assert event.kind is EvidenceKind.EVALUATION_ERROR
-    assert event.payload["code"] in {
-        "side_effect_observation_unavailable",
-        "side_effect_call_identity_unavailable",
-    }
+    assert event.kind is EvidenceKind.RUNTIME_ERROR
+    assert event.payload["detail_retained"] is False
 
 
 @pytest.mark.openai
