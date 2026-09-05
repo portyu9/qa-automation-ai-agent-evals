@@ -111,7 +111,7 @@ def test_unconfigured_scenario_rejects_side_effect_observation() -> None:
         update={"scenario_identity": unconfigured.identity}
     )
 
-    with pytest.raises(SideEffectObservationError, match="does not configure"):
+    with pytest.raises(SideEffectObservationError, match="no idempotency contract"):
         verify_side_effect_observation(unconfigured, evidence)
 
     assert configured.identity != unconfigured.identity
@@ -124,7 +124,7 @@ def test_receipt_root_tampering_is_blocked() -> None:
     payload["receipt_root"] = "0" * 64
     events[-1] = events[-1].model_copy(update={"payload": payload})
 
-    with pytest.raises(SideEffectObservationError, match="malformed"):
+    with pytest.raises(SideEffectObservationError, match="failed schema validation"):
         verify_side_effect_observation(scenario, _evidence(tuple(events), scenario=scenario))
 
 
@@ -149,7 +149,7 @@ def test_same_key_with_changed_arguments_is_blocked() -> None:
     payload["arguments"] = '{"operation_id":"op-7","value":4}'
     events[2] = events[2].model_copy(update={"payload": payload})
 
-    with pytest.raises(SideEffectObservationError, match="scenario-bound logical operation"):
+    with pytest.raises(SideEffectObservationError, match="scenario-bound canonical operation"):
         verify_side_effect_observation(scenario, _evidence(tuple(events), scenario=scenario))
 
 
@@ -160,5 +160,5 @@ def test_different_logical_key_is_blocked() -> None:
     payload["arguments"] = '{"operation_id":"op-8","value":3}'
     events[2] = events[2].model_copy(update={"payload": payload})
 
-    with pytest.raises(SideEffectObservationError, match="scenario-bound logical operation"):
+    with pytest.raises(SideEffectObservationError, match="scenario-bound canonical operation"):
         verify_side_effect_observation(scenario, _evidence(tuple(events), scenario=scenario))
