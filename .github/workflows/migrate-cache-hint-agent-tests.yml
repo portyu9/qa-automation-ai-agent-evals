@@ -57,6 +57,17 @@ jobs:
                   and fn.value.id in RECEIPTS
               )
 
+          def dict_key_edit(
+              *, text: str, starts: list[int], key: ast.expr, path: Path
+          ) -> tuple[int, int, str] | None:
+              if not (isinstance(key, ast.Constant) and key.value == "ttl_ms"):
+                  return None
+              segment = ast.get_source_segment(text, key)
+              if segment not in {'"ttl_ms"', "'ttl_ms'"}:
+                  raise AssertionError(f"unexpected dict key at {path}:{key.lineno}: {segment!r}")
+              start = starts[key.lineno - 1] + key.col_offset
+              return (start + 1, start + 7, "mcp_cache_hint_ttl_ms")
+
           for path in test_files:
               text = path.read_text()
               tree = ast.parse(text)
@@ -83,8 +94,6 @@ jobs:
                       for kw in node.keywords:
                           if kw.arg is None and isinstance(kw.value, ast.Name):
                               expanded_names.add(kw.value.id)
-                  if not expanded_names:
-                      continue
 
                   for node in ast.walk(func):
                       target: ast.expr | None = None
@@ -93,21 +102,26 @@ jobs:
                           target, value = node.targets[0], node.value
                       elif isinstance(node, ast.AnnAssign):
                           target, value = node.target, node.value
-                      if not (
+                      if (
                           isinstance(target, ast.Name)
                           and target.id in expanded_names
                           and isinstance(value, ast.Dict)
                       ):
-                          continue
-                      for key in value.keys:
-                          if not (isinstance(key, ast.Constant) and key.value == "ttl_ms"):
-                              continue
-                          segment = ast.get_source_segment(text, key)
-                          if segment not in {'"ttl_ms"', "'ttl_ms'"}:
-                              raise AssertionError(f"unexpected dict key at {path}:{key.lineno}: {segment!r}")
-                          start = starts[key.lineno - 1] + key.col_offset
-                          edits.append((start + 1, start + 7, "mcp_cache_hint_ttl_ms"))
-                          helper_dict_changes += 1
+                          for key in value.keys:
+                              edit = dict_key_edit(text=text, starts=starts, key=key, path=path)
+                              if edit is not None:
+                                  edits.append(edit)
+                                  helper_dict_changes += 1
+
+                  # Some suites return a bridge kwargs dictionary from a helper and expand it later.
+                  if func.name.endswith("bridge_kwargs"):
+                      for node in ast.walk(func):
+                          if isinstance(node, ast.Return) and isinstance(node.value, ast.Dict):
+                              for key in node.value.keys:
+                                  edit = dict_key_edit(text=text, starts=starts, key=key, path=path)
+                                  if edit is not None:
+                                      edits.append(edit)
+                                      helper_dict_changes += 1
 
               if edits:
                   ordered = sorted(edits)
@@ -133,7 +147,6 @@ jobs:
           if helper_dict_changes < 2:
               raise AssertionError(f"too few helper-dict migrations: {helper_dict_changes}")
 
-          # These protocol-domain tokens MUST survive the agent-domain rename.
           joined = "\n".join(p.read_text() for p in test_files)
           for token in (
               "create_stale_cache_protocol_receipt(",
