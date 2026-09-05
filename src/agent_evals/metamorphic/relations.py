@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import TypeAlias
 
-from agent_evals.contracts.models import AuthorityPolicy
+from agent_evals.contracts.models import AuthorityPolicy, HandoffAuthorityGrant
 from agent_evals.evidence.models import TrialVerdict
 from agent_evals.runtime.evaluator import EvaluatedTrial
 
@@ -92,8 +92,8 @@ def authority_does_not_expand(
     """Prove that a transformed policy grants no more observable authority than the baseline.
 
     This relation supports authority-monotonicity tests: removing permission from a scenario must
-    not accidentally widen another dimension such as resource scope, approval requirements, or
-    execution budgets.
+    not accidentally widen another dimension such as resource scope, approval requirements,
+    execution budgets, or delegated handoff authority.
     """
 
     reasons: list[str] = []
@@ -119,14 +119,10 @@ def authority_does_not_expand(
         if not baseline.allowed_resource_prefixes:
             reasons.append("resource authority introduced where baseline authorized no resources")
         else:
-            broadened = [
-                prefix
-                for prefix in transformed.allowed_resource_prefixes
-                if not any(
-                    prefix.startswith(baseline_prefix)
-                    for baseline_prefix in baseline.allowed_resource_prefixes
-                )
-            ]
+            broadened = _broadened_resource_prefixes(
+                baseline.allowed_resource_prefixes,
+                transformed.allowed_resource_prefixes,
+            )
             if broadened:
                 reasons.append(f"resource scope broadened: {broadened!r}")
 
@@ -141,9 +137,104 @@ def authority_does_not_expand(
             f"handoff budget expanded: {baseline.max_handoffs} -> {transformed.max_handoffs}"
         )
 
+    reasons.extend(_delegated_authority_expansion_reasons(baseline, transformed))
+
     if reasons:
         return RelationResult(MetamorphicDecision.VIOLATED, tuple(reasons))
     return RelationResult(MetamorphicDecision.SATISFIED)
+
+
+def _delegated_authority_expansion_reasons(
+    baseline: AuthorityPolicy,
+    transformed: AuthorityPolicy,
+) -> tuple[str, ...]:
+    """Return structural delegated-authority changes that cannot prove monotonic attenuation.
+
+    Legacy single-authority policy is the least restrictive handoff mode: adding a validated
+    handoff graph constrains that mode, while removing an existing graph removes path-local
+    attenuation. When both policies use graphs, every transformed transition must already exist in
+    the baseline and each retained grant must be no broader than its baseline counterpart.
+    """
+    if not baseline.has_handoff_authority:
+        return ()
+    if not transformed.has_handoff_authority:
+        return ("delegated handoff attenuation removed from transformed authority",)
+
+    reasons: list[str] = []
+    if transformed.root_agent != baseline.root_agent:
+        reasons.append(
+            "delegated handoff root identity changed: "
+            f"{baseline.root_agent!r} -> {transformed.root_agent!r}"
+        )
+
+    baseline_grants = {grant.transition: grant for grant in baseline.handoff_grants}
+    transformed_grants = {grant.transition: grant for grant in transformed.handoff_grants}
+    new_transitions = sorted(transformed_grants.keys() - baseline_grants.keys())
+    if new_transitions:
+        reasons.append(f"new delegated handoff transitions granted: {new_transitions!r}")
+
+    for transition in sorted(transformed_grants.keys() & baseline_grants.keys()):
+        baseline_grant = baseline_grants[transition]
+        transformed_grant = transformed_grants[transition]
+        reasons.extend(_grant_expansion_reasons(baseline_grant, transformed_grant))
+
+    return tuple(reasons)
+
+
+def _grant_expansion_reasons(
+    baseline: HandoffAuthorityGrant,
+    transformed: HandoffAuthorityGrant,
+) -> tuple[str, ...]:
+    transition = f"{baseline.source_agent!r} -> {baseline.target_agent!r}"
+    reasons: list[str] = []
+
+    extra_tools = transformed.allowed_tools - baseline.allowed_tools
+    if extra_tools:
+        reasons.append(
+            f"delegated tools broadened for {transition}: {sorted(extra_tools)!r}"
+        )
+
+    retained_tools = transformed.allowed_tools & baseline.allowed_tools
+    weakened_approval = (
+        baseline.additional_approval_required_tools & retained_tools
+    ) - transformed.additional_approval_required_tools
+    if weakened_approval:
+        reasons.append(
+            "delegated approval requirement removed for retained tools on "
+            f"{transition}: {sorted(weakened_approval)!r}"
+        )
+
+    broadened_prefixes = _broadened_resource_prefixes(
+        baseline.allowed_resource_prefixes,
+        transformed.allowed_resource_prefixes,
+    )
+    if broadened_prefixes:
+        reasons.append(
+            f"delegated resource scope broadened for {transition}: {broadened_prefixes!r}"
+        )
+
+    if transformed.max_tool_calls > baseline.max_tool_calls:
+        reasons.append(
+            "delegated tool-call budget expanded for "
+            f"{transition}: {baseline.max_tool_calls} -> {transformed.max_tool_calls}"
+        )
+    if transformed.max_handoffs > baseline.max_handoffs:
+        reasons.append(
+            "delegated handoff budget expanded for "
+            f"{transition}: {baseline.max_handoffs} -> {transformed.max_handoffs}"
+        )
+    return tuple(reasons)
+
+
+def _broadened_resource_prefixes(
+    baseline: tuple[str, ...],
+    transformed: tuple[str, ...],
+) -> list[str]:
+    return [
+        prefix
+        for prefix in transformed
+        if not any(prefix.startswith(baseline_prefix) for baseline_prefix in baseline)
+    ]
 
 
 def _resolve_path(state: object, path: StatePath) -> tuple[bool, object | None]:
