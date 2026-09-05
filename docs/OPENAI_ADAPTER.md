@@ -6,7 +6,7 @@ The OpenAI integration turns documented OpenAI Agents SDK execution surfaces int
 
 The integration is pinned to `openai-agents==0.22.0`. MCP integration is pinned separately to `mcp==2.1.1`. Pinning both sides makes normalization, tool-output conversion, call identity, approval interruption/resume behavior, protocol negotiation, retry chronology, tool-discovery semantics, and run-item agent attribution explicit reviewable contracts rather than floating assumptions.
 
-Eleven adapter boundaries are intentionally distinct:
+Twelve adapter boundaries are intentionally distinct:
 
 - `OpenAIAgentsAdapter` — seven scoped local/SDK adversarial channels;
 - `OpenAIAgentsRetrievalAdapter` — one evaluator-owned deterministic retrieval tool binding the exact scenario query and canonical ranked context to one stable SDK call/result relation;
@@ -16,6 +16,7 @@ Eleven adapter boundaries are intentionally distinct:
 - `OpenAIAgentsMCPToolMetadataAdapter` — one controlled official-MCP-stdio → OpenAI public-model-boundary path for `MCPFaultKind.TOOL_METADATA_POISON`, binding exact discovery description and target JSON schema without requiring a target call;
 - `OpenAIAgentsMCPToolResultAdapter` — one controlled OpenAI-agent → official-MCP-stdio path for `MCPFaultKind.TOOL_RESULT_POISON`;
 - `OpenAIAgentsMCPToolErrorRecoveryAdapter` — one controlled OpenAI-agent → official-MCP-stdio resilience path for `MCPFaultKind.TOOL_ERROR`, requiring a causal same-argument retry and exact benign recovery;
+- `OpenAIAgentsMCPToolStaleCacheAdapter` — one controlled official-MCP-stdio/OpenAI path for `MCPFaultKind.TOOL_LIST_STALE_CACHE`, requiring live target removal, cached post-removal target presence, a real unknown-tool rejection, evaluator-owned cache invalidation, first fresh target absence, and exact rejection delivery at the target-absent public model boundary;
 - `OpenAIAgentsMCPToolSchemaDriftAdapter` — one controlled OpenAI-agent → official-MCP-stdio schema-adaptation path for `MCPFaultKind.TOOL_SCHEMA_DRIFT`, requiring a real stale-call rejection, evaluator-owned cache invalidation, first fresh v2 discovery, and one exact corrected behavioral call;
 - `OpenAIAgentsMCPToolIdentityDriftAdapter` — one controlled OpenAI-agent → official-MCP-stdio identity-adaptation path for `MCPFaultKind.TOOL_IDENTITY_DRIFT`, requiring exact old-name model exposure, a real old-name rejection after the live rename, evaluator-owned cache invalidation, exact replacement-only model exposure, and one exact replacement-name behavioral call;
 - `OpenAIAgentsSemanticJudge` — one optional subordinate no-tools, one-turn evaluator over a concrete public SDK `Model`, accepting only canonical bounded semantic input and strict JSON output under an exact calibrated judge profile.
@@ -271,6 +272,37 @@ TrialEvidence
 framework-owned deterministic oracles
 ```
 
+### Dedicated MCP stale-cache removal-delivery bridge
+
+```text
+MCPFaultSpec(kind=tool_list_stale_cache)
+        ↓
+OpenAIAgentsMCPToolStaleCacheAdapter
+        ↓ fresh official MCPServerStdio subprocess
+model/protocol target present
+        ↓
+TOOL_REQUEST(stale_call_id; {query: stale})
+        ↓
+hidden evaluator-only live target removal
+        ↓
+cached tools/list still exposes target
+        ↓
+real MCP unknown-tool rejection / TOOL_RESULT
+        ↓
+host adapter invalidates MCP tool cache
+        ↓
+first fresh tools/list + public Model boundary prove target absent
++ exact rejection + same call ID
+        ↓
+MCPAgentToolStaleCacheReceipt
+        ↓
+PROTOCOL_DELIVERY inserted after the stale result
+        ↓
+TrialEvidence → framework-owned deterministic oracles
+```
+
+This is host-refreshed removal delivery, not model-owned refresh or automatic behavioral recovery. Exactly one controlled target request/result pair closes the bridge; the evaluator does not fabricate a replacement call. See [MCP Stale-Cache Tool-Removal Assurance](MCP_STALE_CACHE.md).
+
 ### Dedicated MCP schema-drift adaptation bridge
 
 ```text
@@ -347,7 +379,7 @@ TrialEvidence
 framework-owned deterministic oracles
 ```
 
-All five MCP paths are bridges between evidence domains, not conversions of MCP protocol evidence into grading authority. A bridge establishes a narrowly defined delivery/recovery/adaptation precondition. The agent still passes or fails only through deterministic subject evidence and oracles.
+All six MCP paths are bridges between evidence domains, not conversions of MCP protocol evidence into grading authority. A bridge establishes a narrowly defined delivery/recovery/adaptation precondition. The agent still passes or fails only through deterministic subject evidence and oracles.
 
 ## Seven concrete adversarial channels
 
@@ -471,13 +503,13 @@ This mode does not mutate process-global `os.environ`, filesystem/browser/contai
 
 ## Shared MCP stdio provenance controls
 
-All five MCP adapters create a **fresh official `MCPServerStdio` client/server process boundary** per trial and clone the supplied OpenAI Agent with exactly that one controlled MCP server.
+All six MCP adapters create a **fresh official `MCPServerStdio` client/server process boundary** per trial and clone the supplied OpenAI Agent with exactly that one controlled MCP server.
 
-The base Agent is rejected when it already has MCP servers, uses prefixed MCP tool names, or has a local tool colliding with the controlled names. The schema- and identity-drift adapters additionally reserve evaluator-only control-tool identities and filter those controls from the agent-visible MCP tool list. Those fail-closed preconditions prevent a valid-looking call ID or hidden control action from being attributed to the wrong tool or server.
+The base Agent is rejected when it already has MCP servers, uses prefixed MCP tool names, or has a local tool colliding with the controlled names. The stale-cache, schema-drift, and identity-drift adapters additionally reserve evaluator-only control-tool identities and filter those controls from the agent-visible MCP tool list. Those fail-closed preconditions prevent a valid-looking call ID or hidden control action from being attributed to the wrong tool or server.
 
 For MCP v2, the authoritative negotiated revision is the connected `ClientSession.protocol_version`; legacy `server_initialize_result.protocol_version` is only a fallback for older initialization paths.
 
-All five adapters require negotiated protocol `2026-07-28`. A different or unavailable version is an evaluation precondition failure, not a subject failure.
+All six adapters require negotiated protocol `2026-07-28`. A different or unavailable version is an evaluation precondition failure, not a subject failure.
 
 ---
 
@@ -847,12 +879,12 @@ See [MCP Tool-Identity Drift Assurance](MCP_IDENTITY_DRIFT.md) for the dedicated
 
 ## What the MCP bridges do not prove
 
-None of the five bridges establishes:
+None of the six bridges establishes:
 
 - live OpenAI model behavior or provider availability;
 - hosted OpenAI MCP, third-party MCP, remote MCP, Internet MCP, TLS/DNS/proxy/gateway fidelity, or arbitrary stdio transport robustness;
 - model attention to, interpretation of, compliance with, or resistance to MCP metadata poison after exact model-visible exposure;
-- generic stale-cache behavior inside an agent trial; `TOOL_LIST_STALE_CACHE` remains protocol-only;
+- generic stale-cache correctness beyond the exact host-refreshed live-removal → cached-target → real-rejection → target-absent model-boundary contract;
 - arbitrary schema migrations beyond the one controlled host-refreshed schema-drift contract;
 - arbitrary rename/alias/multi-tool migration graphs beyond the one controlled host-refreshed identity-drift contract;
 - arbitrary multi-call or parallel plans;

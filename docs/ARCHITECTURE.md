@@ -55,6 +55,16 @@ Trusted evaluation control plane
 │   │   ├── request₁ < result₁ < request₂ < result₂
 │   │   ├── exact same-session benign recovery
 │   │   └── MCPAgentToolErrorRecoveryReceipt
+│   ├── TOOL_LIST_STALE_CACHE host-refreshed removal-delivery bridge
+│   │   ├── initial protocol/model target presence
+│   │   ├── evaluator-only hidden live target removal
+│   │   ├── cached post-removal tools/list still exposes target
+│   │   ├── real unknown-tool rejection for removed target
+│   │   ├── host-owned cache invalidation after rejection
+│   │   ├── first fresh post-invalidation tools/list proves target absent
+│   │   ├── public model boundary proves target absent + exact rejection
+│   │   ├── strict six-step protocol chronology
+│   │   └── MCPAgentToolStaleCacheReceipt
 │   ├── TOOL_SCHEMA_DRIFT host-refreshed adaptation bridge
 │   │   ├── model receives bound v1 target schema
 │   │   ├── evaluator-only hidden live swap to v2
@@ -77,7 +87,7 @@ Trusted evaluation control plane
 │       ├── strict six-step protocol chronology
 │       └── MCPAgentToolIdentityDriftReceipt
 │
-│   all five paths use a fresh official MCPServerStdio subprocess per trial
+│   all six paths use a fresh official MCPServerStdio subprocess per trial
 │   and require negotiated MCP 2026-07-28
 ├── protocol-delivery semantic verifier
 ├── native handoff-authority verifier
@@ -156,11 +166,12 @@ MCPRemoteAuthPolicy    → MCPRemoteAuthReceipt
 MCPOAuthFlowPolicy     → MCPOAuthFlowReceipt
 ```
 
-Five receipt types bridge selected MCP protocol observations into agent-trial evidence without creating new fault identities:
+Six receipt types bridge selected MCP protocol observations into agent-trial evidence without creating new fault identities:
 
 - `MCPAgentToolMetadataReceipt` binds one verified MCP `TOOL_METADATA_POISON` discovery description/schema to the first exact public model-visible target definition without requiring invocation;
 - `MCPAgentToolResultReceipt` binds one verified MCP `TOOL_RESULT_POISON` observation to one exact agent scenario, tool name, call ID, and model-visible output;
 - `MCPAgentToolErrorRecoveryReceipt` binds one verified MCP `TOOL_ERROR` observation to one exact causal two-call agent relation: error call, model-visible error result, distinct same-argument retry call, and exact benign recovery;
+- `MCPAgentToolStaleCacheReceipt` binds one verified MCP `TOOL_LIST_STALE_CACHE` discovery relation to one exact host-refreshed removal-delivery relation: initial model-visible target, hidden live removal, cached target, real unknown-tool rejection, host invalidation, first fresh target absence, and exact target-absent model-boundary rejection delivery;
 - `MCPAgentToolSchemaDriftReceipt` binds one verified MCP `TOOL_SCHEMA_DRIFT` relation to one exact host-refreshed two-call agent relation: v1 discovery, hidden live replacement, stale-call rejection, host cache invalidation, first fresh v2 discovery, distinct corrected call, and exact replacement result;
 - `MCPAgentToolIdentityDriftReceipt` binds one verified MCP `TOOL_IDENTITY_DRIFT` relation to one exact host-refreshed identity transition: original model-visible identity, hidden old→replacement swap, real stale-name rejection, host cache invalidation, first fresh replacement discovery, replacement-only model exposure, distinct replacement call, and exact recovery result.
 
@@ -179,7 +190,7 @@ tool_schema_drift
 tool_identity_drift
 ```
 
-`tool_metadata_poison`, `tool_result_poison`, `tool_error`, `tool_schema_drift`, and `tool_identity_drift` have explicit agent bridges. `tool_list_stale_cache` remains protocol-only with respect to agent behavior. The metadata bridge proves exact model-visible exposure, not attention, interpretation, compliance, resistance, or safe behavior.
+All six fault kinds have explicit agent bridges. `tool_list_stale_cache` now proves only one exact host-refreshed removal-delivery relation; it does not imply generic cache coherence, model-owned refresh, or behavioral recovery. The metadata bridge proves exact model-visible exposure, not attention, interpretation, compliance, resistance, or safe behavior.
 
 The schema- and identity-drift bridges are not blanket promotions of cache semantics. Their ownership is explicit: the harness owns the live mutation, the evaluator/host adapter owns cache invalidation, the official MCP session supplies the first fresh post-invalidation listing, the pinned Agents SDK converts that listing into model tool definitions, and the agent is credited only for changing its next target call after the replacement contract/identity becomes model-visible. Neither path claims model-initiated refresh or automatic `tools/list_changed` handling.
 
@@ -228,7 +239,7 @@ verified bridge + deterministic violation     → FAIL
 verified bridge + deterministic closure       → PASS
 ```
 
-No bridge receipt is grading authority. All five are evaluator-owned integrity evidence used to establish preconditions before deterministic subject grading. Likewise, a semantic judgment is not deterministic state or safety authority: it is evaluated only after deterministic policy/outcome closure and may only narrow that success to non-critical FAIL or INCONCLUSIVE.
+No bridge receipt is grading authority. All six are evaluator-owned integrity evidence used to establish preconditions before deterministic subject grading. Likewise, a semantic judgment is not deterministic state or safety authority: it is evaluated only after deterministic policy/outcome closure and may only narrow that success to non-critical FAIL or INCONCLUSIVE.
 
 ## Seven OpenAI local/SDK channel boundaries
 
@@ -499,7 +510,7 @@ Repeated trials feed `ReliabilityReport`; resolved behavior remains separate fro
 
 ## Current boundary
 
-The executable architecture currently includes provider-neutral deterministic contracts/oracles, seven scoped OpenAI local/SDK adversarial channels, deterministic retrieval assurance, native handoff-authority attenuation, native HITL approval-intent binding, run-local side-effect-idempotency observation, optional calibrated subordinate semantic judging, the six-fault official-SDK MCP protocol laboratory, **five exact OpenAI↔MCP stdio bridges** (metadata, result, ToolError recovery, host-refreshed schema drift, and host-refreshed identity drift), loopback resource-server authorization, separated two-origin OAuth authorization-code/PKCE/introspection, integrity-verified local persistence, exact historical replay, metamorphic relations, repeated-trial statistics, assurance reports, release gating, and bounded failure minimization.
+The executable architecture currently includes provider-neutral deterministic contracts/oracles, seven scoped OpenAI local/SDK adversarial channels, deterministic retrieval assurance, native handoff-authority attenuation, native HITL approval-intent binding, run-local side-effect-idempotency observation, optional calibrated subordinate semantic judging, the six-fault official-SDK MCP protocol laboratory, **six exact OpenAI↔MCP stdio bridges** (metadata, result, ToolError recovery, host-refreshed stale-cache removal delivery, host-refreshed schema drift, and host-refreshed identity drift), loopback resource-server authorization, separated two-origin OAuth authorization-code/PKCE/introspection, integrity-verified local persistence, exact historical replay, metamorphic relations, repeated-trial statistics, assurance reports, release gating, and bounded failure minimization.
 
 Implementation source checkpoint `d98f9ca1feb1179504cd2181295a73936fd0ae6c`, protected-main CI run `33898508697` remains the historical audited merged baseline:
 

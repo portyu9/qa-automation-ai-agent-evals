@@ -5,6 +5,7 @@ from agent_evals.mcp.agent_error_bridge import MCPAgentToolErrorRecoveryReceipt
 from agent_evals.mcp.agent_identity_bridge import MCPAgentToolIdentityDriftReceipt
 from agent_evals.mcp.agent_metadata_bridge import MCPAgentToolMetadataReceipt
 from agent_evals.mcp.agent_schema_bridge import MCPAgentToolSchemaDriftReceipt
+from agent_evals.mcp.agent_stale_cache_bridge import MCPAgentToolStaleCacheReceipt
 from agent_evals.mcp.delivery import ProtocolDeliveryError, verify_protocol_delivery
 from agent_evals.mcp.lab import MCPFaultLab
 from agent_evals.mcp.models import (
@@ -35,6 +36,7 @@ __all__ = [
     "MCPAgentToolMetadataReceipt",
     "MCPAgentToolResultReceipt",
     "MCPAgentToolSchemaDriftReceipt",
+    "MCPAgentToolStaleCacheReceipt",
     "MCPDiscoveryProbeResult",
     "MCPFaultKind",
     "MCPFaultLab",

@@ -8,7 +8,7 @@ This document is intentionally strict. Repository claims must never become stron
 
 The OpenAI integration is pinned to `openai-agents==0.22.0`. CI exercises the real SDK runner/tool/handoff/approval/context loop deterministically with `agents.testing.ScriptedModel` and no provider API call.
 
-The SDK tier covers all seven generic adversarial channel categories at scoped local/SDK boundaries. A separate `OpenAIAgentsRetrievalAdapter` closes one evaluator-owned deterministic retrieval-delivery relation. A separate `OpenAIAgentsHandoffAuthorityAdapter` exercises run-local native handoff authority attenuation. `OpenAIAgentsHITLApprovalAdapter` exercises one exact native `ToolApprovalItem` → evaluator decision → same-`RunState` continuation relation. `OpenAIAgentsSideEffectIdempotencyAdapter` separately exercises two exact local `FunctionTool` attempts while independently sampling effect state around the real callback. Five additional adapters exercise exact official-MCP-stdio/OpenAI SDK paths: one `TOOL_METADATA_POISON` discovery → model-visible target-definition bridge, one `TOOL_RESULT_POISON` same-call bridge, one causal `TOOL_ERROR` → same-argument retry → benign recovery bridge, one host-refreshed `TOOL_SCHEMA_DRIFT` adaptation bridge, and one host-refreshed `TOOL_IDENTITY_DRIFT` old-name rejection → replacement-name adaptation bridge. `OpenAIAgentsSemanticJudge` separately exercises one concrete public SDK `Model` through a no-tools, one-turn evaluator boundary under deterministic `ScriptedModel` integration.
+The SDK tier covers all seven generic adversarial channel categories at scoped local/SDK boundaries. A separate `OpenAIAgentsRetrievalAdapter` closes one evaluator-owned deterministic retrieval-delivery relation. A separate `OpenAIAgentsHandoffAuthorityAdapter` exercises run-local native handoff authority attenuation. `OpenAIAgentsHITLApprovalAdapter` exercises one exact native `ToolApprovalItem` → evaluator decision → same-`RunState` continuation relation. `OpenAIAgentsSideEffectIdempotencyAdapter` separately exercises two exact local `FunctionTool` attempts while independently sampling effect state around the real callback. Six additional adapters exercise exact official-MCP-stdio/OpenAI SDK paths: one `TOOL_METADATA_POISON` discovery → model-visible target-definition bridge, one `TOOL_RESULT_POISON` same-call bridge, one causal `TOOL_ERROR` → same-argument retry → benign recovery bridge, one host-refreshed `TOOL_LIST_STALE_CACHE` removal/rejection/target-absence delivery bridge, one host-refreshed `TOOL_SCHEMA_DRIFT` adaptation bridge, and one host-refreshed `TOOL_IDENTITY_DRIFT` old-name rejection → replacement-name adaptation bridge. `OpenAIAgentsSemanticJudge` separately exercises one concrete public SDK `Model` through a no-tools, one-turn evaluator boundary under deterministic `ScriptedModel` integration.
 
 None of this establishes live-model quality, production-provider availability, provider-side delivery attestation, authenticated human approval, production IAM, or credentialed end-to-end assurance.
 
@@ -56,7 +56,7 @@ The ordinary `OpenAIAgentsAdapter` result mode targets one exact local SDK `Func
 
 That local injector still does not intercept hosted tools, MCP tools, or arbitrary external services.
 
-MCP result, ToolError-recovery, schema-drift adaptation, and identity-drift adaptation assurance are covered only by the **separate** controlled stdio bridges described below. Their existence must not be retroactively attributed to the local `FunctionTool` injector.
+MCP result, ToolError-recovery, stale-cache removal delivery, schema-drift adaptation, and identity-drift adaptation assurance are covered only by the **separate** controlled stdio bridges described below. Their existence must not be retroactively attributed to the local `FunctionTool` injector.
 
 ### Local `TOOL_METADATA` means OpenAI description poisoning only
 
@@ -160,11 +160,13 @@ Six exact fault families are implemented:
 
 A raw `MCPFaultReceipt` does **not** establish agent consumption, resistance, correctness, `PASS`, `FAIL`, or release acceptance.
 
-One of the six fault families remains **protocol-only** with respect to agent behavior:
+All six fault families now have explicit agent bridges, each as an additional contract rather than an exception to the trust model. `tool_list_stale_cache` closes only after exact initial model-visible target presence, hidden live removal, cached post-removal target presence, real unknown-tool rejection, host invalidation, first fresh target absence, and exact rejection delivery to the target-absent public model boundary. Metadata closes at exact model-visible exposure; schema and identity drift close only after host-refreshed adaptation. None of these bridge closures establishes a behavioral verdict.
 
-- `tool_list_stale_cache`.
+## Controlled MCP `TOOL_LIST_STALE_CACHE` → host-refreshed target-removal delivery bridge
 
-Five bridged families remain explicit additional contracts rather than exceptions to the trust model: `tool_metadata_poison`, `tool_result_poison`, `tool_error`, `tool_schema_drift`, and `tool_identity_drift` each require independent cross-domain evidence and fault-specific relation closure before `PROTOCOL_DELIVERY` exists. Metadata closes at exact model-visible exposure; schema and identity drift close only after host-refreshed adaptation; none of these bridge closures establishes a behavioral verdict.
+`OpenAIAgentsMCPToolStaleCacheAdapter` proves one exact controlled relation: target initially visible at protocol/model boundaries, evaluator-only live removal, cached host discovery still advertising the removed target, real unknown-tool rejection, host-owned cache invalidation, first fresh target absence, and exact rejection delivery at the target-absent public model boundary. `MCPAgentToolStaleCacheReceipt` binds that historical relation and replay revalidates the normalized request/result chronology.
+
+This does **not** establish generic cache-coherence policy, arbitrary TTL race behavior, notification-driven invalidation, shared/distributed cache propagation, automatic agent recovery after tool retirement, model-owned refresh, production rollout/service-discovery correctness, or behavioral PASS from target absence. See [MCP Stale-Cache Tool-Removal Assurance](MCP_STALE_CACHE.md).
 
 ## Controlled MCP `TOOL_METADATA_POISON` → OpenAI model-visible definition bridge
 
@@ -310,8 +312,8 @@ It establishes one exact host-refreshed identity-adaptation relation. It does no
 The implemented bridges do not claim:
 
 - model attention to, interpretation of, compliance with, or resistance to MCP metadata poison after verified exposure;
-- agent behavior for generic stale-cache behavior beyond the protocol-only `tool_list_stale_cache` laboratory;
-- arbitrary MCP result/error/schema/identity behavior outside the exact controlled contracts;
+- generic stale-cache/coherence behavior beyond the exact controlled host-refreshed `tool_list_stale_cache` removal-delivery contract;
+- arbitrary MCP result/error/stale-cache/schema/identity behavior outside the exact controlled contracts;
 - generic retry policy, exponential backoff, jitter, retry budgets, idempotency, or side-effect safety;
 - more than one ToolError retry;
 - model-initiated MCP refresh or automatic `tools/list_changed` handling;

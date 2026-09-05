@@ -10,7 +10,7 @@
 
 **A provider-neutral quality-engineering framework for evaluating autonomous agents by observable outcomes, side effects, authority boundaries, approval intent, adversarial conditions, verified evaluation preconditions, protocol state, authorization behavior, reliability, and reproducible evidence—not by persuasive final prose.**
 
-[Documentation](docs/README.md) · [Architecture](docs/ARCHITECTURE.md) · [Evaluation Model](docs/EVALUATION_MODEL.md) · [Semantic Judging](docs/SEMANTIC_JUDGING.md) · [Handoff Authority](docs/HANDOFF_AUTHORITY.md) · [HITL Approval](docs/APPROVAL_INTENT.md) · [Side-Effect Idempotency](docs/SIDE_EFFECT_IDEMPOTENCY.md) · [Adversarial Testing](docs/ADVERSARIAL_TESTING.md) · [Retrieval Assurance](docs/RETRIEVAL_ASSURANCE.md) · [MCP Fault Lab](docs/MCP_LAB.md) · [MCP Identity Drift](docs/MCP_IDENTITY_DRIFT.md) · [MCP Remote Auth](docs/MCP_REMOTE_AUTH.md) · [MCP OAuth Flow](docs/MCP_OAUTH_FLOW.md) · [Evidence & Replay](docs/EVIDENCE_AND_REPLAY.md) · [Session Reports](docs/ASSURANCE_REPORTS.md) · [OpenAI Adapter](docs/OPENAI_ADAPTER.md) · [Statistics](docs/STATISTICAL_ASSURANCE.md) · [Security](docs/SECURITY.md) · [Limitations](docs/LIMITATIONS.md)
+[Documentation](docs/README.md) · [Architecture](docs/ARCHITECTURE.md) · [Evaluation Model](docs/EVALUATION_MODEL.md) · [Semantic Judging](docs/SEMANTIC_JUDGING.md) · [Handoff Authority](docs/HANDOFF_AUTHORITY.md) · [HITL Approval](docs/APPROVAL_INTENT.md) · [Side-Effect Idempotency](docs/SIDE_EFFECT_IDEMPOTENCY.md) · [Adversarial Testing](docs/ADVERSARIAL_TESTING.md) · [Retrieval Assurance](docs/RETRIEVAL_ASSURANCE.md) · [MCP Fault Lab](docs/MCP_LAB.md) · [MCP Stale Cache](docs/MCP_STALE_CACHE.md) · [MCP Identity Drift](docs/MCP_IDENTITY_DRIFT.md) · [MCP Remote Auth](docs/MCP_REMOTE_AUTH.md) · [MCP OAuth Flow](docs/MCP_OAUTH_FLOW.md) · [Evidence & Replay](docs/EVIDENCE_AND_REPLAY.md) · [Session Reports](docs/ASSURANCE_REPORTS.md) · [OpenAI Adapter](docs/OPENAI_ADAPTER.md) · [Statistics](docs/STATISTICAL_ASSURANCE.md) · [Security](docs/SECURITY.md) · [Limitations](docs/LIMITATIONS.md)
 
 </div>
 
@@ -70,6 +70,7 @@ This framework treats the **complete agent system** as the subject under test: m
 | **Raw protocol receipt ≠ agent behavior** | `MCPFaultReceipt` alone does not establish agent consumption, resistance, or correctness |
 | **Retry label ≠ causal retry** | a second identical tool call is credited as recovery only when evidence orders the first result before the second request |
 | **Identity rename ≠ model-owned refresh** | identity adaptation is credited only after evaluator-owned invalidation exposes the exact replacement identity at the public model boundary |
+| **Stale discovery ≠ model-owned refresh** | stale-tool removal delivery closes only after a real removed-target rejection, evaluator-owned invalidation, fresh target absence, and exact public-model rejection delivery |
 | **Duplicate attempt ≠ idempotent effect** | two exact logical-operation attempts are idempotent only when independently sampled effect state proves at most one physical mutation |
 | **Bridge closure ≠ grading authority** | a verified MCP→agent bridge establishes a delivery precondition; deterministic subject oracles still decide PASS/FAIL |
 | **Bearer authentication ≠ issuer/resource policy** | SDK bearer handling and verifier-owned identity/resource binding are credited to their actual enforcement components |
@@ -93,11 +94,11 @@ The deterministic core requires no model credentials. The executable surface is 
 1. **Provider-neutral core** — contracts, evidence, persistence, replay, deterministic oracles, calibrated subordinate semantic-judging contracts, statistics, metamorphic assurance, reporting, minimization, and release gates, including scenario-owned directed handoff grants, exact accepted authority-path state, scenario-bound optional approval intent, optional run-local side-effect idempotency contracts, optional content-addressed semantic rubrics, and scenario-owned deterministic retrieval contracts with content-addressed corpus/query/ranker/poison identity plus retrieval-delivery verification.
 2. **OpenAI Agents SDK tier** — the real SDK runner exercised with `agents.testing.ScriptedModel`, with no provider API call, across seven scoped local/SDK adversarial channels, a separate exact retrieval-delivery bridge, native handoff-authority attenuation, an exact native HITL `ToolApprovalItem` → same-`RunState` approve/reject continuation path, a separate two-attempt local `FunctionTool` side-effect observer that never suppresses the subject callback, and a one-turn no-tools semantic judge over the same public SDK model boundary.
 3. **MCP protocol/control-plane laboratories** — the six-fault official-client protocol lab, real loopback resource-server authorization lab, and separated two-origin OAuth authorization-code/PKCE/introspection lab.
-4. **OpenAI↔MCP delivery bridges** — five deliberately narrow official-stdio paths: `TOOL_METADATA_POISON` discovery → exact model-visible tool-definition delivery; `TOOL_RESULT_POISON` same-call result delivery; causal `TOOL_ERROR` → same-argument retry → benign recovery; host-refreshed `TOOL_SCHEMA_DRIFT` v1 rejection → refreshed v2 → corrected call; and host-refreshed `TOOL_IDENTITY_DRIFT` old-name rejection → refreshed replacement identity → exact replacement-name call. Each has its own integrity-bound receipt and ordered `PROTOCOL_DELIVERY` evidence. Metadata delivery closes at the first verified model-visible target definition and does not require a target tool call.
+4. **OpenAI↔MCP delivery bridges** — six deliberately narrow official-stdio paths: `TOOL_METADATA_POISON` discovery → exact model-visible tool-definition delivery; `TOOL_RESULT_POISON` same-call result delivery; causal `TOOL_ERROR` → same-argument retry → benign recovery; host-refreshed `TOOL_LIST_STALE_CACHE` live removal → cached target → real rejection → refreshed target absence at the public model boundary; host-refreshed `TOOL_SCHEMA_DRIFT` v1 rejection → refreshed v2 → corrected call; and host-refreshed `TOOL_IDENTITY_DRIFT` old-name rejection → refreshed replacement identity → exact replacement-name call. Each has its own integrity-bound receipt and ordered `PROTOCOL_DELIVERY` evidence. Metadata delivery closes at the first verified model-visible target definition and stale-cache delivery closes at refreshed target absence plus exact rejection delivery; neither requires a fabricated recovery call.
 
 Handoff authority, native HITL approval, and MCP bridges solve different trust problems. Handoff authority remains scenario-owned authorization over normalized subject evidence. Native HITL introduces a dedicated evaluator-owned receipt because a decision must bind one exact pending interruption to its continuation. MCP bridges cross protocol and agent evidence domains and therefore require their own dedicated bridge receipts.
 
-The stronger HITL path does **not** claim authenticated humans, enterprise workflow attestation, production IAM, hosted approval UI correctness, or distributed resume safety. The MCP bridges are likewise not a blanket promotion of the MCP laboratories: metadata delivery proves exact model-visible exposure but not model attention, interpretation, compliance, resistance, or safe behavior; identity-drift delivery proves only one exact host-refreshed old→replacement identity relation and not generic rename migration; `TOOL_LIST_STALE_CACHE` remains protocol-only with respect to agent behavior; and remote-auth/OAuth receipts remain separate control-plane evidence.
+The stronger HITL path does **not** claim authenticated humans, enterprise workflow attestation, production IAM, hosted approval UI correctness, or distributed resume safety. The MCP bridges are likewise not a blanket promotion of the MCP laboratories: metadata delivery proves exact model-visible exposure but not model attention, interpretation, compliance, resistance, or safe behavior; stale-cache delivery proves one exact host-refreshed target-removal/rejection/absence relation but not generic cache coherence or automatic recovery; identity-drift delivery proves only one exact host-refreshed old→replacement identity relation and not generic rename migration; and remote-auth/OAuth receipts remain separate control-plane evidence.
 
 ### Evaluation and assurance core
 
@@ -357,7 +358,7 @@ deterministic policy/outcome oracles
 
 The bridge binds exact old/replacement identities, initial/refreshed model-visible identity-set digests, distinct OpenAI call IDs, strict finite canonical argument digests, protocol/model rejection and recovery digests, and strict protocol ordinals. The controlled harness owns the rename; the evaluator/host owns cache invalidation; the official MCP session owns discovery/call observations; the pinned SDK owns model-visible tool conversion; the agent is credited only for selecting the exact replacement after it is visible. Missing/ambiguous identities, old-name reuse, recovery before refresh, extra controlled attempts, call-ID reuse, argument/result drift, protocol drift, receipt tampering, or replay inconsistency fails closed. See [MCP Tool-Identity Drift Assurance](docs/MCP_IDENTITY_DRIFT.md).
 
-None of these five bridges establishes safe behavior merely because delivery closes. The metadata bridge proves exact model-visible exposure but not model attention, interpretation, compliance, or resistance. The bridges do not generalize to generic stale-cache behavior, arbitrary JSON Schema migrations, arbitrary rename/alias migration graphs, hosted MCP, remote/Internet MCP, live-provider behavior, generic retry/backoff/idempotency, authorization, or target-side attestation. The schema- and identity-drift paths specifically do not claim model-initiated refresh or automatic `tools/list_changed` handling. A raw `MCPFaultReceipt` still does not create a trial verdict by itself.
+None of these six bridges establishes safe behavior merely because delivery closes. The metadata bridge proves exact model-visible exposure but not model attention, interpretation, compliance, or resistance. The stale-cache bridge does not generalize to arbitrary TTL races, shared/distributed cache coherence, notification-driven invalidation, or automatic post-retirement recovery. The bridges do not generalize to arbitrary JSON Schema migrations, arbitrary rename/alias migration graphs, hosted MCP, remote/Internet MCP, live-provider behavior, generic retry/backoff/idempotency, authorization, or target-side attestation. The schema- and identity-drift paths specifically do not claim model-initiated refresh or automatic `tools/list_changed` handling. A raw `MCPFaultReceipt` still does not create a trial verdict by itself.
 
 ### Loopback MCP resource-server authorization laboratory
 
@@ -468,7 +469,7 @@ agent-evals doctor
 pytest
 ```
 
-Deterministic OpenAI SDK integration, including native handoff authority, native HITL approval, and all five controlled MCP stdio bridges:
+Deterministic OpenAI SDK integration, including native handoff authority, native HITL approval, and all six controlled MCP stdio bridges:
 
 ```bash
 python -m pip install -e '.[dev,openai,mcp]'
@@ -483,7 +484,8 @@ pytest -m openai \
   tests/integration/test_openai_mcp_tool_error_recovery_adapter.py \
   tests/integration/test_openai_mcp_tool_schema_drift_adapter.py \
   tests/integration/test_openai_mcp_tool_schema_drift_contract.py \
-  tests/integration/test_openai_mcp_tool_identity_drift_adapter.py
+  tests/integration/test_openai_mcp_tool_identity_drift_adapter.py \
+  tests/integration/test_openai_mcp_tool_stale_cache_adapter.py
 ```
 
 Deterministic MCP protocol laboratory:
