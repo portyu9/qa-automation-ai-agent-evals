@@ -1,0 +1,25 @@
+........................................................................ [ 11%]
+........................................................................ [ 23%]
+........................................................................ [ 34%]
+........................................................................ [ 46%]
+........................................................................ [ 58%]
+..................................F..................................... [ 69%]
+........................................................................ [ 81%]
+........................................................................ [ 93%]
+...........................................                              [100%]
+=================================== FAILURES ===================================
+_________ test_stale_cache_replay_rejects_changed_normalized_rejection _________
+
+    def test_stale_cache_replay_rejects_changed_normalized_rejection() -> None:
+>       with pytest.raises(ProtocolDeliveryError, match="normalized rejection"):
+E       AssertionError: Regex pattern did not match.
+E         Expected regex: 'normalized rejection'
+E         Actual message: 'MCP stale-cache rejection output does not match the delivery receipt'
+
+tests/unit/test_mcp_agent_stale_cache_bridge.py:333: AssertionError
+=========================== short test summary info ============================
+FAILED tests/unit/test_mcp_agent_stale_cache_bridge.py::test_stale_cache_replay_rejects_changed_normalized_rejection - AssertionError: Regex pattern did not match.
+  Expected regex: 'normalized rejection'
+  Actual message: 'MCP stale-cache rejection output does not match the delivery receipt'
+
+exit_code=1
