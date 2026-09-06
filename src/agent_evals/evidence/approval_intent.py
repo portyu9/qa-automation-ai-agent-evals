@@ -263,8 +263,11 @@ def verify_approval_intent(scenario: EvaluationScenario, evidence: TrialEvidence
             raise ApprovalIntentError(
                 "approved interruption must produce exactly one matching resumed tool result"
             )
-        _verify_result_identity(matching_results[0], receipt=receipt, phase="approved tool result")
-        if matching_results[0].payload.get("approval_rejected") is True:
+        matching_result = matching_results[0]
+        if matching_result.sequence <= resumed.sequence:
+            raise ApprovalIntentError("approved tool result must follow the resumed tool request")
+        _verify_result_identity(matching_result, receipt=receipt, phase="approved tool result")
+        if matching_result.payload.get("approval_rejected") is True:
             raise ApprovalIntentError("approved invocation produced rejection-marked tool result")
         return
 
@@ -288,9 +291,10 @@ def verify_approval_intent(scenario: EvaluationScenario, evidence: TrialEvidence
             raise ApprovalIntentError(
                 "rejected bypass must produce exactly one matching tool result"
             )
-        _verify_result_identity(
-            matching_results[0], receipt=receipt, phase="rejected bypass result"
-        )
+        matching_result = matching_results[0]
+        if matching_result.sequence <= resumed.sequence:
+            raise ApprovalIntentError("rejected bypass result must follow the resumed tool request")
+        _verify_result_identity(matching_result, receipt=receipt, phase="rejected bypass result")
         return
 
     if len(matching_results) != 1:
