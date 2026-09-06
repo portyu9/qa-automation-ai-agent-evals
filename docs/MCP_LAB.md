@@ -149,6 +149,27 @@ Two hashes are required because configuration and observation are not always byt
 
 This prevents SDK transformation or state transition from being mislabeled as byte-identical delivery.
 
+## Live bridge producer authority versus durable replay
+
+Bridge receipt schemas and `verify_protocol_delivery(...)` deliberately remain usable without a live adapter. That is necessary for deterministic unit construction, persistence validation, and historical replay. A self-consistent receipt root therefore proves an internal relation; it is **not** a live capability token proving that an official MCP session, host refresh, hidden mutation, or public model-boundary observation just occurred.
+
+Fresh `TrialRunner` execution adds a separate producer-authority rule for the six fixed `bridge:mcp-agent:*` sources. Each known source is accepted only from its exact built-in bridge adapter:
+
+| `PROTOCOL_DELIVERY` source | Exact live producer |
+|---|---|
+| `bridge:mcp-agent:tool-metadata` | `OpenAIAgentsMCPToolMetadataAdapter` |
+| `bridge:mcp-agent:tool-result` | `OpenAIAgentsMCPToolResultAdapter` |
+| `bridge:mcp-agent:tool-error-recovery` | `OpenAIAgentsMCPToolErrorRecoveryAdapter` |
+| `bridge:mcp-agent:tool-stale-cache` | `OpenAIAgentsMCPToolStaleCacheAdapter` |
+| `bridge:mcp-agent:tool-schema-drift` | `OpenAIAgentsMCPToolSchemaDriftAdapter` |
+| `bridge:mcp-agent:tool-identity-drift` | `OpenAIAgentsMCPToolIdentityDriftAdapter` |
+
+An ordinary live adapter, copied adapter name, copied source string, or subclass cannot import one of those framework-owned live bridge claims by constructing matching receipt bytes. It is blocked before protocol delivery can satisfy pre-grading closure. Unknown protocol-delivery sources still fail through the normal protocol verifier so unsupported-source diagnostics remain verifier-owned rather than being reclassified as a producer mismatch.
+
+Historical replay is intentionally different. The exact built-in `EvidenceReplayAdapter` may re-emit finalized `PROTOCOL_DELIVERY` events, after which `verify_protocol_delivery(...)` revalidates their receipt roots, scenario binding, normalized call/result relations, and chronology. Replay does not recreate MCP liveness, negotiate a protocol revision again, repeat a host refresh, or re-observe the model boundary.
+
+This separation is framework execution-path ownership, not cryptographic producer authentication, remote attestation, or hostile same-process Python isolation. Direct receipt construction remains valid for verifier tests; only fresh trial authority is reserved to the exact bridge implementation that performs the corresponding observation.
+
 ## Concrete protocol observation points
 
 ```text
