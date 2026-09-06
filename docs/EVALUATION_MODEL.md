@@ -19,6 +19,19 @@ The framework uses precise terms because agent evaluation becomes ambiguous when
 | **Reliability report** | aggregate statistics over repeated trial verdicts |
 | **Release gate** | deterministic policy that decides whether evidence is sufficient for acceptance |
 
+## Runtime contract ownership
+
+`EvaluationScenario` is content-addressed, but its JSON state/outcome containers remain ordinary Python containers for ergonomic construction. Pydantic `frozen=True` prevents field reassignment; it is not a claim of deep in-memory immutability.
+
+The runtime establishes immutability at the ownership boundary instead of relying on caller object behavior:
+
+1. `EvaluationSession` revalidates and snapshots the subject/scenario pair once before a repeated-trial loop;
+2. `TrialRunner` revalidates its received pair before execution and retains an evaluator-owned scenario snapshot for identity, evidence verification, deterministic grading, and semantic input;
+3. the adapter receives a second detached scenario snapshot rather than the evaluator-owned object;
+4. after adapter completion—or an adapter exception—the evaluator recomputes the adapter-facing scenario identity; persistent drift produces `EVALUATION_ERROR / BLOCKED` with `scenario_contract_mutated` rather than grading against a changed contract.
+
+Caller mutation after an awaited run or session has begun therefore cannot change the in-flight evaluator contract. Adapter-side mutation cannot alter the evaluator-owned grading basis. The drift check covers ordinary mutable-container changes; it is not tamper-proof memory, caller authentication, or protection against interpreter compromise or deliberate `object.__setattr__` abuse. Scenario and subject hashes remain integrity identities, not signatures.
+
 ## Outcome versus output
 
 The most important distinction is between **what the agent said** and **what actually happened**.
@@ -133,7 +146,7 @@ A replayed semantic receipt therefore says, "this exact historical judgment rema
 
 Meaning-level dimensions such as groundedness, completeness, or answer quality are useful, but they answer different questions from deterministic state and safety gates.
 
-A system can therefore receive a semantic PASS and still be release-ineligible because of an unauthorized side effect. Conversely, a semantically poor answer can yield a non-critical semantic FAIL even when all state and policy checks passed. These conclusions are intentionally separate in `AssuranceReport` v2.
+A system can therefore receive a semantic PASS and still be release-ineligible because of an unauthorized side effect. Conversely, a semantically poor answer can yield a non-critical semantic FAIL even when all state and policy checks passed. These conclusions are intentionally separate in `AssuranceReport` v3.
 
 ## Capability and regression use
 
