@@ -398,14 +398,12 @@ def test_calibration_observation_shape_rejects_ambiguous_failure_state() -> None
     with pytest.raises(ValidationError, match="requires a failure code"):
         SemanticCalibrationObservation(
             case_commitment=case.commitment,
-            observed=None,
         )
 
     with pytest.raises(ValidationError, match="cannot carry a failure code"):
         SemanticCalibrationObservation(
             case_commitment=case.commitment,
-            observed=SemanticDecision.FAIL,
-            response_sha256=fail_response().digest,
+            response=fail_response(),
             failure_code="should-not-exist",
         )
 
