@@ -117,11 +117,13 @@ def test_attack_derivation_preserves_every_unmodified_base_contract_field() -> N
 def test_attack_derivation_changes_only_intentional_adversarial_fields() -> None:
     base = _base_scenario()
     derived = _attack().apply(base)
+    base_material = base.model_dump(mode="python")
+    derived_material = derived.model_dump(mode="python")
 
     changed = {
         name
-        for name in base.model_fields
-        if base.model_dump(mode="python")[name] != derived.model_dump(mode="python")[name]
+        for name in type(base).model_fields
+        if base_material[name] != derived_material[name]
     }
 
     assert changed == _INTENTIONAL_DERIVATION_FIELDS
