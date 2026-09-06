@@ -5,7 +5,7 @@ from pydantic import ValidationError
 
 from agent_evals.assurance.report import AssuranceReport
 from agent_evals.contracts.semantic import SemanticCriterionSpec, SemanticRubricSpec
-from agent_evals.evidence.models import TrialEvidence, TrialVerdict
+from agent_evals.evidence.models import EvidenceEvent, EvidenceKind, TrialEvidence, TrialVerdict
 from agent_evals.gates.release import ReleasePolicy
 from agent_evals.oracles.deterministic import OracleResult
 from agent_evals.runtime.evaluator import EvaluatedTrial
@@ -24,6 +24,7 @@ from agent_evals.semantic.models import (
     SemanticJudgeResponse,
 )
 from agent_evals.semantic.receipt import SemanticJudgmentReceipt
+from agent_evals.semantic.verification import SEMANTIC_JUDGMENT_SOURCE
 from agent_evals.statistics.reliability import ReliabilityReport
 
 _SUBJECT = "a" * 64
@@ -107,6 +108,7 @@ def _calibration() -> SemanticCalibrationReceipt:
 def _semantic_receipt(
     decision: SemanticDecision,
     *,
+    subject_evidence_root: str,
     subject_identity: str = _SUBJECT,
     scenario_identity: str = _SCENARIO,
 ) -> SemanticJudgmentReceipt:
@@ -114,7 +116,7 @@ def _semantic_receipt(
     return SemanticJudgmentReceipt.create(
         scenario_identity=scenario_identity,
         subject_identity=subject_identity,
-        subject_evidence_root="c" * 64,
+        subject_evidence_root=subject_evidence_root,
         rubric=rubric,
         judge_profile=_profile(),
         calibration_receipt=_calibration(),
@@ -134,10 +136,30 @@ def _trial(
     semantic_subject: str = _SUBJECT,
     semantic_scenario: str = _SCENARIO,
 ) -> EvaluatedTrial:
+    pre_semantic = TrialEvidence(
+        trial_id=f"semantic-{decision.value}",
+        subject_identity=_SUBJECT,
+        scenario_identity=_SCENARIO,
+        final_output="Candidate answer.",
+    )
     semantic = _semantic_receipt(
         decision,
+        subject_evidence_root=pre_semantic.evidence_root,
         subject_identity=semantic_subject,
         scenario_identity=semantic_scenario,
+    )
+    semantic_event = EvidenceEvent(
+        sequence=0,
+        kind=EvidenceKind.SEMANTIC_JUDGMENT,
+        source=SEMANTIC_JUDGMENT_SOURCE,
+        payload=semantic.model_dump(mode="json"),
+    )
+    evidence = TrialEvidence(
+        trial_id=pre_semantic.trial_id,
+        subject_identity=pre_semantic.subject_identity,
+        scenario_identity=pre_semantic.scenario_identity,
+        events=(semantic_event,),
+        final_output=pre_semantic.final_output,
     )
     verdict = (
         TrialVerdict.INCONCLUSIVE
@@ -147,12 +169,7 @@ def _trial(
         else TrialVerdict.PASS
     )
     return EvaluatedTrial(
-        evidence=TrialEvidence(
-            trial_id=f"semantic-{decision.value}",
-            subject_identity=_SUBJECT,
-            scenario_identity=_SCENARIO,
-            final_output="Candidate answer.",
-        ),
+        evidence=evidence,
         oracle_results=(
             OracleResult(
                 name="policy",
@@ -164,7 +181,6 @@ def _trial(
         verdict=verdict,
         semantic_judgment=semantic,
     )
-
 
 def _session(trial: EvaluatedTrial) -> EvaluationSessionResult:
     return EvaluationSessionResult(
