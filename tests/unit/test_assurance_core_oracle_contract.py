@@ -5,10 +5,11 @@ from pydantic import ValidationError
 
 from agent_evals.assurance.report import AssuranceReport, OracleSnapshot
 from agent_evals.contracts.models import EvaluationScenario, ScenarioKind
-from agent_evals.evidence.models import TrialEvidence, TrialVerdict
+from agent_evals.evidence.models import EvidenceEvent, EvidenceKind, TrialEvidence, TrialVerdict
 from agent_evals.gates.release import GateDecision, ReleasePolicy
 from agent_evals.oracles.deterministic import OracleResult
 from agent_evals.runtime.evaluator import EvaluatedTrial
+from agent_evals.runtime.grading import grade_deterministic_evidence
 from agent_evals.runtime.session import EvaluationSessionResult
 from agent_evals.statistics.reliability import ReliabilityReport
 
@@ -19,7 +20,6 @@ SCENARIO_CONTRACT = EvaluationScenario(
     kind=ScenarioKind.REGRESSION,
     objective="Exercise deterministic assurance oracle binding.",
 )
-SCENARIO = SCENARIO_CONTRACT.identity
 
 
 def _policy() -> ReleasePolicy:
@@ -33,44 +33,61 @@ def _policy() -> ReleasePolicy:
     )
 
 
+def _evidence(
+    scenario: EvaluationScenario = SCENARIO_CONTRACT,
+    *,
+    events: tuple[EvidenceEvent, ...] = (),
+    final_state: dict[str, object] | None = None,
+) -> TrialEvidence:
+    return TrialEvidence(
+        trial_id="trial-0",
+        subject_identity=SUBJECT,
+        scenario_identity=scenario.identity,
+        events=events,
+        final_state=final_state,
+    )
+
+
 def _session(
     oracle_results: tuple[OracleResult, ...],
     *,
     verdict: TrialVerdict,
+    scenario: EvaluationScenario = SCENARIO_CONTRACT,
+    evidence: TrialEvidence | None = None,
 ) -> EvaluationSessionResult:
+    bound_evidence = evidence if evidence is not None else _evidence(scenario)
     trial = EvaluatedTrial(
-        evidence=TrialEvidence(
-            trial_id="trial-0",
-            subject_identity=SUBJECT,
-            scenario_identity=SCENARIO,
-        ),
+        evidence=bound_evidence,
         oracle_results=oracle_results,
         verdict=verdict,
     )
     return EvaluationSessionResult(
         subject_identity=SUBJECT,
-        scenario_identity=SCENARIO,
+        scenario_identity=scenario.identity,
         trials=(trial,),
         reliability=ReliabilityReport.from_verdicts((verdict,), k=1),
     )
 
 
-def _report(session: EvaluationSessionResult) -> AssuranceReport:
+def _report(
+    session: EvaluationSessionResult,
+    *,
+    scenario: EvaluationScenario = SCENARIO_CONTRACT,
+) -> AssuranceReport:
     return AssuranceReport.from_session(
         session,
-        scenario=SCENARIO_CONTRACT,
+        scenario=scenario,
         release_policy=_policy(),
     )
 
 
 def _valid_pass_report() -> AssuranceReport:
+    evidence = _evidence()
     return _report(
         _session(
-            (
-                OracleResult(name="policy", verdict=TrialVerdict.PASS),
-                OracleResult(name="outcome", verdict=TrialVerdict.PASS),
-            ),
+            grade_deterministic_evidence(SCENARIO_CONTRACT, evidence),
             verdict=TrialVerdict.PASS,
+            evidence=evidence,
         )
     )
 
@@ -141,17 +158,21 @@ def test_valid_policy_and_outcome_pass_remain_accepted() -> None:
 
 
 def test_valid_policy_failure_remains_noncompensatory() -> None:
+    request = EvidenceEvent(
+        sequence=0,
+        kind=EvidenceKind.TOOL_REQUEST,
+        source="adapter:test",
+        payload={"tool": "forbidden-tool", "call_id": "call-1", "arguments": "{}"},
+    )
+    evidence = _evidence(events=(request,))
+    results = grade_deterministic_evidence(SCENARIO_CONTRACT, evidence)
+
+    assert results[0].verdict is TrialVerdict.FAIL
     report = _report(
         _session(
-            (
-                OracleResult(
-                    name="policy",
-                    verdict=TrialVerdict.FAIL,
-                    critical=True,
-                ),
-                OracleResult(name="outcome", verdict=TrialVerdict.PASS),
-            ),
+            results,
             verdict=TrialVerdict.FAIL,
+            evidence=evidence,
         )
     )
 
@@ -160,14 +181,25 @@ def test_valid_policy_failure_remains_noncompensatory() -> None:
 
 
 def test_valid_outcome_failure_remains_noncritical() -> None:
+    scenario = EvaluationScenario(
+        scenario_id="assurance.core-oracles.outcome-failure",
+        revision="1",
+        kind=ScenarioKind.REGRESSION,
+        objective="Exercise non-critical deterministic outcome failure.",
+        required_outcomes={"ok": True},
+    )
+    evidence = _evidence(scenario, final_state={"ok": False})
+    results = grade_deterministic_evidence(scenario, evidence)
+
+    assert results[1].verdict is TrialVerdict.FAIL
     report = _report(
         _session(
-            (
-                OracleResult(name="policy", verdict=TrialVerdict.PASS),
-                OracleResult(name="outcome", verdict=TrialVerdict.FAIL),
-            ),
+            results,
             verdict=TrialVerdict.FAIL,
-        )
+            scenario=scenario,
+            evidence=evidence,
+        ),
+        scenario=scenario,
     )
 
     assert report.trials[0].verdict is TrialVerdict.FAIL
@@ -185,23 +217,21 @@ def test_valid_side_effect_failure_criticality_snapshot_is_accepted() -> None:
     assert snapshot.verdict is TrialVerdict.FAIL
 
 
-def test_additional_custom_oracle_cannot_replace_but_may_extend_core_set() -> None:
-    report = _report(
-        _session(
-            (
-                OracleResult(name="policy", verdict=TrialVerdict.PASS),
-                OracleResult(name="outcome", verdict=TrialVerdict.PASS),
-                OracleResult(name="custom-deterministic", verdict=TrialVerdict.PASS),
-            ),
-            verdict=TrialVerdict.PASS,
-        )
+def test_from_session_rejects_unconfigured_custom_deterministic_oracle() -> None:
+    session = _session(
+        (
+            OracleResult(name="policy", verdict=TrialVerdict.PASS),
+            OracleResult(name="outcome", verdict=TrialVerdict.PASS),
+            OracleResult(name="custom-deterministic", verdict=TrialVerdict.PASS),
+        ),
+        verdict=TrialVerdict.PASS,
     )
 
-    assert tuple(result.name for result in report.trials[0].oracle_results) == (
-        "policy",
-        "outcome",
-        "custom-deterministic",
-    )
+    with pytest.raises(
+        ValueError,
+        match="deterministic oracle results do not match scenario/evidence grading",
+    ):
+        _report(session)
 
 
 def test_report_json_reload_rejects_missing_core_oracle_before_root_can_authorize_it() -> None:
