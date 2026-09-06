@@ -33,6 +33,13 @@ from agent_evals.side_effect.verification import (
     verify_side_effect_observation,
 )
 
+_BLOCKING_EVIDENCE_KINDS = frozenset(
+    {
+        EvidenceKind.EVALUATION_ERROR,
+        EvidenceKind.RUNTIME_ERROR,
+    }
+)
+
 
 @dataclass(frozen=True, slots=True)
 class EvaluatedTrial:
@@ -178,6 +185,13 @@ class TrialRunner:
                 scenario=scenario,
                 trial_id=trial_id,
                 elapsed_ms=(perf_counter() - started) * 1000.0,
+            )
+
+        if any(event.kind in _BLOCKING_EVIDENCE_KINDS for event in evidence.events):
+            return EvaluatedTrial(
+                evidence=evidence,
+                oracle_results=(),
+                verdict=TrialVerdict.BLOCKED,
             )
 
         try:

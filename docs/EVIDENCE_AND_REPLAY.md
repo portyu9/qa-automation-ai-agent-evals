@@ -116,6 +116,14 @@ A mismatch raises `ReplayIdentityError` at the adapter boundary. When all identi
 
 For an unchanged evidence model, a successful exact-identity replay reproduces the original `evidence_root`.
 
+## Recorded evaluator/runtime failures remain blocked
+
+`EVALUATION_ERROR` and `RUNTIME_ERROR` are terminal uncertainty markers, not subject observations that a later deterministic score may compensate for. Once normalized evidence already contains either event kind, `TrialRunner` returns `BLOCKED` with no oracle results before delivery, approval, deterministic, or semantic grading. Replay preserves the exact historical envelope and evidence root instead of appending a second synthetic error.
+
+This rule matters even when terminal state happens to satisfy every deterministic outcome. A recorded runtime failure means the original run did not establish a resolved evaluation result; replay cannot manufacture the missing execution/evaluator observation by noticing that some other persisted field looks successful. The same rule also preserves rejected semantic history: if a historical semantic event is followed by a terminal evaluator error, replay remains `BLOCKED` rather than attempting to promote the earlier judgment.
+
+The marker is fail-closed regardless of event source or `critical` flag. Writer/source authentication is a separate trust problem; a normalized event whose kind is explicitly `EVALUATION_ERROR` or `RUNTIME_ERROR` cannot simultaneously authorize a resolved PASS.
+
 ## Semantic judgments are historically revalidated
 
 A persisted terminal `SEMANTIC_JUDGMENT` event is not trusted merely because its enclosing evidence envelope hashes correctly. Replay reconstructs the exact `TrialEvidence` that existed before that event, rederives its evidence root, and requires the embedded `SemanticJudgmentReceipt.subject_evidence_root` to match it. The receipt then revalidates exact scenario/subject identity, embedded rubric identity, judge profile, accepted calibration identity, bounded input digest, structured-response digest, criterion threshold semantics, derived decision, and outer receipt root.
