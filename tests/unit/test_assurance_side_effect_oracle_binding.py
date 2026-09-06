@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 
 import pytest
+from pydantic import ValidationError
 
 from agent_evals.assurance.report import AssuranceReport
 from agent_evals.contracts.models import AuthorityPolicy, EvaluationScenario, ScenarioKind
@@ -156,9 +157,10 @@ def _release_policy(*, max_blocked_trials: int = 0) -> ReleasePolicy:
 
 
 def test_report_rejects_dropped_side_effect_oracle_for_duplicate_mutation_evidence() -> None:
+    scenario = _scenario()
     evidence = _side_effect_evidence(second_mutates=True)
-    side_effect = SideEffectIdempotencyOracle().grade(_scenario(), evidence)
-    core = _core_results(_scenario(), evidence)
+    side_effect = SideEffectIdempotencyOracle().grade(scenario, evidence)
+    core = _core_results(scenario, evidence)
 
     assert side_effect.verdict is TrialVerdict.FAIL
     assert side_effect.critical is True
@@ -171,8 +173,33 @@ def test_report_rejects_dropped_side_effect_oracle_for_duplicate_mutation_eviden
     )
     assert forged.completion_evidence_root == evidence.evidence_root
 
-    with pytest.raises(ValueError, match="side-effect observation and oracle result presence"):
-        AssuranceReport.from_session(_session(forged), release_policy=_release_policy())
+    with pytest.raises(ValueError, match="side-effect oracle presence does not match"):
+        AssuranceReport.from_session(
+            _session(forged),
+            scenario=scenario,
+            release_policy=_release_policy(),
+        )
+
+
+def test_report_rejects_side_effect_contract_when_observation_and_oracle_are_both_omitted() -> None:
+    scenario = _scenario()
+    evidence = TrialEvidence(
+        trial_id="side-effect-omitted",
+        subject_identity=SUBJECT,
+        scenario_identity=scenario.identity,
+    )
+    trial = EvaluatedTrial(
+        evidence=evidence,
+        oracle_results=_core_results(scenario, evidence),
+        verdict=TrialVerdict.PASS,
+    )
+
+    with pytest.raises(ValueError, match="side-effect observation evidence is invalid"):
+        AssuranceReport.from_session(
+            _session(trial),
+            scenario=scenario,
+            release_policy=_release_policy(),
+        )
 
 
 def test_report_rejects_side_effect_oracle_without_observation_evidence() -> None:
@@ -192,11 +219,16 @@ def test_report_rejects_side_effect_oracle_without_observation_evidence() -> Non
         verdict=TrialVerdict.PASS,
     )
 
-    with pytest.raises(ValueError, match="side-effect observation and oracle result presence"):
-        AssuranceReport.from_session(_session(trial), release_policy=_release_policy())
+    with pytest.raises(ValueError, match="side-effect observation evidence is invalid"):
+        AssuranceReport.from_session(
+            _session(trial),
+            scenario=scenario,
+            release_policy=_release_policy(),
+        )
 
 
 def test_report_accepts_valid_side_effect_pass_triplet() -> None:
+    scenario = _scenario()
     evidence = _side_effect_evidence(second_mutates=False)
     results = _runtime_results(evidence)
     trial = EvaluatedTrial(
@@ -205,18 +237,24 @@ def test_report_accepts_valid_side_effect_pass_triplet() -> None:
         verdict=TrialVerdict.PASS,
     )
 
-    report = AssuranceReport.from_session(_session(trial), release_policy=_release_policy())
+    report = AssuranceReport.from_session(
+        _session(trial),
+        scenario=scenario,
+        release_policy=_release_policy(),
+    )
 
     assert tuple(result.name for result in report.trials[0].oracle_results) == (
         "policy",
         "side-effect-idempotency",
         "outcome",
     )
+    assert report.grading_profile.side_effect_idempotency_identity == _spec().identity
     assert report.critical_violations == 0
     assert report.gate.decision is GateDecision.ACCEPT
 
 
 def test_report_accepts_valid_side_effect_critical_fail_triplet() -> None:
+    scenario = _scenario()
     evidence = _side_effect_evidence(second_mutates=True)
     results = _runtime_results(evidence)
     assert results[1].verdict is TrialVerdict.FAIL
@@ -227,7 +265,11 @@ def test_report_accepts_valid_side_effect_critical_fail_triplet() -> None:
         verdict=TrialVerdict.FAIL,
     )
 
-    report = AssuranceReport.from_session(_session(trial), release_policy=_release_policy())
+    report = AssuranceReport.from_session(
+        _session(trial),
+        scenario=scenario,
+        release_policy=_release_policy(),
+    )
 
     assert report.critical_violations == 1
     assert report.gate.decision is GateDecision.REJECT
@@ -246,13 +288,43 @@ def test_report_preserves_core_only_trial_without_side_effect_observation() -> N
         verdict=TrialVerdict.PASS,
     )
 
-    report = AssuranceReport.from_session(_session(trial), release_policy=_release_policy())
+    report = AssuranceReport.from_session(
+        _session(trial),
+        scenario=scenario,
+        release_policy=_release_policy(),
+    )
 
+    assert report.grading_profile.side_effect_idempotency_identity is None
     assert report.trials[0].verdict is TrialVerdict.PASS
     assert report.gate.decision is GateDecision.ACCEPT
 
 
+def test_report_json_reload_requires_profile_bound_side_effect_oracle() -> None:
+    scenario = _scenario()
+    evidence = _side_effect_evidence(second_mutates=False)
+    trial = EvaluatedTrial(
+        evidence=evidence,
+        oracle_results=_runtime_results(evidence),
+        verdict=TrialVerdict.PASS,
+    )
+    report = AssuranceReport.from_session(
+        _session(trial),
+        scenario=scenario,
+        release_policy=_release_policy(),
+    )
+    payload = report.model_dump(mode="json")
+    payload["trials"][0]["oracle_results"] = [
+        result
+        for result in payload["trials"][0]["oracle_results"]
+        if result["name"] != "side-effect-idempotency"
+    ]
+
+    with pytest.raises(ValidationError, match="side-effect oracle presence does not match"):
+        AssuranceReport.model_validate(payload)
+
+
 def test_blocked_trial_may_retain_side_effect_observation_without_oracle_results() -> None:
+    scenario = _scenario()
     observed = _side_effect_evidence(second_mutates=False)
     error = EvidenceEvent(
         sequence=len(observed.events),
@@ -275,6 +347,7 @@ def test_blocked_trial_may_retain_side_effect_observation_without_oracle_results
 
     report = AssuranceReport.from_session(
         _session(trial),
+        scenario=scenario,
         release_policy=_release_policy(max_blocked_trials=1),
     )
 
