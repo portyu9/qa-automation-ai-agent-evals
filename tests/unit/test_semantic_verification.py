@@ -287,3 +287,28 @@ def test_append_semantic_judgment_rejects_duplicate_or_wrong_binding() -> None:
     recorded = append_semantic_judgment(first, receipt)
     with pytest.raises(SemanticJudgmentError, match="already contains"):
         append_semantic_judgment(recorded, receipt)
+
+
+def test_semantic_replay_verification_rejects_legacy_nested_calibration_schema() -> None:
+    scenario = _scenario(rubric=_rubric())
+    subject_evidence = _subject_evidence(scenario)
+    recorded = append_semantic_judgment(
+        subject_evidence,
+        _receipt(scenario, subject_evidence),
+    )
+    semantic = recorded.events[-1]
+    payload = dict(semantic.payload)
+    calibration_payload = dict(payload["calibration_receipt"])
+    calibration_payload["schema_version"] = "agent-evals/semantic-calibration-receipt/v1"
+    payload["calibration_receipt"] = calibration_payload
+    tampered = recorded.model_copy(
+        update={
+            "events": (
+                *recorded.events[:-1],
+                semantic.model_copy(update={"payload": payload}),
+            )
+        }
+    )
+
+    with pytest.raises(SemanticJudgmentError, match="receipt is malformed"):
+        verify_semantic_judgment(scenario, tampered)
