@@ -265,6 +265,30 @@ def verify_approval_intent(scenario: EvaluationScenario, evidence: TrialEvidence
             "approval receipt does not reference the unique target approval request"
         )
 
+    predecision_same_call_requests = [
+        event
+        for event in evidence.events[: decision_event.sequence]
+        if event.kind is EvidenceKind.TOOL_REQUEST
+        and event.payload.get("call_id") == receipt.call_id
+    ]
+    for candidate in predecision_same_call_requests:
+        candidate_state = validated_handoff_state_before(
+            scenario.authority,
+            evidence.events,
+            candidate.sequence,
+        )
+        try:
+            _verify_event_intent(
+                candidate,
+                receipt=receipt,
+                expected_state=candidate_state,
+                phase="pre-decision tool request",
+            )
+        except ApprovalIntentError as exc:
+            raise ApprovalIntentError(
+                "approval call identity collides with an unrelated pre-decision tool request"
+            ) from exc
+
     if any(
         event.kind is EvidenceKind.TOOL_RESULT
         and event.payload.get("call_id") == receipt.call_id
