@@ -10,7 +10,9 @@ from agent_evals.evidence.models import EvidenceEvent, EvidenceKind, TrialEviden
 from agent_evals.evidence.store import LocalEvidenceStore
 from agent_evals.mcp.agent_bridge import MCPAgentToolResultReceipt
 from agent_evals.mcp.models import MCPFaultKind, MCPFaultReceipt, MCPFaultSpec
+from agent_evals.oracles.deterministic import OutcomeOracle, PolicyOracle
 from agent_evals.runtime.evaluator import TrialRunner
+from agent_evals.semantic.verification import SEMANTIC_JUDGMENT_SOURCE
 
 
 def subject(*, model: str = "recorded") -> SubjectFingerprint:
@@ -44,6 +46,40 @@ def recorded_evidence() -> TrialEvidence:
         scenario_identity=scenario().identity,
         final_state={"status": "ok"},
         final_output="Recorded success",
+    )
+
+
+def blocking_error_evidence(kind: EvidenceKind) -> TrialEvidence:
+    if kind is EvidenceKind.EVALUATION_ERROR:
+        source = "evaluator:historical-precondition"
+        payload: dict[str, object] = {
+            "code": "historical_precondition_failed",
+            "reason": "required evaluator evidence was unavailable",
+        }
+    elif kind is EvidenceKind.RUNTIME_ERROR:
+        source = "adapter:historical-runtime"
+        payload = {
+            "exception_type": "HistoricalRuntimeError",
+            "detail_retained": False,
+        }
+    else:  # pragma: no cover - helper is intentionally narrow
+        raise AssertionError(f"unsupported blocking kind: {kind}")
+
+    return TrialEvidence(
+        trial_id="original-trial",
+        subject_identity=subject().identity,
+        scenario_identity=scenario().identity,
+        events=(
+            EvidenceEvent(
+                sequence=0,
+                kind=kind,
+                source=source,
+                payload=payload,
+                critical=True,
+            ),
+        ),
+        final_state={"status": "ok"},
+        final_output="Recorded state happens to satisfy the outcome oracle",
     )
 
 
@@ -102,6 +138,74 @@ async def test_replay_regrades_recorded_state_with_exact_evidence_identity(tmp_p
     )
 
     assert replayed.verdict is TrialVerdict.PASS
+    assert replayed.evidence == original
+    assert replayed.evidence.evidence_root == original.evidence_root
+
+
+@pytest.mark.parametrize(
+    "kind",
+    (EvidenceKind.EVALUATION_ERROR, EvidenceKind.RUNTIME_ERROR),
+)
+@pytest.mark.asyncio
+async def test_replay_preserves_recorded_blocking_error_evidence(
+    tmp_path: Path,
+    kind: EvidenceKind,
+) -> None:
+    original = blocking_error_evidence(kind)
+
+    # Without the runner-level blocking invariant, both deterministic oracles accept this envelope
+    # because the recorded terminal state happens to satisfy the scenario contract.
+    assert PolicyOracle().grade(scenario(), original).verdict is TrialVerdict.PASS
+    assert OutcomeOracle().grade(scenario(), original).verdict is TrialVerdict.PASS
+
+    store = LocalEvidenceStore(tmp_path / kind.value)
+    manifest = store.write(original)
+    replayed = await TrialRunner().run(
+        EvidenceReplayAdapter.from_store(store, manifest.record_key),
+        subject=subject(),
+        scenario=scenario(),
+        trial_id=original.trial_id,
+    )
+
+    assert replayed.verdict is TrialVerdict.BLOCKED
+    assert replayed.oracle_results == ()
+    assert replayed.evidence == original
+    assert replayed.evidence.evidence_root == original.evidence_root
+    assert replayed.completion_evidence_root == original.evidence_root
+
+
+@pytest.mark.asyncio
+async def test_replay_does_not_promote_rejected_semantic_history_past_terminal_error() -> None:
+    error = blocking_error_evidence(EvidenceKind.EVALUATION_ERROR).events[0].model_copy(
+        update={"sequence": 1}
+    )
+    original = TrialEvidence(
+        trial_id="original-trial",
+        subject_identity=subject().identity,
+        scenario_identity=scenario().identity,
+        events=(
+            EvidenceEvent(
+                sequence=0,
+                kind=EvidenceKind.SEMANTIC_JUDGMENT,
+                source=SEMANTIC_JUDGMENT_SOURCE,
+                payload={"rejected_history": True},
+            ),
+            error,
+        ),
+        final_state={"status": "ok"},
+        final_output="Recorded success",
+    )
+
+    replayed = await TrialRunner().run(
+        EvidenceReplayAdapter(original),
+        subject=subject(),
+        scenario=scenario(),
+        trial_id=original.trial_id,
+    )
+
+    assert replayed.verdict is TrialVerdict.BLOCKED
+    assert replayed.oracle_results == ()
+    assert replayed.semantic_judgment is None
     assert replayed.evidence == original
     assert replayed.evidence.evidence_root == original.evidence_root
 
