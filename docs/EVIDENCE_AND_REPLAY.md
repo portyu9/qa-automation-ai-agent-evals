@@ -116,6 +116,14 @@ A mismatch raises `ReplayIdentityError` at the adapter boundary. When all identi
 
 For an unchanged evidence model, a successful exact-identity replay reproduces the original `evidence_root`.
 
+## Recorded evaluator/runtime failures remain blocked
+
+`EVALUATION_ERROR` and `RUNTIME_ERROR` are terminal uncertainty markers, not subject observations that a later deterministic score may compensate for. Once normalized evidence already contains either event kind, `TrialRunner` returns `BLOCKED` with no oracle results before delivery, approval, deterministic, or semantic grading. Replay preserves the exact historical envelope and evidence root instead of appending a second synthetic error.
+
+This rule matters even when terminal state happens to satisfy every deterministic outcome. A recorded runtime failure means the original run did not establish a resolved evaluation result; replay cannot manufacture the missing execution/evaluator observation by noticing that some other persisted field looks successful. The same rule also preserves rejected semantic history: if a historical semantic event is followed by a terminal evaluator error, replay remains `BLOCKED` rather than attempting to promote the earlier judgment.
+
+The marker is fail-closed regardless of event source or `critical` flag. Writer/source authentication is a separate trust problem; a normalized event whose kind is explicitly `EVALUATION_ERROR` or `RUNTIME_ERROR` cannot simultaneously authorize a resolved PASS.
+
 ## Semantic judgments are historically revalidated
 
 A persisted terminal `SEMANTIC_JUDGMENT` event is not trusted merely because its enclosing evidence envelope hashes correctly. Replay reconstructs the exact `TrialEvidence` that existed before that event, rederives its evidence root, and requires the embedded `SemanticJudgmentReceipt.subject_evidence_root` to match it. The receipt then revalidates exact scenario/subject identity, embedded rubric identity, judge profile, accepted calibration identity, bounded input digest, structured-response digest, criterion threshold semantics, derived decision, and outer receipt root.
@@ -175,7 +183,7 @@ Before subject grading, the evaluator dispatches each known protocol-delivery so
 | `bridge:mcp-agent:tool-error-recovery` | `MCPAgentToolErrorRecoveryReceipt` | exact error/retry identities, causal chronology, argument and recovery bindings |
 | `bridge:mcp-agent:tool-stale-cache` | `MCPAgentToolStaleCacheReceipt` | exact stale target request/result identity, strict bound arguments, protocol/model rejection digest equality, target-present→target-absent model relation, and request < result < delivery chronology |
 | `bridge:mcp-agent:tool-schema-drift` | `MCPAgentToolSchemaDriftReceipt` | exact schema/argument/observation digests, strict protocol chronology, and host-refreshed adaptation binding |
-| `bridge:mcp-agent:tool-identity-drift` | `MCPAgentToolIdentityDriftReceipt` | exact original→replacement identity binding, model-visible identity-set digests, strict call/result and protocol chronology, argument/rejection/recovery bindings |
+| `bridge:mcp-agent:tool-identity-drift` | `MCPAgentToolIdentityDriftReceipt` | exact original→replacement identity binding, model-visible identity-set digests, strict call/result and protocol chronology, argument and recovery bindings |
 
 The metadata replay verifier does not recreate MCP discovery or a model request. It rechecks the typed receipt's exact `TOOL_METADATA_POISON` kind, protocol revision and `tools/list:<tool>:description` observation point, description digest relation, tool identity, schema-digest relation, scenario identity, semantic root, and chronology. Leading pre-model `ATTACK_DELIVERY` is permitted, but metadata `PROTOCOL_DELIVERY` appearing after normalized model/agent behavior fails closed.
 
