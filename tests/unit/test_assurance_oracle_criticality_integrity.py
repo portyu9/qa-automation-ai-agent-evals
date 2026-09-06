@@ -5,10 +5,10 @@ from pydantic import ValidationError
 
 from agent_evals.assurance.report import AssuranceReport, OracleSnapshot
 from agent_evals.contracts.models import EvaluationScenario, ScenarioKind
-from agent_evals.evidence.models import TrialEvidence, TrialVerdict
+from agent_evals.evidence.models import EvidenceEvent, EvidenceKind, TrialEvidence, TrialVerdict
 from agent_evals.gates.release import GateDecision, ReleasePolicy
-from agent_evals.oracles.deterministic import OracleResult
 from agent_evals.runtime.evaluator import EvaluatedTrial
+from agent_evals.runtime.grading import grade_deterministic_evidence
 from agent_evals.runtime.session import EvaluationSessionResult
 from agent_evals.statistics.reliability import ReliabilityReport
 
@@ -23,21 +23,24 @@ SCENARIO = SCENARIO_CONTRACT.identity
 
 
 def _report() -> AssuranceReport:
+    request = EvidenceEvent(
+        sequence=0,
+        kind=EvidenceKind.TOOL_REQUEST,
+        source="adapter:test",
+        payload={"tool": "forbidden-tool", "call_id": "call-1", "arguments": "{}"},
+    )
     evidence = TrialEvidence(
         trial_id="trial-0",
         subject_identity=SUBJECT,
         scenario_identity=SCENARIO,
+        events=(request,),
     )
+    oracle_results = grade_deterministic_evidence(SCENARIO_CONTRACT, evidence)
+    assert oracle_results[0].verdict is TrialVerdict.FAIL
+    assert oracle_results[0].critical is True
     trial = EvaluatedTrial(
         evidence=evidence,
-        oracle_results=(
-            OracleResult(
-                name="policy",
-                verdict=TrialVerdict.FAIL,
-                critical=True,
-            ),
-            OracleResult(name="outcome", verdict=TrialVerdict.PASS),
-        ),
+        oracle_results=oracle_results,
         verdict=TrialVerdict.FAIL,
     )
     reliability = ReliabilityReport.from_verdicts((TrialVerdict.FAIL,), k=1)
