@@ -8,13 +8,14 @@ from time import perf_counter
 from pydantic import ValidationError
 
 from agent_evals.adapters.base import AdapterPreconditionError, AdapterResult, AgentAdapter
-from agent_evals.adversarial.delivery import AttackDeliveryError, verify_attack_delivery
 from agent_evals.contracts.models import EvaluationScenario, SubjectFingerprint
-from agent_evals.evidence.approval_intent import ApprovalIntentError, verify_approval_intent
 from agent_evals.evidence.models import EvidenceEvent, EvidenceKind, TrialEvidence, TrialVerdict
-from agent_evals.mcp.delivery import ProtocolDeliveryError, verify_protocol_delivery
 from agent_evals.oracles.deterministic import OracleResult, OutcomeOracle, PolicyOracle
-from agent_evals.retrieval.verification import RetrievalDeliveryError, verify_retrieval_delivery
+from agent_evals.runtime.preconditions import (
+    EvaluationPreconditionError,
+    has_blocking_evidence,
+    verify_pregrading_closure,
+)
 from agent_evals.semantic.judge import (
     SemanticJudge,
     SemanticJudgeConfigurationError,
@@ -28,17 +29,6 @@ from agent_evals.semantic.verification import (
     verify_semantic_judgment,
 )
 from agent_evals.side_effect.oracle import SideEffectIdempotencyOracle
-from agent_evals.side_effect.verification import (
-    SideEffectObservationError,
-    verify_side_effect_observation,
-)
-
-_BLOCKING_EVIDENCE_KINDS = frozenset(
-    {
-        EvidenceKind.EVALUATION_ERROR,
-        EvidenceKind.RUNTIME_ERROR,
-    }
-)
 
 
 @dataclass(frozen=True, slots=True)
@@ -187,7 +177,7 @@ class TrialRunner:
                 elapsed_ms=(perf_counter() - started) * 1000.0,
             )
 
-        if any(event.kind in _BLOCKING_EVIDENCE_KINDS for event in evidence.events):
+        if has_blocking_evidence(evidence):
             return EvaluatedTrial(
                 evidence=evidence,
                 oracle_results=(),
@@ -195,70 +185,14 @@ class TrialRunner:
             )
 
         try:
-            verify_attack_delivery(scenario, evidence)
-        except AttackDeliveryError as exc:
+            verify_pregrading_closure(scenario, evidence)
+        except EvaluationPreconditionError as exc:
             return EvaluatedTrial(
                 evidence=self._append_evaluation_error(
                     evidence,
-                    source="evaluator:attack-delivery",
-                    code="attack_delivery_unverified",
-                    reason=str(exc),
-                ),
-                oracle_results=(),
-                verdict=TrialVerdict.BLOCKED,
-            )
-
-        try:
-            verify_protocol_delivery(evidence)
-        except ProtocolDeliveryError as exc:
-            return EvaluatedTrial(
-                evidence=self._append_evaluation_error(
-                    evidence,
-                    source="evaluator:protocol-delivery",
-                    code="protocol_delivery_unverified",
-                    reason=str(exc),
-                ),
-                oracle_results=(),
-                verdict=TrialVerdict.BLOCKED,
-            )
-
-        try:
-            verify_retrieval_delivery(scenario, evidence)
-        except RetrievalDeliveryError as exc:
-            return EvaluatedTrial(
-                evidence=self._append_evaluation_error(
-                    evidence,
-                    source="evaluator:retrieval-delivery",
-                    code="retrieval_delivery_unverified",
-                    reason=str(exc),
-                ),
-                oracle_results=(),
-                verdict=TrialVerdict.BLOCKED,
-            )
-
-        try:
-            verify_side_effect_observation(scenario, evidence)
-        except SideEffectObservationError as exc:
-            return EvaluatedTrial(
-                evidence=self._append_evaluation_error(
-                    evidence,
-                    source="evaluator:side-effect-observation",
-                    code="side_effect_observation_unverified",
-                    reason=str(exc),
-                ),
-                oracle_results=(),
-                verdict=TrialVerdict.BLOCKED,
-            )
-
-        try:
-            verify_approval_intent(scenario, evidence)
-        except ApprovalIntentError as exc:
-            return EvaluatedTrial(
-                evidence=self._append_evaluation_error(
-                    evidence,
-                    source="evaluator:approval-intent",
-                    code="approval_intent_unverified",
-                    reason=str(exc),
+                    source=exc.source,
+                    code=exc.code,
+                    reason=exc.reason,
                 ),
                 oracle_results=(),
                 verdict=TrialVerdict.BLOCKED,

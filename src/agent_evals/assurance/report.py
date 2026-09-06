@@ -13,14 +13,15 @@ from agent_evals.contracts.models import EvaluationScenario
 from agent_evals.evidence.models import TrialVerdict
 from agent_evals.gates.release import GateDecision, GateResult, ReleaseGate, ReleasePolicy
 from agent_evals.oracles.deterministic import OracleResult
+from agent_evals.runtime.preconditions import (
+    EvaluationPreconditionError,
+    has_blocking_evidence,
+    verify_pregrading_closure,
+)
 from agent_evals.runtime.session import EvaluationSessionResult
 from agent_evals.semantic.models import SemanticDecision
 from agent_evals.semantic.receipt import SemanticJudgmentReceipt
 from agent_evals.semantic.verification import SemanticJudgmentError, verify_semantic_judgment
-from agent_evals.side_effect.verification import (
-    SideEffectObservationError,
-    verify_side_effect_observation,
-)
 from agent_evals.statistics.reliability import ReliabilityReport
 
 _REPORT_SCHEMA: Literal["agent-evals/assurance-report/v4"] = "agent-evals/assurance-report/v4"
@@ -311,11 +312,19 @@ class AssuranceReport(BaseModel):
                 else None
             )
             if trial.verdict is not TrialVerdict.BLOCKED:
-                try:
-                    verify_side_effect_observation(scenario, evidence)
-                except SideEffectObservationError as exc:
+                if has_blocking_evidence(evidence):
                     raise ValueError(
-                        f"trial side-effect observation evidence is invalid: {exc}"
+                        "non-blocked assurance trial contains evaluator/runtime blocking evidence"
+                    )
+                try:
+                    verify_pregrading_closure(scenario, evidence)
+                except EvaluationPreconditionError as exc:
+                    if exc.code == "side_effect_observation_unverified":
+                        raise ValueError(
+                            f"trial side-effect observation evidence is invalid: {exc.reason}"
+                        ) from exc
+                    raise ValueError(
+                        f"trial pre-grading evidence is invalid ({exc.code}): {exc.reason}"
                     ) from exc
 
                 has_side_effect_oracle = any(
