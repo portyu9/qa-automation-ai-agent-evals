@@ -4,6 +4,7 @@ import pytest
 from pydantic import ValidationError
 
 from agent_evals.assurance.report import AssuranceReport, ReliabilitySnapshot
+from agent_evals.contracts.models import EvaluationScenario, ScenarioKind
 from agent_evals.evidence.models import TrialEvidence, TrialVerdict
 from agent_evals.gates.release import ReleasePolicy
 from agent_evals.oracles.deterministic import OracleResult
@@ -12,7 +13,13 @@ from agent_evals.runtime.session import EvaluationSessionResult
 from agent_evals.statistics.reliability import ReliabilityReport
 
 SUBJECT = "a" * 64
-SCENARIO = "b" * 64
+SCENARIO_CONTRACT = EvaluationScenario(
+    scenario_id="assurance.reliability-scalars",
+    revision="1",
+    kind=ScenarioKind.REGRESSION,
+    objective="Verify assurance reliability scalar integrity.",
+)
+SCENARIO = SCENARIO_CONTRACT.identity
 
 
 def _report() -> AssuranceReport:
@@ -41,7 +48,11 @@ def _report() -> AssuranceReport:
         min_success_rate=0.0,
         min_wilson_low=0.0,
     )
-    return AssuranceReport.from_session(session, release_policy=policy)
+    return AssuranceReport.from_session(
+        session,
+        scenario=SCENARIO_CONTRACT,
+        release_policy=policy,
+    )
 
 
 @pytest.mark.parametrize(
