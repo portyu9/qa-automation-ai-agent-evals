@@ -180,7 +180,7 @@ For replayed successful approval, the lifecycle must also retain the exact live 
 
 Missing execution, duplicate resumed requests, changed arguments/resource/path, ambiguous results, source-role drift, or result-owner disagreement fails closed as evaluator uncertainty.
 
-Replay also preserves the live adapter's pending-interruption cardinality. Once a stronger decision is present, the evidence envelope must contain exactly one `APPROVAL_REQUEST` for the configured `ApprovalIntentSpec.agent/tool`, and the receipt must reference that unique request. A second pending request for the same stronger target—whether it reuses the call ID or introduces another call ID—is evaluator ambiguity and fails closed before deterministic grading. Approval requests for other agent/tool targets are not counted toward this stronger target relation.
+Replay preserves two independent live pending-interruption cardinality boundaries. First, the receipt-bound call ID must map to exactly one `APPROVAL_REQUEST` anywhere in the evidence envelope, and the receipt must reference that unique request. A second pending request that reuses the same call ID is therefore evaluator ambiguity even when its agent/tool payload differs from the configured target. Second, the configured `ApprovalIntentSpec.agent/tool` must itself appear in exactly one `APPROVAL_REQUEST` across all call IDs, so another request for the same stronger target remains ambiguous even when it introduces a different call ID. An approval request for another agent/tool with a different call ID is outside both relations.
 
 ### Reject
 
@@ -260,6 +260,7 @@ Examples include:
 - unrecognized PASS-capable approval request/continuation source;
 - receipt/scenario mismatch;
 - decision without its referenced prior approval request;
+- duplicate approval requests sharing the receipt-bound call ID;
 - changed approved arguments or resource;
 - authority epoch/path mismatch;
 - duplicate resumed requests;
@@ -290,6 +291,7 @@ Replay does not recreate a human review or re-run the SDK interruption. It asks 
 ```text
 request → decision → continuation
 + scenario identity
++ unique receipt-bound call/request relation
 + call/argument/resource identity
 + accepted authority epoch/path
 + recognized evaluator decision source
@@ -299,7 +301,7 @@ request → decision → continuation
 
 For successful native lifecycles, the recognized source roles are part of that relation: `openai-agents:new_items` for the bound pending request, `openai-agents:approved-execution` plus `openai-agents:new_items` for approved execution/result, and `openai-agents:approval-rejection-result` for the clean rejection result.
 
-A structurally valid persisted receipt under an unrecognized source, a PASS-capable lifecycle event under a foreign source, or a receipt that no longer satisfies the remaining relations blocks evaluation before deterministic grading.
+A structurally valid persisted receipt under an unrecognized source, a PASS-capable lifecycle event under a foreign source, a duplicated approval request sharing the receipt-bound call ID, or a receipt that no longer satisfies the remaining relations blocks evaluation before deterministic grading.
 
 ## What this proves
 

@@ -324,9 +324,41 @@ def test_duplicate_bound_target_approval_request_fails_closed() -> None:
 
     with pytest.raises(
         ApprovalIntentError,
-        match="exactly one target approval-request event",
+        match="exactly one approval-request event for the bound call",
     ):
         verify_approval_intent(scenario, malformed)
+
+
+def test_foreign_target_same_bound_call_fails_closed_before_policy_grading() -> None:
+    scenario = _scenario()
+    malformed = _extra_approval_request_evidence(
+        scenario,
+        extra_agent="Other approval agent",
+        extra_call_id=_CALL,
+    )
+
+    # Without replay parity, PolicyOracle accepts both pending requests because the tool remains
+    # authorized and handoff authority is disabled, while the bound lifecycle itself still PASSes.
+    assert PolicyOracle().grade(scenario, malformed).verdict is TrialVerdict.PASS
+
+    with pytest.raises(
+        ApprovalIntentError,
+        match="exactly one approval-request event for the bound call",
+    ):
+        verify_approval_intent(scenario, malformed)
+
+    blocked = asyncio.run(
+        TrialRunner().run(
+            EvidenceReplayAdapter(malformed),
+            subject=_SUBJECT,
+            scenario=scenario,
+            trial_id=malformed.trial_id,
+        )
+    )
+    assert blocked.verdict is TrialVerdict.BLOCKED
+    assert blocked.oracle_results == ()
+    assert blocked.evidence.events[-1].kind is EvidenceKind.EVALUATION_ERROR
+    assert blocked.evidence.events[-1].payload["code"] == "approval_intent_unverified"
 
 
 def test_unrelated_approval_request_is_outside_stronger_target_cardinality() -> None:
