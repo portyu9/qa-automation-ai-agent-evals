@@ -176,6 +176,8 @@ The result must match the approved agent and call ID and must not be marked as a
 
 Missing execution, duplicate resumed requests, changed arguments/resource/path, ambiguous results, or result-owner disagreement fails closed as evaluator uncertainty.
 
+Replay also preserves the live adapter's pending-interruption cardinality. Once a stronger decision is present, the evidence envelope must contain exactly one `APPROVAL_REQUEST` for the configured `ApprovalIntentSpec.agent/tool`, and the receipt must reference that unique request. A second pending request for the same stronger target—whether it reuses the call ID or introduces another call ID—is evaluator ambiguity and fails closed before deterministic grading. Approval requests for other agent/tool targets are not counted toward this stronger target relation.
+
 ### Reject
 
 A clean rejection must complete the same SDK continuation without executing the protected implementation:

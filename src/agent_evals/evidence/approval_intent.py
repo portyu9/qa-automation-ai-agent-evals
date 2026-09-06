@@ -225,6 +225,22 @@ def verify_approval_intent(scenario: EvaluationScenario, evidence: TrialEvidence
         phase="approval request",
     )
 
+    target_approval_requests = [
+        event
+        for event in evidence.events
+        if event.kind is EvidenceKind.APPROVAL_REQUEST
+        and event.payload.get("agent") == spec.agent
+        and event.payload.get("tool") == spec.tool
+    ]
+    if len(target_approval_requests) != 1:
+        raise ApprovalIntentError(
+            "approval intent requires exactly one target approval-request event"
+        )
+    if target_approval_requests[0].sequence != receipt.approval_request_sequence:
+        raise ApprovalIntentError(
+            "approval receipt does not reference the unique target approval request"
+        )
+
     if any(
         event.kind is EvidenceKind.TOOL_RESULT
         and event.payload.get("call_id") == receipt.call_id
