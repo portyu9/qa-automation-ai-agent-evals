@@ -12,6 +12,7 @@ from agent_evals.contracts.models import (
     ScenarioKind,
 )
 from agent_evals.evidence.approval_intent import (
+    APPROVAL_DECISION_SOURCE,
     ApprovalIntentError,
     ApprovalIntentReceipt,
     canonical_arguments_sha256,
@@ -228,7 +229,7 @@ def test_canonical_argument_digest_ignores_json_object_formatting() -> None:
 
 def test_exact_approval_request_decision_and_resumed_invocation_pass() -> None:
     contract = scenario()
-    decision = receipt(contract).to_event(sequence=1, source="evaluator:approval-intent")
+    decision = receipt(contract).to_event(sequence=1, source=APPROVAL_DECISION_SOURCE)
     trial = evidence(
         contract,
         approval_request(0),
@@ -251,7 +252,7 @@ def test_exact_approval_request_decision_and_resumed_invocation_pass() -> None:
 
 def test_changed_arguments_or_resource_after_decision_block_verification() -> None:
     contract = scenario()
-    decision = receipt(contract).to_event(sequence=1, source="evaluator:approval-intent")
+    decision = receipt(contract).to_event(sequence=1, source=APPROVAL_DECISION_SOURCE)
 
     changed_arguments = evidence(
         contract,
@@ -292,7 +293,7 @@ def test_changed_arguments_or_resource_after_decision_block_verification() -> No
 
 def test_decision_without_prior_request_or_wrong_call_identity_blocks() -> None:
     contract = scenario()
-    decision = receipt(contract).to_event(sequence=0, source="evaluator:approval-intent")
+    decision = receipt(contract).to_event(sequence=0, source=APPROVAL_DECISION_SOURCE)
     trial = evidence(contract, decision)
     with pytest.raises(ApprovalIntentError, match="follow its bound approval request"):
         verify_approval_intent(contract, trial)
@@ -327,7 +328,7 @@ def test_handoff_epoch_must_match_request_and_resumed_execution() -> None:
         authority_epoch=1,
         approval_request_sequence=1,
     )
-    decision = decision_receipt.to_event(sequence=2, source="evaluator:approval-intent")
+    decision = decision_receipt.to_event(sequence=2, source=APPROVAL_DECISION_SOURCE)
     trial = evidence(
         contract,
         handoff,
@@ -358,7 +359,7 @@ def test_handoff_epoch_must_match_request_and_resumed_execution() -> None:
         contract,
         handoff,
         request,
-        wrong_epoch_receipt.to_event(sequence=2, source="evaluator:approval-intent"),
+        wrong_epoch_receipt.to_event(sequence=2, source=APPROVAL_DECISION_SOURCE),
         event(
             3,
             EvidenceKind.TOOL_REQUEST,
@@ -393,7 +394,7 @@ def test_unauthorized_handoff_cannot_spoof_approval_epoch() -> None:
         contract,
         unauthorized,
         request,
-        valid_epoch_receipt.to_event(sequence=2, source="evaluator:approval-intent"),
+        valid_epoch_receipt.to_event(sequence=2, source=APPROVAL_DECISION_SOURCE),
         event(
             3,
             EvidenceKind.TOOL_REQUEST,
@@ -422,7 +423,7 @@ def test_unauthorized_handoff_cannot_spoof_approval_epoch() -> None:
         contract,
         unauthorized,
         request,
-        spoofed_epoch_receipt.to_event(sequence=2, source="evaluator:approval-intent"),
+        spoofed_epoch_receipt.to_event(sequence=2, source=APPROVAL_DECISION_SOURCE),
         event(
             3,
             EvidenceKind.TOOL_REQUEST,
@@ -464,7 +465,7 @@ def test_same_depth_sibling_handoff_path_cannot_replay_approval() -> None:
         left_1,
         left_2,
         approval_request(2, agent=_FINAL),
-        left_receipt.to_event(sequence=3, source="evaluator:approval-intent"),
+        left_receipt.to_event(sequence=3, source=APPROVAL_DECISION_SOURCE),
         event(
             4,
             EvidenceKind.TOOL_REQUEST,
@@ -485,7 +486,7 @@ def test_same_depth_sibling_handoff_path_cannot_replay_approval() -> None:
         right_1,
         right_2,
         approval_request(2, agent=_FINAL),
-        left_receipt.to_event(sequence=3, source="evaluator:approval-intent"),
+        left_receipt.to_event(sequence=3, source=APPROVAL_DECISION_SOURCE),
         event(
             4,
             EvidenceKind.TOOL_REQUEST,
@@ -503,7 +504,7 @@ def test_same_depth_sibling_handoff_path_cannot_replay_approval() -> None:
 
 def test_exact_rejection_continuation_passes_without_execution() -> None:
     contract = scenario(ApprovalDecision.REJECT)
-    decision = receipt(contract).to_event(sequence=1, source="evaluator:approval-intent")
+    decision = receipt(contract).to_event(sequence=1, source=APPROVAL_DECISION_SOURCE)
     trial = evidence(
         contract,
         approval_request(0),
@@ -521,7 +522,7 @@ def test_exact_rejection_continuation_passes_without_execution() -> None:
 
 def test_rejection_requires_post_decision_completion_evidence() -> None:
     contract = scenario(ApprovalDecision.REJECT)
-    decision = receipt(contract).to_event(sequence=1, source="evaluator:approval-intent")
+    decision = receipt(contract).to_event(sequence=1, source=APPROVAL_DECISION_SOURCE)
     incomplete = evidence(contract, approval_request(0), decision)
 
     with pytest.raises(ApprovalIntentError, match="matching continuation result"):
@@ -530,7 +531,7 @@ def test_rejection_requires_post_decision_completion_evidence() -> None:
 
 def test_exact_rejection_followed_by_execution_is_a_critical_policy_failure() -> None:
     contract = scenario(ApprovalDecision.REJECT)
-    decision = receipt(contract).to_event(sequence=1, source="evaluator:approval-intent")
+    decision = receipt(contract).to_event(sequence=1, source=APPROVAL_DECISION_SOURCE)
     trial = evidence(
         contract,
         approval_request(0),
@@ -559,7 +560,7 @@ def test_legacy_persistent_approval_cannot_override_stronger_rejection() -> None
     decision = receipt(
         contract,
         approval_request_sequence=1,
-    ).to_event(sequence=2, source="evaluator:approval-intent")
+    ).to_event(sequence=2, source=APPROVAL_DECISION_SOURCE)
     trial = evidence(
         contract,
         event(0, EvidenceKind.APPROVAL, tool=_TOOL, scope="tool"),

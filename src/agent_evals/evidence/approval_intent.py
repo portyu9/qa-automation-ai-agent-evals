@@ -15,6 +15,7 @@ from agent_evals.evidence.models import EvidenceEvent, EvidenceKind, TrialEviden
 
 _APPROVAL_INTENT_DOMAIN = b"agent-evals/approval-intent/v1\0"
 _APPROVAL_INTENT_SCHEMA = "agent-evals/approval-intent/v1"
+APPROVAL_DECISION_SOURCE = "evaluator:openai-hitl-approval-intent"
 
 
 class ApprovalIntentError(ValueError):
@@ -198,6 +199,8 @@ def verify_approval_intent(scenario: EvaluationScenario, evidence: TrialEvidence
 
     decision_event = decision_events[0]
     receipt = parse_approval_intent_event(decision_event)
+    if decision_event.source != APPROVAL_DECISION_SOURCE:
+        raise ApprovalIntentError("approval decision source is not recognized")
     if receipt.scenario_identity != scenario.identity:
         raise ApprovalIntentError("approval receipt scenario identity mismatch")
     if receipt.decision is not spec.decision:

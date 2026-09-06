@@ -96,7 +96,9 @@ A pending approval must never be counted as a completed execution merely because
 
 Raw arguments are deliberately absent from the receipt. The argument digest binds semantic content without duplicating possibly sensitive request material.
 
-The receipt root is an integrity relation, not a signature, MAC, authenticated human identity, or non-repudiation proof.
+The receipt is authoritative only when carried by the recognized evaluator-owned `APPROVAL_DECISION` source `evaluator:openai-hitl-approval-intent`. Replay rejects the same self-valid receipt under a subject, provider, or other unrecognized source instead of promoting that event into framework-owned approval authority.
+
+The source string is an evidence-role/provenance label, not cryptographic authentication. The receipt root is likewise an integrity relation, not a signature, MAC, authenticated human identity, or non-repudiation proof.
 
 ## Canonical argument identity
 
@@ -252,6 +254,7 @@ Examples include:
 
 - no bound decision when the target never executes;
 - malformed or root-invalid receipt;
+- unrecognized approval-decision source;
 - receipt/scenario mismatch;
 - decision without its referenced prior approval request;
 - changed approved arguments or resource;
@@ -286,10 +289,11 @@ request → decision → continuation
 + scenario identity
 + call/argument/resource identity
 + accepted authority epoch/path
++ recognized evaluator decision source
 + semantic receipt root
 ```
 
-A structurally valid persisted receipt that no longer satisfies those relations blocks evaluation.
+A structurally valid persisted receipt under an unrecognized source, or a receipt that no longer satisfies the remaining relations, blocks evaluation before deterministic grading.
 
 ## What this proves
 
