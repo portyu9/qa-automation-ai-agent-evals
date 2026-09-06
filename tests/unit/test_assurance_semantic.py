@@ -260,13 +260,13 @@ def test_assurance_report_rejects_forged_semantic_trial_verdict() -> None:
 
 
 def test_assurance_report_rejects_semantic_identity_drift() -> None:
-    with pytest.raises(ValueError, match="subject identity does not match report"):
+    with pytest.raises(ValueError, match="subject identity does not match evidence"):
         AssuranceReport.from_session(
             _session(_trial(SemanticDecision.PASS, semantic_subject="d" * 64)),
             release_policy=_policy(),
         )
 
-    with pytest.raises(ValueError, match="scenario identity does not match report"):
+    with pytest.raises(ValueError, match="scenario identity does not match evidence"):
         AssuranceReport.from_session(
             _session(_trial(SemanticDecision.PASS, semantic_scenario="e" * 64)),
             release_policy=_policy(),
