@@ -32,6 +32,14 @@ The runtime establishes immutability at the ownership boundary instead of relyin
 
 Caller mutation after an awaited run or session has begun therefore cannot change the in-flight evaluator contract. Adapter-side mutation cannot alter the evaluator-owned grading basis. The drift check covers ordinary mutable-container changes; it is not tamper-proof memory, caller authentication, or protection against interpreter compromise or deliberate `object.__setattr__` abuse. Scenario and subject hashes remain integrity identities, not signatures.
 
+## Normalized evidence ownership
+
+Normalized evidence applies the same ownership discipline to adapter observations. `EvidenceEvent.payload` and `TrialEvidence.final_state` are JSON-shaped Python mappings for convenient adapter integration, but field freezing alone would not detach nested dictionaries or lists. The evaluator therefore canonical-JSON round-trips those values during validation, and nested `EvidenceEvent` instances are revalidated when a `TrialEvidence` envelope is constructed.
+
+That detachment happens before delivery verification or deterministic grading. An adapter-owned nested object can therefore be changed later—including while an optional semantic judge is awaiting—without changing the already-normalized event payload, terminal state, deterministic verdict basis, or evidence root. `EvidenceReplayAdapter` snapshots evidence when it accepts a replay input, and `LocalEvidenceStore.write()` snapshots once before deriving persisted bytes and the manifest root, so those boundaries also operate on one detached evidence view.
+
+These snapshots preserve the existing serialized evidence schema and evidence-root algorithm; they do not create signatures or authenticated provenance. They also do not make returned Python mappings tamper-proof, provide thread-safe shared mutation, or defend against deliberate mutation of evaluator-owned objects after return. The guarantee is narrower: mutable objects owned by an adapter or caller do not remain aliased across the normalization, replay, or persistence trust boundaries.
+
 ## Outcome versus output
 
 The most important distinction is between **what the agent said** and **what actually happened**.
