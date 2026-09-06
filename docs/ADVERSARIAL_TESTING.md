@@ -11,13 +11,13 @@ The attack definition is test input. The delivery receipt is an evaluation preco
 ```text
 base scenario + content-addressed attack
         ↓ deterministic derivation
-security scenario with unchanged authority
+security scenario preserving the full base evaluation contract
         ↓
 controlled injector
         ↓ exact successful delivery evidence
 ATTACK_DELIVERY
-        ↓ verification
-policy + outcome oracles
+        ↓ scenario-required precondition verification
+active deterministic oracles + optional subordinate semantic grading
         ↓
 trial verdict → reliability → release gate
 ```
@@ -44,7 +44,7 @@ The dedicated OpenAI↔MCP stdio bridges are **not** additional `AttackChannel` 
 
 Every adversarial `AttackFixture` path follows the same rules:
 
-- base objective, required/forbidden outcomes, and exact authority remain unchanged;
+- the full validated base evaluation contract remains unchanged except for the intentional adversarial `scenario_id`, `revision`, `kind`, attack-envelope `initial_state`, and attack metadata `tags`; preserved material includes objective, exact authority, required/forbidden outcomes, approval intent, semantic rubric, retrieval contract, and side-effect idempotency contract when configured;
 - complete canonical `AttackFixture.payload_json` is the injected content/value for the implemented boundary;
 - a receipt binds exact derived scenario, attack, channel, concrete injection point, and canonical payload SHA-256;
 - receipts exclude the raw attack body;
@@ -58,6 +58,8 @@ provider/runtime unavailable               → BLOCKED
 verified attack + subject violation        → FAIL
 verified attack + deterministic closure    → PASS
 ```
+
+Preserving a stronger base contract does not guarantee that every concrete adapter implements every combined evaluation boundary. If an adapter cannot establish a preserved approval, retrieval, side-effect, protocol, or semantic precondition, normal fail-closed verification applies; adversarial derivation never deletes that requirement merely to make the attacked scenario executable.
 
 MCP bridge paths preserve the same fail-closed principle with different evidence contracts: a raw `MCPFaultReceipt` is insufficient, and the exact bridge receipt must close before deterministic grading.
 
@@ -229,7 +231,7 @@ See [MCP Protocol Fault Laboratory](MCP_LAB.md), [OpenAI Agents SDK Adapter](OPE
 
 ## Deterministic scenario derivation
 
-`AttackFixture.apply(base_scenario)` preserves base objective, exact `AuthorityPolicy`, required outcomes, forbidden outcomes, initial state, and existing tags while adding the reserved attack envelope.
+`AttackFixture.apply(base_scenario)` starts from the complete validated base scenario and overrides only the intentional adversarial identity/kind/state/tag fields. Objective, exact `AuthorityPolicy`, required and forbidden outcomes, `approval_intent`, `semantic_rubric`, `retrieval`, `side_effect_idempotency`, and any future behavior-bearing `EvaluationScenario` field therefore remain part of the derived security contract by construction. The derived material is revalidated as a fresh `EvaluationScenario` rather than assembled from a legacy allowlist.
 
 `extract_attack(..., expected_base_scenario=...)` can deterministically rederive the expected scenario and detect unauthorized drift. `AdversarialCampaign` rejects duplicate attack IDs, canonicalizes ordering, and rechecks captured base identity.
 
