@@ -32,6 +32,18 @@ The runtime establishes immutability at the ownership boundary instead of relyin
 
 Caller mutation after an awaited run or session has begun therefore cannot change the in-flight evaluator contract. Adapter-side mutation cannot alter the evaluator-owned grading basis. The drift check covers ordinary mutable-container changes; it is not tamper-proof memory, caller authentication, or protection against interpreter compromise or deliberate `object.__setattr__` abuse. Scenario and subject hashes remain integrity identities, not signatures.
 
+## Trial isolation ownership
+
+Evaluator-owned object isolation is not the same claim as system-under-test or environment isolation.
+
+`EvaluationSession` intentionally reuses the supplied adapter object across repeated attempts while snapshotting the subject/scenario contract passed into each `TrialRunner`. The framework does not generically reset provider state, application state, model/session memory, databases, filesystems, queues, remote services, or any other target system between those attempts. A concrete adapter may create trial-local provider/session structures for a specific boundary, but that does not establish reset of unrelated application or external state.
+
+`EvaluationScenario.initial_state` is behavior-bearing declarative contract material: it participates in scenario identity and is delivered to adapters inside the snapshotted scenario. `EvaluationSession` and `TrialRunner` do **not** automatically materialize that dictionary into an arbitrary target system or attest that an external system was restored to it before each attempt.
+
+If a reliability claim requires independent or identically prepared attempts, the adapter/operator integration must establish the corresponding reset or provisioning discipline. Without that discipline, repeated verdicts are still valid historical observations of the executions that occurred, but correlation or non-stationarity can limit the interpretation of aggregate reliability and especially the independent-attempt `pass@k` / `pass^k` approximation.
+
+This ownership boundary is deliberate. A universal Python reset callback would not by itself prove that an arbitrary production system, provider session, or external target actually returned to the intended baseline.
+
 ## Normalized evidence ownership
 
 Normalized evidence applies the same ownership discipline to adapter observations. `EvidenceEvent.payload` and `TrialEvidence.final_state` are JSON-shaped Python mappings for convenient adapter integration, but field freezing alone would not detach nested dictionaries or lists. The evaluator therefore canonical-JSON round-trips those values during validation, and nested `EvidenceEvent` instances are revalidated when a `TrialEvidence` envelope is constructed.

@@ -6,6 +6,10 @@ Agent outputs vary across attempts. One successful run establishes that success 
 
 The framework therefore treats each attempt as a trial, preserves unresolved execution separately, and aggregates resolved behavioral verdicts explicitly.
 
+Repeated execution does **not** by itself prove environmental independence. `EvaluationSession` snapshots the evaluator-owned subject/scenario contract but intentionally reuses the supplied adapter object; it does not reset provider state, application state, memory, external targets, or automatically apply `EvaluationScenario.initial_state`. The adapter/operator integration must establish whatever same-starting-condition or reset discipline the intended reliability claim requires.
+
+That distinction matters statistically. Success/failure counts and Wilson intervals remain exact summaries of the recorded resolved verdicts, but an independent-attempt interpretation of repeated outcomes—and especially the `pass@k` / `pass^k` extrapolations—requires the underlying attempts to be sufficiently independent and stationary for that approximation to be meaningful. A session API call is not evidence that this precondition was satisfied.
+
 ## Resolved versus unresolved attempts
 
 `PASS` and `FAIL` are **resolved behavioral trials**: enough evidence existed for deterministic oracles to decide the scenario. `BLOCKED` and `INCONCLUSIVE` are not relabelled as behavioral failure merely to make arithmetic convenient.
@@ -53,6 +57,8 @@ pass^k = p^k
 ```
 
 `pass@k` estimates at least one success in `k` attempts. `pass^k` estimates all `k` attempts succeeding. They answer different operational questions and intentionally diverge as `k` grows.
+
+These formulas do not create independence. If an adapter carries state across attempts, an external target is not restored to the intended baseline, provider/session memory leaks between trials, or the evaluated process is otherwise correlated or non-stationary, the formulas remain arithmetic over the observed `p` but their independent-attempt interpretation is not established by the framework.
 
 ## Paired candidate-versus-baseline comparison
 

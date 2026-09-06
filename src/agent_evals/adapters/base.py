@@ -29,10 +29,15 @@ class AdapterPreconditionError(RuntimeError):
 
 @dataclass(frozen=True, slots=True)
 class AdapterResult:
-    """Observable result returned by an adapter after one isolated trial.
+    """Observable result returned by an adapter after one trial execution.
 
     Empty event and state collections are valid observations. This keeps provider adapters free to
     report a state-only or event-only result without manufacturing placeholder evidence.
+
+    Repeated-session environmental isolation is not encoded in this result. The adapter/operator
+    integration owns any provider, application, session, memory, or external-target reset needed
+    to make separate executions independent; the evaluator detaches and grades only the normalized
+    observations returned for the current trial.
     """
 
     events: tuple[EvidenceEvent, ...] = ()
@@ -49,6 +54,12 @@ class AgentAdapter(Protocol):
 
     Adapters translate provider-specific execution into normalized observable evidence. They do
     not grade their own behavior and they do not own the release decision.
+
+    For repeated-session use, an adapter/operator integration is also responsible for whatever
+    system-under-test isolation its reliability claim requires. ``EvaluationSession`` intentionally
+    reuses the supplied adapter object and does not reset external systems or automatically apply
+    ``EvaluationScenario.initial_state``. Evaluator-owned subject/scenario/evidence snapshots are
+    isolated separately from provider, application, memory, session, and target-system state.
     """
 
     @property

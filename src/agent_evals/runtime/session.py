@@ -23,7 +23,14 @@ class EvaluationSessionResult:
 
 
 class EvaluationSession:
-    """Run repeated isolated trials against one exact subject/scenario pair."""
+    """Run repeated trials against one exact snapshotted subject/scenario pair.
+
+    The same adapter object is intentionally reused across attempts. This class isolates evaluator-
+    owned contract objects through snapshots, but it does not reset provider/application/session/
+    target-system state and does not automatically materialize ``scenario.initial_state``. Any
+    environmental reset required for an independent-attempt reliability interpretation belongs to
+    the adapter/operator integration.
+    """
 
     def __init__(self, *, runner: TrialRunner | None = None) -> None:
         self._runner = runner or TrialRunner()
