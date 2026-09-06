@@ -69,9 +69,7 @@ def _attempt(
 def _receipt(*, second_mutates: bool) -> SideEffectIdempotencyReceipt:
     empty = canonical_json_sha256({"effects": []})
     once = canonical_json_sha256({"effects": [{"operation_id": "op-7"}]})
-    twice = canonical_json_sha256(
-        {"effects": [{"operation_id": "op-7"}, {"operation_id": "op-7"}]}
-    )
+    twice = canonical_json_sha256({"effects": [{"operation_id": "op-7"}, {"operation_id": "op-7"}]})
     return SideEffectIdempotencyReceipt.create(
         scenario_identity=_scenario().identity,
         contract=_spec(),
@@ -119,7 +117,9 @@ def _side_effect_evidence(*, second_mutates: bool) -> TrialEvidence:
     )
 
 
-def _core_results(scenario: EvaluationScenario, evidence: TrialEvidence) -> tuple[OracleResult, ...]:
+def _core_results(
+    scenario: EvaluationScenario, evidence: TrialEvidence
+) -> tuple[OracleResult, ...]:
     return (
         PolicyOracle().grade(scenario, evidence),
         OutcomeOracle().grade(scenario, evidence),
