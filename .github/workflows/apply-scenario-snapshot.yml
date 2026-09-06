@@ -23,39 +23,65 @@ jobs:
           python - <<'PY'
           from pathlib import Path
 
-          path = Path("src/agent_evals/contracts/models.py")
-          text = path.read_text()
-          old = '''    @property
+          def replace_once(text: str, old: str, new: str, label: str) -> str:
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"{label} match count: {count}")
+              return text.replace(old, new)
+
+          def replace_in_scope(
+              text: str,
+              *,
+              start_marker: str,
+              end_marker: str,
+              old: str,
+              new: str,
+              label: str,
+          ) -> str:
+              start = text.index(start_marker)
+              end = text.index(end_marker, start)
+              scope = text[start:end]
+              scope = replace_once(scope, old, new, label)
+              return text[:start] + scope + text[end:]
+
+          identity = '''    @property
               def identity(self) -> str:
                   return _sha256_json(self.model_dump(mode="python", exclude_none=True))
           '''.replace("              ", "")
-          new_subject = '''    @property
-              def identity(self) -> str:
-                  return _sha256_json(self.model_dump(mode="python", exclude_none=True))
 
+          path = Path("src/agent_evals/contracts/models.py")
+          text = path.read_text()
+          text = replace_in_scope(
+              text,
+              start_marker="class SubjectFingerprint(BaseModel):",
+              end_marker="\n\nclass HandoffAuthorityGrant(BaseModel):",
+              old=identity,
+              new=identity + '''
               def snapshot(self) -> SubjectFingerprint:
                   """Return a detached, revalidated copy for one runtime boundary."""
                   return SubjectFingerprint.model_validate_json(self.model_dump_json())
-          '''.replace("              ", "")
-          if text.count(old) != 2:
-              raise SystemExit(f"expected two identity blocks in contracts/models.py; found {text.count(old)}")
-          text = text.replace(old, new_subject, 1)
-          new_scenario = '''    @property
-              def identity(self) -> str:
-                  return _sha256_json(self.model_dump(mode="python", exclude_none=True))
-
+          '''.replace("              ", ""),
+              label="SubjectFingerprint identity",
+          )
+          text = replace_in_scope(
+              text,
+              start_marker="class EvaluationScenario(BaseModel):",
+              end_marker="\n\ndef _agent_path_requires_approval",
+              old=identity,
+              new=identity + '''
               def snapshot(self) -> EvaluationScenario:
                   """Return a detached, revalidated copy for one runtime boundary."""
                   return EvaluationScenario.model_validate_json(self.model_dump_json())
-          '''.replace("              ", "")
-          if text.count(old) != 1:
-              raise SystemExit(f"expected one remaining scenario identity block; found {text.count(old)}")
-          text = text.replace(old, new_scenario, 1)
+          '''.replace("              ", ""),
+              label="EvaluationScenario identity",
+          )
           path.write_text(text)
 
           path = Path("src/agent_evals/runtime/evaluator.py")
           text = path.read_text()
-          old = '''    ) -> EvaluatedTrial:
+          text = replace_once(
+              text,
+              '''    ) -> EvaluatedTrial:
                   started = perf_counter()
                   try:
                       result = await adapter.execute(
@@ -63,8 +89,8 @@ jobs:
                           scenario=scenario,
                           trial_id=trial_id,
                       )
-          '''.replace("                  ", "")
-          new = '''    ) -> EvaluatedTrial:
+          '''.replace("                  ", ""),
+              '''    ) -> EvaluatedTrial:
                   started = perf_counter()
                   subject = subject.snapshot()
                   scenario = scenario.snapshot()
@@ -76,15 +102,15 @@ jobs:
                           scenario=execution_scenario,
                           trial_id=trial_id,
                       )
-          '''.replace("                  ", "")
-          if text.count(old) != 1:
-              raise SystemExit(f"TrialRunner entry block match count: {text.count(old)}")
-          text = text.replace(old, new)
-
-          old = '''        except AdapterPreconditionError as exc:
+          '''.replace("                  ", ""),
+              "TrialRunner entry",
+          )
+          text = replace_once(
+              text,
+              '''        except AdapterPreconditionError as exc:
                   elapsed_ms = (perf_counter() - started) * 1000.0
-          '''.replace("                  ", "")
-          new = '''        except AdapterPreconditionError as exc:
+          '''.replace("                  ", ""),
+              '''        except AdapterPreconditionError as exc:
                   if self._scenario_contract_drifted(execution_scenario, scenario_identity):
                       return self._scenario_contract_mutated(
                           adapter=adapter,
@@ -94,15 +120,15 @@ jobs:
                           elapsed_ms=(perf_counter() - started) * 1000.0,
                       )
                   elapsed_ms = (perf_counter() - started) * 1000.0
-          '''.replace("                  ", "")
-          if text.count(old) != 1:
-              raise SystemExit(f"precondition block match count: {text.count(old)}")
-          text = text.replace(old, new)
-
-          old = '''        except Exception as exc:  # adapter boundary: provider failure becomes structured evidence
+          '''.replace("                  ", ""),
+              "adapter precondition mutation check",
+          )
+          text = replace_once(
+              text,
+              '''        except Exception as exc:  # adapter boundary: provider failure becomes structured evidence
                   elapsed_ms = (perf_counter() - started) * 1000.0
-          '''.replace("                  ", "")
-          new = '''        except Exception as exc:  # adapter boundary: provider failure becomes structured evidence
+          '''.replace("                  ", ""),
+              '''        except Exception as exc:  # adapter boundary: provider failure becomes structured evidence
                   if self._scenario_contract_drifted(execution_scenario, scenario_identity):
                       return self._scenario_contract_mutated(
                           adapter=adapter,
@@ -112,14 +138,13 @@ jobs:
                           elapsed_ms=(perf_counter() - started) * 1000.0,
                       )
                   elapsed_ms = (perf_counter() - started) * 1000.0
-          '''.replace("                  ", "")
-          if text.count(old) != 1:
-              raise SystemExit(f"runtime exception block match count: {text.count(old)}")
-          text = text.replace(old, new)
-
-          old = '''        if not isinstance(result, AdapterResult):
-          '''
-          new = '''        if self._scenario_contract_drifted(execution_scenario, scenario_identity):
+          '''.replace("                  ", ""),
+              "runtime exception mutation check",
+          )
+          text = replace_once(
+              text,
+              "        if not isinstance(result, AdapterResult):\n",
+              '''        if self._scenario_contract_drifted(execution_scenario, scenario_identity):
                   return self._scenario_contract_mutated(
                       adapter=adapter,
                       subject=subject,
@@ -129,11 +154,9 @@ jobs:
                   )
 
               if not isinstance(result, AdapterResult):
-          '''.replace("              ", "")
-          if text.count(old) != 1:
-              raise SystemExit(f"post-adapter block match count: {text.count(old)}")
-          text = text.replace(old, new)
-
+          '''.replace("              ", ""),
+              "post-adapter mutation check",
+          )
           marker = '''    @staticmethod
               def _semantic_verdict(decision: SemanticDecision) -> TrialVerdict:
           '''.replace("              ", "")
@@ -185,28 +208,27 @@ jobs:
               @staticmethod
               def _semantic_verdict(decision: SemanticDecision) -> TrialVerdict:
           '''.replace("              ", "")
-          if text.count(marker) != 1:
-              raise SystemExit(f"semantic helper marker count: {text.count(marker)}")
-          text = text.replace(marker, helper)
+          text = replace_once(text, marker, helper, "scenario drift helpers")
           path.write_text(text)
 
           path = Path("src/agent_evals/runtime/session.py")
           text = path.read_text()
-          old = '''        if k < 1:
-                  raise ValueError("k must be >= 1")
+          text = replace_once(
+              text,
+              '''        if isinstance(k, bool) or not isinstance(k, int) or k < 1:
+                  raise ValueError("k must be a positive integer")
 
-              trials = []
-          '''.replace("              ", "")
-          new = '''        if k < 1:
-                  raise ValueError("k must be >= 1")
+              evaluated: list[EvaluatedTrial] = []
+          '''.replace("              ", ""),
+              '''        if isinstance(k, bool) or not isinstance(k, int) or k < 1:
+                  raise ValueError("k must be a positive integer")
 
               subject = subject.snapshot()
               scenario = scenario.snapshot()
-              trials = []
-          '''.replace("              ", "")
-          if text.count(old) != 1:
-              raise SystemExit(f"session snapshot insertion count: {text.count(old)}")
-          text = text.replace(old, new)
+              evaluated: list[EvaluatedTrial] = []
+          '''.replace("              ", ""),
+              "session boundary snapshot",
+          )
           path.write_text(text)
           PY
       - name: Commit runtime hardening
