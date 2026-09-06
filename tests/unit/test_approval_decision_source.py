@@ -16,6 +16,10 @@ from agent_evals.contracts.models import (
 )
 from agent_evals.evidence.approval_intent import (
     APPROVAL_DECISION_SOURCE,
+    APPROVAL_REQUEST_SOURCE,
+    APPROVED_TOOL_REQUEST_SOURCE,
+    APPROVED_TOOL_RESULT_SOURCE,
+    REJECTION_TOOL_RESULT_SOURCE,
     ApprovalIntentError,
     ApprovalIntentReceipt,
     verify_approval_intent,
@@ -87,12 +91,15 @@ def _receipt(scenario: EvaluationScenario) -> ApprovalIntentReceipt:
 def _evidence(
     scenario: EvaluationScenario,
     *,
-    decision_source: str,
+    decision_source: str = APPROVAL_DECISION_SOURCE,
+    request_source: str = APPROVAL_REQUEST_SOURCE,
+    resumed_source: str = APPROVED_TOOL_REQUEST_SOURCE,
+    result_source: str | None = None,
 ) -> TrialEvidence:
     request = _event(
         0,
         EvidenceKind.APPROVAL_REQUEST,
-        source="openai-agents:new_items",
+        source=request_source,
         agent=_AGENT,
         tool=_TOOL,
         call_id=_CALL,
@@ -106,7 +113,7 @@ def _evidence(
             _event(
                 2,
                 EvidenceKind.TOOL_REQUEST,
-                source="openai-agents:approved-execution",
+                source=resumed_source,
                 agent=_AGENT,
                 tool=_TOOL,
                 call_id=_CALL,
@@ -115,7 +122,7 @@ def _evidence(
             _event(
                 3,
                 EvidenceKind.TOOL_RESULT,
-                source="openai-agents:new_items",
+                source=result_source or APPROVED_TOOL_RESULT_SOURCE,
                 agent=_AGENT,
                 call_id=_CALL,
                 output="done",
@@ -126,7 +133,7 @@ def _evidence(
             _event(
                 2,
                 EvidenceKind.TOOL_RESULT,
-                source="openai-agents:approval-rejection-result",
+                source=result_source or REJECTION_TOOL_RESULT_SOURCE,
                 agent=_AGENT,
                 call_id=_CALL,
                 output="Tool execution was rejected.",
@@ -167,10 +174,65 @@ def test_foreign_approval_decision_source_fails_closed_before_policy_grading() -
     assert blocked.evidence.events[-1].payload["code"] == "approval_intent_unverified"
 
 
+def test_foreign_approval_request_source_fails_closed_before_policy_grading() -> None:
+    scenario = _scenario(ApprovalDecision.APPROVE)
+    foreign = _evidence(scenario, request_source="subject:agent")
+
+    assert PolicyOracle().grade(scenario, foreign).verdict is TrialVerdict.PASS
+    with pytest.raises(ApprovalIntentError, match="approval request source is not recognized"):
+        verify_approval_intent(scenario, foreign)
+
+    blocked = asyncio.run(
+        TrialRunner().run(
+            EvidenceReplayAdapter(foreign),
+            subject=_SUBJECT,
+            scenario=scenario,
+            trial_id=foreign.trial_id,
+        )
+    )
+    assert blocked.verdict is TrialVerdict.BLOCKED
+    assert blocked.oracle_results == ()
+    assert blocked.evidence.events[-1].kind is EvidenceKind.EVALUATION_ERROR
+    assert blocked.evidence.events[-1].payload["code"] == "approval_intent_unverified"
+
+
+def test_foreign_approved_execution_source_fails_closed() -> None:
+    scenario = _scenario(ApprovalDecision.APPROVE)
+    foreign = _evidence(scenario, resumed_source="subject:agent")
+
+    assert PolicyOracle().grade(scenario, foreign).verdict is TrialVerdict.PASS
+    with pytest.raises(
+        ApprovalIntentError,
+        match="approved resumed tool request source is not recognized",
+    ):
+        verify_approval_intent(scenario, foreign)
+
+
+def test_foreign_approved_result_source_fails_closed() -> None:
+    scenario = _scenario(ApprovalDecision.APPROVE)
+    foreign = _evidence(scenario, result_source="subject:agent")
+
+    assert PolicyOracle().grade(scenario, foreign).verdict is TrialVerdict.PASS
+    with pytest.raises(ApprovalIntentError, match="approved tool result source is not recognized"):
+        verify_approval_intent(scenario, foreign)
+
+
+def test_foreign_rejection_result_source_fails_closed() -> None:
+    scenario = _scenario(ApprovalDecision.REJECT)
+    foreign = _evidence(scenario, result_source="subject:agent")
+
+    assert PolicyOracle().grade(scenario, foreign).verdict is TrialVerdict.PASS
+    with pytest.raises(
+        ApprovalIntentError,
+        match="rejection continuation result source is not recognized",
+    ):
+        verify_approval_intent(scenario, foreign)
+
+
 @pytest.mark.parametrize("decision", [ApprovalDecision.APPROVE, ApprovalDecision.REJECT])
 def test_canonical_evaluator_source_preserves_valid_lifecycles(decision: ApprovalDecision) -> None:
     scenario = _scenario(decision)
-    canonical = _evidence(scenario, decision_source=APPROVAL_DECISION_SOURCE)
+    canonical = _evidence(scenario)
 
     verify_approval_intent(scenario, canonical)
     assert PolicyOracle().grade(scenario, canonical).verdict is TrialVerdict.PASS
