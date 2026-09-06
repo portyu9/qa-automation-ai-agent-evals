@@ -95,6 +95,10 @@ class SubjectFingerprint(BaseModel):
     def identity(self) -> str:
         return _sha256_json(self.model_dump(mode="python", exclude_none=True))
 
+    def snapshot(self) -> SubjectFingerprint:
+        """Return a detached, revalidated copy for one runtime boundary."""
+        return SubjectFingerprint.model_validate_json(self.model_dump_json())
+
 
 class HandoffAuthorityGrant(BaseModel):
     """Directed authority granted to one agent after one exact handoff transition.
@@ -336,6 +340,10 @@ class EvaluationScenario(BaseModel):
     @property
     def identity(self) -> str:
         return _sha256_json(self.model_dump(mode="python", exclude_none=True))
+
+    def snapshot(self) -> EvaluationScenario:
+        """Return a detached, revalidated copy for one runtime boundary."""
+        return EvaluationScenario.model_validate_json(self.model_dump_json())
 
 
 def _agent_path_requires_approval(policy: AuthorityPolicy, *, agent: str, tool: str) -> bool:

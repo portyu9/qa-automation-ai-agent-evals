@@ -70,13 +70,25 @@ class TrialRunner:
         trial_id: str,
     ) -> EvaluatedTrial:
         started = perf_counter()
+        subject = subject.snapshot()
+        scenario = scenario.snapshot()
+        execution_scenario = scenario.snapshot()
+        scenario_identity = scenario.identity
         try:
             result = await adapter.execute(
                 subject=subject,
-                scenario=scenario,
+                scenario=execution_scenario,
                 trial_id=trial_id,
             )
         except AdapterPreconditionError as exc:
+            if self._scenario_contract_drifted(execution_scenario, scenario_identity):
+                return self._scenario_contract_mutated(
+                    adapter=adapter,
+                    subject=subject,
+                    scenario=scenario,
+                    trial_id=trial_id,
+                    elapsed_ms=(perf_counter() - started) * 1000.0,
+                )
             elapsed_ms = (perf_counter() - started) * 1000.0
             event = EvidenceEvent(
                 sequence=0,
@@ -98,6 +110,14 @@ class TrialRunner:
                 verdict=TrialVerdict.BLOCKED,
             )
         except Exception as exc:  # adapter boundary: provider failure becomes structured evidence
+            if self._scenario_contract_drifted(execution_scenario, scenario_identity):
+                return self._scenario_contract_mutated(
+                    adapter=adapter,
+                    subject=subject,
+                    scenario=scenario,
+                    trial_id=trial_id,
+                    elapsed_ms=(perf_counter() - started) * 1000.0,
+                )
             elapsed_ms = (perf_counter() - started) * 1000.0
             event = EvidenceEvent(
                 sequence=0,
@@ -120,6 +140,15 @@ class TrialRunner:
                 evidence=evidence,
                 oracle_results=(),
                 verdict=TrialVerdict.BLOCKED,
+            )
+
+        if self._scenario_contract_drifted(execution_scenario, scenario_identity):
+            return self._scenario_contract_mutated(
+                adapter=adapter,
+                subject=subject,
+                scenario=scenario,
+                trial_id=trial_id,
+                elapsed_ms=(perf_counter() - started) * 1000.0,
             )
 
         if not isinstance(result, AdapterResult):
@@ -369,6 +398,51 @@ class TrialRunner:
             oracle_results=oracle_results,
             verdict=self._semantic_verdict(receipt.decision),
             semantic_judgment=receipt,
+        )
+
+    @staticmethod
+    def _scenario_contract_drifted(
+        scenario: EvaluationScenario,
+        expected_identity: str,
+    ) -> bool:
+        try:
+            return scenario.identity != expected_identity
+        except (TypeError, ValueError):
+            return True
+
+    @staticmethod
+    def _scenario_contract_mutated(
+        *,
+        adapter: AgentAdapter,
+        subject: SubjectFingerprint,
+        scenario: EvaluationScenario,
+        trial_id: str,
+        elapsed_ms: float,
+    ) -> EvaluatedTrial:
+        event = EvidenceEvent(
+            sequence=0,
+            kind=EvidenceKind.EVALUATION_ERROR,
+            source=f"evaluator:adapter:{adapter.name}",
+            payload={
+                "code": "scenario_contract_mutated",
+                "reason": (
+                    "adapter-facing scenario contract changed during execution; "
+                    "the evaluator retained the pre-execution contract"
+                ),
+            },
+            critical=True,
+        )
+        evidence = TrialEvidence(
+            trial_id=trial_id,
+            subject_identity=subject.identity,
+            scenario_identity=scenario.identity,
+            events=(event,),
+            elapsed_ms=elapsed_ms,
+        )
+        return EvaluatedTrial(
+            evidence=evidence,
+            oracle_results=(),
+            verdict=TrialVerdict.BLOCKED,
         )
 
     @staticmethod
