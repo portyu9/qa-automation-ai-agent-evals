@@ -32,7 +32,7 @@ def verify_semantic_judgment_evidence(
     if not semantic_events:
         return None
     if len(semantic_events) != 1:
-        raise SemanticJudgmentError("semantic evidence requires exactly one recorded judgment")
+        raise SemanticJudgmentError("semantic evidence permits at most one recorded judgment")
 
     event = semantic_events[0]
     if event.sequence != len(evidence.events) - 1:
@@ -70,15 +70,15 @@ def verify_semantic_judgment(
     caller decides whether absence is allowed for its execution mode. A scenario without a rubric
     must never contain semantic judgment evidence.
     """
-    receipt = verify_semantic_judgment_evidence(evidence)
     rubric = scenario.semantic_rubric
     if rubric is None:
-        if receipt is not None:
+        if any(event.kind is EvidenceKind.SEMANTIC_JUDGMENT for event in evidence.events):
             raise SemanticJudgmentError(
                 "semantic judgment evidence exists for a scenario without a semantic rubric"
             )
         return None
 
+    receipt = verify_semantic_judgment_evidence(evidence)
     if receipt is None:
         return None
     if receipt.scenario_identity != scenario.identity:
