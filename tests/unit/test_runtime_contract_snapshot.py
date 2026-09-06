@@ -8,7 +8,7 @@ import pytest
 from agent_evals.adapters.base import AdapterResult
 from agent_evals.contracts.models import EvaluationScenario, ScenarioKind, SubjectFingerprint
 from agent_evals.evidence.models import TrialVerdict
-from agent_evals.runtime.evaluator import TrialRunner
+from agent_evals.runtime.evaluator import EvaluatedTrial, TrialRunner
 from agent_evals.runtime.session import EvaluationSession
 
 
@@ -37,12 +37,9 @@ def _scenario() -> EvaluationScenario:
     )
 
 
-def _error_code(result: object) -> object:
-    trial = result
-    assert hasattr(trial, "evidence")
-    evidence = trial.evidence
-    assert len(evidence.events) == 1
-    return evidence.events[0].payload.get("code")
+def _error_code(result: EvaluatedTrial) -> object:
+    assert len(result.evidence.events) == 1
+    return result.evidence.events[0].payload.get("code")
 
 
 @dataclass(slots=True)
