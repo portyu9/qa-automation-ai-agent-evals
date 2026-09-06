@@ -6,6 +6,7 @@ import pytest
 from pydantic import ValidationError
 
 from agent_evals.assurance.report import AssuranceReport
+from agent_evals.contracts.models import EvaluationScenario, ScenarioKind
 from agent_evals.contracts.semantic import SemanticCriterionSpec, SemanticRubricSpec
 from agent_evals.evidence.models import (
     EvidenceEvent,
@@ -38,7 +39,6 @@ from agent_evals.semantic.verification import (
 from agent_evals.statistics.reliability import ReliabilityReport
 
 _SUBJECT = "a" * 64
-_SCENARIO = "b" * 64
 
 
 def _rubric() -> SemanticRubricSpec:
@@ -53,6 +53,19 @@ def _rubric() -> SemanticRubricSpec:
             ),
         ),
     )
+
+
+def _scenario() -> EvaluationScenario:
+    return EvaluationScenario(
+        scenario_id="assurance.semantic",
+        revision="1",
+        kind=ScenarioKind.CAPABILITY,
+        objective="Answer accurately.",
+        semantic_rubric=_rubric(),
+    )
+
+
+_SCENARIO = _scenario().identity
 
 
 def _response(decision: SemanticDecision) -> SemanticJudgeResponse:
@@ -193,6 +206,27 @@ def _trial(
     )
 
 
+def _deterministic_only_trial(*, failed: bool) -> EvaluatedTrial:
+    verdict = TrialVerdict.FAIL if failed else TrialVerdict.PASS
+    return EvaluatedTrial(
+        evidence=TrialEvidence(
+            trial_id=f"semantic-required-{'fail' if failed else 'pass'}",
+            subject_identity=_SUBJECT,
+            scenario_identity=_SCENARIO,
+            final_output="Candidate answer.",
+        ),
+        oracle_results=(
+            OracleResult(
+                name="policy",
+                verdict=verdict if failed else TrialVerdict.PASS,
+                critical=failed,
+            ),
+            OracleResult(name="outcome", verdict=TrialVerdict.PASS),
+        ),
+        verdict=verdict,
+    )
+
+
 def _session(trial: EvaluatedTrial) -> EvaluationSessionResult:
     return EvaluationSessionResult(
         subject_identity=_SUBJECT,
@@ -213,13 +247,19 @@ def _policy() -> ReleasePolicy:
     )
 
 
-def test_assurance_report_v3_keeps_semantic_failure_noncritical() -> None:
-    report = AssuranceReport.from_session(
-        _session(_trial(SemanticDecision.FAIL)),
+def _report(session: EvaluationSessionResult) -> AssuranceReport:
+    return AssuranceReport.from_session(
+        session,
+        scenario=_scenario(),
         release_policy=_policy(),
     )
 
-    assert report.schema_version == "agent-evals/assurance-report/v3"
+
+def test_assurance_report_v4_keeps_semantic_failure_noncritical() -> None:
+    report = _report(_session(_trial(SemanticDecision.FAIL)))
+
+    assert report.schema_version == "agent-evals/assurance-report/v4"
+    assert report.grading_profile.semantic_rubric_identity == _rubric().identity
     assert report.trials[0].verdict is TrialVerdict.FAIL
     assert report.trials[0].semantic_judgment is not None
     assert report.trials[0].semantic_judgment.decision is SemanticDecision.FAIL
@@ -228,11 +268,21 @@ def test_assurance_report_v3_keeps_semantic_failure_noncritical() -> None:
     assert report.reliability.failures == 1
 
 
+def test_assurance_report_rejects_missing_semantic_judgment_after_deterministic_pass() -> None:
+    with pytest.raises(ValueError, match="missing semantic judgment required by grading profile"):
+        _report(_session(_deterministic_only_trial(failed=False)))
+
+
+def test_assurance_report_allows_semantic_short_circuit_after_deterministic_failure() -> None:
+    report = _report(_session(_deterministic_only_trial(failed=True)))
+
+    assert report.trials[0].verdict is TrialVerdict.FAIL
+    assert report.trials[0].semantic_judgment is None
+    assert report.critical_violations == 1
+
+
 def test_assurance_report_rederives_semantic_abstention_as_inconclusive() -> None:
-    report = AssuranceReport.from_session(
-        _session(_trial(SemanticDecision.ABSTAIN)),
-        release_policy=_policy(),
-    )
+    report = _report(_session(_trial(SemanticDecision.ABSTAIN)))
 
     assert report.trials[0].verdict is TrialVerdict.INCONCLUSIVE
     assert report.reliability.inconclusive == 1
@@ -241,17 +291,11 @@ def test_assurance_report_rederives_semantic_abstention_as_inconclusive() -> Non
 
 def test_assurance_report_rejects_semantic_judgment_after_deterministic_failure() -> None:
     with pytest.raises(ValueError, match="cannot coexist with deterministic oracle failure"):
-        AssuranceReport.from_session(
-            _session(_trial(SemanticDecision.PASS, deterministic_fail=True)),
-            release_policy=_policy(),
-        )
+        _report(_session(_trial(SemanticDecision.PASS, deterministic_fail=True)))
 
 
 def test_assurance_report_rejects_forged_semantic_trial_verdict() -> None:
-    report = AssuranceReport.from_session(
-        _session(_trial(SemanticDecision.FAIL)),
-        release_policy=_policy(),
-    )
+    report = _report(_session(_trial(SemanticDecision.FAIL)))
     payload = report.model_dump(mode="json")
     payload["trials"][0]["verdict"] = TrialVerdict.PASS.value
 
@@ -261,16 +305,10 @@ def test_assurance_report_rejects_forged_semantic_trial_verdict() -> None:
 
 def test_assurance_report_rejects_semantic_identity_drift() -> None:
     with pytest.raises(ValueError, match="subject identity does not match evidence"):
-        AssuranceReport.from_session(
-            _session(_trial(SemanticDecision.PASS, semantic_subject="d" * 64)),
-            release_policy=_policy(),
-        )
+        _report(_session(_trial(SemanticDecision.PASS, semantic_subject="d" * 64)))
 
     with pytest.raises(ValueError, match="scenario identity does not match evidence"):
-        AssuranceReport.from_session(
-            _session(_trial(SemanticDecision.PASS, semantic_scenario="e" * 64)),
-            release_policy=_policy(),
-        )
+        _report(_session(_trial(SemanticDecision.PASS, semantic_scenario="e" * 64)))
 
 
 def test_assurance_report_rejects_semantic_field_without_committed_event() -> None:
@@ -284,14 +322,14 @@ def test_assurance_report_rejects_semantic_field_without_committed_event() -> No
     )
 
     with pytest.raises(ValueError, match="not committed by the final evidence envelope"):
-        AssuranceReport.from_session(_session(inconsistent), release_policy=_policy())
+        _report(_session(inconsistent))
 
 
 def test_assurance_report_rejects_semantic_event_without_finalized_field() -> None:
     trial = replace(_trial(SemanticDecision.PASS), semantic_judgment=None)
 
     with pytest.raises(ValueError, match="field is absent but final evidence commits"):
-        AssuranceReport.from_session(_session(trial), release_policy=_policy())
+        _report(_session(trial))
 
 
 def test_assurance_report_rejects_different_self_valid_semantic_receipt() -> None:
@@ -304,7 +342,7 @@ def test_assurance_report_rejects_different_self_valid_semantic_receipt() -> Non
     inconsistent = replace(trial, semantic_judgment=different)
 
     with pytest.raises(ValueError, match="does not match the receipt committed"):
-        AssuranceReport.from_session(_session(inconsistent), release_policy=_policy())
+        _report(_session(inconsistent))
 
 
 @pytest.mark.parametrize(
@@ -344,7 +382,7 @@ def test_assurance_report_rejects_invalid_semantic_event_authority(
     )
 
     with pytest.raises(ValueError, match=expected):
-        AssuranceReport.from_session(_session(inconsistent), release_policy=_policy())
+        _report(_session(inconsistent))
 
 
 def test_assurance_report_rejects_nonterminal_semantic_event() -> None:
@@ -378,7 +416,7 @@ def test_assurance_report_rejects_nonterminal_semantic_event() -> None:
     )
 
     with pytest.raises(ValueError, match="must be the terminal evaluator event"):
-        AssuranceReport.from_session(_session(inconsistent), release_policy=_policy())
+        _report(_session(inconsistent))
 
 
 def test_assurance_report_rejects_duplicate_semantic_events() -> None:
@@ -409,7 +447,7 @@ def test_assurance_report_rejects_duplicate_semantic_events() -> None:
     )
 
     with pytest.raises(ValueError, match="at most one recorded judgment"):
-        AssuranceReport.from_session(_session(inconsistent), release_policy=_policy())
+        _report(_session(inconsistent))
 
 
 def test_assurance_report_rejects_semantic_receipt_with_foreign_pre_root() -> None:
@@ -439,24 +477,40 @@ def test_assurance_report_rejects_semantic_receipt_with_foreign_pre_root() -> No
     )
 
     with pytest.raises(ValueError, match="exact pre-judgment subject evidence root"):
-        AssuranceReport.from_session(_session(inconsistent), release_policy=_policy())
+        _report(_session(inconsistent))
 
 
-def test_assurance_semantic_binding_preserves_v3_report_shape() -> None:
-    report = AssuranceReport.from_session(
-        _session(_trial(SemanticDecision.PASS)),
-        release_policy=_policy(),
-    )
+def test_assurance_report_json_reload_requires_profile_bound_semantic_judgment() -> None:
+    report = _report(_session(_trial(SemanticDecision.PASS)))
+    payload = report.model_dump(mode="json")
+    payload["trials"][0]["semantic_judgment"] = None
+
+    with pytest.raises(ValidationError, match="missing semantic judgment required by grading profile"):
+        AssuranceReport.model_validate(payload)
+
+
+def test_assurance_report_json_reload_rejects_semantic_profile_rubric_drift() -> None:
+    report = _report(_session(_trial(SemanticDecision.PASS)))
+    payload = report.model_dump(mode="json")
+    payload["grading_profile"]["semantic_rubric_identity"] = "f" * 64
+
+    with pytest.raises(ValidationError, match="rubric identity does not match assurance grading profile"):
+        AssuranceReport.model_validate(payload)
+
+
+def test_assurance_semantic_binding_preserves_v4_report_shape() -> None:
+    report = _report(_session(_trial(SemanticDecision.PASS)))
 
     assert set(report.model_dump(mode="json")) == {
         "schema_version",
         "evidence_schema",
         "subject_identity",
         "scenario_identity",
+        "grading_profile",
         "trials",
         "release_policy",
         "reliability",
         "gate",
         "report_root",
     }
-    assert report.schema_version == "agent-evals/assurance-report/v3"
+    assert report.schema_version == "agent-evals/assurance-report/v4"
