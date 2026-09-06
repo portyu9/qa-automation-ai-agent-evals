@@ -243,6 +243,7 @@ async def test_assurance_reports_runtime_blocked_rejected_semantic_history() -> 
 
     report = AssuranceReport.from_session(
         _report_session(blocked),
+        scenario=scenario,
         release_policy=_report_policy(),
     )
     assert report.trials[0].verdict is TrialVerdict.BLOCKED
@@ -258,6 +259,7 @@ async def test_assurance_reports_runtime_blocked_rejected_semantic_history() -> 
     ):
         AssuranceReport.from_session(
             _report_session(forged),
+            scenario=scenario,
             release_policy=_report_policy(),
         )
 
@@ -315,6 +317,7 @@ async def test_assurance_reports_runtime_blocked_semantic_after_deterministic_fa
 
     report = AssuranceReport.from_session(
         _report_session(blocked),
+        scenario=failing_scenario,
         release_policy=_report_policy(),
     )
     assert report.trials[0].verdict is TrialVerdict.BLOCKED
