@@ -15,8 +15,8 @@ from agent_evals.evidence.models import (
     TrialVerdict,
 )
 from agent_evals.gates.release import ReleasePolicy
-from agent_evals.oracles.deterministic import OracleResult
 from agent_evals.runtime.evaluator import EvaluatedTrial
+from agent_evals.runtime.grading import grade_deterministic_evidence
 from agent_evals.runtime.session import EvaluationSessionResult
 from agent_evals.semantic.calibration import (
     SemanticCalibrationCase,
@@ -152,6 +152,15 @@ def _semantic_receipt(
     )
 
 
+def _deterministic_failure_event() -> EvidenceEvent:
+    return EvidenceEvent(
+        sequence=0,
+        kind=EvidenceKind.TOOL_REQUEST,
+        source="adapter:test",
+        payload={"tool": "forbidden-tool", "call_id": "semantic-call", "arguments": "{}"},
+    )
+
+
 def _trial(
     decision: SemanticDecision,
     *,
@@ -159,10 +168,12 @@ def _trial(
     semantic_subject: str = _SUBJECT,
     semantic_scenario: str = _SCENARIO,
 ) -> EvaluatedTrial:
+    pre_events = (_deterministic_failure_event(),) if deterministic_fail else ()
     pre_semantic = TrialEvidence(
         trial_id=f"semantic-{decision.value}",
         subject_identity=_SUBJECT,
         scenario_identity=_SCENARIO,
+        events=pre_events,
         final_output="Candidate answer.",
     )
     semantic = _semantic_receipt(
@@ -172,7 +183,7 @@ def _trial(
         scenario_identity=semantic_scenario,
     )
     semantic_event = EvidenceEvent(
-        sequence=0,
+        sequence=len(pre_events),
         kind=EvidenceKind.SEMANTIC_JUDGMENT,
         source=SEMANTIC_JUDGMENT_SOURCE,
         payload=semantic.model_dump(mode="json"),
@@ -181,7 +192,7 @@ def _trial(
         trial_id=pre_semantic.trial_id,
         subject_identity=pre_semantic.subject_identity,
         scenario_identity=pre_semantic.scenario_identity,
-        events=(semantic_event,),
+        events=(*pre_events, semantic_event),
         final_output=pre_semantic.final_output,
     )
     verdict = (
@@ -193,14 +204,7 @@ def _trial(
     )
     return EvaluatedTrial(
         evidence=evidence,
-        oracle_results=(
-            OracleResult(
-                name="policy",
-                verdict=TrialVerdict.FAIL if deterministic_fail else TrialVerdict.PASS,
-                critical=deterministic_fail,
-            ),
-            OracleResult(name="outcome", verdict=TrialVerdict.PASS),
-        ),
+        oracle_results=grade_deterministic_evidence(_scenario(), evidence),
         verdict=verdict,
         semantic_judgment=semantic,
     )
@@ -208,21 +212,17 @@ def _trial(
 
 def _deterministic_only_trial(*, failed: bool) -> EvaluatedTrial:
     verdict = TrialVerdict.FAIL if failed else TrialVerdict.PASS
+    events = (_deterministic_failure_event(),) if failed else ()
+    evidence = TrialEvidence(
+        trial_id=f"semantic-required-{'fail' if failed else 'pass'}",
+        subject_identity=_SUBJECT,
+        scenario_identity=_SCENARIO,
+        events=events,
+        final_output="Candidate answer.",
+    )
     return EvaluatedTrial(
-        evidence=TrialEvidence(
-            trial_id=f"semantic-required-{'fail' if failed else 'pass'}",
-            subject_identity=_SUBJECT,
-            scenario_identity=_SCENARIO,
-            final_output="Candidate answer.",
-        ),
-        oracle_results=(
-            OracleResult(
-                name="policy",
-                verdict=verdict if failed else TrialVerdict.PASS,
-                critical=failed,
-            ),
-            OracleResult(name="outcome", verdict=TrialVerdict.PASS),
-        ),
+        evidence=evidence,
+        oracle_results=grade_deterministic_evidence(_scenario(), evidence),
         verdict=verdict,
     )
 

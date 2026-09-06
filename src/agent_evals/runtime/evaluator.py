@@ -10,7 +10,8 @@ from pydantic import ValidationError
 from agent_evals.adapters.base import AdapterPreconditionError, AdapterResult, AgentAdapter
 from agent_evals.contracts.models import EvaluationScenario, SubjectFingerprint
 from agent_evals.evidence.models import EvidenceEvent, EvidenceKind, TrialEvidence, TrialVerdict
-from agent_evals.oracles.deterministic import OracleResult, OutcomeOracle, PolicyOracle
+from agent_evals.oracles.deterministic import OracleResult
+from agent_evals.runtime.grading import grade_deterministic_evidence
 from agent_evals.runtime.preconditions import (
     EvaluationPreconditionError,
     has_blocking_evidence,
@@ -28,7 +29,6 @@ from agent_evals.semantic.verification import (
     append_semantic_judgment,
     verify_semantic_judgment,
 )
-from agent_evals.side_effect.oracle import SideEffectIdempotencyOracle
 
 
 @dataclass(frozen=True, slots=True)
@@ -59,7 +59,6 @@ class TrialRunner:
     """
 
     def __init__(self, *, semantic_judge: SemanticJudge | None = None) -> None:
-        self._oracles = (PolicyOracle(), OutcomeOracle())
         self._semantic_judge = semantic_judge
 
     async def run(
@@ -198,17 +197,7 @@ class TrialRunner:
                 verdict=TrialVerdict.BLOCKED,
             )
 
-        if scenario.side_effect_idempotency is not None:
-            oracle_results = tuple(
-                oracle.grade(scenario, evidence)
-                for oracle in (
-                    self._oracles[0],
-                    SideEffectIdempotencyOracle(),
-                    self._oracles[1],
-                )
-            )
-        else:
-            oracle_results = tuple(oracle.grade(scenario, evidence) for oracle in self._oracles)
+        oracle_results = grade_deterministic_evidence(scenario, evidence)
         deterministic_failed = any(result.verdict is TrialVerdict.FAIL for result in oracle_results)
 
         try:

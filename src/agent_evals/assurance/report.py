@@ -13,6 +13,7 @@ from agent_evals.contracts.models import EvaluationScenario
 from agent_evals.evidence.models import TrialVerdict
 from agent_evals.gates.release import GateDecision, GateResult, ReleaseGate, ReleasePolicy
 from agent_evals.oracles.deterministic import OracleResult
+from agent_evals.runtime.grading import grade_deterministic_evidence
 from agent_evals.runtime.preconditions import (
     EvaluationPreconditionError,
     has_blocking_evidence,
@@ -136,29 +137,14 @@ class TrialAssuranceRecord(BaseModel):
 
     @model_validator(mode="after")
     def validate_trial_derivation(self) -> Self:
-        oracle_names = [result.name for result in self.oracle_results]
-        if len(set(oracle_names)) != len(oracle_names):
-            raise ValueError("assurance trial oracle names must be unique")
+        _validate_oracle_snapshot_shape(self.oracle_results, verdict=self.verdict)
 
         if self.verdict is TrialVerdict.BLOCKED:
-            if self.oracle_results:
-                raise ValueError("blocked assurance trial cannot contain completed oracle results")
             if self.semantic_judgment is not None:
                 raise ValueError(
                     "blocked assurance trial cannot contain semantic judgment evidence"
                 )
             return self
-
-        if not self.oracle_results:
-            raise ValueError("non-blocked assurance trial requires deterministic oracle results")
-        missing_core = _CORE_ORACLE_NAMES.difference(oracle_names)
-        if missing_core:
-            missing = ", ".join(sorted(missing_core))
-            raise ValueError(
-                f"non-blocked assurance trial is missing core oracle results: {missing}"
-            )
-        if any(result.verdict not in _RESOLVED_VERDICTS for result in self.oracle_results):
-            raise ValueError("non-blocked assurance trial has a non-resolved oracle verdict")
 
         deterministic_failed = any(
             result.verdict is TrialVerdict.FAIL for result in self.oracle_results
@@ -311,7 +297,20 @@ class AssuranceReport(BaseModel):
                 if trial.semantic_judgment is not None
                 else None
             )
+            verified_oracle_results = tuple(trial.oracle_results)
             if trial.verdict is not TrialVerdict.BLOCKED:
+                supplied_snapshots = tuple(
+                    OracleSnapshot.from_oracle(result) for result in verified_oracle_results
+                )
+                _validate_oracle_snapshot_shape(supplied_snapshots, verdict=trial.verdict)
+                deterministic_failed = any(
+                    result.verdict is TrialVerdict.FAIL for result in supplied_snapshots
+                )
+                if semantic is not None and deterministic_failed:
+                    raise ValueError(
+                        "semantic judgment cannot coexist with deterministic oracle failure"
+                    )
+
                 if has_blocking_evidence(evidence):
                     raise ValueError(
                         "non-blocked assurance trial contains evaluator/runtime blocking evidence"
@@ -328,12 +327,19 @@ class AssuranceReport(BaseModel):
                     ) from exc
 
                 has_side_effect_oracle = any(
-                    result.name == _SIDE_EFFECT_ORACLE_NAME for result in trial.oracle_results
+                    result.name == _SIDE_EFFECT_ORACLE_NAME for result in supplied_snapshots
                 )
                 if has_side_effect_oracle is not grading_profile.requires_side_effect_grading:
                     raise ValueError(
                         "trial side-effect oracle presence does not match scenario grading profile"
                     )
+
+                expected_oracle_results = grade_deterministic_evidence(scenario, evidence)
+                if verified_oracle_results != expected_oracle_results:
+                    raise ValueError(
+                        "trial deterministic oracle results do not match scenario/evidence grading"
+                    )
+                verified_oracle_results = expected_oracle_results
 
                 try:
                     evidence_semantic = verify_semantic_judgment(scenario, evidence)
@@ -357,7 +363,7 @@ class AssuranceReport(BaseModel):
                 evidence_root=evidence.evidence_root,
                 verdict=trial.verdict,
                 oracle_results=tuple(
-                    OracleSnapshot.from_oracle(result) for result in trial.oracle_results
+                    OracleSnapshot.from_oracle(result) for result in verified_oracle_results
                 ),
                 semantic_judgment=semantic,
             )
@@ -475,6 +481,30 @@ class AssuranceReport(BaseModel):
             raise ValueError(
                 "semantic judgment rubric identity does not match assurance grading profile"
             )
+
+
+def _validate_oracle_snapshot_shape(
+    oracle_results: tuple[OracleSnapshot, ...],
+    *,
+    verdict: TrialVerdict,
+) -> None:
+    oracle_names = [result.name for result in oracle_results]
+    if len(set(oracle_names)) != len(oracle_names):
+        raise ValueError("assurance trial oracle names must be unique")
+
+    if verdict is TrialVerdict.BLOCKED:
+        if oracle_results:
+            raise ValueError("blocked assurance trial cannot contain completed oracle results")
+        return
+
+    if not oracle_results:
+        raise ValueError("non-blocked assurance trial requires deterministic oracle results")
+    missing_core = _CORE_ORACLE_NAMES.difference(oracle_names)
+    if missing_core:
+        missing = ", ".join(sorted(missing_core))
+        raise ValueError(f"non-blocked assurance trial is missing core oracle results: {missing}")
+    if any(result.verdict not in _RESOLVED_VERDICTS for result in oracle_results):
+        raise ValueError("non-blocked assurance trial has a non-resolved oracle verdict")
 
 
 def _report_root(value: object) -> str:

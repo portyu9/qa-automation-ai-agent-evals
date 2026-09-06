@@ -7,10 +7,11 @@ from pydantic import ValidationError
 
 from agent_evals.assurance.report import AssuranceReport
 from agent_evals.contracts.models import EvaluationScenario, ScenarioKind
-from agent_evals.evidence.models import TrialEvidence, TrialVerdict
+from agent_evals.evidence.models import EvidenceEvent, EvidenceKind, TrialEvidence, TrialVerdict
 from agent_evals.gates.release import GateDecision, ReleasePolicy
 from agent_evals.oracles.deterministic import OracleResult
 from agent_evals.runtime.evaluator import EvaluatedTrial
+from agent_evals.runtime.grading import grade_deterministic_evidence
 from agent_evals.runtime.session import EvaluationSessionResult
 from agent_evals.statistics.reliability import ReliabilityReport
 
@@ -20,6 +21,7 @@ SCENARIO_CONTRACT = EvaluationScenario(
     revision="1",
     kind=ScenarioKind.REGRESSION,
     objective="Validate a self-contained assurance report.",
+    required_outcomes={"status": "ok"},
 )
 SCENARIO = SCENARIO_CONTRACT.identity
 
@@ -32,29 +34,40 @@ def evaluated_trial(
     subject_identity: str = SUBJECT,
     scenario_identity: str = SCENARIO,
 ) -> EvaluatedTrial:
+    events: tuple[EvidenceEvent, ...] = ()
+    final_state: dict[str, object] = {"trial": trial_id, "status": "ok"}
+    if verdict is TrialVerdict.FAIL and critical:
+        events = (
+            EvidenceEvent(
+                sequence=0,
+                kind=EvidenceKind.TOOL_REQUEST,
+                source="adapter:test",
+                payload={
+                    "tool": "forbidden-tool",
+                    "call_id": f"{trial_id}-call",
+                    "arguments": "{}",
+                },
+            ),
+        )
+    elif verdict is TrialVerdict.FAIL:
+        final_state["status"] = "wrong"
+
     evidence = TrialEvidence(
         trial_id=trial_id,
         subject_identity=subject_identity,
         scenario_identity=scenario_identity,
-        final_state={"trial": trial_id},
+        events=events,
+        final_state=final_state,
     )
     oracle_results: tuple[OracleResult, ...] = ()
-    if verdict is TrialVerdict.PASS:
-        oracle_results = (
-            OracleResult(name="policy", verdict=TrialVerdict.PASS),
-            OracleResult(name="outcome", verdict=TrialVerdict.PASS),
+    if verdict is not TrialVerdict.BLOCKED:
+        oracle_results = grade_deterministic_evidence(SCENARIO_CONTRACT, evidence)
+        expected_verdict = (
+            TrialVerdict.FAIL
+            if any(result.verdict is TrialVerdict.FAIL for result in oracle_results)
+            else TrialVerdict.PASS
         )
-    elif verdict is TrialVerdict.FAIL:
-        if critical:
-            oracle_results = (
-                OracleResult(name="policy", verdict=TrialVerdict.FAIL, critical=True),
-                OracleResult(name="outcome", verdict=TrialVerdict.PASS),
-            )
-        else:
-            oracle_results = (
-                OracleResult(name="policy", verdict=TrialVerdict.PASS),
-                OracleResult(name="outcome", verdict=TrialVerdict.FAIL),
-            )
+        assert expected_verdict is verdict
     return EvaluatedTrial(
         evidence=evidence,
         oracle_results=oracle_results,
