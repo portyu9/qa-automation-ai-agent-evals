@@ -94,9 +94,7 @@ def _attack() -> AttackFixture:
 def _unmodified_contract_material(scenario: EvaluationScenario) -> dict[str, object]:
     material = scenario.model_dump(mode="python")
     return {
-        key: value
-        for key, value in material.items()
-        if key not in _INTENTIONAL_DERIVATION_FIELDS
+        key: value for key, value in material.items() if key not in _INTENTIONAL_DERIVATION_FIELDS
     }
 
 
@@ -121,9 +119,7 @@ def test_attack_derivation_changes_only_intentional_adversarial_fields() -> None
     derived_material = derived.model_dump(mode="python")
 
     changed = {
-        name
-        for name in type(base).model_fields
-        if base_material[name] != derived_material[name]
+        name for name in type(base).model_fields if base_material[name] != derived_material[name]
     }
 
     assert changed == _INTENTIONAL_DERIVATION_FIELDS
