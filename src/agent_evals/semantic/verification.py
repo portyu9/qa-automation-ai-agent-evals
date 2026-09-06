@@ -104,6 +104,7 @@ def verify_semantic_judgment(
         )
     return receipt
 
+
 def evidence_before_semantic_judgment(evidence: TrialEvidence) -> TrialEvidence:
     """Reconstruct the exact trial envelope that existed before a terminal semantic event."""
     if not evidence.events or evidence.events[-1].kind is not EvidenceKind.SEMANTIC_JUDGMENT:

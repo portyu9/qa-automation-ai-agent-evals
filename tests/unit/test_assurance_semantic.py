@@ -1,11 +1,18 @@
 from __future__ import annotations
 
+from dataclasses import replace
+
 import pytest
 from pydantic import ValidationError
 
 from agent_evals.assurance.report import AssuranceReport
 from agent_evals.contracts.semantic import SemanticCriterionSpec, SemanticRubricSpec
-from agent_evals.evidence.models import EvidenceEvent, EvidenceKind, TrialEvidence, TrialVerdict
+from agent_evals.evidence.models import (
+    EvidenceEvent,
+    EvidenceKind,
+    TrialEvidence,
+    TrialVerdict,
+)
 from agent_evals.gates.release import ReleasePolicy
 from agent_evals.oracles.deterministic import OracleResult
 from agent_evals.runtime.evaluator import EvaluatedTrial
@@ -24,7 +31,10 @@ from agent_evals.semantic.models import (
     SemanticJudgeResponse,
 )
 from agent_evals.semantic.receipt import SemanticJudgmentReceipt
-from agent_evals.semantic.verification import SEMANTIC_JUDGMENT_SOURCE
+from agent_evals.semantic.verification import (
+    SEMANTIC_JUDGMENT_SOURCE,
+    evidence_before_semantic_judgment,
+)
 from agent_evals.statistics.reliability import ReliabilityReport
 
 _SUBJECT = "a" * 64
@@ -182,6 +192,7 @@ def _trial(
         semantic_judgment=semantic,
     )
 
+
 def _session(trial: EvaluatedTrial) -> EvaluationSessionResult:
     return EvaluationSessionResult(
         subject_identity=_SUBJECT,
@@ -260,3 +271,192 @@ def test_assurance_report_rejects_semantic_identity_drift() -> None:
             _session(_trial(SemanticDecision.PASS, semantic_scenario="e" * 64)),
             release_policy=_policy(),
         )
+
+
+def test_assurance_report_rejects_semantic_field_without_committed_event() -> None:
+    trial = _trial(SemanticDecision.PASS)
+    pre_semantic = evidence_before_semantic_judgment(trial.evidence)
+    inconsistent = EvaluatedTrial(
+        evidence=pre_semantic,
+        oracle_results=trial.oracle_results,
+        verdict=trial.verdict,
+        semantic_judgment=trial.semantic_judgment,
+    )
+
+    with pytest.raises(ValueError, match="not committed by the final evidence envelope"):
+        AssuranceReport.from_session(_session(inconsistent), release_policy=_policy())
+
+
+def test_assurance_report_rejects_semantic_event_without_finalized_field() -> None:
+    trial = replace(_trial(SemanticDecision.PASS), semantic_judgment=None)
+
+    with pytest.raises(ValueError, match="field is absent but final evidence commits"):
+        AssuranceReport.from_session(_session(trial), release_policy=_policy())
+
+
+def test_assurance_report_rejects_different_self_valid_semantic_receipt() -> None:
+    trial = _trial(SemanticDecision.PASS)
+    pre_semantic = evidence_before_semantic_judgment(trial.evidence)
+    different = _semantic_receipt(
+        SemanticDecision.FAIL,
+        subject_evidence_root=pre_semantic.evidence_root,
+    )
+    inconsistent = replace(trial, semantic_judgment=different)
+
+    with pytest.raises(ValueError, match="does not match the receipt committed"):
+        AssuranceReport.from_session(_session(inconsistent), release_policy=_policy())
+
+
+@pytest.mark.parametrize(
+    ("source", "critical", "expected"),
+    (
+        ("evaluator:other-semantic-source", False, "source is not recognized"),
+        (SEMANTIC_JUDGMENT_SOURCE, True, "must not claim critical authority"),
+    ),
+)
+def test_assurance_report_rejects_invalid_semantic_event_authority(
+    source: str,
+    critical: bool,
+    expected: str,
+) -> None:
+    trial = _trial(SemanticDecision.PASS)
+    receipt = trial.semantic_judgment
+    assert receipt is not None
+    event = EvidenceEvent(
+        sequence=0,
+        kind=EvidenceKind.SEMANTIC_JUDGMENT,
+        source=source,
+        payload=receipt.model_dump(mode="json"),
+        critical=critical,
+    )
+    evidence = TrialEvidence(
+        trial_id=trial.evidence.trial_id,
+        subject_identity=trial.evidence.subject_identity,
+        scenario_identity=trial.evidence.scenario_identity,
+        events=(event,),
+        final_output=trial.evidence.final_output,
+    )
+    inconsistent = EvaluatedTrial(
+        evidence=evidence,
+        oracle_results=trial.oracle_results,
+        verdict=trial.verdict,
+        semantic_judgment=receipt,
+    )
+
+    with pytest.raises(ValueError, match=expected):
+        AssuranceReport.from_session(_session(inconsistent), release_policy=_policy())
+
+
+def test_assurance_report_rejects_nonterminal_semantic_event() -> None:
+    trial = _trial(SemanticDecision.PASS)
+    receipt = trial.semantic_judgment
+    assert receipt is not None
+    semantic_event = EvidenceEvent(
+        sequence=0,
+        kind=EvidenceKind.SEMANTIC_JUDGMENT,
+        source=SEMANTIC_JUDGMENT_SOURCE,
+        payload=receipt.model_dump(mode="json"),
+    )
+    later_event = EvidenceEvent(
+        sequence=1,
+        kind=EvidenceKind.STATE,
+        source="adapter:test",
+        payload={"phase": "after-semantic"},
+    )
+    evidence = TrialEvidence(
+        trial_id=trial.evidence.trial_id,
+        subject_identity=trial.evidence.subject_identity,
+        scenario_identity=trial.evidence.scenario_identity,
+        events=(semantic_event, later_event),
+        final_output=trial.evidence.final_output,
+    )
+    inconsistent = EvaluatedTrial(
+        evidence=evidence,
+        oracle_results=trial.oracle_results,
+        verdict=trial.verdict,
+        semantic_judgment=receipt,
+    )
+
+    with pytest.raises(ValueError, match="must be the terminal evaluator event"):
+        AssuranceReport.from_session(_session(inconsistent), release_policy=_policy())
+
+
+def test_assurance_report_rejects_duplicate_semantic_events() -> None:
+    trial = _trial(SemanticDecision.PASS)
+    receipt = trial.semantic_judgment
+    assert receipt is not None
+    events = tuple(
+        EvidenceEvent(
+            sequence=sequence,
+            kind=EvidenceKind.SEMANTIC_JUDGMENT,
+            source=SEMANTIC_JUDGMENT_SOURCE,
+            payload=receipt.model_dump(mode="json"),
+        )
+        for sequence in range(2)
+    )
+    evidence = TrialEvidence(
+        trial_id=trial.evidence.trial_id,
+        subject_identity=trial.evidence.subject_identity,
+        scenario_identity=trial.evidence.scenario_identity,
+        events=events,
+        final_output=trial.evidence.final_output,
+    )
+    inconsistent = EvaluatedTrial(
+        evidence=evidence,
+        oracle_results=trial.oracle_results,
+        verdict=trial.verdict,
+        semantic_judgment=receipt,
+    )
+
+    with pytest.raises(ValueError, match="exactly one recorded judgment"):
+        AssuranceReport.from_session(_session(inconsistent), release_policy=_policy())
+
+
+def test_assurance_report_rejects_semantic_receipt_with_foreign_pre_root() -> None:
+    trial = _trial(SemanticDecision.PASS)
+    foreign = _semantic_receipt(
+        SemanticDecision.PASS,
+        subject_evidence_root="d" * 64,
+    )
+    event = EvidenceEvent(
+        sequence=0,
+        kind=EvidenceKind.SEMANTIC_JUDGMENT,
+        source=SEMANTIC_JUDGMENT_SOURCE,
+        payload=foreign.model_dump(mode="json"),
+    )
+    evidence = TrialEvidence(
+        trial_id=trial.evidence.trial_id,
+        subject_identity=trial.evidence.subject_identity,
+        scenario_identity=trial.evidence.scenario_identity,
+        events=(event,),
+        final_output=trial.evidence.final_output,
+    )
+    inconsistent = EvaluatedTrial(
+        evidence=evidence,
+        oracle_results=trial.oracle_results,
+        verdict=trial.verdict,
+        semantic_judgment=foreign,
+    )
+
+    with pytest.raises(ValueError, match="exact pre-judgment subject evidence root"):
+        AssuranceReport.from_session(_session(inconsistent), release_policy=_policy())
+
+
+def test_assurance_semantic_binding_preserves_v3_report_shape() -> None:
+    report = AssuranceReport.from_session(
+        _session(_trial(SemanticDecision.PASS)),
+        release_policy=_policy(),
+    )
+
+    assert set(report.model_dump(mode="json")) == {
+        "schema_version",
+        "evidence_schema",
+        "subject_identity",
+        "scenario_identity",
+        "trials",
+        "release_policy",
+        "reliability",
+        "gate",
+        "report_root",
+    }
+    assert report.schema_version == "agent-evals/assurance-report/v3"
