@@ -234,6 +234,21 @@ def verify_approval_intent(scenario: EvaluationScenario, evidence: TrialEvidence
     if request_event.source != APPROVAL_REQUEST_SOURCE:
         raise ApprovalIntentError("approval request source is not recognized")
 
+    bound_call_approval_requests = [
+        event
+        for event in evidence.events
+        if event.kind is EvidenceKind.APPROVAL_REQUEST
+        and event.payload.get("call_id") == receipt.call_id
+    ]
+    if len(bound_call_approval_requests) != 1:
+        raise ApprovalIntentError(
+            "approval intent requires exactly one approval-request event for the bound call"
+        )
+    if bound_call_approval_requests[0].sequence != receipt.approval_request_sequence:
+        raise ApprovalIntentError(
+            "approval receipt does not reference the unique bound-call approval request"
+        )
+
     target_approval_requests = [
         event
         for event in evidence.events
