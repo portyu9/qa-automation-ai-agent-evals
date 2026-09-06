@@ -355,8 +355,7 @@ def _calibration_metrics(
         for observation in observations
     )
     correct = sum(
-        observation.observed is observation.case_commitment.expected
-        for observation in observations
+        observation.observed is observation.case_commitment.expected for observation in observations
     )
     false_passes = sum(
         observation.case_commitment.expected is SemanticDecision.FAIL
@@ -369,13 +368,7 @@ def _calibration_metrics(
     )
     judge_failures = sum(observation.observed is None for observation in observations)
     covered_tags = tuple(
-        sorted(
-            {
-                tag
-                for observation in observations
-                for tag in observation.case_commitment.tags
-            }
-        )
+        sorted({tag for observation in observations for tag in observation.case_commitment.tags})
     )
     accuracy = correct / total_cases
     accepted = (
