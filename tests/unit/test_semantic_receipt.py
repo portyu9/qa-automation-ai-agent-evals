@@ -272,9 +272,7 @@ def test_semantic_judgment_binds_subject_evidence_root() -> None:
 
 def test_semantic_judgment_rejects_legacy_nested_calibration_schema() -> None:
     payload = _receipt().model_dump(mode="json")
-    payload["calibration_receipt"]["schema_version"] = (
-        "agent-evals/semantic-calibration-receipt/v1"
-    )
+    payload["calibration_receipt"]["schema_version"] = "agent-evals/semantic-calibration-receipt/v1"
 
     with pytest.raises(ValidationError, match="schema_version"):
         SemanticJudgmentReceipt.model_validate(payload)
