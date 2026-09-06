@@ -261,7 +261,7 @@ class SemanticCalibrationObservation(BaseModel):
                 raise ValueError(
                     "resolved semantic calibration observation cannot carry a failure code"
                 )
-            self.observed
+            _ = self.observed
         return self
 
 

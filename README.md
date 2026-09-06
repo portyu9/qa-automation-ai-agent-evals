@@ -81,7 +81,7 @@ This framework treats the **complete agent system** as the subject under test: m
 | **Evidence is reverified** | persisted bytes must pass schema, identity, hash, semantic-root, and scenario-required receipt checks before reuse |
 | **Replay is historical** | replay regrades recorded evidence; persisted semantic receipts are revalidated without a fresh model call, and replay does not pretend to re-execute the subject, approval interruption, or human review |
 | **Semantic judgment is subordinate** | deterministic policy/outcome failure short-circuits semantic invocation; semantic PASS cannot rescue it, semantic FAIL is non-critical, and ABSTAIN remains `INCONCLUSIVE` |
-| **Calibration is commitment-bound** | judge prompt/model/configuration drift invalidates reuse; case labels and coverage tags participate in a privacy-preserving case commitment, while aggregate accuracy cannot substitute for false-PASS, abstention, judge-failure, and adversarial-coverage gates |
+| **Calibration is commitment-bound** | judge prompt/model/configuration drift invalidates reuse; case labels and coverage tags participate in a privacy-preserving case commitment, resolved outcomes are rederived from persisted bounded judge responses, and aggregate accuracy cannot substitute for false-PASS, abstention, judge-failure, and adversarial-coverage gates |
 | **Nondeterminism is measured** | repeated trials produce uncertainty bounds instead of one-shot certainty |
 | **Release authority is deterministic** | critical state/safety evidence cannot be overridden by future semantic graders |
 
