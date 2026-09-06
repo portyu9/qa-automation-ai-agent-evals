@@ -44,7 +44,7 @@ def _evidence(
         subject_identity=SUBJECT,
         scenario_identity=scenario.identity,
         events=events,
-        final_state=final_state,
+        final_state={} if final_state is None else final_state,
     )
 
 
