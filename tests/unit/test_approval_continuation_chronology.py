@@ -15,6 +15,7 @@ from agent_evals.contracts.models import (
     SubjectFingerprint,
 )
 from agent_evals.evidence.approval_intent import (
+    APPROVAL_DECISION_SOURCE,
     ApprovalIntentError,
     ApprovalIntentReceipt,
     verify_approval_intent,
@@ -117,7 +118,7 @@ def _receipt(scenario: EvaluationScenario) -> ApprovalIntentReceipt:
 def _reordered_evidence(
     scenario: EvaluationScenario,
 ) -> TrialEvidence:
-    decision = _receipt(scenario).to_event(sequence=1, source="evaluator:approval-intent")
+    decision = _receipt(scenario).to_event(sequence=1, source=APPROVAL_DECISION_SOURCE)
     return TrialEvidence(
         trial_id="approval-continuation-reordered",
         subject_identity=_SUBJECT.identity,
@@ -176,7 +177,7 @@ def _predecision_result_evidence(
 ) -> TrialEvidence:
     decision = _receipt(scenario).to_event(
         sequence=2,
-        source="evaluator:approval-intent",
+        source=APPROVAL_DECISION_SOURCE,
     )
     events: list[EvidenceEvent] = [
         _approval_request(),
@@ -253,7 +254,7 @@ def _extra_approval_request_evidence(
 ) -> TrialEvidence:
     decision = _receipt(scenario).to_event(
         sequence=2,
-        source="evaluator:approval-intent",
+        source=APPROVAL_DECISION_SOURCE,
     )
     return TrialEvidence(
         trial_id=f"approval-request-cardinality-{extra_agent}-{extra_call_id}",
