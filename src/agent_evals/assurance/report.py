@@ -13,6 +13,7 @@ from agent_evals.contracts.models import EvaluationScenario
 from agent_evals.evidence.models import TrialVerdict
 from agent_evals.gates.release import GateDecision, GateResult, ReleaseGate, ReleasePolicy
 from agent_evals.oracles.deterministic import OracleResult
+from agent_evals.runtime.grading import grade_deterministic_evidence
 from agent_evals.runtime.preconditions import (
     EvaluationPreconditionError,
     has_blocking_evidence,
@@ -311,6 +312,7 @@ class AssuranceReport(BaseModel):
                 if trial.semantic_judgment is not None
                 else None
             )
+            verified_oracle_results = tuple(trial.oracle_results)
             if trial.verdict is not TrialVerdict.BLOCKED:
                 if has_blocking_evidence(evidence):
                     raise ValueError(
@@ -327,8 +329,15 @@ class AssuranceReport(BaseModel):
                         f"trial pre-grading evidence is invalid ({exc.code}): {exc.reason}"
                     ) from exc
 
+                expected_oracle_results = grade_deterministic_evidence(scenario, evidence)
+                if verified_oracle_results != expected_oracle_results:
+                    raise ValueError(
+                        "trial deterministic oracle results do not match scenario/evidence grading"
+                    )
+                verified_oracle_results = expected_oracle_results
+
                 has_side_effect_oracle = any(
-                    result.name == _SIDE_EFFECT_ORACLE_NAME for result in trial.oracle_results
+                    result.name == _SIDE_EFFECT_ORACLE_NAME for result in verified_oracle_results
                 )
                 if has_side_effect_oracle is not grading_profile.requires_side_effect_grading:
                     raise ValueError(
@@ -357,7 +366,7 @@ class AssuranceReport(BaseModel):
                 evidence_root=evidence.evidence_root,
                 verdict=trial.verdict,
                 oracle_results=tuple(
-                    OracleSnapshot.from_oracle(result) for result in trial.oracle_results
+                    OracleSnapshot.from_oracle(result) for result in verified_oracle_results
                 ),
                 semantic_judgment=semantic,
             )
