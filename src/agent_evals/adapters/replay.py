@@ -21,7 +21,7 @@ class ReplayIdentityError(AdapterPreconditionError):
 
 class EvidenceReplayAdapter:
     def __init__(self, evidence: TrialEvidence) -> None:
-        self._evidence = evidence
+        self._evidence = evidence.snapshot()
 
     @classmethod
     def from_store(cls, store: LocalEvidenceStore, record_key: str) -> EvidenceReplayAdapter:
