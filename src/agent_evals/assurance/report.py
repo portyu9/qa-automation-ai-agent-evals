@@ -501,9 +501,7 @@ def _validate_oracle_snapshot_shape(
     missing_core = _CORE_ORACLE_NAMES.difference(oracle_names)
     if missing_core:
         missing = ", ".join(sorted(missing_core))
-        raise ValueError(
-            f"non-blocked assurance trial is missing core oracle results: {missing}"
-        )
+        raise ValueError(f"non-blocked assurance trial is missing core oracle results: {missing}")
     if any(result.verdict not in _RESOLVED_VERDICTS for result in oracle_results):
         raise ValueError("non-blocked assurance trial has a non-resolved oracle verdict")
 
