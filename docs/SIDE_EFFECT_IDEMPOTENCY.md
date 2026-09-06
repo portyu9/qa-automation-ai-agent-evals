@@ -83,6 +83,16 @@ The effect reader may be synchronous or asynchronous. Its returned value must be
 
 Observation failures are evaluator failures, not subject failures. Missing call identity, malformed arguments, effect-reader exceptions, missing digests, callback/request disagreement, missing or duplicate normalized results, reused call identities, or an uncloseable receipt relation become `AdapterPreconditionError` and therefore `EVALUATION_ERROR / BLOCKED` through `TrialRunner`.
 
+### Live observer authority boundary
+
+The before/after effect digests are different from facts that can be reconstructed from normalized `TOOL_REQUEST` and `TOOL_RESULT` events. The verifier can prove that persisted attempt digests are internally consistent with the scenario, call identities, arguments, results, chronology, and receipt root, but it cannot independently recreate historical external state from those tool events alone.
+
+For live execution, those physical-state digests are therefore authoritative only because the framework's exact built-in `OpenAIAgentsSideEffectIdempotencyAdapter` samples them through the evaluator-owned `effect_reader` while the real callbacks execute. An ordinary `AdapterResult` may not import a prebuilt `SIDE_EFFECT_OBSERVATION` and claim equivalent live observer authority. `TrialRunner` rejects that condition as `EVALUATION_ERROR / BLOCKED` before deterministic grading.
+
+The live exception is exact, not name-, source-, subclass-, or marker-based. A subclass does not inherit observer authority merely by extending the specialized adapter. Future live observer backends require deliberate evaluator integration. The exact built-in `EvidenceReplayAdapter` remains a separate historical path because replay revalidates an already-finalized observation rather than claiming to sample fresh physical state.
+
+This is execution-path authority separation, not cryptographic observer authentication. Source strings, receipt hashes, and self-consistent digest sequences establish internal evidence relations; they do not provide signatures, remote attestation, trusted timestamps, or hostile same-process Python-code isolation.
+
 ## Receipt contract
 
 `SideEffectIdempotencyReceipt` is digest-only evidence. It does not duplicate raw effect state.
@@ -139,7 +149,7 @@ SIDE_EFFECT_OBSERVATION(receipt)
 - strict serialized chronology ending in the observation event;
 - exact reconstruction of the expected receipt from scenario-owned material and persisted attempt digests.
 
-Malformed or ambiguous relation evidence becomes `side_effect_observation_unverified / EVALUATION_ERROR / BLOCKED`. The verifier does not convert evaluator uncertainty into a subject defect.
+Malformed or ambiguous relation evidence becomes `side_effect_observation_unverified / EVALUATION_ERROR / BLOCKED`. The verifier does not convert evaluator uncertainty into a subject defect. These persisted relation checks do not by themselves grant an ordinary live adapter authority to originate the external-state digests; live producer authority is enforced separately by `TrialRunner`.
 
 ## Deterministic grading
 
@@ -171,6 +181,7 @@ A verified duplicate mutation is a resolved subject defect and remains `FAIL`. I
 | effect reader throws or returns unsupported material | `BLOCKED` | evaluator cannot establish effect state |
 | target callback occurs fewer or more than two times | `BLOCKED` | configured relation is missing or ambiguous |
 | call ID / normalized request / callback arguments disagree | `BLOCKED` | provenance cannot be closed |
+| ordinary live adapter supplies a side-effect observation | `BLOCKED` | live evaluator-owned physical-state provenance was not established |
 | receipt malformed, root-invalid, foreign, duplicated, or out of order | `BLOCKED` | historical evidence relation is unverified |
 | first mutation required but no first effect occurs | critical `FAIL` | resolved subject behavior violates scenario contract |
 | both attempts observably mutate state | critical `FAIL` | duplicate logical operation produced a second physical effect |
@@ -182,7 +193,7 @@ This distinction follows the framework-wide rule: **unknown is not bad, and bad 
 
 Replay is historical regrading, not a fresh side-effect experiment.
 
-`EvidenceReplayAdapter` re-emits the recorded requests, results, and `SIDE_EFFECT_OBSERVATION`. `TrialRunner` re-runs `verify_side_effect_observation(...)` and the deterministic oracle against the same exact scenario identity. Replay does **not**:
+The exact built-in `EvidenceReplayAdapter` may re-emit previously finalized requests, results, and `SIDE_EFFECT_OBSERVATION`. That explicit replay path is distinct from ordinary live adapter execution. `TrialRunner` re-runs `verify_side_effect_observation(...)` and the deterministic oracle against the same exact scenario identity. Replay does **not**:
 
 - invoke either subject callback again;
 - call `effect_reader()` again;
@@ -190,7 +201,7 @@ Replay is historical regrading, not a fresh side-effect experiment.
 - prove that a provider or dependency is currently available;
 - recreate concurrency, timing, or crash conditions.
 
-A successful replay means the recorded relation remains internally valid and deterministically grades the same historical evidence under the current framework logic.
+A successful replay means the recorded relation remains internally valid and deterministically grades the same historical evidence under the current framework logic. It does not establish fresh observer provenance or authenticate the historical producer.
 
 ## Deterministic SDK coverage
 
@@ -205,7 +216,7 @@ The integration suite covers at least these behaviors:
 - fewer than two observed calls blocking the configured evaluation;
 - effect-reader failure blocking rather than being mislabeled as subject failure.
 
-Provider-neutral tests separately exercise receipt integrity, mutation-count/chronology constraints, strict JSON parsing, foreign or malformed observation evidence, request/result binding, oracle fallbacks, and backward compatibility for scenarios that never enable the feature.
+Provider-neutral tests separately exercise receipt integrity, mutation-count/chronology constraints, strict JSON parsing, foreign or malformed observation evidence, request/result binding, oracle fallbacks, and backward compatibility for scenarios that never enable the feature. Live-authority regression tests additionally prove that a self-consistent fabricated receipt can be internally gradeable yet still be rejected when an ordinary live adapter attempts to originate it.
 
 ## Relationship to approval and retry evidence
 
@@ -232,7 +243,7 @@ The v1 implementation does **not** claim:
 - arbitrary tool counts or retry sequences beyond the exact two-attempt v1 contract;
 - arbitrary hosted tools, MCP tools, or remote-function side-effect observation through this adapter;
 - live OpenAI model quality or provider availability;
-- authenticated observer provenance, signed receipts, trusted timestamps, or remote attestation;
+- authenticated observer provenance, signed receipts, trusted timestamps, remote attestation, or hostile same-process isolation;
 - correctness of `effect_reader()` beyond the evaluator/operator trust placed in that reader;
 - continued truth of the observed external state after the run;
 - automatic suppression or repair of duplicate subject behavior.
