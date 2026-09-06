@@ -164,3 +164,77 @@ def test_rejected_bypass_result_before_resumed_request_is_not_resolved_failure()
 
     with pytest.raises(ApprovalIntentError, match="result must follow the resumed tool request"):
         verify_approval_intent(scenario, reordered)
+
+
+def _predecision_result_evidence(
+    scenario: EvaluationScenario,
+) -> TrialEvidence:
+    decision = _receipt(scenario).to_event(
+        sequence=2,
+        source="evaluator:approval-intent",
+    )
+    events: list[EvidenceEvent] = [
+        _approval_request(),
+        _result(1),
+        decision,
+    ]
+    if (
+        scenario.approval_intent is not None
+        and scenario.approval_intent.decision is ApprovalDecision.APPROVE
+    ):
+        events.extend((_execution(3), _result(4)))
+    else:
+        events.append(
+            _event(
+                3,
+                EvidenceKind.TOOL_RESULT,
+                agent=_AGENT,
+                call_id=_CALL,
+                output="Tool execution was rejected.",
+                approval_rejected=True,
+            )
+        )
+    assert scenario.approval_intent is not None
+    return TrialEvidence(
+        trial_id=f"approval-predecision-{scenario.approval_intent.decision.value}",
+        subject_identity=_SUBJECT.identity,
+        scenario_identity=scenario.identity,
+        events=tuple(events),
+    )
+
+
+def test_approved_predecision_result_is_rejected_before_policy_grading() -> None:
+    scenario = _scenario()
+    malformed = _predecision_result_evidence(scenario)
+
+    # Policy grading ignores result events, so without approval verification this malformed
+    # same-call history would otherwise PASS after consuming the later approved request.
+    assert PolicyOracle().grade(scenario, malformed).verdict is TrialVerdict.PASS
+
+    with pytest.raises(ApprovalIntentError, match="result cannot precede its decision"):
+        verify_approval_intent(scenario, malformed)
+
+    blocked = asyncio.run(
+        TrialRunner().run(
+            EvidenceReplayAdapter(malformed),
+            subject=_SUBJECT,
+            scenario=scenario,
+            trial_id=malformed.trial_id,
+        )
+    )
+    assert blocked.verdict is TrialVerdict.BLOCKED
+    assert blocked.oracle_results == ()
+    assert blocked.evidence.events[-1].kind is EvidenceKind.EVALUATION_ERROR
+    assert blocked.evidence.events[-1].payload["code"] == "approval_intent_unverified"
+
+
+def test_clean_rejection_rejects_matching_result_before_decision() -> None:
+    scenario = _scenario(ApprovalDecision.REJECT)
+    malformed = _predecision_result_evidence(scenario)
+
+    # Clean rejection also ignores result events in policy grading, so the impossible same-call
+    # pre-decision result would otherwise preserve policy PASS.
+    assert PolicyOracle().grade(scenario, malformed).verdict is TrialVerdict.PASS
+
+    with pytest.raises(ApprovalIntentError, match="result cannot precede its decision"):
+        verify_approval_intent(scenario, malformed)
