@@ -110,6 +110,8 @@ Pydantic model validation is not merely schema parsing. A loaded report must sat
 
 A schema-valid JSON object that forges a semantic decision, trial verdict, success rate, Wilson interval, confidence parameter, gate decision, gate reasons, critical flag, core-oracle presence, evidence root, policy threshold, or report root therefore fails validation unless all lower-level bound relations also remain valid.
 
+The report does not contain the full event stream, so event-level relations that require inspecting `TrialEvidence` cannot be reconstructed from report JSON alone. Those relations are checked during `from_session()` construction when the in-memory evidence is present, and later historical re-establishment requires the evidence/replay path.
+
 ## Generation from a session
 
 `AssuranceReport.from_session()` verifies the in-memory session before creating an artifact:
@@ -123,6 +125,7 @@ A schema-valid JSON object that forges a semantic decision, trial verdict, succe
 - trial IDs must be unique;
 - deterministic oracle names must be unique within each non-blocked trial;
 - each non-`BLOCKED` trial must contain the core `policy` and `outcome` oracle snapshots;
+- for each non-`BLOCKED` trial, final `SIDE_EFFECT_OBSERVATION` evidence and the `side-effect-idempotency` oracle must either both be present or both be absent; a `BLOCKED` history may retain an observation without completed oracle results because a later evaluator check can still fail before grading;
 - known framework oracle criticality must match runtime semantics before critical violations or the release gate are derived;
 - deterministic and semantic precedence must rederive each trial verdict;
 - any semantic receipt must revalidate under its own contract;
@@ -185,6 +188,8 @@ That separation is intentional:
 - `LocalEvidenceStore` verifies and returns the actual persisted `TrialEvidence`;
 - `EvidenceReplayAdapter` can submit those historical observations through deterministic grading again under exact identity;
 - if semantic evidence is present, replay reconstructs the pre-semantic envelope and revalidates the historical semantic receipt **without calling a fresh semantic model**;
+- during `AssuranceReport.from_session()`, the in-memory final evidence can additionally prove whether side-effect observation evidence exists, so construction rejects a resolved trial that omits or invents the corresponding `side-effect-idempotency` oracle;
+- a standalone v3 report contains only the final evidence root, not those events, so parsing the report by itself cannot reconstruct that side-effect observation/oracle relation; exact-identity evidence replay is the path that re-establishes the historical event-level relation;
 - `AssuranceReport` verifies session-level derivation from its bound grading facts, evidence schema, evidence roots, optional semantic receipts, exact statistical configuration, reliability, and release policy.
 
 Therefore the report can answer, "Does this stored session conclusion internally follow from the grading facts, statistical contract, and policy it contains?" It cannot by itself answer, "Would the deterministic or semantic evaluators produce those same observations if run again now?" The latter requires fresh execution, not report parsing.

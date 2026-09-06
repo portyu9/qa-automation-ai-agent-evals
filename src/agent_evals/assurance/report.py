@@ -9,7 +9,7 @@ from typing import Literal, Self
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from agent_evals.evidence.models import TrialVerdict
+from agent_evals.evidence.models import EvidenceKind, TrialVerdict
 from agent_evals.gates.release import GateDecision, GateResult, ReleaseGate, ReleasePolicy
 from agent_evals.oracles.deterministic import OracleResult
 from agent_evals.runtime.session import EvaluationSessionResult
@@ -26,7 +26,8 @@ _EVIDENCE_SCHEMA: Literal["agent-evals/trial-evidence/v2"] = "agent-evals/trial-
 _REPORT_DOMAIN = b"agent-evals/assurance-report/v3\0"
 _RESOLVED_VERDICTS = frozenset({TrialVerdict.PASS, TrialVerdict.FAIL})
 _CORE_ORACLE_NAMES = frozenset({"policy", "outcome"})
-_CRITICAL_ON_FAIL_ORACLE_NAMES = frozenset({"policy", "side-effect-idempotency"})
+_SIDE_EFFECT_ORACLE_NAME = "side-effect-idempotency"
+_CRITICAL_ON_FAIL_ORACLE_NAMES = frozenset({"policy", _SIDE_EFFECT_ORACLE_NAME})
 _NEVER_CRITICAL_ORACLE_NAMES = frozenset({"outcome"})
 
 
@@ -261,6 +262,17 @@ class AssuranceReport(BaseModel):
                 else None
             )
             if trial.verdict is not TrialVerdict.BLOCKED:
+                has_side_effect_observation = any(
+                    event.kind is EvidenceKind.SIDE_EFFECT_OBSERVATION for event in evidence.events
+                )
+                has_side_effect_oracle = any(
+                    result.name == _SIDE_EFFECT_ORACLE_NAME for result in trial.oracle_results
+                )
+                if has_side_effect_observation != has_side_effect_oracle:
+                    raise ValueError(
+                        "trial side-effect observation and oracle result presence do not match"
+                    )
+
                 try:
                     evidence_semantic = verify_semantic_judgment_evidence(evidence)
                 except SemanticJudgmentError as exc:

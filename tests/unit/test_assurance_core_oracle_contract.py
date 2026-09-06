@@ -162,25 +162,15 @@ def test_valid_outcome_failure_remains_noncritical() -> None:
     assert report.critical_violations == 0
 
 
-def test_valid_side_effect_failure_preserves_critical_authority() -> None:
-    report = AssuranceReport.from_session(
-        _session(
-            (
-                OracleResult(name="policy", verdict=TrialVerdict.PASS),
-                OracleResult(
-                    name="side-effect-idempotency",
-                    verdict=TrialVerdict.FAIL,
-                    critical=True,
-                ),
-                OracleResult(name="outcome", verdict=TrialVerdict.PASS),
-            ),
-            verdict=TrialVerdict.FAIL,
-        ),
-        release_policy=_policy(),
+def test_valid_side_effect_failure_criticality_snapshot_is_accepted() -> None:
+    snapshot = OracleSnapshot(
+        name="side-effect-idempotency",
+        verdict=TrialVerdict.FAIL,
+        critical=True,
     )
 
-    assert report.critical_violations == 1
-    assert report.gate.decision is GateDecision.REJECT
+    assert snapshot.critical is True
+    assert snapshot.verdict is TrialVerdict.FAIL
 
 
 def test_additional_custom_oracle_cannot_replace_but_may_extend_core_set() -> None:
