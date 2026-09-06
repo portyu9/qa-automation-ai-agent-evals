@@ -111,6 +111,7 @@ A schema-valid JSON object that forges a semantic decision, trial verdict, succe
 `AssuranceReport.from_session()` verifies the in-memory session before creating an artifact:
 
 - at least one evaluated trial must exist;
+- every trial's current final evidence root must match the runtime-only completion root captured when its verdict/oracle/semantic tuple was finalized;
 - every trial evidence envelope must match the session subject identity;
 - every trial evidence envelope must match the session scenario identity;
 - trial IDs must be unique;
@@ -120,6 +121,8 @@ A schema-valid JSON object that forges a semantic decision, trial verdict, succe
 - the session's `ReliabilityReport` must recompute from its trial verdicts using the same `k` and `confidence_z`.
 
 Only then is the release gate evaluated and the report root produced.
+
+`EvaluatedTrial.completion_evidence_root` is a runtime-only finalization commitment, not an Assurance Report v3 field. It prevents report construction from pairing a post-finalization-mutated evidence root with stale grading facts. For semantic trials it captures the final envelope root after the terminal semantic event, while the nested semantic receipt continues to bind the distinct pre-semantic root. This does not make returned Python evidence tamper-proof; it makes later mutation detectable at the report boundary.
 
 ```python
 from agent_evals.assurance import AssuranceReport
