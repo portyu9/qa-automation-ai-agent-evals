@@ -20,6 +20,7 @@ from agent_evals.contracts.models import (
     ScenarioKind,
 )
 from agent_evals.evidence.approval_intent import (
+    APPROVAL_DECISION_SOURCE,
     ApprovalIntentError,
     ApprovalIntentReceipt,
     canonical_arguments_sha256,
@@ -200,7 +201,7 @@ def test_receipt_creation_and_shape_fail_closed() -> None:
 
 def test_verifier_rejects_scenario_and_decision_envelope_drift() -> None:
     scenario = contract()
-    decision = receipt(scenario).to_event(sequence=1, source="evaluator")
+    decision = receipt(scenario).to_event(sequence=1, source=APPROVAL_DECISION_SOURCE)
     wrong_identity = TrialEvidence(
         trial_id="wrong-scenario",
         subject_identity=_IDENTITY,
@@ -214,7 +215,7 @@ def test_verifier_rejects_scenario_and_decision_envelope_drift() -> None:
         scenario,
         request(),
         decision,
-        receipt(scenario).to_event(sequence=2, source="evaluator"),
+        receipt(scenario).to_event(sequence=2, source=APPROVAL_DECISION_SOURCE),
     )
     with pytest.raises(ApprovalIntentError, match="exactly one decision"):
         verify_approval_intent(scenario, duplicate)
@@ -245,7 +246,7 @@ def test_verifier_rejects_scenario_and_decision_envelope_drift() -> None:
 
 def test_approve_requires_one_exact_resumed_request_and_result() -> None:
     scenario = contract()
-    decision = receipt(scenario).to_event(sequence=1, source="evaluator")
+    decision = receipt(scenario).to_event(sequence=1, source=APPROVAL_DECISION_SOURCE)
 
     no_request = evidence(scenario, request(), decision, result(2))
     with pytest.raises(ApprovalIntentError, match="no matching resumed tool request"):
@@ -289,7 +290,7 @@ def test_approve_requires_one_exact_resumed_request_and_result() -> None:
 
 def test_reject_requires_explicit_matching_rejection_result() -> None:
     scenario = contract(ApprovalDecision.REJECT)
-    decision = receipt(scenario).to_event(sequence=1, source="evaluator")
+    decision = receipt(scenario).to_event(sequence=1, source=APPROVAL_DECISION_SOURCE)
 
     unmarked = evidence(scenario, request(), decision, result(2))
     with pytest.raises(ApprovalIntentError, match="explicit rejection marker"):
