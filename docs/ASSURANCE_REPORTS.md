@@ -112,7 +112,8 @@ A schema-valid JSON object that forges a semantic decision, trial verdict, succe
 
 - at least one evaluated trial must exist;
 - every trial's current final evidence root must match the runtime-only completion root captured when its verdict/oracle/semantic tuple was finalized;
-- optional semantic grading must be the exact valid receipt committed by one terminal, recognized, non-critical `SEMANTIC_JUDGMENT` event in that final evidence envelope, including the exact reconstructed pre-semantic evidence root; absence must match on both sides;
+- for resolved or inconclusive trials, optional semantic grading must be the exact valid receipt committed by one terminal, recognized, non-critical `SEMANTIC_JUDGMENT` event in that final evidence envelope, including the exact reconstructed pre-semantic evidence root; absence must match on both sides;
+- `BLOCKED` trials carry no finalized semantic grading authority: rejected semantic events may remain in the final evidence history before the evaluator error that caused blocking, but they are not copied into the report semantic field;
 - every trial evidence envelope must match the session subject identity;
 - every trial evidence envelope must match the session scenario identity;
 - trial IDs must be unique;
