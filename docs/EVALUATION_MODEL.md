@@ -166,7 +166,7 @@ A replayed semantic receipt therefore says, "this exact historical judgment rema
 
 Meaning-level dimensions such as groundedness, completeness, or answer quality are useful, but they answer different questions from deterministic state and safety gates.
 
-A system can therefore receive a semantic PASS and still be release-ineligible because of an unauthorized side effect. Conversely, a semantically poor answer can yield a non-critical semantic FAIL even when all state and policy checks passed. These conclusions are intentionally separate in `AssuranceReport` v3.
+A system can therefore receive a semantic PASS and still be release-ineligible because of an unauthorized side effect. Conversely, a semantically poor answer can yield a non-critical semantic FAIL even when all state and policy checks passed. These conclusions are intentionally separate in `AssuranceReport` v4.
 
 ## Capability and regression use
 
