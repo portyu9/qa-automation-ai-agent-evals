@@ -485,7 +485,9 @@ def test_assurance_report_json_reload_requires_profile_bound_semantic_judgment()
     payload = report.model_dump(mode="json")
     payload["trials"][0]["semantic_judgment"] = None
 
-    with pytest.raises(ValidationError, match="missing semantic judgment required by grading profile"):
+    with pytest.raises(
+        ValidationError, match="missing semantic judgment required by grading profile"
+    ):
         AssuranceReport.model_validate(payload)
 
 
@@ -494,7 +496,9 @@ def test_assurance_report_json_reload_rejects_semantic_profile_rubric_drift() ->
     payload = report.model_dump(mode="json")
     payload["grading_profile"]["semantic_rubric_identity"] = "f" * 64
 
-    with pytest.raises(ValidationError, match="rubric identity does not match assurance grading profile"):
+    with pytest.raises(
+        ValidationError, match="rubric identity does not match assurance grading profile"
+    ):
         AssuranceReport.model_validate(payload)
 
 
