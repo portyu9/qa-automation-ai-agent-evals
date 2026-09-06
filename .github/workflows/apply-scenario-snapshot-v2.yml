@@ -1,4 +1,4 @@
-name: Apply scenario snapshot v2
+name: Apply runtime snapshot docs
 
 on:
   push:
@@ -17,7 +17,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           ref: fix/scenario-contract-runtime-snapshot
-      - name: Apply source changes
+      - name: Synchronize runtime snapshot documentation
         shell: bash
         run: |
           python - <<'PY'
@@ -29,179 +29,66 @@ jobs:
                   raise SystemExit(f"{label} match count: {count}")
               return text.replace(old, new, 1)
 
-          def in_scope(text: str, start: str, end: str, old: str, new: str, label: str) -> str:
-              i = text.index(start)
-              j = text.index(end, i)
-              scope = once(text[i:j], old, new, label)
-              return text[:i] + scope + text[j:]
-
-          identity = (
-              '    @property\n'
-              '    def identity(self) -> str:\n'
-              '        return _sha256_json(self.model_dump(mode="python", exclude_none=True))\n'
-          )
-
-          path = Path('src/agent_evals/contracts/models.py')
+          path = Path('docs/EVALUATION_MODEL.md')
           text = path.read_text()
-          text = in_scope(
-              text,
-              'class SubjectFingerprint(BaseModel):',
-              '\n\nclass HandoffAuthorityGrant(BaseModel):',
-              identity,
-              identity + (
-                  '\n    def snapshot(self) -> SubjectFingerprint:\n'
-                  '        """Return a detached, revalidated copy for one runtime boundary."""\n'
-                  '        return SubjectFingerprint.model_validate_json(self.model_dump_json())\n'
-              ),
-              'subject snapshot',
+          marker = (
+              '| **Release gate** | deterministic policy that decides whether evidence is sufficient for acceptance |\n\n'
+              '## Outcome versus output'
           )
-          text = in_scope(
+          replacement = '''| **Release gate** | deterministic policy that decides whether evidence is sufficient for acceptance |
+
+## Runtime contract ownership
+
+`EvaluationScenario` is content-addressed, but its JSON state/outcome containers remain ordinary Python containers for ergonomic construction. Pydantic `frozen=True` prevents field reassignment; it is not a claim of deep in-memory immutability.
+
+The runtime establishes immutability at the ownership boundary instead of relying on caller object behavior:
+
+1. `EvaluationSession` revalidates and snapshots the subject/scenario pair once before a repeated-trial loop;
+2. `TrialRunner` revalidates its received pair before execution and retains an evaluator-owned scenario snapshot for identity, evidence verification, deterministic grading, and semantic input;
+3. the adapter receives a second detached scenario snapshot rather than the evaluator-owned object;
+4. after adapter completion—or an adapter exception—the evaluator recomputes the adapter-facing scenario identity; persistent drift produces `EVALUATION_ERROR / BLOCKED` with `scenario_contract_mutated` rather than grading against a changed contract.
+
+Caller mutation after an awaited run/session has begun therefore cannot change the in-flight evaluator contract. Adapter-side mutation cannot alter the evaluator-owned grading basis. The drift check covers ordinary mutable-container changes; it is not tamper-proof memory, caller authentication, or protection against interpreter compromise or deliberate `object.__setattr__` abuse. Scenario and subject hashes remain integrity identities, not signatures.
+
+## Outcome versus output'''
+          text = once(text, marker, replacement, 'runtime ownership section')
+          text = once(
               text,
-              'class EvaluationScenario(BaseModel):',
-              '\n\ndef _agent_path_requires_approval',
-              identity,
-              identity + (
-                  '\n    def snapshot(self) -> EvaluationScenario:\n'
-                  '        """Return a detached, revalidated copy for one runtime boundary."""\n'
-                  '        return EvaluationScenario.model_validate_json(self.model_dump_json())\n'
-              ),
-              'scenario snapshot',
+              'separate in `AssuranceReport` v2.',
+              'separate in `AssuranceReport` v3.',
+              'assurance report version',
           )
           path.write_text(text)
 
-          path = Path('src/agent_evals/runtime/evaluator.py')
-          text = path.read_text()
-          entry = (
-              '    ) -> EvaluatedTrial:\n'
-              '        started = perf_counter()\n'
-              '        try:\n'
-              '            result = await adapter.execute(\n'
-              '                subject=subject,\n'
-              '                scenario=scenario,\n'
-              '                trial_id=trial_id,\n'
-              '            )\n'
-          )
-          replacement = (
-              '    ) -> EvaluatedTrial:\n'
-              '        started = perf_counter()\n'
-              '        subject = subject.snapshot()\n'
-              '        scenario = scenario.snapshot()\n'
-              '        execution_scenario = scenario.snapshot()\n'
-              '        scenario_identity = scenario.identity\n'
-              '        try:\n'
-              '            result = await adapter.execute(\n'
-              '                subject=subject,\n'
-              '                scenario=execution_scenario,\n'
-              '                trial_id=trial_id,\n'
-              '            )\n'
-          )
-          text = once(text, entry, replacement, 'runner entry')
-
-          mutation_check = (
-              '            if self._scenario_contract_drifted(execution_scenario, scenario_identity):\n'
-              '                return self._scenario_contract_mutated(\n'
-              '                    adapter=adapter,\n'
-              '                    subject=subject,\n'
-              '                    scenario=scenario,\n'
-              '                    trial_id=trial_id,\n'
-              '                    elapsed_ms=(perf_counter() - started) * 1000.0,\n'
-              '                )\n'
-          )
-          text = once(
-              text,
-              '        except AdapterPreconditionError as exc:\n',
-              '        except AdapterPreconditionError as exc:\n' + mutation_check,
-              'precondition drift check',
-          )
-          text = once(
-              text,
-              '        except Exception as exc:  # adapter boundary: provider failure becomes structured evidence\n',
-              '        except Exception as exc:  # adapter boundary: provider failure becomes structured evidence\n' + mutation_check,
-              'runtime drift check',
-          )
-          post_check = (
-              '        if self._scenario_contract_drifted(execution_scenario, scenario_identity):\n'
-              '            return self._scenario_contract_mutated(\n'
-              '                adapter=adapter,\n'
-              '                subject=subject,\n'
-              '                scenario=scenario,\n'
-              '                trial_id=trial_id,\n'
-              '                elapsed_ms=(perf_counter() - started) * 1000.0,\n'
-              '            )\n\n'
-          )
-          text = once(
-              text,
-              '        if not isinstance(result, AdapterResult):\n',
-              post_check + '        if not isinstance(result, AdapterResult):\n',
-              'post-adapter drift check',
-          )
-          marker = '    @staticmethod\n    def _semantic_verdict(decision: SemanticDecision) -> TrialVerdict:\n'
-          helpers = (
-              '    @staticmethod\n'
-              '    def _scenario_contract_drifted(\n'
-              '        scenario: EvaluationScenario,\n'
-              '        expected_identity: str,\n'
-              '    ) -> bool:\n'
-              '        try:\n'
-              '            return scenario.identity != expected_identity\n'
-              '        except (TypeError, ValueError):\n'
-              '            return True\n\n'
-              '    @staticmethod\n'
-              '    def _scenario_contract_mutated(\n'
-              '        *,\n'
-              '        adapter: AgentAdapter,\n'
-              '        subject: SubjectFingerprint,\n'
-              '        scenario: EvaluationScenario,\n'
-              '        trial_id: str,\n'
-              '        elapsed_ms: float,\n'
-              '    ) -> EvaluatedTrial:\n'
-              '        event = EvidenceEvent(\n'
-              '            sequence=0,\n'
-              '            kind=EvidenceKind.EVALUATION_ERROR,\n'
-              '            source=f"evaluator:adapter:{adapter.name}",\n'
-              '            payload={\n'
-              '                "code": "scenario_contract_mutated",\n'
-              '                "reason": (\n'
-              '                    "adapter-facing scenario contract changed during execution; "\n'
-              '                    "the evaluator retained the pre-execution contract"\n'
-              '                ),\n'
-              '            },\n'
-              '            critical=True,\n'
-              '        )\n'
-              '        evidence = TrialEvidence(\n'
-              '            trial_id=trial_id,\n'
-              '            subject_identity=subject.identity,\n'
-              '            scenario_identity=scenario.identity,\n'
-              '            events=(event,),\n'
-              '            elapsed_ms=elapsed_ms,\n'
-              '        )\n'
-              '        return EvaluatedTrial(\n'
-              '            evidence=evidence,\n'
-              '            oracle_results=(),\n'
-              '            verdict=TrialVerdict.BLOCKED,\n'
-              '        )\n\n'
-          )
-          text = once(text, marker, helpers + marker, 'drift helpers')
-          path.write_text(text)
-
-          path = Path('src/agent_evals/runtime/session.py')
+          path = Path('docs/ARCHITECTURE.md')
           text = path.read_text()
           text = once(
               text,
-              '        evaluated: list[EvaluatedTrial] = []\n',
-              '        subject = subject.snapshot()\n'
-              '        scenario = scenario.snapshot()\n'
-              '        evaluated: list[EvaluatedTrial] = []\n',
-              'session snapshot',
+              '├── subject/scenario contracts\n',
+              '├── subject/scenario contracts\n'
+              '│   ├── session-start revalidated snapshot for repeated trials\n'
+              '│   ├── per-trial evaluator-owned grading snapshot\n'
+              '│   ├── detached adapter-facing scenario copy\n'
+              '│   └── persistent adapter-side contract drift -> EVALUATION_ERROR / BLOCKED\n',
+              'trust-model snapshot ownership',
           )
+          old = (
+              '`SubjectFingerprint` binds provider, model, application revision, instructions, tool schema, policy, memory policy, and adapter identity/version. '
+              '`EvaluationScenario` binds scenario ID/revision, objective, initial state, authority, required/forbidden outcomes, classification, tags, approval intent, optional side-effect-idempotency contract, optional `SemanticRubricSpec`, and optional `RetrievalContractSpec`. '
+              'Behavior-bearing material therefore participates in scenario identity rather than living as untracked runtime configuration.'
+          )
+          new = old + (
+              ' At execution time, those content identities are evaluated from detached, revalidated snapshots: the evaluator does not rely on Pydantic field freezing as deep container immutability, and a persistently mutated adapter-facing scenario is blocked before evidence normalization or grading.'
+          )
+          text = once(text, old, new, 'identity-domain runtime ownership')
           path.write_text(text)
           PY
-      - name: Commit source changes
+      - name: Commit documentation
         shell: bash
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add src/agent_evals/contracts/models.py src/agent_evals/runtime/evaluator.py src/agent_evals/runtime/session.py
+          git add docs/EVALUATION_MODEL.md docs/ARCHITECTURE.md
           git diff --cached --check
-          git commit -m "fix: snapshot scenario contracts across runtime boundaries"
+          git commit -m "docs: define runtime contract snapshot ownership"
           git push origin HEAD:fix/scenario-contract-runtime-snapshot
