@@ -26,258 +26,273 @@ jobs:
           report = Path("src/agent_evals/assurance/report.py")
           text = report.read_text()
           old = '''            try:
-                evidence_semantic = verify_semantic_judgment_evidence(evidence)
-            except SemanticJudgmentError as exc:
-                raise ValueError(f"trial semantic judgment evidence is invalid: {exc}") from exc
+              evidence_semantic = verify_semantic_judgment_evidence(evidence)
+          except SemanticJudgmentError as exc:
+              raise ValueError(f"trial semantic judgment evidence is invalid: {exc}") from exc
 
-            semantic = (
-                SemanticJudgmentReceipt.model_validate(
-                    trial.semantic_judgment.model_dump(mode="json")
-                )
-                if trial.semantic_judgment is not None
-                else None
-            )
-            if semantic is None and evidence_semantic is not None:
-                raise ValueError(
-                    "trial semantic judgment field is absent but final evidence commits a judgment"
-                )
-            if semantic is not None and evidence_semantic is None:
-                raise ValueError(
-                    "trial semantic judgment is not committed by the final evidence envelope"
-                )
-            if semantic is not None and evidence_semantic != semantic:
-                raise ValueError(
-                    "trial semantic judgment does not match the receipt committed by final evidence"
-                )
-'''
-          new = '''            semantic = (
-                SemanticJudgmentReceipt.model_validate(
-                    trial.semantic_judgment.model_dump(mode="json")
-                )
-                if trial.semantic_judgment is not None
-                else None
-            )
-            if trial.verdict is not TrialVerdict.BLOCKED:
-                try:
-                    evidence_semantic = verify_semantic_judgment_evidence(evidence)
-                except SemanticJudgmentError as exc:
-                    raise ValueError(f"trial semantic judgment evidence is invalid: {exc}") from exc
+          semantic = (
+              SemanticJudgmentReceipt.model_validate(
+                  trial.semantic_judgment.model_dump(mode="json")
+              )
+              if trial.semantic_judgment is not None
+              else None
+          )
+          if semantic is None and evidence_semantic is not None:
+              raise ValueError(
+                  "trial semantic judgment field is absent but final evidence commits a judgment"
+              )
+          if semantic is not None and evidence_semantic is None:
+              raise ValueError(
+                  "trial semantic judgment is not committed by the final evidence envelope"
+              )
+          if semantic is not None and evidence_semantic != semantic:
+              raise ValueError(
+                  "trial semantic judgment does not match the receipt committed by final evidence"
+              )
+          '''
+          # Restore the exact source indentation stripped by this helper string's own indentation.
+          old = "\n".join(("            " + line if line else "") for line in old.splitlines()) + "\n"
+          new = '''semantic = (
+              SemanticJudgmentReceipt.model_validate(
+                  trial.semantic_judgment.model_dump(mode="json")
+              )
+              if trial.semantic_judgment is not None
+              else None
+          )
+          if trial.verdict is not TrialVerdict.BLOCKED:
+              try:
+                  evidence_semantic = verify_semantic_judgment_evidence(evidence)
+              except SemanticJudgmentError as exc:
+                  raise ValueError(f"trial semantic judgment evidence is invalid: {exc}") from exc
 
-                if semantic is None and evidence_semantic is not None:
-                    raise ValueError(
-                        "trial semantic judgment field is absent but final evidence commits a judgment"
-                    )
-                if semantic is not None and evidence_semantic is None:
-                    raise ValueError(
-                        "trial semantic judgment is not committed by the final evidence envelope"
-                    )
-                if semantic is not None and evidence_semantic != semantic:
-                    raise ValueError(
-                        "trial semantic judgment does not match the receipt committed by final evidence"
-                    )
-'''
+              if semantic is None and evidence_semantic is not None:
+                  raise ValueError(
+                      "trial semantic judgment field is absent but final evidence commits a judgment"
+                  )
+              if semantic is not None and evidence_semantic is None:
+                  raise ValueError(
+                      "trial semantic judgment is not committed by the final evidence envelope"
+                  )
+              if semantic is not None and evidence_semantic != semantic:
+                  raise ValueError(
+                      "trial semantic judgment does not match the receipt committed by final evidence"
+                  )
+          '''
+          new = "\n".join(("            " + line if line else "") for line in new.splitlines()) + "\n"
           if text.count(old) != 1:
               raise SystemExit(f"report semantic block anchor count={text.count(old)}")
           report.write_text(text.replace(old, new, 1))
 
           test = Path("tests/unit/test_semantic_replay.py")
           text = test.read_text()
-          text = text.replace(
-              'from dataclasses import dataclass\n',
-              'from dataclasses import dataclass, replace\n',
-              1,
+          replacements = (
+              (
+                  "from dataclasses import dataclass\n",
+                  "from dataclasses import dataclass, replace\n",
+              ),
+              (
+                  "from agent_evals.adapters.replay import EvidenceReplayAdapter\n",
+                  "from agent_evals.adapters.replay import EvidenceReplayAdapter\n"
+                  "from agent_evals.assurance.report import AssuranceReport\n",
+              ),
+              (
+                  "from agent_evals.evidence.models import TrialVerdict\n",
+                  "from agent_evals.evidence.models import TrialEvidence, TrialVerdict\n"
+                  "from agent_evals.gates.release import ReleasePolicy\n",
+              ),
+              (
+                  "from agent_evals.runtime.evaluator import TrialRunner\n",
+                  "from agent_evals.runtime.evaluator import EvaluatedTrial, TrialRunner\n"
+                  "from agent_evals.runtime.session import EvaluationSessionResult\n",
+              ),
           )
-          text = text.replace(
-              'from agent_evals.adapters.replay import EvidenceReplayAdapter\n',
-              'from agent_evals.adapters.replay import EvidenceReplayAdapter\nfrom agent_evals.assurance.report import AssuranceReport\n',
-              1,
-          )
-          text = text.replace(
-              'from agent_evals.evidence.models import TrialVerdict\n',
-              'from agent_evals.evidence.models import TrialEvidence, TrialVerdict\nfrom agent_evals.gates.release import ReleasePolicy\n',
-              1,
-          )
-          text = text.replace(
-              'from agent_evals.runtime.evaluator import TrialRunner\n',
-              'from agent_evals.runtime.evaluator import EvaluatedTrial, TrialRunner\nfrom agent_evals.runtime.session import EvaluationSessionResult\n',
-              1,
-          )
-          text = text.replace(
-              'from agent_evals.semantic.models import (\n',
-              'from agent_evals.semantic.models import (\n',
-              1,
-          )
-          marker = ')\n\n\ndef _subject() -> SubjectFingerprint:\n'
-          replacement = ')\nfrom agent_evals.semantic.receipt import SemanticJudgmentReceipt\nfrom agent_evals.semantic.verification import append_semantic_judgment\nfrom agent_evals.statistics.reliability import ReliabilityReport\n\n\ndef _subject() -> SubjectFingerprint:\n'
-          if text.count(marker) != 1:
-              raise SystemExit(f"semantic import marker count={text.count(marker)}")
-          text = text.replace(marker, replacement, 1)
+          for before, after in replacements:
+              if text.count(before) != 1:
+                  raise SystemExit(f"test import anchor count={text.count(before)} for {before!r}")
+              text = text.replace(before, after, 1)
 
-          helper_anchor = '''class _Judge:
-'''
+          import_marker = ")\n\n\ndef _subject() -> SubjectFingerprint:\n"
+          import_replacement = (
+              ")\n"
+              "from agent_evals.semantic.receipt import SemanticJudgmentReceipt\n"
+              "from agent_evals.semantic.verification import append_semantic_judgment\n"
+              "from agent_evals.statistics.reliability import ReliabilityReport\n\n\n"
+              "def _subject() -> SubjectFingerprint:\n"
+          )
+          if text.count(import_marker) != 1:
+              raise SystemExit(f"semantic import marker count={text.count(import_marker)}")
+          text = text.replace(import_marker, import_replacement, 1)
+
+          helper_anchor = "class _Judge:\n"
           helpers = '''def _report_session(trial: EvaluatedTrial) -> EvaluationSessionResult:
-    return EvaluationSessionResult(
-        subject_identity=trial.evidence.subject_identity,
-        scenario_identity=trial.evidence.scenario_identity,
-        trials=(trial,),
-        reliability=ReliabilityReport.from_verdicts((trial.verdict,)),
-    )
+              return EvaluationSessionResult(
+                  subject_identity=trial.evidence.subject_identity,
+                  scenario_identity=trial.evidence.scenario_identity,
+                  trials=(trial,),
+                  reliability=ReliabilityReport.from_verdicts((trial.verdict,)),
+              )
 
 
-def _report_policy() -> ReleasePolicy:
-    return ReleasePolicy(
-        min_resolved_trials=1,
-        min_success_rate=0.0,
-        min_wilson_low=0.0,
-        max_critical_violations=0,
-        max_blocked_trials=1,
-        max_inconclusive_trials=1,
-    )
+          def _report_policy() -> ReleasePolicy:
+              return ReleasePolicy(
+                  min_resolved_trials=1,
+                  min_success_rate=0.0,
+                  min_wilson_low=0.0,
+                  max_critical_violations=0,
+                  max_blocked_trials=1,
+                  max_inconclusive_trials=1,
+              )
 
 
-class _Judge:
-'''
+          class _Judge:
+          '''
+          helpers = "\n".join(line[10:] if line.startswith("          ") else line for line in helpers.splitlines()) + "\n"
           if text.count(helper_anchor) != 1:
               raise SystemExit(f"test helper anchor count={text.count(helper_anchor)}")
           text = text.replace(helper_anchor, helpers, 1)
 
           old_test = '''@pytest.mark.asyncio
-async def test_replay_rejects_semantic_evidence_after_deterministic_failure() -> None:
-    subject = _subject()
-    scenario = _scenario()
-    judge = _Judge()
-    live = await TrialRunner(semantic_judge=judge).run(
-        _StaticAdapter(),
-        subject=subject,
-        scenario=scenario,
-        trial_id="semantic-invalid-precedence",
-    )
-    tampered = live.evidence.model_copy(update={"final_state": {"unexpected": "state"}})
-    failing_scenario = scenario.model_copy(update={"required_outcomes": {"required": "value"}})
-    rebound = tampered.model_copy(update={"scenario_identity": failing_scenario.identity})
+          async def test_replay_rejects_semantic_evidence_after_deterministic_failure() -> None:
+              subject = _subject()
+              scenario = _scenario()
+              judge = _Judge()
+              live = await TrialRunner(semantic_judge=judge).run(
+                  _StaticAdapter(),
+                  subject=subject,
+                  scenario=scenario,
+                  trial_id="semantic-invalid-precedence",
+              )
+              tampered = live.evidence.model_copy(update={"final_state": {"unexpected": "state"}})
+              failing_scenario = scenario.model_copy(update={"required_outcomes": {"required": "value"}})
+              rebound = tampered.model_copy(update={"scenario_identity": failing_scenario.identity})
 
-    replayed = await TrialRunner().run(
-        EvidenceReplayAdapter(rebound),
-        subject=subject,
-        scenario=failing_scenario,
-        trial_id="semantic-invalid-precedence",
-    )
+              replayed = await TrialRunner().run(
+                  EvidenceReplayAdapter(rebound),
+                  subject=subject,
+                  scenario=failing_scenario,
+                  trial_id="semantic-invalid-precedence",
+              )
 
-    assert replayed.verdict is TrialVerdict.BLOCKED
-    assert replayed.evidence.events[-1].payload["code"] in {
-        "semantic_judgment_unverified",
-        "semantic_judgment_after_deterministic_failure",
-    }
-'''
+              assert replayed.verdict is TrialVerdict.BLOCKED
+              assert replayed.evidence.events[-1].payload["code"] in {
+                  "semantic_judgment_unverified",
+                  "semantic_judgment_after_deterministic_failure",
+              }
+          '''
+          old_test = "\n".join(line[10:] if line.startswith("          ") else line for line in old_test.splitlines()) + "\n"
           new_test = '''@pytest.mark.asyncio
-async def test_assurance_reports_runtime_blocked_rejected_semantic_history() -> None:
-    subject = _subject()
-    scenario = _scenario()
-    judge = _Judge()
-    live = await TrialRunner(semantic_judge=judge).run(
-        _StaticAdapter(),
-        subject=subject,
-        scenario=scenario,
-        trial_id="semantic-rejected-history",
-    )
-    semantic_event = live.evidence.events[-1]
-    malformed_payload = dict(semantic_event.payload)
-    malformed_payload["receipt_root"] = "0" * 64
-    malformed_event = semantic_event.model_copy(update={"payload": malformed_payload})
-    malformed_evidence = live.evidence.model_copy(
-        update={"events": (*live.evidence.events[:-1], malformed_event)}
-    )
+          async def test_assurance_reports_runtime_blocked_rejected_semantic_history() -> None:
+              subject = _subject()
+              scenario = _scenario()
+              judge = _Judge()
+              live = await TrialRunner(semantic_judge=judge).run(
+                  _StaticAdapter(),
+                  subject=subject,
+                  scenario=scenario,
+                  trial_id="semantic-rejected-history",
+              )
+              semantic_event = live.evidence.events[-1]
+              malformed_payload = dict(semantic_event.payload)
+              malformed_payload["receipt_root"] = "0" * 64
+              malformed_event = semantic_event.model_copy(update={"payload": malformed_payload})
+              malformed_evidence = live.evidence.model_copy(
+                  update={"events": (*live.evidence.events[:-1], malformed_event)}
+              )
 
-    blocked = await TrialRunner().run(
-        EvidenceReplayAdapter(malformed_evidence),
-        subject=subject,
-        scenario=scenario,
-        trial_id="semantic-rejected-history",
-    )
+              blocked = await TrialRunner().run(
+                  EvidenceReplayAdapter(malformed_evidence),
+                  subject=subject,
+                  scenario=scenario,
+                  trial_id="semantic-rejected-history",
+              )
 
-    assert blocked.verdict is TrialVerdict.BLOCKED
-    assert blocked.oracle_results == ()
-    assert blocked.semantic_judgment is None
-    assert blocked.evidence.events[-2].kind.value == "semantic_judgment"
-    assert blocked.evidence.events[-1].payload["code"] == "semantic_judgment_unverified"
+              assert blocked.verdict is TrialVerdict.BLOCKED
+              assert blocked.oracle_results == ()
+              assert blocked.semantic_judgment is None
+              assert blocked.evidence.events[-2].kind.value == "semantic_judgment"
+              assert blocked.evidence.events[-1].payload["code"] == "semantic_judgment_unverified"
 
-    report = AssuranceReport.from_session(
-        _report_session(blocked),
-        release_policy=_report_policy(),
-    )
-    assert report.trials[0].verdict is TrialVerdict.BLOCKED
-    assert report.trials[0].oracle_results == ()
-    assert report.trials[0].semantic_judgment is None
-    assert report.trials[0].evidence_root == blocked.evidence.evidence_root
+              report = AssuranceReport.from_session(
+                  _report_session(blocked),
+                  release_policy=_report_policy(),
+              )
+              assert report.trials[0].verdict is TrialVerdict.BLOCKED
+              assert report.trials[0].oracle_results == ()
+              assert report.trials[0].semantic_judgment is None
+              assert report.trials[0].evidence_root == blocked.evidence.evidence_root
 
-    assert live.semantic_judgment is not None
-    forged = replace(blocked, semantic_judgment=live.semantic_judgment)
-    with pytest.raises(ValueError, match="blocked assurance trial cannot contain semantic judgment"):
-        AssuranceReport.from_session(
-            _report_session(forged),
-            release_policy=_report_policy(),
-        )
+              assert live.semantic_judgment is not None
+              forged = replace(blocked, semantic_judgment=live.semantic_judgment)
+              with pytest.raises(
+                  ValueError,
+                  match="blocked assurance trial cannot contain semantic judgment",
+              ):
+                  AssuranceReport.from_session(
+                      _report_session(forged),
+                      release_policy=_report_policy(),
+                  )
 
 
-@pytest.mark.asyncio
-async def test_assurance_reports_runtime_blocked_semantic_after_deterministic_failure() -> None:
-    subject = _subject()
-    base = _scenario()
-    failing_scenario = EvaluationScenario(
-        scenario_id=base.scenario_id,
-        revision=base.revision,
-        kind=base.kind,
-        objective=base.objective,
-        semantic_rubric=base.semantic_rubric,
-        required_outcomes={"required": "value"},
-    )
-    pre_semantic = TrialEvidence(
-        trial_id="semantic-invalid-precedence",
-        subject_identity=subject.identity,
-        scenario_identity=failing_scenario.identity,
-        final_state={"unexpected": "state"},
-        final_output="Grounded answer.",
-    )
-    judge_input = SemanticJudgeInput(
-        objective=failing_scenario.objective,
-        rubric=_rubric(),
-        candidate_output="Grounded answer.",
-    )
-    receipt = SemanticJudgmentReceipt.create(
-        scenario_identity=failing_scenario.identity,
-        subject_identity=subject.identity,
-        subject_evidence_root=pre_semantic.evidence_root,
-        rubric=_rubric(),
-        judge_profile=_profile(),
-        calibration_receipt=_calibration(),
-        judge_input=judge_input,
-        response=_response(SemanticDecision.PASS),
-    )
-    recorded = append_semantic_judgment(pre_semantic, receipt)
+          @pytest.mark.asyncio
+          async def test_assurance_reports_runtime_blocked_semantic_after_deterministic_failure() -> None:
+              subject = _subject()
+              base = _scenario()
+              failing_scenario = EvaluationScenario(
+                  scenario_id=base.scenario_id,
+                  revision=base.revision,
+                  kind=base.kind,
+                  objective=base.objective,
+                  semantic_rubric=base.semantic_rubric,
+                  required_outcomes={"required": "value"},
+              )
+              pre_semantic = TrialEvidence(
+                  trial_id="semantic-invalid-precedence",
+                  subject_identity=subject.identity,
+                  scenario_identity=failing_scenario.identity,
+                  final_state={"unexpected": "state"},
+                  final_output="Grounded answer.",
+              )
+              judge_input = SemanticJudgeInput(
+                  objective=failing_scenario.objective,
+                  rubric=_rubric(),
+                  candidate_output="Grounded answer.",
+              )
+              receipt = SemanticJudgmentReceipt.create(
+                  scenario_identity=failing_scenario.identity,
+                  subject_identity=subject.identity,
+                  subject_evidence_root=pre_semantic.evidence_root,
+                  rubric=_rubric(),
+                  judge_profile=_profile(),
+                  calibration_receipt=_calibration(),
+                  judge_input=judge_input,
+                  response=_response(SemanticDecision.PASS),
+              )
+              recorded = append_semantic_judgment(pre_semantic, receipt)
 
-    blocked = await TrialRunner().run(
-        EvidenceReplayAdapter(recorded),
-        subject=subject,
-        scenario=failing_scenario,
-        trial_id="semantic-invalid-precedence",
-    )
+              blocked = await TrialRunner().run(
+                  EvidenceReplayAdapter(recorded),
+                  subject=subject,
+                  scenario=failing_scenario,
+                  trial_id="semantic-invalid-precedence",
+              )
 
-    assert blocked.verdict is TrialVerdict.BLOCKED
-    assert blocked.oracle_results == ()
-    assert blocked.semantic_judgment is None
-    assert blocked.evidence.events[-2].kind.value == "semantic_judgment"
-    assert blocked.evidence.events[-1].payload["code"] == (
-        "semantic_judgment_after_deterministic_failure"
-    )
+              assert blocked.verdict is TrialVerdict.BLOCKED
+              assert blocked.oracle_results == ()
+              assert blocked.semantic_judgment is None
+              assert blocked.evidence.events[-2].kind.value == "semantic_judgment"
+              assert blocked.evidence.events[-1].payload["code"] == (
+                  "semantic_judgment_after_deterministic_failure"
+              )
 
-    report = AssuranceReport.from_session(
-        _report_session(blocked),
-        release_policy=_report_policy(),
-    )
-    assert report.trials[0].verdict is TrialVerdict.BLOCKED
-    assert report.trials[0].semantic_judgment is None
-    assert report.trials[0].evidence_root == blocked.evidence.evidence_root
-'''
+              report = AssuranceReport.from_session(
+                  _report_session(blocked),
+                  release_policy=_report_policy(),
+              )
+              assert report.trials[0].verdict is TrialVerdict.BLOCKED
+              assert report.trials[0].semantic_judgment is None
+              assert report.trials[0].evidence_root == blocked.evidence.evidence_root
+          '''
+          new_test = "\n".join(line[10:] if line.startswith("          ") else line for line in new_test.splitlines()) + "\n"
           if text.count(old_test) != 1:
               raise SystemExit(f"semantic replay regression anchor count={text.count(old_test)}")
           test.write_text(text.replace(old_test, new_test, 1))
@@ -285,16 +300,23 @@ async def test_assurance_reports_runtime_blocked_semantic_after_deterministic_fa
           docs = Path("docs/ASSURANCE_REPORTS.md")
           text = docs.read_text()
           old_doc = '- optional semantic grading must be the exact valid receipt committed by one terminal, recognized, non-critical `SEMANTIC_JUDGMENT` event in that final evidence envelope, including the exact reconstructed pre-semantic evidence root; absence must match on both sides;\n'
-          new_doc = '- for resolved or inconclusive trials, optional semantic grading must be the exact valid receipt committed by one terminal, recognized, non-critical `SEMANTIC_JUDGMENT` event in that final evidence envelope, including the exact reconstructed pre-semantic evidence root; absence must match on both sides;\n- `BLOCKED` trials carry no finalized semantic grading authority: rejected semantic events may remain in the final evidence history before the evaluator error that caused blocking, but they are not copied into the report semantic field;\n'
+          new_doc = (
+              '- for resolved or inconclusive trials, optional semantic grading must be the exact valid receipt committed by one terminal, recognized, non-critical `SEMANTIC_JUDGMENT` event in that final evidence envelope, including the exact reconstructed pre-semantic evidence root; absence must match on both sides;\n'
+              '- `BLOCKED` trials carry no finalized semantic grading authority: rejected semantic events may remain in the final evidence history before the evaluator error that caused blocking, but they are not copied into the report semantic field;\n'
+          )
           if text.count(old_doc) != 1:
               raise SystemExit(f"assurance doc anchor count={text.count(old_doc)}")
           docs.write_text(text.replace(old_doc, new_doc, 1))
           PY
       - name: Install targeted test dependencies
         run: python -m pip install --disable-pip-version-check -e '.[dev]'
+      - name: Normalize touched Python files
+        run: |
+          ruff check --fix src/agent_evals/assurance/report.py tests/unit/test_semantic_replay.py
+          ruff format src/agent_evals/assurance/report.py tests/unit/test_semantic_replay.py
       - name: Run focused regression tests
         run: pytest -q tests/unit/test_semantic_replay.py tests/unit/test_assurance_semantic.py tests/unit/test_assurance_report.py
-      - name: Validate formatting and patch
+      - name: Validate patch
         run: |
           ruff check src/agent_evals/assurance/report.py tests/unit/test_semantic_replay.py
           ruff format --check src/agent_evals/assurance/report.py tests/unit/test_semantic_replay.py
