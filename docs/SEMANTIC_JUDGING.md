@@ -144,10 +144,16 @@ A `SemanticCalibrationCase` contains evaluator-owned labeled material:
 - expected PASS or FAIL label;
 - optional coverage tags.
 
-The raw candidate text is not duplicated into the calibration receipt. Each observation binds the content-addressed case identity and either:
+Calibration case/observation/receipt schemas are explicitly versioned. In case v2, `SemanticCalibrationCase.identity` is the root of a privacy-preserving `SemanticCalibrationCaseCommitment` rather than a hash that requires the raw case body to be present. The commitment binds case ID/revision, objective SHA-256, rubric identity, candidate-output SHA-256, evaluator-owned expected PASS/FAIL label, and canonical coverage tags. Raw objective and candidate text are not duplicated into the durable observation or calibration receipt.
+
+Each observation v2 embeds that self-validating commitment and either:
 
 - a rederived structured judge decision plus response digest; or
 - an explicit judge/malformed-response failure code.
+
+`expected` and coverage `tags` are no longer independently serialized observation claims. Class support, false-PASS accounting, accuracy, and adversarial coverage are derived from the verified case commitment. Relabeling a case or injecting/removing a coverage tag therefore changes the case identity; retaining the old identity makes commitment validation fail.
+
+The commitment is still an ordinary content hash. An actor able to author an entirely new unsigned case and recompute all roots can create a different valid identity; this mechanism provides internal binding and drift detection, not human-label authentication, trusted publisher identity, or signatures.
 
 ### Metrics
 
@@ -175,7 +181,7 @@ The policy itself is content-addressed and embedded in the receipt. Changing acc
 
 ### Prompt-injection coverage
 
-A calibration case tagged `judge-prompt-injection` is not a magic security certification. It proves only that the exact calibrated judge configuration was evaluated against at least one explicitly labeled candidate containing evaluator-directed adversarial text.
+A calibration case committed with the `judge-prompt-injection` tag is not a magic security certification. It proves only that the exact calibrated judge configuration was evaluated against at least one case whose evaluator-owned commitment includes that coverage label. An observation cannot manufacture this coverage by adding a standalone tag.
 
 The repository's deterministic OpenAI SDK tests additionally verify that candidate text such as an instruction to ignore the rubric remains inside the canonical JSON `candidate_output` field supplied to the judge model.
 
@@ -189,7 +195,9 @@ Validation re-parses the live judge profile and calibration receipt, then requir
 
 - calibration `accepted == True`;
 - exact profile identity equality between live judge and calibration;
-- internally valid calibration metrics and receipt root.
+- internally valid v2 case commitments, calibration metrics, and receipt root.
+
+Current authority validation accepts calibration receipt v2. Legacy v1 calibration receipts are not silently interpreted as the stronger relation: the typed nested calibration field causes both fresh semantic-authority validation and persisted `SemanticJudgmentReceipt` replay validation to fail closed on the old schema. The outer semantic-judgment schema does not change because its own relation and hashing semantics are unchanged; it already binds and validates the complete nested calibration receipt.
 
 Malformed, rejected, or drifted authority produces evaluator uncertainty rather than subject failure.
 
