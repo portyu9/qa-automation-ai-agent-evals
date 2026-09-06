@@ -5,6 +5,7 @@ from agent_evals.assurance.report import (
     GateSnapshot,
     OracleSnapshot,
     ReliabilitySnapshot,
+    ScenarioGradingProfile,
     TrialAssuranceRecord,
 )
 
@@ -13,5 +14,6 @@ __all__ = [
     "GateSnapshot",
     "OracleSnapshot",
     "ReliabilitySnapshot",
+    "ScenarioGradingProfile",
     "TrialAssuranceRecord",
 ]
