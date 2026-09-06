@@ -62,25 +62,28 @@ class SemanticCalibrationCaseCommitment(BaseModel):
 
     @classmethod
     def from_case(cls, case: SemanticCalibrationCase) -> Self:
+        objective_sha256 = _sha256_text(case.objective)
+        candidate_output_sha256 = _sha256_text(case.candidate_output)
+        tags = tuple(sorted(case.tags))
         unsigned = {
             "schema_version": _CASE_COMMITMENT_SCHEMA,
             "source_case_schema": _CASE_SCHEMA,
             "case_id": case.case_id,
             "revision": case.revision,
-            "objective_sha256": _sha256_text(case.objective),
+            "objective_sha256": objective_sha256,
             "rubric_identity": case.rubric.identity,
-            "candidate_output_sha256": _sha256_text(case.candidate_output),
+            "candidate_output_sha256": candidate_output_sha256,
             "expected": case.expected.value,
-            "tags": sorted(case.tags),
+            "tags": tags,
         }
         return cls(
             case_id=case.case_id,
             revision=case.revision,
-            objective_sha256=unsigned["objective_sha256"],
+            objective_sha256=objective_sha256,
             rubric_identity=case.rubric.identity,
-            candidate_output_sha256=unsigned["candidate_output_sha256"],
+            candidate_output_sha256=candidate_output_sha256,
             expected=case.expected,
-            tags=tuple(sorted(case.tags)),
+            tags=tags,
             commitment_root=_case_commitment_root(unsigned),
         )
 
@@ -91,7 +94,9 @@ class SemanticCalibrationCaseCommitment(BaseModel):
     @model_validator(mode="after")
     def verify_commitment(self) -> Self:
         if self.expected is SemanticDecision.ABSTAIN:
-            raise ValueError("calibration case commitment requires evaluator-owned PASS or FAIL label")
+            raise ValueError(
+                "calibration case commitment requires evaluator-owned PASS or FAIL label"
+            )
         if any(not tag.strip() for tag in self.tags):
             raise ValueError("semantic calibration commitment tags must be non-empty strings")
         if self.tags != tuple(sorted(set(self.tags))):
