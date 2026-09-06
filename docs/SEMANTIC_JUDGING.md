@@ -198,6 +198,16 @@ Current authority validation accepts calibration receipt v2. Legacy v1 calibrati
 
 Malformed, rejected, or drifted authority produces evaluator uncertainty rather than subject failure.
 
+### Live adapter authority boundary
+
+`AdapterResult` is an observation boundary, not a grading-authority channel. An ordinary live adapter may report normalized provider/runtime events, but it may not return a pre-recorded `SEMANTIC_JUDGMENT` and thereby claim that the evaluator already graded the subject.
+
+After adapter output is normalized and existing blocking evidence is honored, `TrialRunner` rejects any live adapter result containing `SEMANTIC_JUDGMENT` as `EVALUATION_ERROR / BLOCKED` with no completed oracle results and no authoritative semantic judgment. A syntactically correct `source="evaluator:semantic-judge"`, accepted calibration receipt, semantic receipt, and matching content roots do not change that rule: those values establish internal consistency, not the producer identity of a live adapter event.
+
+The only path allowed to enter `TrialRunner` with an already-finalized semantic event is the framework's exact built-in `EvidenceReplayAdapter`. This is an execution-path distinction, not a signature or remote-attestation mechanism. Explicit replay means “revalidate this previously finalized evidence envelope”; it does not grant ordinary adapters, replay subclasses, or self-declared marker interfaces evaluator authority.
+
+Fresh live semantic authority is created only after deterministic grading passes, the configured judge authority validates, the evaluator invokes that judge, independently validates the response, creates the receipt, and appends the terminal semantic event itself.
+
 ## Deterministic precedence
 
 Semantic grading occurs only after the framework has already verified execution preconditions and run deterministic policy/outcome oracles.
@@ -270,13 +280,17 @@ A valid semantic event must be:
 - bound to the exact scenario rubric;
 - bound to the exact evidence root reconstructed from everything before the semantic event.
 
+These invariants define the persisted event's replay-verifiable relation; they are necessary but not sufficient to authorize an ordinary live adapter to produce that event. Live producer authority is enforced separately by the execution-path boundary above.
+
 Duplicate semantic events, post-judgment subject events, critical semantic events, source spoofing, receipt tampering, or pre-semantic root mismatch fail closed.
 
 ## Replay
 
 Replay never silently invokes a semantic model.
 
-When persisted evidence already contains a semantic event, `TrialRunner`:
+Only the exact built-in `EvidenceReplayAdapter` may supply a previously finalized semantic event to `TrialRunner`. Ordinary live adapters carrying the same event are blocked before that historical decision can influence grading. This explicit replay exception preserves reproducibility without turning a source string or receipt hash into live producer authentication.
+
+When persisted evidence already contains a semantic event through that replay path, `TrialRunner`:
 
 1. reruns deterministic delivery/precondition checks;
 2. reruns deterministic policy/outcome oracles;
@@ -286,7 +300,7 @@ When persisted evidence already contains a semantic event, `TrialRunner`:
 
 If deterministic replay now fails while historical semantic evidence exists, the runtime rejects the impossible precedence relation instead of allowing the old semantic result to rescue or coexist with deterministic failure.
 
-Replay therefore verifies historical consistency. It does not prove that the semantic provider is live, that the model would return the same result now, or that external state is unchanged.
+Replay therefore verifies historical consistency. It does not prove that the semantic provider is live, that the model would return the same result now, that the persisted evidence came from an authenticated publisher, or that external state is unchanged.
 
 ## Assurance reports
 
@@ -351,10 +365,11 @@ The current semantic layer does not claim:
 - provider-side model-version attestation;
 - calibration transfer across model/prompt/configuration drift;
 - current-model liveness during replay;
+- authenticated publisher identity for replayed semantic evidence;
 - authority to override policy, state, approval, protocol, or release-safety evidence;
 - that a semantic PASS proves any external side effect occurred.
 
-These limits are architectural, not caveats added after scoring. The code encodes them through identity, calibration, runtime short-circuiting, event criticality, replay verification, and report derivation.
+These limits are architectural, not caveats added after scoring. The code encodes them through identity, calibration, runtime short-circuiting, live/replay authority separation, event criticality, replay verification, and report derivation.
 
 ## Recommended usage
 
