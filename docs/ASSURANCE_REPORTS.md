@@ -28,7 +28,7 @@ The profile intentionally does **not** serialize the full scenario objective, in
 
 Assurance Report v4 keeps deterministic and semantic grading as separate authority classes:
 
-1. **deterministic oracle snapshots** — required core `policy`/`outcome` conclusions plus the scenario-required `side-effect-idempotency` conclusion and any additional deterministic conclusions produced by an extending runtime;
+1. **deterministic oracle snapshots** — required core `policy`/`outcome` conclusions plus the scenario-required `side-effect-idempotency` conclusion and any additional deterministic conclusions produced by an extending runtime; during report construction the framework-owned oracle tuple is rederived from the exact scenario/evidence and must exactly equal the finalized trial tuple before those snapshots are persisted;
 2. **semantic judgment receipt** — calibrated meaning-level grading that is required only when the scenario grading profile contains a semantic rubric identity **and** deterministic grading has passed.
 
 Semantic grading remains subordinate to deterministic grading. It can narrow deterministic PASS into semantic FAIL or evaluator uncertainty, but it cannot rescue deterministic failure and can never create critical policy authority.
@@ -41,7 +41,9 @@ ScenarioGradingProfile
         └─ side-effect contract identity / explicit absence
         ↓
 bound TrialEvidence schema + exact final evidence root
-        ↓
+        ↓ shared pre-grading closure
+rederived deterministic oracle tuple
+        ↓ exact equality with finalized trial oracle tuple
 deterministic oracle snapshots
         ├─ deterministic FAIL ───────────────→ trial FAIL
         │                                     semantic grading short-circuits
@@ -73,13 +75,13 @@ For every non-`BLOCKED` trial, v4 enforces:
 - if no semantic rubric is configured, semantic judgment evidence is not valid;
 - any semantic receipt carried by the report must bind the exact rubric identity committed by the profile.
 
-Unknown additional deterministic oracle names remain extensible. The profile controls only framework-known grading stages whose required presence is determined by the scenario contract.
+Unknown additional deterministic oracle names remain extensible in the serialized artifact model. The profile controls only framework-known grading stages whose required presence is determined by the scenario contract. Construction of a report from an in-memory framework session is stricter: the finalized deterministic tuple must equal the framework's exact rederived tuple, including oracle order, names, verdicts, reasons, and critical flags.
 
 The profile is included in `report_root`, so unacknowledged profile changes alter the report content identity. As with the rest of the report, this is ordinary integrity hashing, not authenticated authorship.
 
 ## Construction-time verification with the exact scenario
 
-`AssuranceReport.from_session()` now requires the exact `EvaluationScenario`:
+`AssuranceReport.from_session()` requires the exact `EvaluationScenario`:
 
 ```python
 report = AssuranceReport.from_session(
@@ -97,7 +99,7 @@ scenario.identity == session.scenario_identity
 
 A caller therefore cannot generate a v4 report for one session while supplying a different grading contract.
 
-For each non-`BLOCKED` trial, construction now reuses the same **pre-grading closure** that `TrialRunner` requires before deterministic oracle execution. This is intentionally one shared runtime boundary rather than a second, partially duplicated verifier list. The ordering is behavior-bearing and remains:
+For each non-`BLOCKED` trial, construction reuses the same **pre-grading closure** that `TrialRunner` requires before deterministic oracle execution. This is intentionally one shared runtime boundary rather than a second, partially duplicated verifier list. The ordering is behavior-bearing and remains:
 
 1. reject evidence that already contains `EVALUATION_ERROR` or `RUNTIME_ERROR` as impossible for a resolved trial;
 2. `verify_attack_delivery(scenario, evidence)` — adversarial scenarios must prove one exact controlled delivery;
@@ -106,14 +108,26 @@ For each non-`BLOCKED` trial, construction now reuses the same **pre-grading clo
 5. `verify_side_effect_observation(scenario, evidence)` — a configured side-effect contract must close its observation relation and absence is enforced for ordinary scenarios;
 6. `verify_approval_intent(scenario, evidence)` — configured stronger approval intent must close its exact request→decision→continuation relation before deterministic grading.
 
-After that shared pre-grading closure succeeds, report construction performs the post-deterministic checks that cannot live in the shared boundary:
+After the shared pre-grading closure succeeds, construction calls the same deterministic-grading function as `TrialRunner`:
+
+```text
+ordinary scenario:
+PolicyOracle → OutcomeOracle
+
+side-effect-idempotency scenario:
+PolicyOracle → SideEffectIdempotencyOracle → OutcomeOracle
+```
+
+The complete rederived `OracleResult` tuple must exactly equal the finalized trial tuple. Equality is intentionally stronger than verdict-only comparison: oracle ordering, names, verdicts, reasons, and critical flags must all match. Report snapshots are created from the rederived tuple only after that equality check succeeds. This prevents a reconstructed session from promoting policy, outcome, or side-effect evidence to PASS by supplying fabricated deterministic snapshots.
+
+Report construction then performs the post-deterministic checks that cannot live in either shared boundary:
 
 - the side-effect oracle's presence must match the grading profile;
 - `verify_semantic_judgment(scenario, evidence)` validates semantic event authority, exact scenario/rubric identity, pre-semantic evidence root, and the exact judge-input relation when a semantic receipt is present;
 - semantic field presence must match the receipt committed by final evidence;
 - completion evidence root, subject identity, scenario identity, trial-ID uniqueness, oracle criticality, reliability, and gate derivation retain their existing checks.
 
-Historical `BLOCKED` trials deliberately do **not** have their failed precondition re-run as though it must now succeed. They remain valid report inputs only when they carry no completed oracle results or finalized semantic authority, preserving evaluator/runtime uncertainty instead of rewriting history.
+Historical `BLOCKED` trials deliberately do **not** have their failed precondition or deterministic grading re-run as though the trial had reached those stages. They remain valid report inputs only when they carry no completed oracle results or finalized semantic authority, preserving evaluator/runtime uncertainty instead of rewriting history.
 
 This construction boundary is intentionally stronger than loading a standalone report because construction still has the full scenario and full trial evidence available.
 
@@ -126,6 +140,8 @@ For each trial the report records:
 - terminal trial verdict;
 - deterministic oracle snapshots: unique oracle name, verdict, reasons, and critical flag;
 - optional full `SemanticJudgmentReceipt`.
+
+At construction time, framework deterministic snapshots have already been proven equal to exact scenario/evidence regrading. Standalone report loading does not repeat that evidence-level regrading because the report intentionally does not embed full `TrialEvidence` or the full scenario preimage; it instead revalidates the persisted snapshot structure and every report-level derivation that can be recomputed from the artifact itself.
 
 The runtime contract also constrains known framework-oracle criticality. `policy` and `side-effect-idempotency` are critical exactly when they fail; `outcome` is never critical. Report validation rechecks those structural semantics rather than trusting a serialized criticality label.
 
@@ -180,10 +196,13 @@ Pydantic model validation is not passive JSON parsing. A loaded v4 report must s
 
 A schema-valid object that deletes a required semantic receipt, removes a required side-effect oracle, invents a semantic rubric profile, forges a verdict, changes reliability, changes confidence configuration, changes gate policy, or alters a report root therefore fails validation unless all lower-level persisted relations are coherently changed as well.
 
+This standalone-load list does **not** claim to re-run deterministic oracles from report bytes. Exact deterministic regrading occurs at `from_session()` while scenario/evidence are present, or later through the exact-identity evidence replay path.
+
 ## What standalone loading still cannot prove
 
 A v4 report still does not contain the complete event stream or the complete scenario preimage. Standalone loading therefore cannot reconstruct event-level facts such as:
 
+- whether deterministic oracle snapshots equal a fresh regrade of the referenced scenario/evidence preimage;
 - exact tool request/result chronology;
 - side-effect before/after observations and operation-key binding;
 - retrieval-delivery chronology;
@@ -252,8 +271,8 @@ The layers remain intentionally separate:
 - `LocalEvidenceStore` verifies and returns persisted `TrialEvidence`;
 - `EvidenceReplayAdapter` can submit those historical observations through deterministic grading again under exact subject/scenario identity;
 - semantic replay reconstructs the pre-semantic envelope and revalidates historical semantic receipts without calling a fresh semantic model;
-- v4 report construction uses the supplied exact scenario plus in-memory evidence to run the same pre-grading closure as `TrialRunner`, then validates side-effect grading shape and post-deterministic semantic relations before producing the artifact;
-- standalone v4 parsing uses the grading profile to enforce which grading stages must be present, but exact evidence replay is still required to re-establish event-level chronology and receipt relations;
+- v4 report construction uses the supplied exact scenario plus in-memory evidence to run the same pre-grading closure **and the same deterministic oracle derivation** as `TrialRunner`, requires exact equality with the finalized trial tuple, then validates grading shape and post-deterministic semantic relations before producing the artifact;
+- standalone v4 parsing uses the grading profile and serialized oracle facts to enforce report-level derivation, but exact evidence replay is still required to re-establish event-level chronology, receipt relations, and deterministic oracle/evidence equivalence from persisted source material;
 - `AssuranceReport` verifies session-level derivation from bound grading facts, grading profile, evidence schema/roots, exact statistical configuration, release policy, and release-gate result.
 
 The report can answer, "Does this stored session conclusion internally follow from the grading facts, grading-shape contract, statistical contract, and policy it contains?" It cannot by itself answer, "Would fresh execution produce the same observations now?"
