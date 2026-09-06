@@ -103,7 +103,9 @@ class SemanticCalibrationCaseCommitment(BaseModel):
                 "calibration case commitment requires evaluator-owned PASS or FAIL label"
             )
         if self.rubric_identity != self.rubric.identity:
-            raise ValueError("semantic calibration commitment rubric identity does not match rubric")
+            raise ValueError(
+                "semantic calibration commitment rubric identity does not match rubric"
+            )
         if any(not tag.strip() for tag in self.tags):
             raise ValueError("semantic calibration commitment tags must be non-empty strings")
         if self.tags != tuple(sorted(set(self.tags))):
