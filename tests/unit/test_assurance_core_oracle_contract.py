@@ -4,6 +4,7 @@ import pytest
 from pydantic import ValidationError
 
 from agent_evals.assurance.report import AssuranceReport, OracleSnapshot
+from agent_evals.contracts.models import EvaluationScenario, ScenarioKind
 from agent_evals.evidence.models import TrialEvidence, TrialVerdict
 from agent_evals.gates.release import GateDecision, ReleasePolicy
 from agent_evals.oracles.deterministic import OracleResult
@@ -12,7 +13,13 @@ from agent_evals.runtime.session import EvaluationSessionResult
 from agent_evals.statistics.reliability import ReliabilityReport
 
 SUBJECT = "a" * 64
-SCENARIO = "b" * 64
+SCENARIO_CONTRACT = EvaluationScenario(
+    scenario_id="assurance.core-oracles",
+    revision="1",
+    kind=ScenarioKind.REGRESSION,
+    objective="Exercise deterministic assurance oracle binding.",
+)
+SCENARIO = SCENARIO_CONTRACT.identity
 
 
 def _policy() -> ReleasePolicy:
@@ -48,16 +55,23 @@ def _session(
     )
 
 
-def _valid_pass_report() -> AssuranceReport:
+def _report(session: EvaluationSessionResult) -> AssuranceReport:
     return AssuranceReport.from_session(
+        session,
+        scenario=SCENARIO_CONTRACT,
+        release_policy=_policy(),
+    )
+
+
+def _valid_pass_report() -> AssuranceReport:
+    return _report(
         _session(
             (
                 OracleResult(name="policy", verdict=TrialVerdict.PASS),
                 OracleResult(name="outcome", verdict=TrialVerdict.PASS),
             ),
             verdict=TrialVerdict.PASS,
-        ),
-        release_policy=_policy(),
+        )
     )
 
 
@@ -68,7 +82,7 @@ def test_from_session_rejects_resolved_trial_without_policy_oracle() -> None:
     )
 
     with pytest.raises(ValueError, match="missing core oracle results: policy"):
-        AssuranceReport.from_session(session, release_policy=_policy())
+        _report(session)
 
 
 def test_from_session_rejects_resolved_trial_without_outcome_oracle() -> None:
@@ -84,7 +98,7 @@ def test_from_session_rejects_resolved_trial_without_outcome_oracle() -> None:
     )
 
     with pytest.raises(ValueError, match="missing core oracle results: outcome"):
-        AssuranceReport.from_session(session, release_policy=_policy())
+        _report(session)
 
 
 @pytest.mark.parametrize(
@@ -127,7 +141,7 @@ def test_valid_policy_and_outcome_pass_remain_accepted() -> None:
 
 
 def test_valid_policy_failure_remains_noncompensatory() -> None:
-    report = AssuranceReport.from_session(
+    report = _report(
         _session(
             (
                 OracleResult(
@@ -138,8 +152,7 @@ def test_valid_policy_failure_remains_noncompensatory() -> None:
                 OracleResult(name="outcome", verdict=TrialVerdict.PASS),
             ),
             verdict=TrialVerdict.FAIL,
-        ),
-        release_policy=_policy(),
+        )
     )
 
     assert report.critical_violations == 1
@@ -147,15 +160,14 @@ def test_valid_policy_failure_remains_noncompensatory() -> None:
 
 
 def test_valid_outcome_failure_remains_noncritical() -> None:
-    report = AssuranceReport.from_session(
+    report = _report(
         _session(
             (
                 OracleResult(name="policy", verdict=TrialVerdict.PASS),
                 OracleResult(name="outcome", verdict=TrialVerdict.FAIL),
             ),
             verdict=TrialVerdict.FAIL,
-        ),
-        release_policy=_policy(),
+        )
     )
 
     assert report.trials[0].verdict is TrialVerdict.FAIL
@@ -174,7 +186,7 @@ def test_valid_side_effect_failure_criticality_snapshot_is_accepted() -> None:
 
 
 def test_additional_custom_oracle_cannot_replace_but_may_extend_core_set() -> None:
-    report = AssuranceReport.from_session(
+    report = _report(
         _session(
             (
                 OracleResult(name="policy", verdict=TrialVerdict.PASS),
@@ -182,8 +194,7 @@ def test_additional_custom_oracle_cannot_replace_but_may_extend_core_set() -> No
                 OracleResult(name="custom-deterministic", verdict=TrialVerdict.PASS),
             ),
             verdict=TrialVerdict.PASS,
-        ),
-        release_policy=_policy(),
+        )
     )
 
     assert tuple(result.name for result in report.trials[0].oracle_results) == (
@@ -218,4 +229,4 @@ def test_from_session_rejects_policy_criticality_downgrade_before_release_gate()
     )
 
     with pytest.raises(ValueError, match="criticality does not match deterministic runtime"):
-        AssuranceReport.from_session(session, release_policy=_policy())
+        _report(session)

@@ -3,6 +3,7 @@ from __future__ import annotations
 import pytest
 
 from agent_evals.assurance.report import AssuranceReport
+from agent_evals.contracts.models import EvaluationScenario, ScenarioKind
 from agent_evals.evidence.models import EvidenceEvent, EvidenceKind, TrialEvidence, TrialVerdict
 from agent_evals.gates.release import ReleasePolicy
 from agent_evals.oracles.deterministic import OracleResult
@@ -11,7 +12,13 @@ from agent_evals.runtime.session import EvaluationSessionResult
 from agent_evals.statistics.reliability import ReliabilityReport
 
 SUBJECT = "a" * 64
-SCENARIO = "b" * 64
+SCENARIO_CONTRACT = EvaluationScenario(
+    scenario_id="assurance.completion-root",
+    revision="1",
+    kind=ScenarioKind.REGRESSION,
+    objective="Verify final trial evidence root binding.",
+)
+SCENARIO = SCENARIO_CONTRACT.identity
 
 
 def _policy() -> ReleasePolicy:
@@ -31,6 +38,14 @@ def _session(trial: EvaluatedTrial) -> EvaluationSessionResult:
         scenario_identity=SCENARIO,
         trials=(trial,),
         reliability=ReliabilityReport.from_verdicts((trial.verdict,)),
+    )
+
+
+def _report(session: EvaluationSessionResult) -> AssuranceReport:
+    return AssuranceReport.from_session(
+        session,
+        scenario=SCENARIO_CONTRACT,
+        release_policy=_policy(),
     )
 
 
@@ -86,7 +101,7 @@ def test_report_rejects_final_state_mutation_after_trial_finalization() -> None:
 
     assert trial.evidence.evidence_root != completion_root
     with pytest.raises(ValueError, match="evidence root changed after evaluation finalization"):
-        AssuranceReport.from_session(_session(trial), release_policy=_policy())
+        _report(_session(trial))
 
 
 def test_report_rejects_event_payload_mutation_after_trial_finalization() -> None:
@@ -98,15 +113,15 @@ def test_report_rejects_event_payload_mutation_after_trial_finalization() -> Non
 
     assert trial.evidence.evidence_root != completion_root
     with pytest.raises(ValueError, match="evidence root changed after evaluation finalization"):
-        AssuranceReport.from_session(_session(trial), release_policy=_policy())
+        _report(_session(trial))
 
 
-def test_unchanged_trial_preserves_assurance_v3_shape_and_root_determinism() -> None:
+def test_unchanged_trial_preserves_assurance_v4_shape_and_root_determinism() -> None:
     trial = _resolved_trial()
     session = _session(trial)
 
-    first = AssuranceReport.from_session(session, release_policy=_policy())
-    second = AssuranceReport.from_session(session, release_policy=_policy())
+    first = _report(session)
+    second = _report(session)
     payload = first.model_dump(mode="json")
 
     assert first == second

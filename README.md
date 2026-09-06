@@ -118,7 +118,7 @@ The stronger HITL path does **not** claim authenticated humans, enterprise workf
 | **Reliability** | resolved success rate, Wilson interval, empirical `pass@k`/`pass^k`; unresolved attempts stay separate |
 | **Differential evaluation** | exact paired McNemar/binomial comparison over resolved trials |
 | **Semantic judging** | optional scenario-owned rubric, exact judge-profile/calibration authority, bounded PASS/FAIL/ABSTAIN response, terminal non-critical receipt bound to the pre-semantic evidence root, and deterministic short-circuit precedence |
-| **Assurance reports** | v3 self-validating artifacts preserving deterministic/semantic authority separation while rederiving trial verdicts, reliability from exact `k` + `confidence_z`, release policy, gate result, and report root |
+| **Assurance reports** | v4 self-validating artifacts binding a minimal scenario grading profile to deterministic/semantic grading shape while rederiving trial verdicts, reliability from exact `k` + `confidence_z`, release policy, gate result, and report root |
 | **Release gate** | non-compensatory critical-safety rules plus explicit `ACCEPT`, `REJECT`, and `INCONCLUSIVE` semantics |
 | **Metamorphic assurance** | state-projection invariance and authority-monotonicity relations without golden prose |
 | **Failure minimization** | bounded deterministic counterexample reduction requiring failure reproduction |

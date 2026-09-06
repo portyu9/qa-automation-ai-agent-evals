@@ -6,6 +6,7 @@ import pytest
 from pydantic import ValidationError
 
 from agent_evals.assurance.report import AssuranceReport
+from agent_evals.contracts.models import EvaluationScenario, ScenarioKind
 from agent_evals.evidence.models import TrialEvidence, TrialVerdict
 from agent_evals.gates.release import GateDecision, ReleasePolicy
 from agent_evals.oracles.deterministic import OracleResult
@@ -14,7 +15,13 @@ from agent_evals.runtime.session import EvaluationSessionResult
 from agent_evals.statistics.reliability import ReliabilityReport
 
 SUBJECT = "a" * 64
-SCENARIO = "b" * 64
+SCENARIO_CONTRACT = EvaluationScenario(
+    scenario_id="assurance.report",
+    revision="1",
+    kind=ScenarioKind.REGRESSION,
+    objective="Validate a self-contained assurance report.",
+)
+SCENARIO = SCENARIO_CONTRACT.identity
 
 
 def evaluated_trial(
@@ -83,13 +90,29 @@ def release_policy() -> ReleasePolicy:
     )
 
 
-def test_report_binds_trial_roots_oracles_schema_and_release_decision() -> None:
-    session = session_result()
-    report = AssuranceReport.from_session(session, release_policy=release_policy())
+def _report(
+    session: EvaluationSessionResult | None = None,
+    *,
+    scenario: EvaluationScenario = SCENARIO_CONTRACT,
+    policy: ReleasePolicy | None = None,
+) -> AssuranceReport:
+    return AssuranceReport.from_session(
+        session or session_result(),
+        scenario=scenario,
+        release_policy=policy or release_policy(),
+    )
 
+
+def test_report_binds_trial_roots_oracles_schema_profile_and_release_decision() -> None:
+    session = session_result()
+    report = _report(session)
+
+    assert report.schema_version == "agent-evals/assurance-report/v4"
     assert report.evidence_schema == "agent-evals/trial-evidence/v2"
     assert report.subject_identity == SUBJECT
     assert report.scenario_identity == SCENARIO
+    assert report.grading_profile.semantic_rubric_identity is None
+    assert report.grading_profile.side_effect_idempotency_identity is None
     assert tuple(record.trial_id for record in report.trials) == (
         "trial-0",
         "trial-1",
@@ -108,15 +131,24 @@ def test_report_binds_trial_roots_oracles_schema_and_release_decision() -> None:
 
 
 def test_report_json_round_trip_revalidates_all_derived_claims() -> None:
-    report = AssuranceReport.from_session(session_result(), release_policy=release_policy())
+    report = _report()
 
     loaded = AssuranceReport.model_validate_json(report.model_dump_json())
 
     assert loaded == report
 
 
+def test_v3_assurance_schema_is_rejected_under_v4() -> None:
+    report = _report()
+    payload = report.model_dump(mode="json")
+    payload["schema_version"] = "agent-evals/assurance-report/v3"
+
+    with pytest.raises(ValidationError, match="schema_version"):
+        AssuranceReport.model_validate(payload)
+
+
 def test_evidence_schema_is_strictly_version_bound() -> None:
-    report = AssuranceReport.from_session(session_result(), release_policy=release_policy())
+    report = _report()
     payload = report.model_dump(mode="json")
     payload["evidence_schema"] = "agent-evals/trial-evidence/v3"
 
@@ -124,8 +156,20 @@ def test_evidence_schema_is_strictly_version_bound() -> None:
         AssuranceReport.model_validate(payload)
 
 
+def test_from_session_rejects_scenario_contract_identity_drift() -> None:
+    foreign = EvaluationScenario(
+        scenario_id="assurance.report.foreign",
+        revision="1",
+        kind=ScenarioKind.REGRESSION,
+        objective="A different scenario contract.",
+    )
+
+    with pytest.raises(ValueError, match="scenario contract does not match session identity"):
+        _report(scenario=foreign)
+
+
 def test_resolved_trial_requires_oracle_results() -> None:
-    report = AssuranceReport.from_session(session_result(), release_policy=release_policy())
+    report = _report()
     payload = report.model_dump(mode="json")
     payload["trials"][0]["oracle_results"] = []
 
@@ -134,7 +178,7 @@ def test_resolved_trial_requires_oracle_results() -> None:
 
 
 def test_resolved_trial_rejects_nonresolved_oracle_verdict() -> None:
-    report = AssuranceReport.from_session(session_result(), release_policy=release_policy())
+    report = _report()
     payload = report.model_dump(mode="json")
     payload["trials"][0]["oracle_results"][0]["verdict"] = TrialVerdict.BLOCKED.value
 
@@ -143,7 +187,7 @@ def test_resolved_trial_rejects_nonresolved_oracle_verdict() -> None:
 
 
 def test_duplicate_oracle_names_are_rejected() -> None:
-    report = AssuranceReport.from_session(session_result(), release_policy=release_policy())
+    report = _report()
     payload = report.model_dump(mode="json")
     payload["trials"][0]["oracle_results"].append(
         deepcopy(payload["trials"][0]["oracle_results"][0])
@@ -154,7 +198,7 @@ def test_duplicate_oracle_names_are_rejected() -> None:
 
 
 def test_forged_trial_verdict_is_rejected_from_oracle_snapshots() -> None:
-    report = AssuranceReport.from_session(session_result(), release_policy=release_policy())
+    report = _report()
     payload = report.model_dump(mode="json")
     payload["trials"][0]["verdict"] = TrialVerdict.FAIL.value
 
@@ -163,7 +207,7 @@ def test_forged_trial_verdict_is_rejected_from_oracle_snapshots() -> None:
 
 
 def test_blocked_trial_cannot_smuggle_completed_oracle_results() -> None:
-    report = AssuranceReport.from_session(session_result(), release_policy=release_policy())
+    report = _report()
     payload = report.model_dump(mode="json")
     payload["trials"][2]["oracle_results"] = payload["trials"][0]["oracle_results"]
 
@@ -172,7 +216,7 @@ def test_blocked_trial_cannot_smuggle_completed_oracle_results() -> None:
 
 
 def test_forged_reliability_is_rejected_even_when_schema_valid() -> None:
-    report = AssuranceReport.from_session(session_result(), release_policy=release_policy())
+    report = _report()
     payload = report.model_dump(mode="json")
     payload["reliability"]["success_rate"] = 0.75
 
@@ -181,7 +225,7 @@ def test_forged_reliability_is_rejected_even_when_schema_valid() -> None:
 
 
 def test_forged_gate_decision_is_rejected() -> None:
-    report = AssuranceReport.from_session(session_result(), release_policy=release_policy())
+    report = _report()
     payload = report.model_dump(mode="json")
     payload["gate"]["decision"] = GateDecision.ACCEPT.value
     payload["gate"]["reasons"] = []
@@ -191,7 +235,7 @@ def test_forged_gate_decision_is_rejected() -> None:
 
 
 def test_forged_oracle_criticality_rejects_runtime_contract_drift() -> None:
-    report = AssuranceReport.from_session(session_result(), release_policy=release_policy())
+    report = _report()
     payload = report.model_dump(mode="json")
     payload["trials"][1]["oracle_results"][0]["critical"] = False
 
@@ -200,7 +244,7 @@ def test_forged_oracle_criticality_rejects_runtime_contract_drift() -> None:
 
 
 def test_release_policy_drift_requires_gate_recomputation() -> None:
-    report = AssuranceReport.from_session(session_result(), release_policy=release_policy())
+    report = _report()
     payload = report.model_dump(mode="json")
     payload["release_policy"]["max_critical_violations"] = 2
     payload["release_policy"]["min_success_rate"] = 0.0
@@ -210,7 +254,7 @@ def test_release_policy_drift_requires_gate_recomputation() -> None:
 
 
 def test_evidence_root_drift_is_caught_by_report_root() -> None:
-    report = AssuranceReport.from_session(session_result(), release_policy=release_policy())
+    report = _report()
     payload = report.model_dump(mode="json")
     payload["trials"][0]["evidence_root"] = "c" * 64
 
@@ -219,7 +263,7 @@ def test_evidence_root_drift_is_caught_by_report_root() -> None:
 
 
 def test_report_root_tampering_is_rejected() -> None:
-    report = AssuranceReport.from_session(session_result(), release_policy=release_policy())
+    report = _report()
     payload = report.model_dump(mode="json")
     payload["report_root"] = "0" * 64
 
@@ -228,7 +272,7 @@ def test_report_root_tampering_is_rejected() -> None:
 
 
 def test_duplicate_trial_ids_are_rejected_on_load() -> None:
-    report = AssuranceReport.from_session(session_result(), release_policy=release_policy())
+    report = _report()
     payload = deepcopy(report.model_dump(mode="json"))
     payload["trials"][1]["trial_id"] = payload["trials"][0]["trial_id"]
 
@@ -258,7 +302,7 @@ def test_from_session_rejects_empty_session() -> None:
     )
 
     with pytest.raises(ValueError, match="at least one evaluated trial"):
-        AssuranceReport.from_session(empty, release_policy=release_policy())
+        _report(empty)
 
 
 def test_from_session_rejects_stale_reliability() -> None:
@@ -274,7 +318,7 @@ def test_from_session_rejects_stale_reliability() -> None:
     )
 
     with pytest.raises(ValueError, match="session reliability does not recompute"):
-        AssuranceReport.from_session(stale, release_policy=release_policy())
+        _report(stale)
 
 
 def test_from_session_rejects_trial_subject_identity_mismatch() -> None:
@@ -292,7 +336,7 @@ def test_from_session_rejects_trial_subject_identity_mismatch() -> None:
     )
 
     with pytest.raises(ValueError, match="subject identity does not match"):
-        AssuranceReport.from_session(mismatched, release_policy=release_policy())
+        _report(mismatched)
 
 
 def test_from_session_rejects_trial_scenario_identity_mismatch() -> None:
@@ -310,7 +354,7 @@ def test_from_session_rejects_trial_scenario_identity_mismatch() -> None:
     )
 
     with pytest.raises(ValueError, match="scenario identity does not match"):
-        AssuranceReport.from_session(mismatched, release_policy=release_policy())
+        _report(mismatched)
 
 
 def test_from_session_rejects_duplicate_trial_ids() -> None:
@@ -329,4 +373,4 @@ def test_from_session_rejects_duplicate_trial_ids() -> None:
     )
 
     with pytest.raises(ValueError, match="duplicate trial IDs"):
-        AssuranceReport.from_session(duplicated, release_policy=release_policy())
+        _report(duplicated)
