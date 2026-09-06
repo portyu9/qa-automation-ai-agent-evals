@@ -42,6 +42,8 @@ class EvaluationSession:
         if isinstance(k, bool) or not isinstance(k, int) or k < 1:
             raise ValueError("k must be a positive integer")
 
+        subject = subject.snapshot()
+        scenario = scenario.snapshot()
         evaluated: list[EvaluatedTrial] = []
         for index in range(trials):
             trial_id = f"{scenario.scenario_id}:{scenario.revision}:{index:04d}"
