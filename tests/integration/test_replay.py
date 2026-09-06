@@ -176,8 +176,10 @@ async def test_replay_preserves_recorded_blocking_error_evidence(
 
 @pytest.mark.asyncio
 async def test_replay_does_not_promote_rejected_semantic_history_past_terminal_error() -> None:
-    error = blocking_error_evidence(EvidenceKind.EVALUATION_ERROR).events[0].model_copy(
-        update={"sequence": 1}
+    error = (
+        blocking_error_evidence(EvidenceKind.EVALUATION_ERROR)
+        .events[0]
+        .model_copy(update={"sequence": 1})
     )
     original = TrialEvidence(
         trial_id="original-trial",
