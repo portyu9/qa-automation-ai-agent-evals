@@ -135,29 +135,60 @@ def test_case_commitment_excludes_raw_objective_and_candidate_but_binds_digests(
     assert candidate not in serialized
     assert commitment.objective_sha256 == hashlib.sha256(objective.encode()).hexdigest()
     assert commitment.candidate_output_sha256 == hashlib.sha256(candidate.encode()).hexdigest()
+    assert commitment.rubric == case.rubric
     assert commitment.rubric_identity == case.rubric.identity
 
 
-def test_observation_cannot_self_assert_expected_label_or_coverage_tags() -> None:
+def test_observation_cannot_self_assert_label_tags_decision_or_response_digest() -> None:
+    case = _case(expected=SemanticDecision.FAIL)
+    response = _response(SemanticDecision.FAIL)
+    observation = SemanticCalibrationObservation.from_case_response(case, response)
+    payload = observation.model_dump(mode="json")
+
+    assert "expected" not in payload
+    assert "tags" not in payload
+    assert "observed" not in payload
+    assert "response_sha256" not in payload
+    assert observation.expected is SemanticDecision.FAIL
+    assert observation.tags == frozenset()
+    assert observation.observed is SemanticDecision.FAIL
+    assert observation.response_sha256 == response.digest
+
+    payload["expected"] = SemanticDecision.PASS.value
+    payload["tags"] = ["judge-prompt-injection"]
+    payload["observed"] = SemanticDecision.PASS.value
+    payload["response_sha256"] = "0" * 64
+    with pytest.raises(ValidationError, match="Extra inputs are not permitted"):
+        SemanticCalibrationObservation.model_validate(payload)
+
+
+def test_resolved_observation_round_trip_rederives_decision_and_response_digest() -> None:
+    case = _case(expected=SemanticDecision.FAIL)
+    response = _response(SemanticDecision.FAIL)
+    observation = SemanticCalibrationObservation.from_case_response(case, response)
+
+    loaded = SemanticCalibrationObservation.model_validate_json(observation.model_dump_json())
+
+    assert loaded.response == response
+    assert loaded.observed is SemanticDecision.FAIL
+    assert loaded.response_sha256 == response.digest
+    assert loaded == observation
+
+
+def test_resolved_observation_rejects_contradictory_persisted_response() -> None:
     case = _case(expected=SemanticDecision.FAIL)
     observation = SemanticCalibrationObservation.from_case_response(
         case,
         _response(SemanticDecision.FAIL),
     )
     payload = observation.model_dump(mode="json")
+    payload["response"]["criteria"][0]["score"] = 4
 
-    assert "expected" not in payload
-    assert "tags" not in payload
-    assert observation.expected is SemanticDecision.FAIL
-    assert observation.tags == frozenset()
-
-    payload["expected"] = SemanticDecision.PASS.value
-    payload["tags"] = ["judge-prompt-injection"]
-    with pytest.raises(ValidationError, match="Extra inputs are not permitted"):
+    with pytest.raises(ValidationError, match="contradicts its score"):
         SemanticCalibrationObservation.model_validate(payload)
 
 
-def test_commitment_rejects_relabel_and_tag_tampering_under_same_identity() -> None:
+def test_commitment_rejects_relabel_tag_and_rubric_tampering_under_same_identity() -> None:
     case = _case(expected=SemanticDecision.FAIL)
 
     relabeled = case.commitment.model_dump(mode="json")
@@ -170,6 +201,11 @@ def test_commitment_rejects_relabel_and_tag_tampering_under_same_identity() -> N
     with pytest.raises(ValidationError, match="commitment root does not match"):
         SemanticCalibrationCaseCommitment.model_validate(retagged)
 
+    rerubriced = case.commitment.model_dump(mode="json")
+    rerubriced["rubric"]["criteria"][0]["minimum_score"] = 4
+    with pytest.raises(ValidationError, match="rubric identity does not match rubric"):
+        SemanticCalibrationCaseCommitment.model_validate(rerubriced)
+
 
 def test_commitment_rejects_malformed_candidate_digest() -> None:
     payload = _case().commitment.model_dump(mode="json")
@@ -179,18 +215,46 @@ def test_commitment_rejects_malformed_candidate_digest() -> None:
         SemanticCalibrationCaseCommitment.model_validate(payload)
 
 
-def test_receipt_acceptance_uses_only_commitment_bound_label_and_tag_material() -> None:
+def test_receipt_acceptance_uses_only_rederived_case_bound_material() -> None:
     receipt = _accepted_receipt()
 
     assert receipt.accepted is True
     assert receipt.pass_cases == 1
     assert receipt.fail_cases == 1
     assert receipt.false_passes == 0
+    assert receipt.correct == 2
     assert receipt.covered_tags == ("judge-prompt-injection",)
     assert all(
         observation.case_identity == observation.case_commitment.identity
         for observation in receipt.observations
     )
+
+
+def test_false_pass_is_rederived_from_persisted_response() -> None:
+    passed = _case(case_id="semantic.response-pass")
+    failed = _case(
+        case_id="semantic.response-false-pass",
+        expected=SemanticDecision.FAIL,
+        tags=frozenset({"judge-prompt-injection"}),
+    )
+    receipt = SemanticCalibrationReceipt.create(
+        judge_profile=_profile(),
+        policy=SemanticCalibrationPolicy(min_cases=2, min_accuracy=0.0),
+        observations=(
+            SemanticCalibrationObservation.from_case_response(
+                passed,
+                _response(SemanticDecision.PASS),
+            ),
+            SemanticCalibrationObservation.from_case_response(
+                failed,
+                _response(SemanticDecision.PASS),
+            ),
+        ),
+    )
+
+    assert receipt.false_passes == 1
+    assert receipt.correct == 1
+    assert receipt.accepted is False
 
 
 def test_failed_observation_retains_commitment_bound_coverage_without_raw_case_text() -> None:
@@ -208,6 +272,9 @@ def test_failed_observation_retains_commitment_bound_coverage_without_raw_case_t
 
     assert observation.expected is SemanticDecision.FAIL
     assert observation.tags == frozenset({"judge-prompt-injection"})
+    assert observation.observed is None
+    assert observation.response is None
+    assert observation.response_sha256 is None
     assert marker not in json.dumps(observation.model_dump(mode="json"), sort_keys=True)
 
 
