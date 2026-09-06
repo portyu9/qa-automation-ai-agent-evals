@@ -3,13 +3,21 @@ from pathlib import Path
 source = Path("src/agent_evals/evidence/approval_intent.py")
 text = source.read_text()
 
-anchor = '''    if len(decision_events) != 1:
-        raise ApprovalIntentError("approval intent requires exactly one decision event")
+anchor = '''    _verify_event_intent(
+        request_event,
+        receipt=receipt,
+        expected_state=request_state,
+        phase="approval request",
+    )
 
-    decision_event = decision_events[0]
+    if any(
 '''
-replacement = '''    if len(decision_events) != 1:
-        raise ApprovalIntentError("approval intent requires exactly one decision event")
+replacement = '''    _verify_event_intent(
+        request_event,
+        receipt=receipt,
+        expected_state=request_state,
+        phase="approval request",
+    )
 
     target_approval_requests = [
         event
@@ -22,30 +30,16 @@ replacement = '''    if len(decision_events) != 1:
         raise ApprovalIntentError(
             "approval intent requires exactly one target approval-request event"
         )
-
-    decision_event = decision_events[0]
-'''
-if text.count(anchor) != 1:
-    raise SystemExit(f"decision anchor count={text.count(anchor)}")
-text = text.replace(anchor, replacement, 1)
-
-anchor2 = '''    if receipt.approval_request_sequence >= len(evidence.events):
-        raise ApprovalIntentError("approval receipt request sequence is outside trial evidence")
-
-    request_event = evidence.events[receipt.approval_request_sequence]
-'''
-replacement2 = '''    if receipt.approval_request_sequence >= len(evidence.events):
-        raise ApprovalIntentError("approval receipt request sequence is outside trial evidence")
     if target_approval_requests[0].sequence != receipt.approval_request_sequence:
         raise ApprovalIntentError(
             "approval receipt does not reference the unique target approval request"
         )
 
-    request_event = evidence.events[receipt.approval_request_sequence]
+    if any(
 '''
-if text.count(anchor2) != 1:
-    raise SystemExit(f"request-sequence anchor count={text.count(anchor2)}")
-source.write_text(text.replace(anchor2, replacement2, 1))
+if text.count(anchor) != 1:
+    raise SystemExit(f"approval request verification anchor count={text.count(anchor)}")
+source.write_text(text.replace(anchor, replacement, 1))
 
 tests = Path("tests/unit/test_approval_continuation_chronology.py")
 text = tests.read_text()
@@ -173,10 +167,7 @@ docs = Path("docs/APPROVAL_INTENT.md")
 text = docs.read_text()
 doc_anchor = '''Missing execution, duplicate resumed requests, changed arguments/resource/path, ambiguous results, or result-owner disagreement fails closed as evaluator uncertainty.
 '''
-doc_replacement = '''Missing execution, duplicate resumed requests, changed arguments/resource/path, ambiguous results, or result-owner disagreement fails closed as evaluator uncertainty.
-
-Replay also preserves the live adapter's pending-interruption cardinality. Once a stronger decision is present, the evidence envelope must contain exactly one `APPROVAL_REQUEST` for the configured `ApprovalIntentSpec.agent/tool`, and the receipt must reference that unique request. A second pending request for the same stronger target—whether it reuses the call ID or introduces another call ID—is evaluator ambiguity and fails closed before deterministic grading. Approval requests for other agent/tool targets are not counted toward this stronger target relation.
-'''
+doc_replacement = doc_anchor + "\nReplay also preserves the live adapter's pending-interruption cardinality. Once a stronger decision is present, the evidence envelope must contain exactly one `APPROVAL_REQUEST` for the configured `ApprovalIntentSpec.agent/tool`, and the receipt must reference that unique request. A second pending request for the same stronger target—whether it reuses the call ID or introduces another call ID—is evaluator ambiguity and fails closed before deterministic grading. Approval requests for other agent/tool targets are not counted toward this stronger target relation.\n"
 if text.count(doc_anchor) != 1:
     raise SystemExit(f"approval-doc anchor count={text.count(doc_anchor)}")
 docs.write_text(text.replace(doc_anchor, doc_replacement, 1))
