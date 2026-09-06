@@ -6,6 +6,7 @@ import pytest
 from pydantic import ValidationError
 
 from agent_evals.assurance.report import AssuranceReport
+from agent_evals.contracts.models import EvaluationScenario, ScenarioKind
 from agent_evals.evidence.models import TrialEvidence, TrialVerdict
 from agent_evals.gates.release import GateDecision, ReleaseGate, ReleasePolicy
 from agent_evals.oracles.deterministic import OracleResult
@@ -15,7 +16,13 @@ from agent_evals.statistics.comparison import PairedComparison
 from agent_evals.statistics.reliability import ReliabilityReport
 
 SUBJECT = "a" * 64
-SCENARIO = "b" * 64
+SCENARIO_CONTRACT = EvaluationScenario(
+    scenario_id="assurance.statistics-integrity",
+    revision="1",
+    kind=ScenarioKind.REGRESSION,
+    objective="Verify statistical assurance integrity and reproducibility.",
+)
+SCENARIO = SCENARIO_CONTRACT.identity
 
 
 def _pass_trial() -> EvaluatedTrial:
@@ -56,6 +63,14 @@ def _release_policy() -> ReleasePolicy:
         max_critical_violations=0,
         max_blocked_trials=0,
         max_inconclusive_trials=0,
+    )
+
+
+def _report(*, confidence_z: float) -> AssuranceReport:
+    return AssuranceReport.from_session(
+        _session(confidence_z=confidence_z),
+        scenario=SCENARIO_CONTRACT,
+        release_policy=_release_policy(),
     )
 
 
@@ -147,14 +162,14 @@ def test_paired_comparison_rejects_nonfloat_alpha() -> None:
         )
 
 
-def test_custom_confidence_round_trips_through_assurance_report_v3() -> None:
+def test_custom_confidence_round_trips_through_assurance_report_v4() -> None:
     custom_z = 1.6448536269514722
     session = _session(confidence_z=custom_z)
 
-    report = AssuranceReport.from_session(session, release_policy=_release_policy())
+    report = _report(confidence_z=custom_z)
     loaded = AssuranceReport.model_validate_json(report.model_dump_json())
 
-    assert report.schema_version == "agent-evals/assurance-report/v3"
+    assert report.schema_version == "agent-evals/assurance-report/v4"
     assert report.reliability.confidence_z == custom_z
     assert loaded == report
     assert loaded.reliability.wilson_low == session.reliability.wilson_low
@@ -162,27 +177,24 @@ def test_custom_confidence_round_trips_through_assurance_report_v3() -> None:
 
 
 def test_confidence_parameter_participates_in_assurance_report_root() -> None:
-    default = AssuranceReport.from_session(
-        _session(confidence_z=1.959963984540054),
-        release_policy=_release_policy(),
-    )
-    custom = AssuranceReport.from_session(
-        _session(confidence_z=1.6448536269514722),
-        release_policy=_release_policy(),
-    )
+    default = _report(confidence_z=1.959963984540054)
+    custom = _report(confidence_z=1.6448536269514722)
 
     assert default.reliability.success_rate == custom.reliability.success_rate
     assert default.reliability.confidence_z != custom.reliability.confidence_z
     assert default.report_root != custom.report_root
 
 
-def test_assurance_report_v2_is_not_silently_reinterpreted_as_v3() -> None:
-    report = AssuranceReport.from_session(
-        _session(confidence_z=1.959963984540054),
-        release_policy=_release_policy(),
-    )
+@pytest.mark.parametrize(
+    "legacy_schema",
+    ["agent-evals/assurance-report/v2", "agent-evals/assurance-report/v3"],
+)
+def test_legacy_assurance_reports_are_not_silently_reinterpreted_as_v4(
+    legacy_schema: str,
+) -> None:
+    report = _report(confidence_z=1.959963984540054)
     payload = report.model_dump(mode="json")
-    payload["schema_version"] = "agent-evals/assurance-report/v2"
+    payload["schema_version"] = legacy_schema
 
     with pytest.raises(ValidationError, match="schema_version"):
         AssuranceReport.model_validate(payload)
