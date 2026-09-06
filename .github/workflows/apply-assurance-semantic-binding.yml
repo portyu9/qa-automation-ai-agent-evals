@@ -1,0 +1,290 @@
+name: Apply assurance semantic evidence binding
+
+on:
+  push:
+    branches:
+      - fix/assurance-semantic-evidence-binding
+    paths:
+      - .github/workflows/apply-assurance-semantic-binding.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: fix/assurance-semantic-evidence-binding
+      - name: Apply semantic evidence relation changes
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace_once(text: str, old: str, new: str, label: str) -> str:
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"{label} match count: {count}")
+              return text.replace(old, new, 1)
+
+          path = Path("src/agent_evals/semantic/verification.py")
+          text = path.read_text()
+          start = text.index("def verify_semantic_judgment(\n")
+          end = text.index("\ndef evidence_before_semantic_judgment", start)
+          replacement = '''def verify_semantic_judgment_evidence(
+    evidence: TrialEvidence,
+) -> SemanticJudgmentReceipt | None:
+    """Verify the semantic receipt relation contained by one final evidence envelope.
+
+    This verifier owns only evidence-envelope facts: uniqueness, terminal placement, evaluator
+    source, non-critical authority, receipt structure, subject/scenario identity, and the exact
+    pre-semantic evidence root. Scenario-owned rubric/input verification remains in
+    ``verify_semantic_judgment`` because it requires the full evaluation scenario contract.
+    """
+    semantic_events = tuple(
+        event for event in evidence.events if event.kind is EvidenceKind.SEMANTIC_JUDGMENT
+    )
+    if not semantic_events:
+        return None
+    if len(semantic_events) != 1:
+        raise SemanticJudgmentError("semantic evidence requires exactly one recorded judgment")
+
+    event = semantic_events[0]
+    if event.sequence != len(evidence.events) - 1:
+        raise SemanticJudgmentError("semantic judgment must be the terminal evaluator event")
+    if event.source != SEMANTIC_JUDGMENT_SOURCE:
+        raise SemanticJudgmentError("semantic judgment source is not recognized")
+    if event.critical:
+        raise SemanticJudgmentError("semantic judgment evidence must not claim critical authority")
+
+    try:
+        receipt = SemanticJudgmentReceipt.model_validate(event.payload)
+    except ValueError as exc:
+        raise SemanticJudgmentError("semantic judgment receipt is malformed") from exc
+
+    if receipt.subject_identity != evidence.subject_identity:
+        raise SemanticJudgmentError("semantic judgment subject identity does not match evidence")
+    if receipt.scenario_identity != evidence.scenario_identity:
+        raise SemanticJudgmentError("semantic judgment scenario identity does not match evidence")
+
+    subject_evidence = evidence_before_semantic_judgment(evidence)
+    if not hmac.compare_digest(receipt.subject_evidence_root, subject_evidence.evidence_root):
+        raise SemanticJudgmentError(
+            "semantic judgment does not bind the exact pre-judgment subject evidence root"
+        )
+    return receipt
+
+
+def verify_semantic_judgment(
+    scenario: EvaluationScenario,
+    evidence: TrialEvidence,
+) -> SemanticJudgmentReceipt | None:
+    """Verify one persisted terminal semantic judgment, returning None when none is recorded.
+
+    Absence is valid here because live runtime may still need to invoke a configured judge. The
+    caller decides whether absence is allowed for its execution mode. A scenario without a rubric
+    must never contain semantic judgment evidence.
+    """
+    receipt = verify_semantic_judgment_evidence(evidence)
+    rubric = scenario.semantic_rubric
+    if rubric is None:
+        if receipt is not None:
+            raise SemanticJudgmentError(
+                "semantic judgment evidence exists for a scenario without a semantic rubric"
+            )
+        return None
+
+    if receipt is None:
+        return None
+    if receipt.scenario_identity != scenario.identity:
+        raise SemanticJudgmentError("semantic judgment scenario identity does not match")
+    if receipt.rubric_identity != rubric.identity:
+        raise SemanticJudgmentError("semantic judgment rubric identity does not match scenario")
+
+    subject_evidence = evidence_before_semantic_judgment(evidence)
+    if subject_evidence.final_output is None:
+        raise SemanticJudgmentError(
+            "recorded semantic judgment requires the exact candidate final output"
+        )
+
+    expected_input = SemanticJudgeInput(
+        objective=scenario.objective,
+        rubric=rubric,
+        candidate_output=subject_evidence.final_output,
+    )
+    if not hmac.compare_digest(receipt.judge_input_sha256, expected_input.digest):
+        raise SemanticJudgmentError(
+            "semantic judgment input digest does not match the exact scenario objective, rubric, "
+            "and candidate output"
+        )
+    return receipt
+'''
+          path.write_text(text[:start] + replacement + text[end:])
+
+          path = Path("src/agent_evals/assurance/report.py")
+          text = path.read_text()
+          old = '''from agent_evals.semantic.receipt import SemanticJudgmentReceipt
+from agent_evals.statistics.reliability import ReliabilityReport
+'''
+          new = '''from agent_evals.semantic.receipt import SemanticJudgmentReceipt
+from agent_evals.semantic.verification import (
+    SemanticJudgmentError,
+    verify_semantic_judgment_evidence,
+)
+from agent_evals.statistics.reliability import ReliabilityReport
+'''
+          text = replace_once(text, old, new, "report semantic verification imports")
+          old = '''            semantic = (
+                SemanticJudgmentReceipt.model_validate(
+                    trial.semantic_judgment.model_dump(mode="json")
+                )
+                if trial.semantic_judgment is not None
+                else None
+            )
+'''
+          new = '''            try:
+                evidence_semantic = verify_semantic_judgment_evidence(evidence)
+            except SemanticJudgmentError as exc:
+                raise ValueError(f"trial semantic judgment evidence is invalid: {exc}") from exc
+
+            semantic = (
+                SemanticJudgmentReceipt.model_validate(
+                    trial.semantic_judgment.model_dump(mode="json")
+                )
+                if trial.semantic_judgment is not None
+                else None
+            )
+            if semantic is None and evidence_semantic is not None:
+                raise ValueError(
+                    "trial semantic judgment field is absent but final evidence commits a judgment"
+                )
+            if semantic is not None and evidence_semantic is None:
+                raise ValueError(
+                    "trial semantic judgment is not committed by the final evidence envelope"
+                )
+            if semantic is not None and evidence_semantic != semantic:
+                raise ValueError(
+                    "trial semantic judgment does not match the receipt committed by final evidence"
+                )
+'''
+          text = replace_once(text, old, new, "report semantic evidence relation")
+          path.write_text(text)
+
+          path = Path("tests/unit/test_assurance_semantic.py")
+          text = path.read_text()
+          text = replace_once(
+              text,
+              "from agent_evals.evidence.models import TrialEvidence, TrialVerdict\n",
+              "from agent_evals.evidence.models import EvidenceEvent, EvidenceKind, TrialEvidence, TrialVerdict\n",
+              "assurance semantic evidence imports",
+          )
+          text = replace_once(
+              text,
+              "from agent_evals.semantic.receipt import SemanticJudgmentReceipt\n",
+              "from agent_evals.semantic.receipt import SemanticJudgmentReceipt\nfrom agent_evals.semantic.verification import SEMANTIC_JUDGMENT_SOURCE\n",
+              "assurance semantic source import",
+          )
+          start = text.index("def _semantic_receipt(\n")
+          end = text.index("\ndef _session", start)
+          replacement = '''def _semantic_receipt(
+    decision: SemanticDecision,
+    *,
+    subject_evidence_root: str,
+    subject_identity: str = _SUBJECT,
+    scenario_identity: str = _SCENARIO,
+) -> SemanticJudgmentReceipt:
+    rubric = _rubric()
+    return SemanticJudgmentReceipt.create(
+        scenario_identity=scenario_identity,
+        subject_identity=subject_identity,
+        subject_evidence_root=subject_evidence_root,
+        rubric=rubric,
+        judge_profile=_profile(),
+        calibration_receipt=_calibration(),
+        judge_input=SemanticJudgeInput(
+            objective="Answer accurately.",
+            rubric=rubric,
+            candidate_output="Candidate answer.",
+        ),
+        response=_response(decision),
+    )
+
+
+def _trial(
+    decision: SemanticDecision,
+    *,
+    deterministic_fail: bool = False,
+    semantic_subject: str = _SUBJECT,
+    semantic_scenario: str = _SCENARIO,
+) -> EvaluatedTrial:
+    pre_semantic = TrialEvidence(
+        trial_id=f"semantic-{decision.value}",
+        subject_identity=_SUBJECT,
+        scenario_identity=_SCENARIO,
+        final_output="Candidate answer.",
+    )
+    semantic = _semantic_receipt(
+        decision,
+        subject_evidence_root=pre_semantic.evidence_root,
+        subject_identity=semantic_subject,
+        scenario_identity=semantic_scenario,
+    )
+    semantic_event = EvidenceEvent(
+        sequence=0,
+        kind=EvidenceKind.SEMANTIC_JUDGMENT,
+        source=SEMANTIC_JUDGMENT_SOURCE,
+        payload=semantic.model_dump(mode="json"),
+    )
+    evidence = TrialEvidence(
+        trial_id=pre_semantic.trial_id,
+        subject_identity=pre_semantic.subject_identity,
+        scenario_identity=pre_semantic.scenario_identity,
+        events=(semantic_event,),
+        final_output=pre_semantic.final_output,
+    )
+    verdict = (
+        TrialVerdict.INCONCLUSIVE
+        if decision is SemanticDecision.ABSTAIN
+        else TrialVerdict.FAIL
+        if decision is SemanticDecision.FAIL or deterministic_fail
+        else TrialVerdict.PASS
+    )
+    return EvaluatedTrial(
+        evidence=evidence,
+        oracle_results=(
+            OracleResult(
+                name="policy",
+                verdict=TrialVerdict.FAIL if deterministic_fail else TrialVerdict.PASS,
+                critical=deterministic_fail,
+            ),
+            OracleResult(name="outcome", verdict=TrialVerdict.PASS),
+        ),
+        verdict=verdict,
+        semantic_judgment=semantic,
+    )
+'''
+          path.write_text(text[:start] + replacement + text[end:])
+
+          path = Path("docs/ASSURANCE_REPORTS.md")
+          text = path.read_text()
+          old = '''- every trial's current final evidence root must match the runtime-only completion root captured when its verdict/oracle/semantic tuple was finalized;
+- every trial evidence envelope must match the session subject identity;
+'''
+          new = '''- every trial's current final evidence root must match the runtime-only completion root captured when its verdict/oracle/semantic tuple was finalized;
+- optional semantic grading must be the exact valid receipt committed by one terminal, recognized, non-critical `SEMANTIC_JUDGMENT` event in that final evidence envelope, including the exact reconstructed pre-semantic evidence root; absence must match on both sides;
+- every trial evidence envelope must match the session subject identity;
+'''
+          text = replace_once(text, old, new, "assurance semantic relation documentation")
+          path.write_text(text)
+          PY
+      - name: Commit permanent changes
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/agent_evals/semantic/verification.py src/agent_evals/assurance/report.py tests/unit/test_assurance_semantic.py docs/ASSURANCE_REPORTS.md
+          git diff --cached --check
+          git commit -m "fix: bind assurance semantic receipt to evidence"
+          git push origin HEAD:fix/assurance-semantic-evidence-binding
