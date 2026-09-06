@@ -376,6 +376,23 @@ class TrialRunner:
                 ),
             )
 
+        if EvidenceKind.APPROVAL_DECISION in event_kinds:
+            # The canonical source string is a persisted evidence role, not a capability token.
+            # Keep the optional OpenAI implementation lazy so importing evaluator core does not
+            # eagerly load provider adapter modules.
+            from agent_evals.adapters.openai_hitl_approval import OpenAIAgentsHITLApprovalAdapter
+
+            if type(adapter) is not OpenAIAgentsHITLApprovalAdapter:
+                return (
+                    "evaluator:approval-intent",
+                    "approval_decision_live_injection",
+                    (
+                        "live adapter output cannot supply framework-owned approval-decision "
+                        "evidence; live approval decisions are accepted only from the exact "
+                        "built-in HITL approval adapter or through exact evidence replay"
+                    ),
+                )
+
         if EvidenceKind.SIDE_EFFECT_OBSERVATION in event_kinds:
             # Deliberately lazy: importing the evaluator core must not load optional OpenAI
             # adapter modules unless this live authority distinction is actually needed.
