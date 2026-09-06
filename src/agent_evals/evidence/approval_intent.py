@@ -198,9 +198,9 @@ def verify_approval_intent(scenario: EvaluationScenario, evidence: TrialEvidence
         raise ApprovalIntentError("approval intent requires exactly one decision event")
 
     decision_event = decision_events[0]
+    receipt = parse_approval_intent_event(decision_event)
     if decision_event.source != APPROVAL_DECISION_SOURCE:
         raise ApprovalIntentError("approval decision source is not recognized")
-    receipt = parse_approval_intent_event(decision_event)
     if receipt.scenario_identity != scenario.identity:
         raise ApprovalIntentError("approval receipt scenario identity mismatch")
     if receipt.decision is not spec.decision:
