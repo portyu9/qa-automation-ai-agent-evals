@@ -53,7 +53,10 @@ def _resolved_trial(*, with_event: bool = False) -> EvaluatedTrial:
             events=events,
             final_state={"nested": {"status": "ok"}},
         ),
-        oracle_results=(OracleResult(name="outcome", verdict=TrialVerdict.PASS),),
+        oracle_results=(
+            OracleResult(name="policy", verdict=TrialVerdict.PASS),
+            OracleResult(name="outcome", verdict=TrialVerdict.PASS),
+        ),
         verdict=TrialVerdict.PASS,
     )
 
