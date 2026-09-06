@@ -6,9 +6,9 @@ import hashlib
 import json
 from datetime import UTC, datetime
 from enum import StrEnum
-from typing import Any
+from typing import Any, Self
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 _EVIDENCE_ROOT_DOMAIN = b"agent-evals/trial-evidence/v2\0"
 
@@ -41,7 +41,7 @@ class TrialVerdict(StrEnum):
 
 
 class EvidenceEvent(BaseModel):
-    """One immutable observable event in an evaluation trial."""
+    """One normalized event detached from adapter-owned JSON containers."""
 
     model_config = ConfigDict(frozen=True, extra="forbid", revalidate_instances="always")
 
@@ -52,25 +52,28 @@ class EvidenceEvent(BaseModel):
     observed_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     critical: bool = Field(default=False, strict=True)
 
-    @model_validator(mode="after")
-    def validate_json_payload(self) -> EvidenceEvent:
-        try:
-            _canonical_json_bytes(self.payload)
-        except (TypeError, ValueError) as exc:
-            raise ValueError("evidence payload must be finite JSON-compatible data") from exc
-        return self
+    @field_validator("payload", mode="before")
+    @classmethod
+    def detach_json_payload(cls, value: Any) -> Any:
+        return _detached_json(value, error="evidence payload must be finite JSON-compatible data")
 
     @property
     def digest(self) -> str:
         canonical = _canonical_json_bytes(self.model_dump(mode="json"))
         return hashlib.sha256(canonical).hexdigest()
 
+    def snapshot(self) -> Self:
+        """Return a detached, revalidated copy of the complete event."""
+        return type(self).model_validate_json(self.model_dump_json())
+
 
 class TrialEvidence(BaseModel):
-    """Complete evidence envelope for one scenario attempt.
+    """Complete evaluator-owned evidence envelope for one scenario attempt.
 
     The envelope is append-order sensitive. Duplicate or non-contiguous sequence numbers are
-    rejected so a later report cannot silently reorder the causal record.
+    rejected so a later report cannot silently reorder the causal record. JSON-bearing state and
+    event payloads are detached during validation so adapter-owned nested containers cannot change
+    the evaluator's evidence after normalization.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -91,18 +94,19 @@ class TrialEvidence(BaseModel):
         strict=True,
     )
 
+    @field_validator("final_state", mode="before")
+    @classmethod
+    def detach_final_state(cls, value: Any) -> Any:
+        return _detached_json(value, error="final_state must be finite JSON-compatible data")
+
     @model_validator(mode="after")
-    def validate_event_sequence(self) -> TrialEvidence:
+    def validate_event_sequence(self) -> Self:
         expected = list(range(len(self.events)))
         actual = [event.sequence for event in self.events]
         if actual != expected:
             raise ValueError(
                 f"event sequence must be contiguous from zero: expected {expected!r}, got {actual!r}"
             )
-        try:
-            _canonical_json_bytes(self.final_state)
-        except (TypeError, ValueError) as exc:
-            raise ValueError("final_state must be finite JSON-compatible data") from exc
         return self
 
     @property
@@ -133,6 +137,18 @@ class TrialEvidence(BaseModel):
             }
         )
         return hashlib.sha256(_EVIDENCE_ROOT_DOMAIN + chain + terminal).hexdigest()
+
+    def snapshot(self) -> Self:
+        """Return a detached, revalidated copy of the complete evidence envelope."""
+        return type(self).model_validate_json(self.model_dump_json())
+
+
+def _detached_json(value: Any, *, error: str) -> Any:
+    """Round-trip one JSON value to sever nested aliases while preserving JSON semantics."""
+    try:
+        return json.loads(_canonical_json_bytes(value))
+    except (TypeError, ValueError, json.JSONDecodeError) as exc:
+        raise ValueError(error) from exc
 
 
 def _canonical_json_bytes(value: Any) -> bytes:
