@@ -216,6 +216,11 @@ class AssuranceReport(BaseModel):
         verdicts: list[TrialVerdict] = []
         for trial in session.trials:
             evidence = trial.evidence
+            if not hmac.compare_digest(
+                evidence.evidence_root,
+                trial.completion_evidence_root,
+            ):
+                raise ValueError("trial evidence root changed after evaluation finalization")
             if evidence.subject_identity != session.subject_identity:
                 raise ValueError("trial evidence subject identity does not match session")
             if evidence.scenario_identity != session.scenario_identity:
