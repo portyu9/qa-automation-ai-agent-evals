@@ -147,7 +147,7 @@ def _detached_json(value: Any, *, error: str) -> Any:
     """Round-trip one JSON value to sever nested aliases while preserving JSON semantics."""
     try:
         return json.loads(_canonical_json_bytes(value))
-    except (TypeError, ValueError, json.JSONDecodeError) as exc:
+    except (TypeError, ValueError) as exc:
         raise ValueError(error) from exc
 
 
