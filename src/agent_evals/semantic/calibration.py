@@ -41,8 +41,9 @@ _REQUIRED_PROMPT_INJECTION_TAG = "judge-prompt-injection"
 class SemanticCalibrationCaseCommitment(BaseModel):
     """Privacy-preserving commitment to one evaluator-owned calibration case.
 
-    The commitment binds behavior-bearing case material while retaining only digests for the
-    objective and candidate output. It is integrity evidence, not publisher authentication.
+    Objective and candidate text are retained only by digest. The evaluator-owned rubric is
+    embedded because durable observations must be able to rederive structured judge decisions.
+    This is integrity evidence, not publisher authentication.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -54,6 +55,7 @@ class SemanticCalibrationCaseCommitment(BaseModel):
     case_id: str = Field(pattern=r"^[a-z0-9][a-z0-9._-]{2,127}$")
     revision: str = Field(min_length=1, max_length=128)
     objective_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    rubric: SemanticRubricSpec
     rubric_identity: str = Field(pattern=r"^[0-9a-f]{64}$")
     candidate_output_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     expected: SemanticDecision
@@ -64,6 +66,7 @@ class SemanticCalibrationCaseCommitment(BaseModel):
     def from_case(cls, case: SemanticCalibrationCase) -> Self:
         objective_sha256 = _sha256_text(case.objective)
         candidate_output_sha256 = _sha256_text(case.candidate_output)
+        rubric_identity = case.rubric.identity
         tags = tuple(sorted(case.tags))
         unsigned = {
             "schema_version": _CASE_COMMITMENT_SCHEMA,
@@ -71,7 +74,8 @@ class SemanticCalibrationCaseCommitment(BaseModel):
             "case_id": case.case_id,
             "revision": case.revision,
             "objective_sha256": objective_sha256,
-            "rubric_identity": case.rubric.identity,
+            "rubric": case.rubric.model_dump(mode="json"),
+            "rubric_identity": rubric_identity,
             "candidate_output_sha256": candidate_output_sha256,
             "expected": case.expected.value,
             "tags": tags,
@@ -80,7 +84,8 @@ class SemanticCalibrationCaseCommitment(BaseModel):
             case_id=case.case_id,
             revision=case.revision,
             objective_sha256=objective_sha256,
-            rubric_identity=case.rubric.identity,
+            rubric=case.rubric,
+            rubric_identity=rubric_identity,
             candidate_output_sha256=candidate_output_sha256,
             expected=case.expected,
             tags=tags,
@@ -97,6 +102,8 @@ class SemanticCalibrationCaseCommitment(BaseModel):
             raise ValueError(
                 "calibration case commitment requires evaluator-owned PASS or FAIL label"
             )
+        if self.rubric_identity != self.rubric.identity:
+            raise ValueError("semantic calibration commitment rubric identity does not match rubric")
         if any(not tag.strip() for tag in self.tags):
             raise ValueError("semantic calibration commitment tags must be non-empty strings")
         if self.tags != tuple(sorted(set(self.tags))):
@@ -186,14 +193,13 @@ class SemanticCalibrationPolicy(BaseModel):
 
 
 class SemanticCalibrationObservation(BaseModel):
-    """Case-commitment-bound judge observation with explicit failure evidence."""
+    """Case-bound durable judge response or explicit evaluator/judge failure."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     schema_version: Literal["agent-evals/semantic-calibration-observation/v2"] = _OBSERVATION_SCHEMA
     case_commitment: SemanticCalibrationCaseCommitment
-    observed: SemanticDecision | None = None
-    response_sha256: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+    response: SemanticJudgeResponse | None = None
     failure_code: str | None = Field(
         default=None,
         pattern=r"^[a-z0-9][a-z0-9._-]{1,127}$",
@@ -205,11 +211,10 @@ class SemanticCalibrationObservation(BaseModel):
         case: SemanticCalibrationCase,
         response: SemanticJudgeResponse,
     ) -> Self:
-        observed = derive_semantic_decision(case.rubric, response)
+        derive_semantic_decision(case.rubric, response)
         return cls(
             case_commitment=case.commitment,
-            observed=observed,
-            response_sha256=response.digest,
+            response=response,
         )
 
     @classmethod
@@ -236,24 +241,27 @@ class SemanticCalibrationObservation(BaseModel):
     def tags(self) -> frozenset[str]:
         return frozenset(self.case_commitment.tags)
 
+    @property
+    def observed(self) -> SemanticDecision | None:
+        if self.response is None:
+            return None
+        return derive_semantic_decision(self.case_commitment.rubric, self.response)
+
+    @property
+    def response_sha256(self) -> str | None:
+        return self.response.digest if self.response is not None else None
+
     @model_validator(mode="after")
     def validate_observation_shape(self) -> Self:
-        if self.observed is None:
+        if self.response is None:
             if self.failure_code is None:
                 raise ValueError("failed semantic calibration observation requires a failure code")
-            if self.response_sha256 is not None:
-                raise ValueError(
-                    "failed semantic calibration observation cannot carry a response digest"
-                )
         else:
             if self.failure_code is not None:
                 raise ValueError(
                     "resolved semantic calibration observation cannot carry a failure code"
                 )
-            if self.response_sha256 is None:
-                raise ValueError(
-                    "resolved semantic calibration observation requires a response digest"
-                )
+            self.observed
         return self
 
 
