@@ -113,6 +113,7 @@ class LocalEvidenceStore:
         return self._root
 
     def write(self, evidence: TrialEvidence) -> ArtifactManifest:
+        evidence = evidence.snapshot()
         payload = _canonical_json_bytes(evidence.model_dump(mode="json"))
         if len(payload) > self._max_payload_bytes:
             raise EvidenceStoreResourceError(
