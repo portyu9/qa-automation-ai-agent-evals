@@ -63,9 +63,7 @@ def _duplicate_mutation_evidence() -> TrialEvidence:
     spec = _spec()
     empty = canonical_json_sha256({"effects": []})
     once = canonical_json_sha256({"effects": [{"operation_id": "op-9"}]})
-    twice = canonical_json_sha256(
-        {"effects": [{"operation_id": "op-9"}, {"operation_id": "op-9"}]}
-    )
+    twice = canonical_json_sha256({"effects": [{"operation_id": "op-9"}, {"operation_id": "op-9"}]})
     receipt = SideEffectIdempotencyReceipt.create(
         scenario_identity=scenario.identity,
         contract=spec,
