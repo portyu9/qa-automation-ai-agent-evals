@@ -303,13 +303,6 @@ class AssuranceReport(BaseModel):
                     OracleSnapshot.from_oracle(result) for result in verified_oracle_results
                 )
                 _validate_oracle_snapshot_shape(supplied_snapshots, verdict=trial.verdict)
-                has_side_effect_oracle = any(
-                    result.name == _SIDE_EFFECT_ORACLE_NAME for result in supplied_snapshots
-                )
-                if has_side_effect_oracle is not grading_profile.requires_side_effect_grading:
-                    raise ValueError(
-                        "trial side-effect oracle presence does not match scenario grading profile"
-                    )
                 deterministic_failed = any(
                     result.verdict is TrialVerdict.FAIL for result in supplied_snapshots
                 )
@@ -332,6 +325,14 @@ class AssuranceReport(BaseModel):
                     raise ValueError(
                         f"trial pre-grading evidence is invalid ({exc.code}): {exc.reason}"
                     ) from exc
+
+                has_side_effect_oracle = any(
+                    result.name == _SIDE_EFFECT_ORACLE_NAME for result in supplied_snapshots
+                )
+                if has_side_effect_oracle is not grading_profile.requires_side_effect_grading:
+                    raise ValueError(
+                        "trial side-effect oracle presence does not match scenario grading profile"
+                    )
 
                 expected_oracle_results = grade_deterministic_evidence(scenario, evidence)
                 if verified_oracle_results != expected_oracle_results:
