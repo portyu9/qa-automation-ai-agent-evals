@@ -6,6 +6,7 @@ on:
       - fix/approval-request-cardinality
     paths:
       - .github/workflows/apply-approval-request-cardinality.yml
+      - .github/scripts/apply-approval-request-cardinality.py
 
 permissions:
   contents: write
