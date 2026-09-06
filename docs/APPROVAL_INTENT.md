@@ -96,9 +96,11 @@ A pending approval must never be counted as a completed execution merely because
 
 Raw arguments are deliberately absent from the receipt. The argument digest binds semantic content without duplicating possibly sensitive request material.
 
-The receipt is authoritative only when carried by the recognized evaluator-owned `APPROVAL_DECISION` source `evaluator:openai-hitl-approval-intent`. Replay rejects the same self-valid receipt under a subject, provider, or other unrecognized source instead of promoting that event into framework-owned approval authority.
+The canonical persisted evidence role for a stronger decision is `evaluator:openai-hitl-approval-intent`. That source remains required when the decision relation is verified, but the source string is **not** a live capability token. During fresh execution, `TrialRunner` accepts incoming `APPROVAL_DECISION` evidence only from the exact built-in `OpenAIAgentsHITLApprovalAdapter`, which is the framework path that observes the native `ToolApprovalItem`, applies the scenario-owned decision, and resumes the same SDK `RunState`. An ordinary live adapter—or a subclass that merely inherits the HITL class—cannot create framework-owned approval authority by copying the canonical source label and constructing a self-valid receipt.
 
-The source string is an evidence-role/provenance label, not cryptographic authentication. The receipt root is likewise an integrity relation, not a signature, MAC, authenticated human identity, or non-repudiation proof.
+Historical replay is deliberately different. The exact built-in `EvidenceReplayAdapter` may re-emit an already-finalized `APPROVAL_DECISION`, after which the approval verifier rechecks the canonical decision source, receipt root, request binding, authority path, lifecycle source roles, cardinality, and continuation chronology. Replay therefore preserves a recorded historical authorization relation without pretending to create a new live decision.
+
+The source string is an evidence-role/provenance label, not cryptographic authentication. The receipt root is likewise an integrity relation, not a signature, MAC, authenticated human identity, or non-repudiation proof. Exact live-adapter separation is framework execution-path ownership, not hostile same-process Python isolation or remote attestation.
 
 ## Canonical argument identity
 
@@ -234,7 +236,7 @@ An approval workflow cannot turn an unauthorized pending action into an authoriz
 
 ## OpenAI Agents SDK boundary
 
-`OpenAIAgentsHITLApprovalAdapter` is built on the pinned `openai-agents==0.22.0` public SDK surface.
+`OpenAIAgentsHITLApprovalAdapter` is built on the pinned `openai-agents==0.22.0` public SDK surface. For fresh `APPROVAL_DECISION` evidence, `TrialRunner` reserves live producer authority to the **exact** built-in adapter type; a custom adapter, copied adapter name, source label, or subclass does not inherit that authority. Provider-neutral adapters remain free to emit ordinary observations, but they cannot manufacture the framework-owned stronger decision that changes authorization state.
 
 The deterministic integration tests exercise real SDK mechanics with `agents.testing.ScriptedModel` and no provider API call:
 
@@ -257,6 +259,7 @@ The framework keeps uncertainty distinct from resolved subject failure.
 Examples include:
 
 - no bound decision when the target never executes;
+- live `APPROVAL_DECISION` evidence supplied by any adapter other than the exact built-in HITL approval adapter;
 - malformed or root-invalid receipt;
 - unrecognized approval-decision source;
 - unrecognized PASS-capable approval request/continuation source;
@@ -288,7 +291,7 @@ These are resolved subject-policy violations, not evaluator uncertainty.
 
 ## Persistence and replay
 
-`TrialRunner` semantically revalidates approval-intent evidence before deterministic oracle grading on both fresh execution and replay.
+Fresh execution and replay deliberately enter the approval verifier through different producer-authority paths. On fresh execution, `TrialRunner` first rejects incoming `APPROVAL_DECISION` evidence unless the adapter is exactly `OpenAIAgentsHITLApprovalAdapter`. On historical replay, the exact `EvidenceReplayAdapter` may carry the finalized decision because it is regrading recorded evidence rather than creating a new authorization act. Both paths then semantically revalidate approval intent before deterministic oracle grading.
 
 Replay does not recreate a human review or re-run the SDK interruption. It asks whether the recorded evidence still proves the same exact historical relation under the current deterministic verifier:
 
