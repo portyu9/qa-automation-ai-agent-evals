@@ -225,6 +225,14 @@ def verify_approval_intent(scenario: EvaluationScenario, evidence: TrialEvidence
         phase="approval request",
     )
 
+    if any(
+        event.kind is EvidenceKind.TOOL_RESULT
+        and event.payload.get("call_id") == receipt.call_id
+        and event.sequence <= decision_event.sequence
+        for event in evidence.events
+    ):
+        raise ApprovalIntentError("approval continuation result cannot precede its decision")
+
     post_decision = evidence.events[decision_event.sequence + 1 :]
     resumed_requests = [
         event
