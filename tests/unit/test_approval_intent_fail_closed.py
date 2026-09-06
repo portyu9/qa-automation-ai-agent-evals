@@ -103,9 +103,7 @@ def result(
     if approval_rejected is not None:
         payload["approval_rejected"] = approval_rejected
     source = (
-        REJECTION_TOOL_RESULT_SOURCE
-        if approval_rejected is True
-        else APPROVED_TOOL_RESULT_SOURCE
+        REJECTION_TOOL_RESULT_SOURCE if approval_rejected is True else APPROVED_TOOL_RESULT_SOURCE
     )
     return event(sequence, EvidenceKind.TOOL_RESULT, source=source, **payload)
 
