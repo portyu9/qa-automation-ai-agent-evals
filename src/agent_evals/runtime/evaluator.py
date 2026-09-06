@@ -411,7 +411,54 @@ class TrialRunner:
                     ),
                 )
 
+        if EvidenceKind.PROTOCOL_DELIVERY in event_kinds:
+            expected_by_source = TrialRunner._live_protocol_adapter_types()
+            for event in evidence.events:
+                if event.kind is not EvidenceKind.PROTOCOL_DELIVERY:
+                    continue
+                expected_type = expected_by_source.get(event.source)
+                if expected_type is not None and type(adapter) is not expected_type:
+                    return (
+                        "evaluator:protocol-delivery",
+                        "protocol_delivery_live_injection",
+                        (
+                            "live adapter output cannot supply framework-owned MCP protocol "
+                            f"delivery source {event.source!r}; fresh bridge evidence is accepted "
+                            "only from its exact built-in bridge adapter or through exact evidence "
+                            "replay"
+                        ),
+                    )
+
         return None
+
+    @staticmethod
+    def _live_protocol_adapter_types() -> dict[str, type[object]]:
+        """Return the fixed live producer type for every framework MCP bridge source."""
+        # Deliberately lazy: core evaluator import must not eagerly load optional OpenAI/MCP
+        # bridge modules. Direct durable receipt verification remains provider-neutral.
+        from agent_evals.adapters.openai_mcp_tool_error_recovery import (
+            OpenAIAgentsMCPToolErrorRecoveryAdapter,
+        )
+        from agent_evals.adapters.openai_mcp_tool_identity_drift import (
+            OpenAIAgentsMCPToolIdentityDriftAdapter,
+        )
+        from agent_evals.adapters.openai_mcp_tool_metadata import OpenAIAgentsMCPToolMetadataAdapter
+        from agent_evals.adapters.openai_mcp_tool_result import OpenAIAgentsMCPToolResultAdapter
+        from agent_evals.adapters.openai_mcp_tool_schema_drift import (
+            OpenAIAgentsMCPToolSchemaDriftAdapter,
+        )
+        from agent_evals.adapters.openai_mcp_tool_stale_cache import (
+            OpenAIAgentsMCPToolStaleCacheAdapter,
+        )
+
+        return {
+            "bridge:mcp-agent:tool-result": OpenAIAgentsMCPToolResultAdapter,
+            "bridge:mcp-agent:tool-error-recovery": OpenAIAgentsMCPToolErrorRecoveryAdapter,
+            "bridge:mcp-agent:tool-schema-drift": OpenAIAgentsMCPToolSchemaDriftAdapter,
+            "bridge:mcp-agent:tool-identity-drift": OpenAIAgentsMCPToolIdentityDriftAdapter,
+            "bridge:mcp-agent:tool-stale-cache": OpenAIAgentsMCPToolStaleCacheAdapter,
+            "bridge:mcp-agent:tool-metadata": OpenAIAgentsMCPToolMetadataAdapter,
+        }
 
     @staticmethod
     def _scenario_contract_drifted(
