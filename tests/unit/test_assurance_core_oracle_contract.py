@@ -207,9 +207,7 @@ def test_report_json_reload_rejects_missing_core_oracle_before_root_can_authoriz
     report = _valid_pass_report()
     payload = report.model_dump(mode="json")
     payload["trials"][0]["oracle_results"] = [
-        result
-        for result in payload["trials"][0]["oracle_results"]
-        if result["name"] != "policy"
+        result for result in payload["trials"][0]["oracle_results"] if result["name"] != "policy"
     ]
 
     with pytest.raises(ValidationError, match="missing core oracle results: policy"):
