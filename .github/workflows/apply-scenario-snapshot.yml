@@ -1,0 +1,220 @@
+name: Apply scenario contract snapshot hardening
+
+on:
+  push:
+    branches:
+      - fix/scenario-contract-runtime-snapshot
+    paths:
+      - .github/workflows/apply-scenario-snapshot.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: fix/scenario-contract-runtime-snapshot
+      - name: Apply runtime snapshot hardening
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path("src/agent_evals/contracts/models.py")
+          text = path.read_text()
+          old = '''    @property
+              def identity(self) -> str:
+                  return _sha256_json(self.model_dump(mode="python", exclude_none=True))
+          '''.replace("              ", "")
+          new_subject = '''    @property
+              def identity(self) -> str:
+                  return _sha256_json(self.model_dump(mode="python", exclude_none=True))
+
+              def snapshot(self) -> SubjectFingerprint:
+                  """Return a detached, revalidated copy for one runtime boundary."""
+                  return SubjectFingerprint.model_validate_json(self.model_dump_json())
+          '''.replace("              ", "")
+          if text.count(old) != 2:
+              raise SystemExit(f"expected two identity blocks in contracts/models.py; found {text.count(old)}")
+          text = text.replace(old, new_subject, 1)
+          new_scenario = '''    @property
+              def identity(self) -> str:
+                  return _sha256_json(self.model_dump(mode="python", exclude_none=True))
+
+              def snapshot(self) -> EvaluationScenario:
+                  """Return a detached, revalidated copy for one runtime boundary."""
+                  return EvaluationScenario.model_validate_json(self.model_dump_json())
+          '''.replace("              ", "")
+          if text.count(old) != 1:
+              raise SystemExit(f"expected one remaining scenario identity block; found {text.count(old)}")
+          text = text.replace(old, new_scenario, 1)
+          path.write_text(text)
+
+          path = Path("src/agent_evals/runtime/evaluator.py")
+          text = path.read_text()
+          old = '''    ) -> EvaluatedTrial:
+                  started = perf_counter()
+                  try:
+                      result = await adapter.execute(
+                          subject=subject,
+                          scenario=scenario,
+                          trial_id=trial_id,
+                      )
+          '''.replace("                  ", "")
+          new = '''    ) -> EvaluatedTrial:
+                  started = perf_counter()
+                  subject = subject.snapshot()
+                  scenario = scenario.snapshot()
+                  execution_scenario = scenario.snapshot()
+                  scenario_identity = scenario.identity
+                  try:
+                      result = await adapter.execute(
+                          subject=subject,
+                          scenario=execution_scenario,
+                          trial_id=trial_id,
+                      )
+          '''.replace("                  ", "")
+          if text.count(old) != 1:
+              raise SystemExit(f"TrialRunner entry block match count: {text.count(old)}")
+          text = text.replace(old, new)
+
+          old = '''        except AdapterPreconditionError as exc:
+                  elapsed_ms = (perf_counter() - started) * 1000.0
+          '''.replace("                  ", "")
+          new = '''        except AdapterPreconditionError as exc:
+                  if self._scenario_contract_drifted(execution_scenario, scenario_identity):
+                      return self._scenario_contract_mutated(
+                          adapter=adapter,
+                          subject=subject,
+                          scenario=scenario,
+                          trial_id=trial_id,
+                          elapsed_ms=(perf_counter() - started) * 1000.0,
+                      )
+                  elapsed_ms = (perf_counter() - started) * 1000.0
+          '''.replace("                  ", "")
+          if text.count(old) != 1:
+              raise SystemExit(f"precondition block match count: {text.count(old)}")
+          text = text.replace(old, new)
+
+          old = '''        except Exception as exc:  # adapter boundary: provider failure becomes structured evidence
+                  elapsed_ms = (perf_counter() - started) * 1000.0
+          '''.replace("                  ", "")
+          new = '''        except Exception as exc:  # adapter boundary: provider failure becomes structured evidence
+                  if self._scenario_contract_drifted(execution_scenario, scenario_identity):
+                      return self._scenario_contract_mutated(
+                          adapter=adapter,
+                          subject=subject,
+                          scenario=scenario,
+                          trial_id=trial_id,
+                          elapsed_ms=(perf_counter() - started) * 1000.0,
+                      )
+                  elapsed_ms = (perf_counter() - started) * 1000.0
+          '''.replace("                  ", "")
+          if text.count(old) != 1:
+              raise SystemExit(f"runtime exception block match count: {text.count(old)}")
+          text = text.replace(old, new)
+
+          old = '''        if not isinstance(result, AdapterResult):
+          '''
+          new = '''        if self._scenario_contract_drifted(execution_scenario, scenario_identity):
+                  return self._scenario_contract_mutated(
+                      adapter=adapter,
+                      subject=subject,
+                      scenario=scenario,
+                      trial_id=trial_id,
+                      elapsed_ms=(perf_counter() - started) * 1000.0,
+                  )
+
+              if not isinstance(result, AdapterResult):
+          '''.replace("              ", "")
+          if text.count(old) != 1:
+              raise SystemExit(f"post-adapter block match count: {text.count(old)}")
+          text = text.replace(old, new)
+
+          marker = '''    @staticmethod
+              def _semantic_verdict(decision: SemanticDecision) -> TrialVerdict:
+          '''.replace("              ", "")
+          helper = '''    @staticmethod
+              def _scenario_contract_drifted(
+                  scenario: EvaluationScenario,
+                  expected_identity: str,
+              ) -> bool:
+                  try:
+                      return scenario.identity != expected_identity
+                  except (TypeError, ValueError):
+                      return True
+
+              @staticmethod
+              def _scenario_contract_mutated(
+                  *,
+                  adapter: AgentAdapter,
+                  subject: SubjectFingerprint,
+                  scenario: EvaluationScenario,
+                  trial_id: str,
+                  elapsed_ms: float,
+              ) -> EvaluatedTrial:
+                  event = EvidenceEvent(
+                      sequence=0,
+                      kind=EvidenceKind.EVALUATION_ERROR,
+                      source=f"evaluator:adapter:{adapter.name}",
+                      payload={
+                          "code": "scenario_contract_mutated",
+                          "reason": (
+                              "adapter-facing scenario contract changed during execution; "
+                              "the evaluator retained the pre-execution contract"
+                          ),
+                      },
+                      critical=True,
+                  )
+                  evidence = TrialEvidence(
+                      trial_id=trial_id,
+                      subject_identity=subject.identity,
+                      scenario_identity=scenario.identity,
+                      events=(event,),
+                      elapsed_ms=elapsed_ms,
+                  )
+                  return EvaluatedTrial(
+                      evidence=evidence,
+                      oracle_results=(),
+                      verdict=TrialVerdict.BLOCKED,
+                  )
+
+              @staticmethod
+              def _semantic_verdict(decision: SemanticDecision) -> TrialVerdict:
+          '''.replace("              ", "")
+          if text.count(marker) != 1:
+              raise SystemExit(f"semantic helper marker count: {text.count(marker)}")
+          text = text.replace(marker, helper)
+          path.write_text(text)
+
+          path = Path("src/agent_evals/runtime/session.py")
+          text = path.read_text()
+          old = '''        if k < 1:
+                  raise ValueError("k must be >= 1")
+
+              trials = []
+          '''.replace("              ", "")
+          new = '''        if k < 1:
+                  raise ValueError("k must be >= 1")
+
+              subject = subject.snapshot()
+              scenario = scenario.snapshot()
+              trials = []
+          '''.replace("              ", "")
+          if text.count(old) != 1:
+              raise SystemExit(f"session snapshot insertion count: {text.count(old)}")
+          text = text.replace(old, new)
+          path.write_text(text)
+          PY
+      - name: Commit runtime hardening
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/agent_evals/contracts/models.py src/agent_evals/runtime/evaluator.py src/agent_evals/runtime/session.py
+          git diff --cached --check
+          git commit -m "fix: snapshot scenario contracts across runtime boundaries"
+          git push origin HEAD:fix/scenario-contract-runtime-snapshot
