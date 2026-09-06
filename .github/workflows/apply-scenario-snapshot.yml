@@ -31,7 +31,6 @@ jobs:
 
           def replace_in_scope(
               text: str,
-              *,
               start_marker: str,
               end_marker: str,
               old: str,
@@ -40,40 +39,42 @@ jobs:
           ) -> str:
               start = text.index(start_marker)
               end = text.index(end_marker, start)
-              scope = text[start:end]
-              scope = replace_once(scope, old, new, label)
+              scope = replace_once(text[start:end], old, new, label)
               return text[:start] + scope + text[end:]
 
-          identity = '''    @property
-              def identity(self) -> str:
-                  return _sha256_json(self.model_dump(mode="python", exclude_none=True))
-          '''.replace("              ", "")
+          identity = (
+              '    @property\n'
+              '    def identity(self) -> str:\n'
+              '        return _sha256_json(self.model_dump(mode="python", exclude_none=True))\n'
+          )
 
           path = Path("src/agent_evals/contracts/models.py")
           text = path.read_text()
           text = replace_in_scope(
               text,
-              start_marker="class SubjectFingerprint(BaseModel):",
-              end_marker="\n\nclass HandoffAuthorityGrant(BaseModel):",
-              old=identity,
-              new=identity + '''
-              def snapshot(self) -> SubjectFingerprint:
-                  """Return a detached, revalidated copy for one runtime boundary."""
-                  return SubjectFingerprint.model_validate_json(self.model_dump_json())
-          '''.replace("              ", ""),
-              label="SubjectFingerprint identity",
+              "class SubjectFingerprint(BaseModel):",
+              "\n\nclass HandoffAuthorityGrant(BaseModel):",
+              identity,
+              identity
+              + (
+                  '\n    def snapshot(self) -> SubjectFingerprint:\n'
+                  '        """Return a detached, revalidated copy for one runtime boundary."""\n'
+                  '        return SubjectFingerprint.model_validate_json(self.model_dump_json())\n'
+              ),
+              "SubjectFingerprint identity",
           )
           text = replace_in_scope(
               text,
-              start_marker="class EvaluationScenario(BaseModel):",
-              end_marker="\n\ndef _agent_path_requires_approval",
-              old=identity,
-              new=identity + '''
-              def snapshot(self) -> EvaluationScenario:
-                  """Return a detached, revalidated copy for one runtime boundary."""
-                  return EvaluationScenario.model_validate_json(self.model_dump_json())
-          '''.replace("              ", ""),
-              label="EvaluationScenario identity",
+              "class EvaluationScenario(BaseModel):",
+              "\n\ndef _agent_path_requires_approval",
+              identity,
+              identity
+              + (
+                  '\n    def snapshot(self) -> EvaluationScenario:\n'
+                  '        """Return a detached, revalidated copy for one runtime boundary."""\n'
+                  '        return EvaluationScenario.model_validate_json(self.model_dump_json())\n'
+              ),
+              "EvaluationScenario identity",
           )
           path.write_text(text)
 
@@ -81,7 +82,7 @@ jobs:
           text = path.read_text()
           text = replace_once(
               text,
-              '''    ) -> EvaluatedTrial:
+              """    ) -> EvaluatedTrial:
                   started = perf_counter()
                   try:
                       result = await adapter.execute(
@@ -89,8 +90,8 @@ jobs:
                           scenario=scenario,
                           trial_id=trial_id,
                       )
-          '''.replace("                  ", ""),
-              '''    ) -> EvaluatedTrial:
+          """.replace("                  ", ""),
+              """    ) -> EvaluatedTrial:
                   started = perf_counter()
                   subject = subject.snapshot()
                   scenario = scenario.snapshot()
@@ -102,49 +103,43 @@ jobs:
                           scenario=execution_scenario,
                           trial_id=trial_id,
                       )
-          '''.replace("                  ", ""),
+          """.replace("                  ", ""),
               "TrialRunner entry",
           )
           text = replace_once(
               text,
-              '''        except AdapterPreconditionError as exc:
-                  elapsed_ms = (perf_counter() - started) * 1000.0
-          '''.replace("                  ", ""),
-              '''        except AdapterPreconditionError as exc:
-                  if self._scenario_contract_drifted(execution_scenario, scenario_identity):
-                      return self._scenario_contract_mutated(
-                          adapter=adapter,
-                          subject=subject,
-                          scenario=scenario,
-                          trial_id=trial_id,
-                          elapsed_ms=(perf_counter() - started) * 1000.0,
-                      )
-                  elapsed_ms = (perf_counter() - started) * 1000.0
-          '''.replace("                  ", ""),
+              "        except AdapterPreconditionError as exc:\n            elapsed_ms =",
+              """        except AdapterPreconditionError as exc:
+                      if self._scenario_contract_drifted(execution_scenario, scenario_identity):
+                          return self._scenario_contract_mutated(
+                              adapter=adapter,
+                              subject=subject,
+                              scenario=scenario,
+                              trial_id=trial_id,
+                              elapsed_ms=(perf_counter() - started) * 1000.0,
+                          )
+                      elapsed_ms =""".replace("                      ", "        "),
               "adapter precondition mutation check",
           )
           text = replace_once(
               text,
-              '''        except Exception as exc:  # adapter boundary: provider failure becomes structured evidence
-                  elapsed_ms = (perf_counter() - started) * 1000.0
-          '''.replace("                  ", ""),
-              '''        except Exception as exc:  # adapter boundary: provider failure becomes structured evidence
-                  if self._scenario_contract_drifted(execution_scenario, scenario_identity):
-                      return self._scenario_contract_mutated(
-                          adapter=adapter,
-                          subject=subject,
-                          scenario=scenario,
-                          trial_id=trial_id,
-                          elapsed_ms=(perf_counter() - started) * 1000.0,
-                      )
-                  elapsed_ms = (perf_counter() - started) * 1000.0
-          '''.replace("                  ", ""),
+              "        except Exception as exc:  # adapter boundary: provider failure becomes structured evidence\n            elapsed_ms =",
+              """        except Exception as exc:  # adapter boundary: provider failure becomes structured evidence
+                      if self._scenario_contract_drifted(execution_scenario, scenario_identity):
+                          return self._scenario_contract_mutated(
+                              adapter=adapter,
+                              subject=subject,
+                              scenario=scenario,
+                              trial_id=trial_id,
+                              elapsed_ms=(perf_counter() - started) * 1000.0,
+                          )
+                      elapsed_ms =""".replace("                      ", "        "),
               "runtime exception mutation check",
           )
           text = replace_once(
               text,
               "        if not isinstance(result, AdapterResult):\n",
-              '''        if self._scenario_contract_drifted(execution_scenario, scenario_identity):
+              """        if self._scenario_contract_drifted(execution_scenario, scenario_identity):
                   return self._scenario_contract_mutated(
                       adapter=adapter,
                       subject=subject,
@@ -154,13 +149,11 @@ jobs:
                   )
 
               if not isinstance(result, AdapterResult):
-          '''.replace("              ", ""),
+          """.replace("              ", ""),
               "post-adapter mutation check",
           )
-          marker = '''    @staticmethod
-              def _semantic_verdict(decision: SemanticDecision) -> TrialVerdict:
-          '''.replace("              ", "")
-          helper = '''    @staticmethod
+          marker = "    @staticmethod\n    def _semantic_verdict(decision: SemanticDecision) -> TrialVerdict:\n"
+          helper = """    @staticmethod
               def _scenario_contract_drifted(
                   scenario: EvaluationScenario,
                   expected_identity: str,
@@ -207,7 +200,7 @@ jobs:
 
               @staticmethod
               def _semantic_verdict(decision: SemanticDecision) -> TrialVerdict:
-          '''.replace("              ", "")
+          """.replace("              ", "")
           text = replace_once(text, marker, helper, "scenario drift helpers")
           path.write_text(text)
 
@@ -215,18 +208,18 @@ jobs:
           text = path.read_text()
           text = replace_once(
               text,
-              '''        if isinstance(k, bool) or not isinstance(k, int) or k < 1:
+              """        if isinstance(k, bool) or not isinstance(k, int) or k < 1:
                   raise ValueError("k must be a positive integer")
 
               evaluated: list[EvaluatedTrial] = []
-          '''.replace("              ", ""),
-              '''        if isinstance(k, bool) or not isinstance(k, int) or k < 1:
+          """.replace("              ", ""),
+              """        if isinstance(k, bool) or not isinstance(k, int) or k < 1:
                   raise ValueError("k must be a positive integer")
 
               subject = subject.snapshot()
               scenario = scenario.snapshot()
               evaluated: list[EvaluatedTrial] = []
-          '''.replace("              ", ""),
+          """.replace("              ", ""),
               "session boundary snapshot",
           )
           path.write_text(text)
