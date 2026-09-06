@@ -79,9 +79,10 @@ jobs:
           PY
       - name: Install focused test dependencies
         run: python -m pip install --disable-pip-version-check -e '.[dev]'
-      - name: Validate focused chronology surface
+      - name: Format and validate focused chronology surface
         run: |
           ruff check src/agent_evals/evidence/approval_intent.py tests/unit/test_approval_continuation_chronology.py
+          ruff format src/agent_evals/evidence/approval_intent.py
           ruff format --check src/agent_evals/evidence/approval_intent.py tests/unit/test_approval_continuation_chronology.py
           pytest -q tests/unit/test_approval_continuation_chronology.py tests/unit/test_approval_intent.py tests/unit/test_approval_intent_fail_closed.py tests/unit/test_approval_intent_legacy_downgrade.py
           git diff --check
