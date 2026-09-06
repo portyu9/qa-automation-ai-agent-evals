@@ -29,6 +29,7 @@ def _report() -> AssuranceReport:
                 verdict=TrialVerdict.FAIL,
                 critical=True,
             ),
+            OracleResult(name="outcome", verdict=TrialVerdict.PASS),
         ),
         verdict=TrialVerdict.FAIL,
     )

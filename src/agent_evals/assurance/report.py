@@ -25,6 +25,9 @@ _REPORT_SCHEMA: Literal["agent-evals/assurance-report/v3"] = "agent-evals/assura
 _EVIDENCE_SCHEMA: Literal["agent-evals/trial-evidence/v2"] = "agent-evals/trial-evidence/v2"
 _REPORT_DOMAIN = b"agent-evals/assurance-report/v3\0"
 _RESOLVED_VERDICTS = frozenset({TrialVerdict.PASS, TrialVerdict.FAIL})
+_CORE_ORACLE_NAMES = frozenset({"policy", "outcome"})
+_CRITICAL_ON_FAIL_ORACLE_NAMES = frozenset({"policy", "side-effect-idempotency"})
+_NEVER_CRITICAL_ORACLE_NAMES = frozenset({"outcome"})
 
 
 class OracleSnapshot(BaseModel):
@@ -36,6 +39,18 @@ class OracleSnapshot(BaseModel):
     verdict: TrialVerdict
     reasons: tuple[str, ...] = ()
     critical: bool = Field(default=False, strict=True)
+
+    @model_validator(mode="after")
+    def validate_runtime_criticality(self) -> Self:
+        if self.name in _CRITICAL_ON_FAIL_ORACLE_NAMES:
+            expected = self.verdict is TrialVerdict.FAIL
+            if self.critical is not expected:
+                raise ValueError(
+                    f"{self.name} oracle criticality does not match deterministic runtime contract"
+                )
+        elif self.name in _NEVER_CRITICAL_ORACLE_NAMES and self.critical:
+            raise ValueError("outcome oracle cannot claim critical authority")
+        return self
 
     @classmethod
     def from_oracle(cls, result: OracleResult) -> Self:
@@ -93,6 +108,12 @@ class TrialAssuranceRecord(BaseModel):
 
         if not self.oracle_results:
             raise ValueError("non-blocked assurance trial requires deterministic oracle results")
+        missing_core = _CORE_ORACLE_NAMES.difference(oracle_names)
+        if missing_core:
+            missing = ", ".join(sorted(missing_core))
+            raise ValueError(
+                f"non-blocked assurance trial is missing core oracle results: {missing}"
+            )
         if any(result.verdict not in _RESOLVED_VERDICTS for result in self.oracle_results):
             raise ValueError("non-blocked assurance trial has a non-resolved oracle verdict")
 

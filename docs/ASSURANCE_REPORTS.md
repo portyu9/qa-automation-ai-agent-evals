@@ -10,10 +10,10 @@ The report is deliberately **not** another grading authority. It preserves concl
 
 Assurance Report v3 keeps two grading classes explicit instead of collapsing them into one score:
 
-1. **deterministic oracle snapshots** — policy and outcome conclusions derived from normalized evidence;
+1. **deterministic oracle snapshots** — the required core policy/outcome conclusions plus any additional deterministic conclusions produced by the runtime;
 2. **optional semantic judgment receipt** — a calibrated meaning-level judgment that may exist only after deterministic PASS.
 
-The second class is subordinate to the first.
+The second class is subordinate to the first. For every non-`BLOCKED` trial, the report requires exactly one `policy` snapshot and exactly one `outcome` snapshot. Additional deterministic oracle snapshots may extend that core set but cannot replace either core oracle.
 
 ```text
 bound TrialEvidence schema + exact final evidence root
@@ -45,6 +45,8 @@ For each trial the report records:
 - terminal trial verdict;
 - deterministic oracle snapshots: unique oracle name, verdict, reasons, and critical flag;
 - optional full `SemanticJudgmentReceipt`.
+
+The runtime contract also constrains the critical flag of known framework oracles. `policy` and `side-effect-idempotency` are critical exactly when they fail; `outcome` is never critical. Report validation rechecks those structural semantics rather than accepting a caller-supplied criticality label that the framework's own deterministic oracles could not have produced. Unknown deterministic oracle names remain extensible and retain their serialized criticality because the assurance layer does not know their external semantics.
 
 The semantic receipt itself binds the exact **pre-semantic** evidence root, rubric, judge profile, accepted calibration, bounded judge-input digest, structured-response digest, criterion results, derived semantic decision, and its own integrity root.
 
@@ -91,20 +93,22 @@ Pydantic model validation is not merely schema parsing. A loaded report must sat
 1. the assurance-report schema and bound evidence schema are the supported versions;
 2. trial IDs are unique;
 3. deterministic oracle names are unique within each trial;
-4. non-blocked trials contain completed deterministic oracle results;
-5. deterministic oracle results themselves have resolved PASS/FAIL verdicts;
-6. `BLOCKED` cannot carry completed oracle results or semantic judgment evidence;
-7. a semantic judgment cannot coexist with deterministic oracle failure;
-8. semantic receipt subject identity matches the report subject;
-9. semantic receipt scenario identity matches the report scenario;
-10. the trial verdict recomputes from deterministic results plus optional semantic decision using strict precedence;
-11. `INCONCLUSIVE` requires an abstaining semantic judgment;
-12. reliability recomputes from the validated trial verdicts using the recorded `k` **and** recorded `confidence_z`;
-13. critical-violation count recomputes from **failed critical deterministic oracle snapshots only**;
-14. the release-gate decision and reasons recompute from reliability, deterministic critical violations, and the frozen policy;
-15. the canonical v3 report root matches the complete report content.
+4. every non-`BLOCKED` trial contains both core oracle snapshots, `policy` and `outcome`, exactly once;
+5. known framework oracle criticality matches runtime semantics: `policy` and `side-effect-idempotency` are critical iff they fail, while `outcome` is never critical;
+6. non-blocked trials contain completed deterministic oracle results;
+7. deterministic oracle results themselves have resolved PASS/FAIL verdicts;
+8. `BLOCKED` cannot carry completed oracle results or semantic judgment evidence;
+9. a semantic judgment cannot coexist with deterministic oracle failure;
+10. semantic receipt subject identity matches the report subject;
+11. semantic receipt scenario identity matches the report scenario;
+12. the trial verdict recomputes from deterministic results plus optional semantic decision using strict precedence;
+13. `INCONCLUSIVE` requires an abstaining semantic judgment;
+14. reliability recomputes from the validated trial verdicts using the recorded `k` **and** recorded `confidence_z`;
+15. critical-violation count recomputes from **failed critical deterministic oracle snapshots only**;
+16. the release-gate decision and reasons recompute from reliability, deterministic critical violations, and the frozen policy;
+17. the canonical v3 report root matches the complete report content.
 
-A schema-valid JSON object that forges a semantic decision, trial verdict, success rate, Wilson interval, confidence parameter, gate decision, gate reasons, critical flag, evidence root, policy threshold, or report root therefore fails validation unless all lower-level bound relations also remain valid.
+A schema-valid JSON object that forges a semantic decision, trial verdict, success rate, Wilson interval, confidence parameter, gate decision, gate reasons, critical flag, core-oracle presence, evidence root, policy threshold, or report root therefore fails validation unless all lower-level bound relations also remain valid.
 
 ## Generation from a session
 
@@ -118,6 +122,8 @@ A schema-valid JSON object that forges a semantic decision, trial verdict, succe
 - every trial evidence envelope must match the session scenario identity;
 - trial IDs must be unique;
 - deterministic oracle names must be unique within each non-blocked trial;
+- each non-`BLOCKED` trial must contain the core `policy` and `outcome` oracle snapshots;
+- known framework oracle criticality must match runtime semantics before critical violations or the release gate are derived;
 - deterministic and semantic precedence must rederive each trial verdict;
 - any semantic receipt must revalidate under its own contract;
 - the session's `ReliabilityReport` must recompute from its trial verdicts using the same `k` and `confidence_z`.
@@ -160,7 +166,7 @@ The persisted report is not the first place statistical values are checked. `Rel
 
 A semantic FAIL is a resolved trial failure, so it contributes to reliability failure counts and can cause a release gate to reject because success-rate requirements are not met.
 
-It is **not** a critical policy violation. `critical_violations` is recomputed exclusively from deterministic oracle snapshots marked critical. This prevents a model grader from inventing safety-critical authority merely by returning FAIL.
+It is **not** a critical policy violation. `critical_violations` is recomputed exclusively from deterministic oracle snapshots marked critical after known framework criticality semantics have been validated. This prevents a model grader from inventing safety-critical authority merely by returning FAIL and prevents a caller from downgrading a framework policy or side-effect failure to non-critical.
 
 Conversely, a deterministic critical failure can never be offset by a semantic PASS because the runtime does not call the semantic judge after deterministic failure and the report rejects any artifact that tries to combine those claims.
 

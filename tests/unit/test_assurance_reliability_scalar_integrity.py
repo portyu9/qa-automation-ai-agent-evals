@@ -23,7 +23,10 @@ def _report() -> AssuranceReport:
     )
     trial = EvaluatedTrial(
         evidence=evidence,
-        oracle_results=(OracleResult(name="outcome", verdict=TrialVerdict.PASS),),
+        oracle_results=(
+            OracleResult(name="policy", verdict=TrialVerdict.PASS),
+            OracleResult(name="outcome", verdict=TrialVerdict.PASS),
+        ),
         verdict=TrialVerdict.PASS,
     )
     reliability = ReliabilityReport.from_verdicts((TrialVerdict.PASS,), k=1)

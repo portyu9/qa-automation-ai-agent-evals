@@ -32,14 +32,22 @@ def evaluated_trial(
         final_state={"trial": trial_id},
     )
     oracle_results: tuple[OracleResult, ...] = ()
-    if verdict in (TrialVerdict.PASS, TrialVerdict.FAIL):
+    if verdict is TrialVerdict.PASS:
         oracle_results = (
-            OracleResult(
-                name="policy" if critical else "outcome",
-                verdict=verdict,
-                critical=critical,
-            ),
+            OracleResult(name="policy", verdict=TrialVerdict.PASS),
+            OracleResult(name="outcome", verdict=TrialVerdict.PASS),
         )
+    elif verdict is TrialVerdict.FAIL:
+        if critical:
+            oracle_results = (
+                OracleResult(name="policy", verdict=TrialVerdict.FAIL, critical=True),
+                OracleResult(name="outcome", verdict=TrialVerdict.PASS),
+            )
+        else:
+            oracle_results = (
+                OracleResult(name="policy", verdict=TrialVerdict.PASS),
+                OracleResult(name="outcome", verdict=TrialVerdict.FAIL),
+            )
     return EvaluatedTrial(
         evidence=evidence,
         oracle_results=oracle_results,
@@ -182,12 +190,12 @@ def test_forged_gate_decision_is_rejected() -> None:
         AssuranceReport.model_validate(payload)
 
 
-def test_forged_oracle_criticality_requires_gate_recomputation() -> None:
+def test_forged_oracle_criticality_rejects_runtime_contract_drift() -> None:
     report = AssuranceReport.from_session(session_result(), release_policy=release_policy())
     payload = report.model_dump(mode="json")
     payload["trials"][1]["oracle_results"][0]["critical"] = False
 
-    with pytest.raises(ValidationError, match="gate does not recompute"):
+    with pytest.raises(ValidationError, match="criticality does not match deterministic runtime"):
         AssuranceReport.model_validate(payload)
 
 
