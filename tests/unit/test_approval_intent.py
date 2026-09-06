@@ -13,6 +13,10 @@ from agent_evals.contracts.models import (
 )
 from agent_evals.evidence.approval_intent import (
     APPROVAL_DECISION_SOURCE,
+    APPROVAL_REQUEST_SOURCE,
+    APPROVED_TOOL_REQUEST_SOURCE,
+    APPROVED_TOOL_RESULT_SOURCE,
+    REJECTION_TOOL_RESULT_SOURCE,
     ApprovalIntentError,
     ApprovalIntentReceipt,
     canonical_arguments_sha256,
@@ -124,8 +128,16 @@ def branched_scenario() -> EvaluationScenario:
     )
 
 
-def event(sequence: int, kind: EvidenceKind, **payload: object) -> EvidenceEvent:
-    return EvidenceEvent(sequence=sequence, kind=kind, source="test", payload=payload)
+def event(
+    sequence: int,
+    kind: EvidenceKind,
+    *,
+    source: str | None = None,
+    **payload: object,
+) -> EvidenceEvent:
+    if source is None:
+        source = APPROVED_TOOL_REQUEST_SOURCE if kind is EvidenceKind.TOOL_REQUEST else "test"
+    return EvidenceEvent(sequence=sequence, kind=kind, source=source, payload=payload)
 
 
 def evidence(contract: EvaluationScenario, *events: EvidenceEvent) -> TrialEvidence:
@@ -141,6 +153,7 @@ def approval_request(sequence: int, *, agent: str = _AGENT) -> EvidenceEvent:
     return event(
         sequence,
         EvidenceKind.APPROVAL_REQUEST,
+        source=APPROVAL_REQUEST_SOURCE,
         agent=agent,
         tool=_TOOL,
         call_id="call-refund",
@@ -163,7 +176,12 @@ def tool_result(
     }
     if approval_rejected is not None:
         payload["approval_rejected"] = approval_rejected
-    return event(sequence, EvidenceKind.TOOL_RESULT, **payload)
+    source = (
+        REJECTION_TOOL_RESULT_SOURCE
+        if approval_rejected is True
+        else APPROVED_TOOL_RESULT_SOURCE
+    )
+    return event(sequence, EvidenceKind.TOOL_RESULT, source=source, **payload)
 
 
 def _state_for_epoch(contract: EvaluationScenario, authority_epoch: int) -> HandoffPathState:
