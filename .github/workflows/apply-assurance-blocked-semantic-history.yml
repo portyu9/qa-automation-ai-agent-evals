@@ -25,34 +25,23 @@ jobs:
 
           report = Path("src/agent_evals/assurance/report.py")
           text = report.read_text()
-          old = '''            try:
-              evidence_semantic = verify_semantic_judgment_evidence(evidence)
-          except SemanticJudgmentError as exc:
-              raise ValueError(f"trial semantic judgment evidence is invalid: {exc}") from exc
-
-          semantic = (
-              SemanticJudgmentReceipt.model_validate(
-                  trial.semantic_judgment.model_dump(mode="json")
-              )
-              if trial.semantic_judgment is not None
-              else None
+          start_marker = (
+              "            try:\n"
+              "                evidence_semantic = verify_semantic_judgment_evidence(evidence)\n"
           )
-          if semantic is None and evidence_semantic is not None:
-              raise ValueError(
-                  "trial semantic judgment field is absent but final evidence commits a judgment"
+          end_marker = (
+              "            if semantic is not None and evidence_semantic != semantic:\n"
+              "                raise ValueError(\n"
+              "                    \"trial semantic judgment does not match the receipt committed by final evidence\"\n"
+              "                )\n"
+          )
+          if text.count(start_marker) != 1 or text.count(end_marker) != 1:
+              raise SystemExit(
+                  f"report sentinels start={text.count(start_marker)} end={text.count(end_marker)}"
               )
-          if semantic is not None and evidence_semantic is None:
-              raise ValueError(
-                  "trial semantic judgment is not committed by the final evidence envelope"
-              )
-          if semantic is not None and evidence_semantic != semantic:
-              raise ValueError(
-                  "trial semantic judgment does not match the receipt committed by final evidence"
-              )
-          '''
-          # Restore the exact source indentation stripped by this helper string's own indentation.
-          old = "\n".join(("            " + line if line else "") for line in old.splitlines()) + "\n"
-          new = '''semantic = (
+          start = text.index(start_marker)
+          end = text.index(end_marker, start) + len(end_marker)
+          new_block = '''            semantic = (
               SemanticJudgmentReceipt.model_validate(
                   trial.semantic_judgment.model_dump(mode="json")
               )
@@ -78,10 +67,12 @@ jobs:
                       "trial semantic judgment does not match the receipt committed by final evidence"
                   )
           '''
-          new = "\n".join(("            " + line if line else "") for line in new.splitlines()) + "\n"
-          if text.count(old) != 1:
-              raise SystemExit(f"report semantic block anchor count={text.count(old)}")
-          report.write_text(text.replace(old, new, 1))
+          # The first line already contains source indentation; indent following lines to the same loop scope.
+          lines = new_block.splitlines()
+          new_block = "\n".join(
+              [lines[0], *[("            " + line if line else "") for line in lines[1:]]]
+          ) + "\n"
+          report.write_text(text[:start] + new_block + text[end:])
 
           test = Path("tests/unit/test_semantic_replay.py")
           text = test.read_text()
@@ -146,41 +137,22 @@ jobs:
 
           class _Judge:
           '''
-          helpers = "\n".join(line[10:] if line.startswith("          ") else line for line in helpers.splitlines()) + "\n"
+          helpers = "\n".join(
+              line[10:] if line.startswith("          ") else line
+              for line in helpers.splitlines()
+          ) + "\n"
           if text.count(helper_anchor) != 1:
               raise SystemExit(f"test helper anchor count={text.count(helper_anchor)}")
           text = text.replace(helper_anchor, helpers, 1)
 
-          old_test = '''@pytest.mark.asyncio
-          async def test_replay_rejects_semantic_evidence_after_deterministic_failure() -> None:
-              subject = _subject()
-              scenario = _scenario()
-              judge = _Judge()
-              live = await TrialRunner(semantic_judge=judge).run(
-                  _StaticAdapter(),
-                  subject=subject,
-                  scenario=scenario,
-                  trial_id="semantic-invalid-precedence",
-              )
-              tampered = live.evidence.model_copy(update={"final_state": {"unexpected": "state"}})
-              failing_scenario = scenario.model_copy(update={"required_outcomes": {"required": "value"}})
-              rebound = tampered.model_copy(update={"scenario_identity": failing_scenario.identity})
-
-              replayed = await TrialRunner().run(
-                  EvidenceReplayAdapter(rebound),
-                  subject=subject,
-                  scenario=failing_scenario,
-                  trial_id="semantic-invalid-precedence",
-              )
-
-              assert replayed.verdict is TrialVerdict.BLOCKED
-              assert replayed.evidence.events[-1].payload["code"] in {
-                  "semantic_judgment_unverified",
-                  "semantic_judgment_after_deterministic_failure",
-              }
-          '''
-          old_test = "\n".join(line[10:] if line.startswith("          ") else line for line in old_test.splitlines()) + "\n"
-          new_test = '''@pytest.mark.asyncio
+          test_start = (
+              "@pytest.mark.asyncio\n"
+              "async def test_replay_rejects_semantic_evidence_after_deterministic_failure() -> None:\n"
+          )
+          if text.count(test_start) != 1:
+              raise SystemExit(f"semantic replay tail anchor count={text.count(test_start)}")
+          tail = text.index(test_start)
+          new_tests = '''@pytest.mark.asyncio
           async def test_assurance_reports_runtime_blocked_rejected_semantic_history() -> None:
               subject = _subject()
               scenario = _scenario()
@@ -292,10 +264,11 @@ jobs:
               assert report.trials[0].semantic_judgment is None
               assert report.trials[0].evidence_root == blocked.evidence.evidence_root
           '''
-          new_test = "\n".join(line[10:] if line.startswith("          ") else line for line in new_test.splitlines()) + "\n"
-          if text.count(old_test) != 1:
-              raise SystemExit(f"semantic replay regression anchor count={text.count(old_test)}")
-          test.write_text(text.replace(old_test, new_test, 1))
+          new_tests = "\n".join(
+              line[10:] if line.startswith("          ") else line
+              for line in new_tests.splitlines()
+          ) + "\n"
+          test.write_text(text[:tail] + new_tests)
 
           docs = Path("docs/ASSURANCE_REPORTS.md")
           text = docs.read_text()
