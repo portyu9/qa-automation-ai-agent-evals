@@ -184,19 +184,15 @@ class TrialRunner:
                 verdict=TrialVerdict.BLOCKED,
             )
 
-        if type(adapter) is not EvidenceReplayAdapter and any(
-            event.kind is EvidenceKind.SEMANTIC_JUDGMENT for event in evidence.events
-        ):
+        authority_violation = self._live_evaluator_owned_evidence_violation(adapter, evidence)
+        if authority_violation is not None:
+            source, code, reason = authority_violation
             return EvaluatedTrial(
                 evidence=self._append_evaluation_error(
                     evidence,
-                    source="evaluator:semantic-judgment",
-                    code="semantic_judgment_live_injection",
-                    reason=(
-                        "live adapter output cannot supply evaluator-owned semantic judgment "
-                        "evidence; recorded semantic judgments are accepted only through the "
-                        "exact evidence replay adapter"
-                    ),
+                    source=source,
+                    code=code,
+                    reason=reason,
                 ),
                 oracle_results=(),
                 verdict=TrialVerdict.BLOCKED,
@@ -359,6 +355,46 @@ class TrialRunner:
             verdict=self._semantic_verdict(receipt.decision),
             semantic_judgment=receipt,
         )
+
+    @staticmethod
+    def _live_evaluator_owned_evidence_violation(
+        adapter: AgentAdapter,
+        evidence: TrialEvidence,
+    ) -> tuple[str, str, str] | None:
+        if type(adapter) is EvidenceReplayAdapter:
+            return None
+
+        event_kinds = {event.kind for event in evidence.events}
+        if EvidenceKind.SEMANTIC_JUDGMENT in event_kinds:
+            return (
+                "evaluator:semantic-judgment",
+                "semantic_judgment_live_injection",
+                (
+                    "live adapter output cannot supply evaluator-owned semantic judgment "
+                    "evidence; recorded semantic judgments are accepted only through the "
+                    "exact evidence replay adapter"
+                ),
+            )
+
+        if EvidenceKind.SIDE_EFFECT_OBSERVATION in event_kinds:
+            # Deliberately lazy: importing the evaluator core must not load optional OpenAI
+            # adapter modules unless this live authority distinction is actually needed.
+            from agent_evals.adapters.openai_side_effect_idempotency import (
+                OpenAIAgentsSideEffectIdempotencyAdapter,
+            )
+
+            if type(adapter) is not OpenAIAgentsSideEffectIdempotencyAdapter:
+                return (
+                    "evaluator:side-effect-observer",
+                    "side_effect_observation_live_injection",
+                    (
+                        "live adapter output cannot supply evaluator-owned side-effect observation "
+                        "evidence; live physical-effect observations are accepted only from the "
+                        "exact built-in side-effect observer or through exact evidence replay"
+                    ),
+                )
+
+        return None
 
     @staticmethod
     def _scenario_contract_drifted(
