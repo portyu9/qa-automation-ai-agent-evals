@@ -2,6 +2,7 @@
 
 from agent_evals.semantic.calibration import (
     SemanticCalibrationCase,
+    SemanticCalibrationCaseCommitment,
     SemanticCalibrationObservation,
     SemanticCalibrationPolicy,
     SemanticCalibrationReceipt,
@@ -33,6 +34,7 @@ from agent_evals.semantic.verification import (
 __all__ = [
     "SEMANTIC_JUDGMENT_SOURCE",
     "SemanticCalibrationCase",
+    "SemanticCalibrationCaseCommitment",
     "SemanticCalibrationObservation",
     "SemanticCalibrationPolicy",
     "SemanticCalibrationReceipt",

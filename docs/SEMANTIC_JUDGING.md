@@ -144,10 +144,13 @@ A `SemanticCalibrationCase` contains evaluator-owned labeled material:
 - expected PASS or FAIL label;
 - optional coverage tags.
 
-The raw candidate text is not duplicated into the calibration receipt. Each observation binds the content-addressed case identity and either:
+Calibration case/observation/receipt schemas are explicitly versioned. In case v2, `SemanticCalibrationCase.identity` is the root of a privacy-preserving `SemanticCalibrationCaseCommitment` rather than a hash that requires the raw case body to be present. The commitment binds case ID/revision, objective SHA-256, the exact evaluator-owned rubric plus its identity, candidate-output SHA-256, evaluator-owned expected PASS/FAIL label, and canonical coverage tags. Raw objective and candidate text are not duplicated into the durable observation or calibration receipt.
 
-- a rederived structured judge decision plus response digest; or
-- an explicit judge/malformed-response failure code.
+Each resolved observation v2 embeds that self-validating commitment **and the bounded `SemanticJudgeResponse` itself**. The response contains criterion IDs, bounded PASS/FAIL/ABSTAIN decisions, integer scores, and the overall decision; it contains no free-form reasoning or candidate text. On every construction and load, `derive_semantic_decision(...)` reruns against the committed rubric. `observed` and `response_sha256` are derived properties rather than independently serialized claims. A failed observation carries no response and requires an explicit judge/malformed-response failure code.
+
+`expected`, coverage `tags`, `observed`, and `response_sha256` are therefore not independent durable authority fields. Class support and adversarial coverage come from the verified case commitment; correctness, false-PASS accounting, abstention, and accuracy consume only the decision rederived from the persisted structured response. Relabeling a case, injecting/removing a coverage tag, changing the rubric, or making a response contradict criterion/order/threshold/overall semantics fails validation unless the corresponding case identity changes.
+
+The commitment is still an ordinary content hash. An actor able to author an entirely new unsigned case and recompute all roots can create a different valid identity; this mechanism provides internal binding and drift detection, not human-label authentication, trusted publisher identity, or signatures.
 
 ### Metrics
 
@@ -175,7 +178,7 @@ The policy itself is content-addressed and embedded in the receipt. Changing acc
 
 ### Prompt-injection coverage
 
-A calibration case tagged `judge-prompt-injection` is not a magic security certification. It proves only that the exact calibrated judge configuration was evaluated against at least one explicitly labeled candidate containing evaluator-directed adversarial text.
+A calibration case committed with the `judge-prompt-injection` tag is not a magic security certification. It proves only that the exact calibrated judge configuration was evaluated against at least one case whose evaluator-owned commitment includes that coverage label. An observation cannot manufacture this coverage by adding a standalone tag.
 
 The repository's deterministic OpenAI SDK tests additionally verify that candidate text such as an instruction to ignore the rubric remains inside the canonical JSON `candidate_output` field supplied to the judge model.
 
@@ -189,7 +192,9 @@ Validation re-parses the live judge profile and calibration receipt, then requir
 
 - calibration `accepted == True`;
 - exact profile identity equality between live judge and calibration;
-- internally valid calibration metrics and receipt root.
+- internally valid v2 case commitments, persisted structured responses, rederived response decisions/digests, calibration metrics, and receipt root.
+
+Current authority validation accepts calibration receipt v2. Legacy v1 calibration receipts are not silently interpreted as the stronger relation: the typed nested calibration field causes both fresh semantic-authority validation and persisted `SemanticJudgmentReceipt` replay validation to fail closed on the old schema. The outer semantic-judgment schema does not change because its own relation and hashing semantics are unchanged; it already binds and validates the complete nested calibration receipt.
 
 Malformed, rejected, or drifted authority produces evaluator uncertainty rather than subject failure.
 

@@ -18,17 +18,104 @@ from agent_evals.semantic.models import (
     derive_semantic_decision,
 )
 
-_CASE_SCHEMA: Literal["agent-evals/semantic-calibration-case/v1"] = (
-    "agent-evals/semantic-calibration-case/v1"
+_CASE_SCHEMA: Literal["agent-evals/semantic-calibration-case/v2"] = (
+    "agent-evals/semantic-calibration-case/v2"
+)
+_CASE_COMMITMENT_SCHEMA: Literal["agent-evals/semantic-calibration-case-commitment/v1"] = (
+    "agent-evals/semantic-calibration-case-commitment/v1"
+)
+_OBSERVATION_SCHEMA: Literal["agent-evals/semantic-calibration-observation/v2"] = (
+    "agent-evals/semantic-calibration-observation/v2"
 )
 _POLICY_SCHEMA: Literal["agent-evals/semantic-calibration-policy/v1"] = (
     "agent-evals/semantic-calibration-policy/v1"
 )
-_RECEIPT_SCHEMA: Literal["agent-evals/semantic-calibration-receipt/v1"] = (
-    "agent-evals/semantic-calibration-receipt/v1"
+_RECEIPT_SCHEMA: Literal["agent-evals/semantic-calibration-receipt/v2"] = (
+    "agent-evals/semantic-calibration-receipt/v2"
 )
-_RECEIPT_DOMAIN = b"agent-evals/semantic-calibration-receipt/v1\0"
+_CASE_COMMITMENT_DOMAIN = b"agent-evals/semantic-calibration-case-commitment/v1\0"
+_RECEIPT_DOMAIN = b"agent-evals/semantic-calibration-receipt/v2\0"
 _REQUIRED_PROMPT_INJECTION_TAG = "judge-prompt-injection"
+
+
+class SemanticCalibrationCaseCommitment(BaseModel):
+    """Privacy-preserving commitment to one evaluator-owned calibration case.
+
+    Objective and candidate text are retained only by digest. The evaluator-owned rubric is
+    embedded because durable observations must be able to rederive structured judge decisions.
+    This is integrity evidence, not publisher authentication.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    schema_version: Literal["agent-evals/semantic-calibration-case-commitment/v1"] = (
+        _CASE_COMMITMENT_SCHEMA
+    )
+    source_case_schema: Literal["agent-evals/semantic-calibration-case/v2"] = _CASE_SCHEMA
+    case_id: str = Field(pattern=r"^[a-z0-9][a-z0-9._-]{2,127}$")
+    revision: str = Field(min_length=1, max_length=128)
+    objective_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    rubric: SemanticRubricSpec
+    rubric_identity: str = Field(pattern=r"^[0-9a-f]{64}$")
+    candidate_output_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    expected: SemanticDecision
+    tags: tuple[str, ...] = ()
+    commitment_root: str = Field(pattern=r"^[0-9a-f]{64}$")
+
+    @classmethod
+    def from_case(cls, case: SemanticCalibrationCase) -> Self:
+        objective_sha256 = _sha256_text(case.objective)
+        candidate_output_sha256 = _sha256_text(case.candidate_output)
+        rubric_identity = case.rubric.identity
+        tags = tuple(sorted(case.tags))
+        unsigned = {
+            "schema_version": _CASE_COMMITMENT_SCHEMA,
+            "source_case_schema": _CASE_SCHEMA,
+            "case_id": case.case_id,
+            "revision": case.revision,
+            "objective_sha256": objective_sha256,
+            "rubric": case.rubric.model_dump(mode="json"),
+            "rubric_identity": rubric_identity,
+            "candidate_output_sha256": candidate_output_sha256,
+            "expected": case.expected.value,
+            "tags": tags,
+        }
+        return cls(
+            case_id=case.case_id,
+            revision=case.revision,
+            objective_sha256=objective_sha256,
+            rubric=case.rubric,
+            rubric_identity=rubric_identity,
+            candidate_output_sha256=candidate_output_sha256,
+            expected=case.expected,
+            tags=tags,
+            commitment_root=_case_commitment_root(unsigned),
+        )
+
+    @property
+    def identity(self) -> str:
+        return self.commitment_root
+
+    @model_validator(mode="after")
+    def verify_commitment(self) -> Self:
+        if self.expected is SemanticDecision.ABSTAIN:
+            raise ValueError(
+                "calibration case commitment requires evaluator-owned PASS or FAIL label"
+            )
+        if self.rubric_identity != self.rubric.identity:
+            raise ValueError(
+                "semantic calibration commitment rubric identity does not match rubric"
+            )
+        if any(not tag.strip() for tag in self.tags):
+            raise ValueError("semantic calibration commitment tags must be non-empty strings")
+        if self.tags != tuple(sorted(set(self.tags))):
+            raise ValueError("semantic calibration commitment tags must be sorted and unique")
+        expected_root = _case_commitment_root(
+            self.model_dump(mode="json", exclude={"commitment_root"})
+        )
+        if not hmac.compare_digest(expected_root, self.commitment_root):
+            raise ValueError("semantic calibration case commitment root does not match content")
+        return self
 
 
 class SemanticCalibrationCase(BaseModel):
@@ -36,7 +123,7 @@ class SemanticCalibrationCase(BaseModel):
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    schema_version: Literal["agent-evals/semantic-calibration-case/v1"] = _CASE_SCHEMA
+    schema_version: Literal["agent-evals/semantic-calibration-case/v2"] = _CASE_SCHEMA
     case_id: str = Field(pattern=r"^[a-z0-9][a-z0-9._-]{2,127}$")
     revision: str = Field(min_length=1, max_length=128)
     objective: str = Field(min_length=1, max_length=20_000)
@@ -62,8 +149,12 @@ class SemanticCalibrationCase(BaseModel):
         )
 
     @property
+    def commitment(self) -> SemanticCalibrationCaseCommitment:
+        return SemanticCalibrationCaseCommitment.from_case(self)
+
+    @property
     def identity(self) -> str:
-        return _sha256_json(self.model_dump(mode="json"))
+        return self.commitment.identity
 
 
 class SemanticCalibrationPolicy(BaseModel):
@@ -104,19 +195,17 @@ class SemanticCalibrationPolicy(BaseModel):
 
 
 class SemanticCalibrationObservation(BaseModel):
-    """Digest-bound labeled observation including explicit judge/evaluator failure evidence."""
+    """Case-bound durable judge response or explicit evaluator/judge failure."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    case_identity: str = Field(pattern=r"^[0-9a-f]{64}$")
-    expected: SemanticDecision
-    observed: SemanticDecision | None = None
-    response_sha256: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+    schema_version: Literal["agent-evals/semantic-calibration-observation/v2"] = _OBSERVATION_SCHEMA
+    case_commitment: SemanticCalibrationCaseCommitment
+    response: SemanticJudgeResponse | None = None
     failure_code: str | None = Field(
         default=None,
         pattern=r"^[a-z0-9][a-z0-9._-]{1,127}$",
     )
-    tags: frozenset[str] = frozenset()
 
     @classmethod
     def from_case_response(
@@ -124,13 +213,10 @@ class SemanticCalibrationObservation(BaseModel):
         case: SemanticCalibrationCase,
         response: SemanticJudgeResponse,
     ) -> Self:
-        observed = derive_semantic_decision(case.rubric, response)
+        derive_semantic_decision(case.rubric, response)
         return cls(
-            case_identity=case.identity,
-            expected=case.expected,
-            observed=observed,
-            response_sha256=response.digest,
-            tags=case.tags,
+            case_commitment=case.commitment,
+            response=response,
         )
 
     @classmethod
@@ -141,34 +227,43 @@ class SemanticCalibrationObservation(BaseModel):
         failure_code: str,
     ) -> Self:
         return cls(
-            case_identity=case.identity,
-            expected=case.expected,
+            case_commitment=case.commitment,
             failure_code=failure_code,
-            tags=case.tags,
         )
+
+    @property
+    def case_identity(self) -> str:
+        return self.case_commitment.identity
+
+    @property
+    def expected(self) -> SemanticDecision:
+        return self.case_commitment.expected
+
+    @property
+    def tags(self) -> frozenset[str]:
+        return frozenset(self.case_commitment.tags)
+
+    @property
+    def observed(self) -> SemanticDecision | None:
+        if self.response is None:
+            return None
+        return derive_semantic_decision(self.case_commitment.rubric, self.response)
+
+    @property
+    def response_sha256(self) -> str | None:
+        return self.response.digest if self.response is not None else None
 
     @model_validator(mode="after")
     def validate_observation_shape(self) -> Self:
-        if self.expected is SemanticDecision.ABSTAIN:
-            raise ValueError("semantic calibration observation cannot expect ABSTAIN")
-        if any(not tag.strip() for tag in self.tags):
-            raise ValueError("semantic calibration observation tags must be non-empty strings")
-        if self.observed is None:
+        if self.response is None:
             if self.failure_code is None:
                 raise ValueError("failed semantic calibration observation requires a failure code")
-            if self.response_sha256 is not None:
-                raise ValueError(
-                    "failed semantic calibration observation cannot carry a response digest"
-                )
         else:
             if self.failure_code is not None:
                 raise ValueError(
                     "resolved semantic calibration observation cannot carry a failure code"
                 )
-            if self.response_sha256 is None:
-                raise ValueError(
-                    "resolved semantic calibration observation requires a response digest"
-                )
+            _ = self.observed
         return self
 
 
@@ -191,7 +286,7 @@ class SemanticCalibrationReceipt(BaseModel):
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    schema_version: Literal["agent-evals/semantic-calibration-receipt/v1"] = _RECEIPT_SCHEMA
+    schema_version: Literal["agent-evals/semantic-calibration-receipt/v2"] = _RECEIPT_SCHEMA
     judge_profile: SemanticJudgeProfile
     policy: SemanticCalibrationPolicy
     observations: tuple[SemanticCalibrationObservation, ...] = Field(min_length=1)
@@ -256,16 +351,24 @@ def _calibration_metrics(
 ) -> _CalibrationMetrics:
     if not observations:
         raise ValueError("semantic calibration requires at least one observation")
-    identities = [observation.case_identity for observation in observations]
+    identities = [observation.case_commitment.identity for observation in observations]
     if len(set(identities)) != len(identities):
-        raise ValueError("semantic calibration case identities must be unique")
+        raise ValueError("semantic calibration case commitments must be unique")
 
     total_cases = len(observations)
-    pass_cases = sum(observation.expected is SemanticDecision.PASS for observation in observations)
-    fail_cases = sum(observation.expected is SemanticDecision.FAIL for observation in observations)
-    correct = sum(observation.observed is observation.expected for observation in observations)
+    pass_cases = sum(
+        observation.case_commitment.expected is SemanticDecision.PASS
+        for observation in observations
+    )
+    fail_cases = sum(
+        observation.case_commitment.expected is SemanticDecision.FAIL
+        for observation in observations
+    )
+    correct = sum(
+        observation.observed is observation.case_commitment.expected for observation in observations
+    )
     false_passes = sum(
-        observation.expected is SemanticDecision.FAIL
+        observation.case_commitment.expected is SemanticDecision.FAIL
         and observation.observed is SemanticDecision.PASS
         for observation in observations
     )
@@ -274,7 +377,9 @@ def _calibration_metrics(
         observation.observed is SemanticDecision.ABSTAIN for observation in observations
     )
     judge_failures = sum(observation.observed is None for observation in observations)
-    covered_tags = tuple(sorted({tag for observation in observations for tag in observation.tags}))
+    covered_tags = tuple(
+        sorted({tag for observation in observations for tag in observation.case_commitment.tags})
+    )
     accuracy = correct / total_cases
     accepted = (
         total_cases >= policy.min_cases
@@ -302,8 +407,16 @@ def _calibration_metrics(
     }
 
 
+def _case_commitment_root(value: object) -> str:
+    return hashlib.sha256(_CASE_COMMITMENT_DOMAIN + _canonical_json_bytes(value)).hexdigest()
+
+
 def _receipt_root(value: object) -> str:
     return hashlib.sha256(_RECEIPT_DOMAIN + _canonical_json_bytes(value)).hexdigest()
+
+
+def _sha256_text(value: str) -> str:
+    return hashlib.sha256(value.encode("utf-8")).hexdigest()
 
 
 def _sha256_json(value: object) -> str:
