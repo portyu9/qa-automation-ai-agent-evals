@@ -15,6 +15,10 @@ from agent_evals.oracles.deterministic import OracleResult
 from agent_evals.runtime.session import EvaluationSessionResult
 from agent_evals.semantic.models import SemanticDecision
 from agent_evals.semantic.receipt import SemanticJudgmentReceipt
+from agent_evals.semantic.verification import (
+    SemanticJudgmentError,
+    verify_semantic_judgment_evidence,
+)
 from agent_evals.statistics.reliability import ReliabilityReport
 
 _REPORT_SCHEMA: Literal["agent-evals/assurance-report/v3"] = "agent-evals/assurance-report/v3"
@@ -228,6 +232,11 @@ class AssuranceReport(BaseModel):
             if evidence.trial_id in trial_ids:
                 raise ValueError("session contains duplicate trial IDs")
             trial_ids.add(evidence.trial_id)
+            try:
+                evidence_semantic = verify_semantic_judgment_evidence(evidence)
+            except SemanticJudgmentError as exc:
+                raise ValueError(f"trial semantic judgment evidence is invalid: {exc}") from exc
+
             semantic = (
                 SemanticJudgmentReceipt.model_validate(
                     trial.semantic_judgment.model_dump(mode="json")
@@ -235,6 +244,18 @@ class AssuranceReport(BaseModel):
                 if trial.semantic_judgment is not None
                 else None
             )
+            if semantic is None and evidence_semantic is not None:
+                raise ValueError(
+                    "trial semantic judgment field is absent but final evidence commits a judgment"
+                )
+            if semantic is not None and evidence_semantic is None:
+                raise ValueError(
+                    "trial semantic judgment is not committed by the final evidence envelope"
+                )
+            if semantic is not None and evidence_semantic != semantic:
+                raise ValueError(
+                    "trial semantic judgment does not match the receipt committed by final evidence"
+                )
             record = TrialAssuranceRecord(
                 trial_id=evidence.trial_id,
                 evidence_root=evidence.evidence_root,

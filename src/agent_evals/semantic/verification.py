@@ -16,31 +16,23 @@ class SemanticJudgmentError(ValueError):
     """Persisted semantic evidence cannot prove the required judgment relation."""
 
 
-def verify_semantic_judgment(
-    scenario: EvaluationScenario,
+def verify_semantic_judgment_evidence(
     evidence: TrialEvidence,
 ) -> SemanticJudgmentReceipt | None:
-    """Verify one persisted terminal semantic judgment, returning None when none is recorded.
+    """Verify the semantic receipt relation contained by one final evidence envelope.
 
-    Absence is valid here because live runtime may still need to invoke a configured judge. The
-    caller decides whether absence is allowed for its execution mode. A scenario without a rubric
-    must never contain semantic judgment evidence.
+    This verifier owns only evidence-envelope facts: uniqueness, terminal placement, evaluator
+    source, non-critical authority, receipt structure, subject/scenario identity, and the exact
+    pre-semantic evidence root. Scenario-owned rubric/input verification remains in
+    ``verify_semantic_judgment`` because it requires the full evaluation scenario contract.
     """
     semantic_events = tuple(
         event for event in evidence.events if event.kind is EvidenceKind.SEMANTIC_JUDGMENT
     )
-    rubric = scenario.semantic_rubric
-    if rubric is None:
-        if semantic_events:
-            raise SemanticJudgmentError(
-                "semantic judgment evidence exists for a scenario without a semantic rubric"
-            )
-        return None
-
     if not semantic_events:
         return None
     if len(semantic_events) != 1:
-        raise SemanticJudgmentError("semantic rubric requires at most one recorded judgment")
+        raise SemanticJudgmentError("semantic evidence permits at most one recorded judgment")
 
     event = semantic_events[0]
     if event.sequence != len(evidence.events) - 1:
@@ -55,18 +47,46 @@ def verify_semantic_judgment(
     except ValueError as exc:
         raise SemanticJudgmentError("semantic judgment receipt is malformed") from exc
 
+    if receipt.subject_identity != evidence.subject_identity:
+        raise SemanticJudgmentError("semantic judgment subject identity does not match evidence")
+    if receipt.scenario_identity != evidence.scenario_identity:
+        raise SemanticJudgmentError("semantic judgment scenario identity does not match evidence")
+
+    subject_evidence = evidence_before_semantic_judgment(evidence)
+    if not hmac.compare_digest(receipt.subject_evidence_root, subject_evidence.evidence_root):
+        raise SemanticJudgmentError(
+            "semantic judgment does not bind the exact pre-judgment subject evidence root"
+        )
+    return receipt
+
+
+def verify_semantic_judgment(
+    scenario: EvaluationScenario,
+    evidence: TrialEvidence,
+) -> SemanticJudgmentReceipt | None:
+    """Verify one persisted terminal semantic judgment, returning None when none is recorded.
+
+    Absence is valid here because live runtime may still need to invoke a configured judge. The
+    caller decides whether absence is allowed for its execution mode. A scenario without a rubric
+    must never contain semantic judgment evidence.
+    """
+    rubric = scenario.semantic_rubric
+    if rubric is None:
+        if any(event.kind is EvidenceKind.SEMANTIC_JUDGMENT for event in evidence.events):
+            raise SemanticJudgmentError(
+                "semantic judgment evidence exists for a scenario without a semantic rubric"
+            )
+        return None
+
+    receipt = verify_semantic_judgment_evidence(evidence)
+    if receipt is None:
+        return None
     if receipt.scenario_identity != scenario.identity:
         raise SemanticJudgmentError("semantic judgment scenario identity does not match")
-    if receipt.subject_identity != evidence.subject_identity:
-        raise SemanticJudgmentError("semantic judgment subject identity does not match")
     if receipt.rubric_identity != rubric.identity:
         raise SemanticJudgmentError("semantic judgment rubric identity does not match scenario")
 
     subject_evidence = evidence_before_semantic_judgment(evidence)
-    if receipt.subject_evidence_root != subject_evidence.evidence_root:
-        raise SemanticJudgmentError(
-            "semantic judgment does not bind the exact pre-judgment subject evidence root"
-        )
     if subject_evidence.final_output is None:
         raise SemanticJudgmentError(
             "recorded semantic judgment requires the exact candidate final output"
