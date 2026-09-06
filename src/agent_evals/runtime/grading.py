@@ -19,14 +19,12 @@ def grade_deterministic_evidence(
     order, verdicts, reasons, and critical flags, against the finalized runtime trial.
     """
     if scenario.side_effect_idempotency is not None:
-        oracles = (
-            PolicyOracle(),
-            SideEffectIdempotencyOracle(),
-            OutcomeOracle(),
+        return (
+            PolicyOracle().grade(scenario, evidence),
+            SideEffectIdempotencyOracle().grade(scenario, evidence),
+            OutcomeOracle().grade(scenario, evidence),
         )
-    else:
-        oracles = (
-            PolicyOracle(),
-            OutcomeOracle(),
-        )
-    return tuple(oracle.grade(scenario, evidence) for oracle in oracles)
+    return (
+        PolicyOracle().grade(scenario, evidence),
+        OutcomeOracle().grade(scenario, evidence),
+    )
