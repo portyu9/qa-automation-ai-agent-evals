@@ -362,7 +362,7 @@ def test_calibration_rejects_invalid_labels_duplicate_cases_and_metric_tampering
 
     receipt = accepted_calibration()
     duplicate = (receipt.observations[0], receipt.observations[0])
-    with pytest.raises(ValueError, match="case identities must be unique"):
+    with pytest.raises(ValueError, match="case commitments must be unique"):
         SemanticCalibrationReceipt.create(
             judge_profile=profile(),
             policy=SemanticCalibrationPolicy(min_cases=2),
@@ -397,20 +397,16 @@ def test_calibration_observation_shape_rejects_ambiguous_failure_state() -> None
 
     with pytest.raises(ValidationError, match="requires a failure code"):
         SemanticCalibrationObservation(
-            case_identity=case.identity,
-            expected=case.expected,
+            case_commitment=case.commitment,
             observed=None,
-            tags=case.tags,
         )
 
     with pytest.raises(ValidationError, match="cannot carry a failure code"):
         SemanticCalibrationObservation(
-            case_identity=case.identity,
-            expected=case.expected,
+            case_commitment=case.commitment,
             observed=SemanticDecision.FAIL,
             response_sha256=fail_response().digest,
             failure_code="should-not-exist",
-            tags=case.tags,
         )
 
 
