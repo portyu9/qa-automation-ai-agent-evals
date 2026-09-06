@@ -408,7 +408,7 @@ def test_assurance_report_rejects_duplicate_semantic_events() -> None:
         semantic_judgment=receipt,
     )
 
-    with pytest.raises(ValueError, match="exactly one recorded judgment"):
+    with pytest.raises(ValueError, match="at most one recorded judgment"):
         AssuranceReport.from_session(_session(inconsistent), release_policy=_policy())
 
 
