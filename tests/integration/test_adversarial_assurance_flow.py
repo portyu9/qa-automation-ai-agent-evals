@@ -124,6 +124,7 @@ def test_missing_delivery_remains_infrastructure_uncertainty_through_session_rep
 
     report = AssuranceReport.from_session(
         session,
+        scenario=scenario,
         release_policy=ReleasePolicy(
             min_resolved_trials=1,
             max_blocked_trials=0,
