@@ -8,6 +8,7 @@ from time import perf_counter
 from pydantic import ValidationError
 
 from agent_evals.adapters.base import AdapterPreconditionError, AdapterResult, AgentAdapter
+from agent_evals.adapters.replay import EvidenceReplayAdapter
 from agent_evals.contracts.models import EvaluationScenario, SubjectFingerprint
 from agent_evals.evidence.models import EvidenceEvent, EvidenceKind, TrialEvidence, TrialVerdict
 from agent_evals.oracles.deterministic import OracleResult
@@ -179,6 +180,24 @@ class TrialRunner:
         if has_blocking_evidence(evidence):
             return EvaluatedTrial(
                 evidence=evidence,
+                oracle_results=(),
+                verdict=TrialVerdict.BLOCKED,
+            )
+
+        if type(adapter) is not EvidenceReplayAdapter and any(
+            event.kind is EvidenceKind.SEMANTIC_JUDGMENT for event in evidence.events
+        ):
+            return EvaluatedTrial(
+                evidence=self._append_evaluation_error(
+                    evidence,
+                    source="evaluator:semantic-judgment",
+                    code="semantic_judgment_live_injection",
+                    reason=(
+                        "live adapter output cannot supply evaluator-owned semantic judgment "
+                        "evidence; recorded semantic judgments are accepted only through the "
+                        "exact evidence replay adapter"
+                    ),
+                ),
                 oracle_results=(),
                 verdict=TrialVerdict.BLOCKED,
             )
