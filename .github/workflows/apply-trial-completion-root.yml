@@ -1,0 +1,91 @@
+name: Apply trial completion root binding
+
+on:
+  push:
+    branches:
+      - fix/trial-completion-root-binding
+    paths:
+      - .github/workflows/apply-trial-completion-root.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: fix/trial-completion-root-binding
+      - name: Apply source changes
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          def once(text: str, old: str, new: str, label: str) -> str:
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"{label} match count: {count}")
+              return text.replace(old, new, 1)
+
+          path = Path('src/agent_evals/runtime/evaluator.py')
+          text = path.read_text()
+          text = once(
+              text,
+              'from dataclasses import dataclass\n',
+              'from dataclasses import dataclass, field\n',
+              'dataclass import',
+          )
+          old = '''@dataclass(frozen=True, slots=True)
+          class EvaluatedTrial:
+              evidence: TrialEvidence
+              oracle_results: tuple[OracleResult, ...]
+              verdict: TrialVerdict
+              semantic_judgment: SemanticJudgmentReceipt | None = None
+
+              @property
+          '''.replace('          ', '')
+          new = '''@dataclass(frozen=True, slots=True)
+          class EvaluatedTrial:
+              evidence: TrialEvidence
+              oracle_results: tuple[OracleResult, ...]
+              verdict: TrialVerdict
+              semantic_judgment: SemanticJudgmentReceipt | None = None
+              completion_evidence_root: str = field(init=False)
+
+              def __post_init__(self) -> None:
+                  object.__setattr__(self, "completion_evidence_root", self.evidence.evidence_root)
+
+              @property
+          '''.replace('          ', '')
+          text = once(text, old, new, 'EvaluatedTrial completion root')
+          path.write_text(text)
+
+          path = Path('src/agent_evals/assurance/report.py')
+          text = path.read_text()
+          old = '''        for trial in session.trials:
+                      evidence = trial.evidence
+                      if evidence.subject_identity != session.subject_identity:
+          '''.replace('                      ', '')
+          new = '''        for trial in session.trials:
+                      evidence = trial.evidence
+                      if not hmac.compare_digest(
+                          evidence.evidence_root,
+                          trial.completion_evidence_root,
+                      ):
+                          raise ValueError("trial evidence root changed after evaluation finalization")
+                      if evidence.subject_identity != session.subject_identity:
+          '''.replace('                      ', '')
+          text = once(text, old, new, 'from_session completion-root check')
+          path.write_text(text)
+          PY
+      - name: Commit source changes
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/agent_evals/runtime/evaluator.py src/agent_evals/assurance/report.py
+          git diff --cached --check
+          git commit -m "fix: bind trial grading facts to completion evidence root"
+          git push origin HEAD:fix/trial-completion-root-binding
