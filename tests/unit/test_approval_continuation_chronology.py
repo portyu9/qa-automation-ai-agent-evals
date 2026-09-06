@@ -16,6 +16,9 @@ from agent_evals.contracts.models import (
 )
 from agent_evals.evidence.approval_intent import (
     APPROVAL_DECISION_SOURCE,
+    APPROVAL_REQUEST_SOURCE,
+    APPROVED_TOOL_REQUEST_SOURCE,
+    APPROVED_TOOL_RESULT_SOURCE,
     ApprovalIntentError,
     ApprovalIntentReceipt,
     verify_approval_intent,
@@ -59,8 +62,14 @@ def _scenario(decision: ApprovalDecision = ApprovalDecision.APPROVE) -> Evaluati
     )
 
 
-def _event(sequence: int, kind: EvidenceKind, **payload: object) -> EvidenceEvent:
-    return EvidenceEvent(sequence=sequence, kind=kind, source="test", payload=payload)
+def _event(
+    sequence: int,
+    kind: EvidenceKind,
+    *,
+    source: str = "test",
+    **payload: object,
+) -> EvidenceEvent:
+    return EvidenceEvent(sequence=sequence, kind=kind, source=source, payload=payload)
 
 
 def _approval_request(
@@ -72,6 +81,7 @@ def _approval_request(
     return _event(
         sequence,
         EvidenceKind.APPROVAL_REQUEST,
+        source=APPROVAL_REQUEST_SOURCE,
         agent=agent,
         tool=_TOOL,
         call_id=call_id,
@@ -83,6 +93,7 @@ def _execution(sequence: int) -> EvidenceEvent:
     return _event(
         sequence,
         EvidenceKind.TOOL_REQUEST,
+        source=APPROVED_TOOL_REQUEST_SOURCE,
         agent=_AGENT,
         tool=_TOOL,
         call_id=_CALL,
@@ -94,6 +105,7 @@ def _result(sequence: int) -> EvidenceEvent:
     return _event(
         sequence,
         EvidenceKind.TOOL_RESULT,
+        source=APPROVED_TOOL_RESULT_SOURCE,
         agent=_AGENT,
         call_id=_CALL,
         output="done",

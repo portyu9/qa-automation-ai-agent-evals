@@ -16,6 +16,10 @@ from agent_evals.evidence.models import EvidenceEvent, EvidenceKind, TrialEviden
 _APPROVAL_INTENT_DOMAIN = b"agent-evals/approval-intent/v1\0"
 _APPROVAL_INTENT_SCHEMA = "agent-evals/approval-intent/v1"
 APPROVAL_DECISION_SOURCE = "evaluator:openai-hitl-approval-intent"
+APPROVAL_REQUEST_SOURCE = "openai-agents:new_items"
+APPROVED_TOOL_REQUEST_SOURCE = "openai-agents:approved-execution"
+APPROVED_TOOL_RESULT_SOURCE = "openai-agents:new_items"
+REJECTION_TOOL_RESULT_SOURCE = "openai-agents:approval-rejection-result"
 
 
 class ApprovalIntentError(ValueError):
@@ -227,6 +231,8 @@ def verify_approval_intent(scenario: EvaluationScenario, evidence: TrialEvidence
         expected_state=request_state,
         phase="approval request",
     )
+    if request_event.source != APPROVAL_REQUEST_SOURCE:
+        raise ApprovalIntentError("approval request source is not recognized")
 
     target_approval_requests = [
         event
@@ -286,6 +292,8 @@ def verify_approval_intent(scenario: EvaluationScenario, evidence: TrialEvidence
             expected_state=resumed_state,
             phase="resumed tool request",
         )
+        if resumed.source != APPROVED_TOOL_REQUEST_SOURCE:
+            raise ApprovalIntentError("approved resumed tool request source is not recognized")
         if len(matching_results) != 1:
             raise ApprovalIntentError(
                 "approved interruption must produce exactly one matching resumed tool result"
@@ -296,6 +304,8 @@ def verify_approval_intent(scenario: EvaluationScenario, evidence: TrialEvidence
         _verify_result_identity(matching_result, receipt=receipt, phase="approved tool result")
         if matching_result.payload.get("approval_rejected") is True:
             raise ApprovalIntentError("approved invocation produced rejection-marked tool result")
+        if matching_result.source != APPROVED_TOOL_RESULT_SOURCE:
+            raise ApprovalIntentError("approved tool result source is not recognized")
         return
 
     if resumed_requests:
@@ -334,6 +344,8 @@ def verify_approval_intent(scenario: EvaluationScenario, evidence: TrialEvidence
     )
     if rejection_result.payload.get("approval_rejected") is not True:
         raise ApprovalIntentError("rejection continuation result lacks explicit rejection marker")
+    if rejection_result.source != REJECTION_TOOL_RESULT_SOURCE:
+        raise ApprovalIntentError("rejection continuation result source is not recognized")
 
 
 def _verify_event_intent(
