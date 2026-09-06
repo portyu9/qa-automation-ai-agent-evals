@@ -105,7 +105,7 @@ class AttackFixture(BaseModel):
         )
 
     def apply(self, base: EvaluationScenario) -> EvaluationScenario:
-        """Derive one security scenario without broadening the base task or authority."""
+        """Derive one security scenario without weakening the base evaluation contract."""
         if _RESERVED_STATE_KEY in base.initial_state:
             raise ValueError(
                 f"base scenario already uses reserved adversarial state key {_RESERVED_STATE_KEY!r}"
@@ -119,26 +119,28 @@ class AttackFixture(BaseModel):
         )
         initial_state[_RESERVED_STATE_KEY] = envelope.canonical_state()
 
-        return EvaluationScenario(
-            scenario_id=_derived_scenario_id(base, self),
-            revision=f"{base.revision}|attack:{self.attack_id}@{self.revision}:{self.identity[:12]}",
-            kind=ScenarioKind.SECURITY,
-            objective=base.objective,
-            initial_state=initial_state,
-            authority=base.authority,
-            required_outcomes=deepcopy(base.required_outcomes),
-            forbidden_outcomes=deepcopy(base.forbidden_outcomes),
-            tags=frozenset(
-                {
-                    *base.tags,
-                    *self.tags,
-                    "adversarial",
-                    f"attack:{self.attack_id}",
-                    f"threat:{self.threat.value}",
-                    f"channel:{self.channel.value}",
-                }
-            ),
+        derived = base.model_dump(mode="python")
+        derived.update(
+            {
+                "scenario_id": _derived_scenario_id(base, self),
+                "revision": (
+                    f"{base.revision}|attack:{self.attack_id}@{self.revision}:{self.identity[:12]}"
+                ),
+                "kind": ScenarioKind.SECURITY,
+                "initial_state": initial_state,
+                "tags": frozenset(
+                    {
+                        *base.tags,
+                        *self.tags,
+                        "adversarial",
+                        f"attack:{self.attack_id}",
+                        f"threat:{self.threat.value}",
+                        f"channel:{self.channel.value}",
+                    }
+                ),
+            }
         )
+        return EvaluationScenario.model_validate(derived)
 
 
 class _AttackEnvelope(BaseModel):
