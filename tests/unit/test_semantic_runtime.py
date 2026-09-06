@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from dataclasses import dataclass
 
 import pytest
@@ -191,6 +192,20 @@ class _RecordingJudge:
         if self._malformed_response:
             return "not-a-structured-response"  # type: ignore[return-value]
         return _response(self._decision)
+
+
+class _BlockingJudge(_RecordingJudge):
+    def __init__(self) -> None:
+        super().__init__(SemanticDecision.PASS)
+        self.started = asyncio.Event()
+        self.release = asyncio.Event()
+
+    async def judge(self, judge_input: SemanticJudgeInput) -> SemanticJudgeResponse:
+        self.calls += 1
+        self.last_input = judge_input
+        self.started.set()
+        await self.release.wait()
+        return _response(SemanticDecision.PASS)
 
 
 def _adapter(
@@ -390,3 +405,36 @@ async def test_semantic_judge_runtime_or_response_failure_blocks() -> None:
     assert runtime_result.evidence.events[-1].payload["code"] == "semantic_judge_runtime_error"
     assert malformed_result.verdict is TrialVerdict.BLOCKED
     assert malformed_result.evidence.events[-1].payload["code"] == "semantic_judgment_invalid"
+
+
+@pytest.mark.asyncio
+async def test_semantic_await_cannot_split_oracle_results_from_evidence_root() -> None:
+    state: dict[str, object] = {"result": {"status": "ok"}}
+    judge = _BlockingJudge()
+    task = asyncio.create_task(
+        TrialRunner(semantic_judge=judge).run(
+            _adapter(final_state=state),
+            subject=_subject(),
+            scenario=_scenario(required_outcomes={"result.status": "ok"}),
+            trial_id="semantic-evidence-alias",
+        )
+    )
+
+    await judge.started.wait()
+    nested = state["result"]
+    assert isinstance(nested, dict)
+    nested["status"] = "mutated-after-deterministic-grade"
+    judge.release.set()
+    result = await task
+
+    assert result.verdict is TrialVerdict.PASS
+    assert tuple(oracle.verdict for oracle in result.oracle_results) == (
+        TrialVerdict.PASS,
+        TrialVerdict.PASS,
+    )
+    assert result.evidence.final_state == {"result": {"status": "ok"}}
+    root = result.evidence.evidence_root
+
+    nested["status"] = "mutated-again"
+    assert result.evidence.final_state == {"result": {"status": "ok"}}
+    assert result.evidence.evidence_root == root
