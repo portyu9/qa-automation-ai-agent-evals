@@ -305,6 +305,8 @@ async def test_calibrated_semantic_decision_applies_only_after_deterministic_pas
     assert result.verdict is expected
     assert result.semantic_judgment is not None
     assert result.semantic_judgment.decision is decision
+    assert result.completion_evidence_root == result.evidence.evidence_root
+    assert result.semantic_judgment.subject_evidence_root != result.completion_evidence_root
     assert result.evidence.events[-1].kind is EvidenceKind.SEMANTIC_JUDGMENT
     assert result.evidence.events[-1].critical is False
     assert result.critical_violations == 0

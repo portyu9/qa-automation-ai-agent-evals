@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from time import perf_counter
 
 from pydantic import ValidationError
@@ -40,6 +40,10 @@ class EvaluatedTrial:
     oracle_results: tuple[OracleResult, ...]
     verdict: TrialVerdict
     semantic_judgment: SemanticJudgmentReceipt | None = None
+    completion_evidence_root: str = field(init=False)
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "completion_evidence_root", self.evidence.evidence_root)
 
     @property
     def critical_violations(self) -> int:
