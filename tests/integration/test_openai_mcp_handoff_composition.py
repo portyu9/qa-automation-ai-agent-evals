@@ -134,9 +134,7 @@ async def test_mcp_bridge_preserves_agent_provenance_under_handoff_authority() -
         event for event in evaluated.evidence.events if event.kind is EvidenceKind.TOOL_REQUEST
     )
     delivery = next(
-        event
-        for event in evaluated.evidence.events
-        if event.kind is EvidenceKind.PROTOCOL_DELIVERY
+        event for event in evaluated.evidence.events if event.kind is EvidenceKind.PROTOCOL_DELIVERY
     )
     result = next(
         event for event in evaluated.evidence.events if event.kind is EvidenceKind.TOOL_RESULT
@@ -144,7 +142,9 @@ async def test_mcp_bridge_preserves_agent_provenance_under_handoff_authority() -
 
     assert request.payload["agent"] == _ROOT
     assert result.payload["agent"] == _ROOT
-    assert request.payload["call_id"] == delivery.payload["agent_call_id"] == result.payload["call_id"]
+    assert (
+        request.payload["call_id"] == delivery.payload["agent_call_id"] == result.payload["call_id"]
+    )
     assert delivery.source == "bridge:mcp-agent:tool-result"
     assert delivery.payload["protocol_receipt"]["kind"] == MCPFaultKind.TOOL_RESULT_POISON.value
     assert not any(
