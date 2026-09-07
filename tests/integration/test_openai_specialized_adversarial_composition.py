@@ -217,12 +217,7 @@ async def test_retrieval_preserves_static_attack_delivery_through_receipt_insert
     ]
     assert len(attacks) == len(deliveries) == len(requests) == len(results) == 1
     assert attacks[0].source == "injector:openai-agents:user-input"
-    assert (
-        attacks[0].sequence
-        < requests[0].sequence
-        < deliveries[0].sequence
-        < results[0].sequence
-    )
+    assert attacks[0].sequence < requests[0].sequence < deliveries[0].sequence < results[0].sequence
     assert requests[0].payload["call_id"] == deliveries[0].payload["call_id"]
     assert not any(
         event.kind is EvidenceKind.EVALUATION_ERROR for event in evaluated.evidence.events
@@ -330,8 +325,7 @@ async def test_side_effect_preserves_static_attack_delivery_across_two_real_atte
     requests = [
         event
         for event in evaluated.evidence.events
-        if event.kind is EvidenceKind.TOOL_REQUEST
-        and event.payload.get("tool") == "apply_change"
+        if event.kind is EvidenceKind.TOOL_REQUEST and event.payload.get("tool") == "apply_change"
     ]
     results = [
         event
