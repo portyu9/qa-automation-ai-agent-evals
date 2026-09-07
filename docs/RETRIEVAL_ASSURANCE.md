@@ -99,6 +99,8 @@ The receipt binds:
 
 Ranked hit projections bind rank, chunk identity, document identity, score, and content digest. Raw retrieved content and raw source locators are intentionally not duplicated into the receipt. Source provenance still participates in each chunk and corpus identity and is therefore bound transitively through `base_corpus_identity` / `attacked_corpus_identity` and `contract_identity` without copying a potentially sensitive URI into durable evidence.
 
+The receipt root and fixed `bridge:retrieval:openai` event source prove internal relation consistency only; neither is a capability token or producer authentication mechanism. Fresh live producer authority is established separately at the evaluator execution boundary.
+
 ## Required chronology
 
 A configured retrieval scenario requires exactly one target retrieval request, exactly one matching retrieval delivery receipt, and exactly one matching result.
@@ -136,6 +138,8 @@ The adapter:
 11. inserts `RETRIEVAL_DELIVERY` between the exact request and result;
 12. relies on `TrialRunner` verification before deterministic subject grading.
 
+For a fresh live `TrialRunner` execution, `RETRIEVAL_DELIVERY` is accepted only when the executing adapter object is exactly the built-in `OpenAIAgentsRetrievalAdapter`. A generic adapter cannot gain evaluator-owned retrieval authority by reproducing the source label or constructing a self-consistent public receipt, and subclasses do not inherit that live authority implicitly. This is execution-path authority separation rather than cryptographic producer attestation.
+
 Deterministic integration tests use `agents.testing.ScriptedModel`; they do not call a provider API.
 
 ## Replay
@@ -145,6 +149,8 @@ Historical replay does not rerun retrieval and does not call the model again.
 Instead, replay requires the persisted evidence to match the exact trial, subject, and scenario identities, then `verify_retrieval_delivery(...)` reconstructs the retrieval relation from the scenario-owned contract and persisted model-visible result.
 
 Changing the query, corpus, ranker profile, poison relation, or other scenario-owned retrieval material changes scenario identity. Historical evidence from the prior scenario therefore cannot be silently replayed as though the contract were unchanged.
+
+The exact built-in `EvidenceReplayAdapter` is deliberately allowed to carry a previously finalized `RETRIEVAL_DELIVERY` event back through grading. Direct provider-neutral receipt construction and `verify_retrieval_delivery(...)` also remain available for deterministic verification. Neither path grants an arbitrary fresh live adapter the right to originate evaluator-owned retrieval-delivery evidence.
 
 Replay proves historical internal consistency under the recorded scenario. It does not prove that a current external retrieval service would return the same results now.
 
@@ -162,6 +168,7 @@ Examples of evaluator uncertainty that become `EVALUATION_ERROR / BLOCKED` inclu
 - model-selected query different from the bound query;
 - failed controlled-poison relation;
 - missing, duplicated, critical, foreign-source, malformed, or reordered delivery evidence;
+- a fresh generic live adapter attempting to originate evaluator-owned retrieval-delivery evidence;
 - receipt identity/root mismatch;
 - model-visible result that cannot be reconstructed from scenario-owned material.
 
@@ -186,6 +193,8 @@ This feature does **not** establish:
 - remote retrieval-service availability or consistency;
 - prompt-injection resistance merely because a poison entered top-k;
 - model attention, interpretation, obedience, resistance, or safe behavior;
+- cryptographic authentication of a retrieval receipt producer;
+- hostile same-process Python isolation merely because exact live adapter types are enforced;
 - universal RAG poisoning assurance.
 
 The deterministic lexical ranker is an evaluator-owned control surface designed to make retrieval provenance and poisoning relations reproducible. Production retrieval systems require their own adapters and receipts if their actual ranking, filtering, provenance, or lifecycle behavior is to be claimed.

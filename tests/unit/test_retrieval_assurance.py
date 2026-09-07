@@ -337,22 +337,25 @@ async def test_trial_runner_and_replay_require_retrieval_delivery_before_grading
         scenario=scenario,
         trial_id=evidence.trial_id,
     )
-    assert evaluated.verdict is TrialVerdict.PASS
+    assert evaluated.verdict is TrialVerdict.BLOCKED
+    assert evaluated.oracle_results == ()
+    assert evaluated.evidence.events[-1].kind is EvidenceKind.EVALUATION_ERROR
+    assert evaluated.evidence.events[-1].payload["code"] == "retrieval_delivery_live_injection"
 
     replayed = await TrialRunner().run(
-        EvidenceReplayAdapter(evaluated.evidence),
+        EvidenceReplayAdapter(evidence),
         subject=subject,
         scenario=scenario,
         trial_id=evidence.trial_id,
     )
     assert replayed.verdict is TrialVerdict.PASS
-    assert replayed.evidence == evaluated.evidence
+    assert replayed.evidence == evidence
 
     changed_contract = contract.model_copy(
         update={"query": RetrievalQuerySpec(query="alpha gamma", top_k=2)}
     )
     drifted = await TrialRunner().run(
-        EvidenceReplayAdapter(evaluated.evidence),
+        EvidenceReplayAdapter(evidence),
         subject=subject,
         scenario=_scenario(changed_contract),
         trial_id=evidence.trial_id,
