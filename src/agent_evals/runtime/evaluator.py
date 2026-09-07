@@ -376,6 +376,22 @@ class TrialRunner:
                 ),
             )
 
+        if EvidenceKind.RETRIEVAL_DELIVERY in event_kinds:
+            # The fixed receipt source is a durable evidence role, not a producer capability.
+            # Keep the optional OpenAI implementation lazy so core imports remain provider-neutral.
+            from agent_evals.adapters.openai_retrieval import OpenAIAgentsRetrievalAdapter
+
+            if type(adapter) is not OpenAIAgentsRetrievalAdapter:
+                return (
+                    "evaluator:retrieval-delivery",
+                    "retrieval_delivery_live_injection",
+                    (
+                        "live adapter output cannot supply evaluator-owned retrieval-delivery "
+                        "evidence; live retrieval delivery is accepted only from the exact "
+                        "built-in retrieval adapter or through exact evidence replay"
+                    ),
+                )
+
         if EvidenceKind.APPROVAL_DECISION in event_kinds:
             # The canonical source string is a persisted evidence role, not a capability token.
             # Keep the optional OpenAI implementation lazy so importing evaluator core does not
