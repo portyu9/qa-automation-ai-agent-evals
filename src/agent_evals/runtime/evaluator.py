@@ -376,6 +376,21 @@ class TrialRunner:
                 ),
             )
 
+        if (
+            EvidenceKind.ATTACK_DELIVERY in event_kinds
+            and type(adapter) not in TrialRunner._live_attack_delivery_adapter_types()
+        ):
+            return (
+                "evaluator:attack-delivery",
+                "attack_delivery_live_injection",
+                (
+                    "live adapter output cannot supply evaluator-owned attack-delivery "
+                    "evidence; fresh adversarial delivery is accepted only from an exact "
+                    "framework-controlled OpenAI injector adapter or through exact evidence "
+                    "replay"
+                ),
+            )
+
         if EvidenceKind.RETRIEVAL_DELIVERY in event_kinds:
             # The fixed receipt source is a durable evidence role, not a producer capability.
             # Keep the optional OpenAI implementation lazy so core imports remain provider-neutral.
@@ -446,6 +461,51 @@ class TrialRunner:
                     )
 
         return None
+
+    @staticmethod
+    def _live_attack_delivery_adapter_types() -> frozenset[type[object]]:
+        """Return exact built-in live adapters that own OpenAI adversarial injection machinery."""
+        # Deliberately lazy: evaluator core remains provider-neutral until live ATTACK_DELIVERY
+        # evidence actually needs a producer-authority decision.
+        from agent_evals.adapters.openai_agents import OpenAIAgentsAdapter
+        from agent_evals.adapters.openai_handoff_authority import (
+            OpenAIAgentsHandoffAuthorityAdapter,
+        )
+        from agent_evals.adapters.openai_hitl_approval import OpenAIAgentsHITLApprovalAdapter
+        from agent_evals.adapters.openai_mcp_tool_error_recovery import (
+            OpenAIAgentsMCPToolErrorRecoveryAdapter,
+        )
+        from agent_evals.adapters.openai_mcp_tool_identity_drift import (
+            OpenAIAgentsMCPToolIdentityDriftAdapter,
+        )
+        from agent_evals.adapters.openai_mcp_tool_metadata import OpenAIAgentsMCPToolMetadataAdapter
+        from agent_evals.adapters.openai_mcp_tool_result import OpenAIAgentsMCPToolResultAdapter
+        from agent_evals.adapters.openai_mcp_tool_schema_drift import (
+            OpenAIAgentsMCPToolSchemaDriftAdapter,
+        )
+        from agent_evals.adapters.openai_mcp_tool_stale_cache import (
+            OpenAIAgentsMCPToolStaleCacheAdapter,
+        )
+        from agent_evals.adapters.openai_retrieval import OpenAIAgentsRetrievalAdapter
+        from agent_evals.adapters.openai_side_effect_idempotency import (
+            OpenAIAgentsSideEffectIdempotencyAdapter,
+        )
+
+        return frozenset(
+            {
+                OpenAIAgentsAdapter,
+                OpenAIAgentsHandoffAuthorityAdapter,
+                OpenAIAgentsHITLApprovalAdapter,
+                OpenAIAgentsRetrievalAdapter,
+                OpenAIAgentsSideEffectIdempotencyAdapter,
+                OpenAIAgentsMCPToolResultAdapter,
+                OpenAIAgentsMCPToolMetadataAdapter,
+                OpenAIAgentsMCPToolErrorRecoveryAdapter,
+                OpenAIAgentsMCPToolIdentityDriftAdapter,
+                OpenAIAgentsMCPToolSchemaDriftAdapter,
+                OpenAIAgentsMCPToolStaleCacheAdapter,
+            }
+        )
 
     @staticmethod
     def _live_protocol_adapter_types() -> dict[str, type[object]]:

@@ -217,7 +217,7 @@ def test_delivery_verifier_rejects_valid_receipt_from_another_scenario() -> None
         verify_attack_delivery(expected, trial_evidence(expected, event))
 
 
-def test_trial_runner_passes_adversarial_trial_only_with_verified_delivery() -> None:
+def test_trial_runner_rejects_verified_receipt_from_untrusted_live_adapter() -> None:
     scenario = adversarial_scenario()
     receipt = AttackDeliveryReceipt.from_scenario(
         scenario,
@@ -235,13 +235,16 @@ def test_trial_runner_passes_adversarial_trial_only_with_verified_delivery() -> 
             adapter,
             subject=subject(),
             scenario=scenario,
-            trial_id="verified-delivery",
+            trial_id="untrusted-live-delivery",
         )
     )
 
-    assert result.verdict is TrialVerdict.PASS
-    assert tuple(oracle.name for oracle in result.oracle_results) == ("policy", "outcome")
-    assert not any(event.kind is EvidenceKind.EVALUATION_ERROR for event in result.evidence.events)
+    assert result.verdict is TrialVerdict.BLOCKED
+    assert result.oracle_results == ()
+    error = result.evidence.events[-1]
+    assert error.kind is EvidenceKind.EVALUATION_ERROR
+    assert error.payload["code"] == "attack_delivery_live_injection"
+    assert error.source == "evaluator:attack-delivery"
 
 
 def test_trial_runner_blocks_missing_delivery_before_oracle_grading() -> None:

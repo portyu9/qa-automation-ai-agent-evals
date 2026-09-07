@@ -13,7 +13,7 @@ from agent_evals.contracts.models import (
     ScenarioKind,
     SubjectFingerprint,
 )
-from agent_evals.evidence.models import EvidenceKind, TrialVerdict
+from agent_evals.evidence.models import EvidenceKind, TrialEvidence, TrialVerdict
 from agent_evals.gates.release import GateDecision, ReleasePolicy
 from agent_evals.runtime.evaluator import TrialRunner
 from agent_evals.runtime.session import EvaluationSession
@@ -60,34 +60,26 @@ def test_verified_adversarial_delivery_survives_exact_evidence_replay() -> None:
         scenario,
         injection_point="conversation:user-message:0",
     )
-    adapter = ScriptedAdapter(
-        lambda *_: AdapterResult(
-            events=(receipt.to_event(sequence=0, source="injector:integration"),),
-            final_state={"protected": "safe"},
-        )
+    recorded = TrialEvidence(
+        trial_id="delivery-replay",
+        subject_identity=evaluated_subject.identity,
+        scenario_identity=scenario.identity,
+        events=(receipt.to_event(sequence=0, source="injector:recorded-integration"),),
+        final_state={"protected": "safe"},
     )
 
-    original = asyncio.run(
-        TrialRunner().run(
-            adapter,
-            subject=evaluated_subject,
-            scenario=scenario,
-            trial_id="delivery-replay",
-        )
-    )
     replayed = asyncio.run(
         TrialRunner().run(
-            EvidenceReplayAdapter(original.evidence),
+            EvidenceReplayAdapter(recorded),
             subject=evaluated_subject,
             scenario=scenario,
-            trial_id="delivery-replay",
+            trial_id=recorded.trial_id,
         )
     )
 
-    assert original.verdict is TrialVerdict.PASS
     assert replayed.verdict is TrialVerdict.PASS
-    assert replayed.evidence.evidence_root == original.evidence.evidence_root
-    assert replayed.evidence.events == original.evidence.events
+    assert replayed.evidence.evidence_root == recorded.evidence_root
+    assert replayed.evidence.events == recorded.events
 
 
 def test_missing_delivery_remains_infrastructure_uncertainty_through_session_report() -> None:
