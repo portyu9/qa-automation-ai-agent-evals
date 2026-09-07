@@ -18,7 +18,8 @@ from dataclasses import replace
 from typing import Any
 
 from agent_evals.adapters.base import AdapterPreconditionError, AdapterResult
-from agent_evals.adapters.openai_agents import OpenAIAgentsAdapter, ResourceResolver, StateReader
+from agent_evals.adapters.openai_agents import ResourceResolver, StateReader
+from agent_evals.adapters.openai_composed import execute_composed_openai
 from agent_evals.contracts.models import EvaluationScenario, SubjectFingerprint
 from agent_evals.evidence.models import EvidenceEvent, EvidenceKind
 from agent_evals.mcp.agent_bridge import MCPAgentToolResultReceipt
@@ -96,13 +97,12 @@ class OpenAIAgentsMCPToolResultAdapter:
             )
             server.call_tool = recorder.call_tool
 
-            delegated = await OpenAIAgentsAdapter(
+            delegated = await execute_composed_openai(
                 runner_agent,
                 state_reader=self._state_reader,
                 resource_resolver=self._resource_resolver,
                 run_context=self._run_context,
                 tracing_disabled=self._tracing_disabled,
-            ).execute(
                 subject=subject,
                 scenario=scenario,
                 trial_id=trial_id,
@@ -237,7 +237,6 @@ def _attach_verified_bridge(
             code="mcp_agent_request_identity_ambiguous",
             reason="normalized agent evidence does not contain one exact MCP target tool request",
         )
-
     call_id = matching_requests[0].payload.get("call_id")
     if not isinstance(call_id, str) or not call_id:
         raise AdapterPreconditionError(
