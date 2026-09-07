@@ -8,7 +8,8 @@ from dataclasses import replace
 from typing import Any, cast
 
 from agent_evals.adapters.base import AdapterPreconditionError, AdapterResult
-from agent_evals.adapters.openai_agents import OpenAIAgentsAdapter, ResourceResolver, StateReader
+from agent_evals.adapters.openai_agents import ResourceResolver, StateReader
+from agent_evals.adapters.openai_composed import execute_composed_openai
 from agent_evals.contracts.models import EvaluationScenario, SubjectFingerprint
 from agent_evals.evidence.models import EvidenceEvent, EvidenceKind
 from agent_evals.mcp.agent_metadata_bridge import MCPAgentToolMetadataReceipt
@@ -80,13 +81,12 @@ class OpenAIAgentsMCPToolMetadataAdapter:
                 recorder=recorder,
             )
 
-            delegated = await OpenAIAgentsAdapter(
+            delegated = await execute_composed_openai(
                 runner_agent,
                 state_reader=self._state_reader,
                 resource_resolver=self._resource_resolver,
                 run_context=self._run_context,
                 tracing_disabled=self._tracing_disabled,
-            ).execute(
                 subject=subject,
                 scenario=scenario,
                 trial_id=trial_id,
