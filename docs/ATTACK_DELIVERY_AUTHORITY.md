@@ -38,11 +38,15 @@ If any other live adapter returns `ATTACK_DELIVERY`, the trial receives a critic
 
 This means a historically valid attack receipt can remain reproducible without pretending that replay itself injected the attack again.
 
-## Fail-closed composition
+## Cross-feature composition
 
-Producer authority does not imply that every cross-feature combination is supported. A controlled adapter must still return the exact delivery evidence required by the scenario. If a specialized path drops or cannot establish an attack receipt, ordinary `verify_attack_delivery()` keeps the trial `BLOCKED`.
+Producer authority does not imply that every cross-feature combination is supported. A controlled adapter must still return the exact delivery evidence required by the scenario. If a specialized path cannot establish an attack receipt, ordinary `verify_attack_delivery()` keeps the trial `BLOCKED`.
 
-In particular, some HITL + adversarial combinations have a separate composition limitation where static prepared delivery events are not retained by every successful HITL path. That limitation should remain fail-closed and is distinct from granting live attack-delivery authority.
+Native HITL execution preserves both static and recorder-driven adversarial delivery without changing their evidence meaning. Static prepared receipts for `USER_INPUT`, `TOOL_METADATA`, `MEMORY`, and `RESOURCE` are retained exactly once before normalized SDK run items, so a later approval interruption and resume cannot erase the fact that the attack was already delivered. Recorder-driven `TOOL_RESULT`, `HANDOFF`, and `ENVIRONMENT` receipts remain emitted at their actual invocation or consumption boundary; because those channels do not populate the static prepared tuple, the shared HITL normalization path does not duplicate them.
+
+The resulting chronology is evidence-driven rather than feature-priority-driven. A static attack delivered before model execution appears before the native approval request; the evaluator decision follows that approval request; approved execution and its result follow the decision. Approval stitching rederives its request sequence and authority-path commitment from the shifted normalized history, so adding the attack receipt does not reuse stale sequence numbers or weaken approval verification.
+
+The same prepared-evidence normalization is used for ordinary completion, native approval resume, initial turn-budget exhaustion, and resumed turn-budget exhaustion. Stronger relations remain non-compensatory: preserving attack delivery does not manufacture missing approval, protocol, retrieval, side-effect, authority, or runtime evidence, and any unresolved relation still keeps the trial fail-closed.
 
 ## Trust boundary
 

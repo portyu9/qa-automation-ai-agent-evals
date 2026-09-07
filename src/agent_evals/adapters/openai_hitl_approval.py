@@ -7,7 +7,7 @@ from time import perf_counter
 from typing import Any
 
 from agent_evals.adapters.base import AdapterPreconditionError, AdapterResult
-from agent_evals.adapters.openai_agents import _stringify_output
+from agent_evals.adapters.openai_agents import _PreparedExecution, _stringify_output
 from agent_evals.adapters.openai_handoff_authority import OpenAIAgentsHandoffAuthorityAdapter
 from agent_evals.authority import validated_handoff_state_before
 from agent_evals.contracts.models import ApprovalDecision, EvaluationScenario, SubjectFingerprint
@@ -98,13 +98,7 @@ class OpenAIAgentsHITLApprovalAdapter(OpenAIAgentsHandoffAuthorityAdapter):
         ]
 
         if not interruptions:
-            normalized = self._normalize_items(
-                first.new_items,
-                start_sequence=0,
-                tool_result_recorder=prepared.tool_result_recorder,
-                environment_recorder=prepared.environment_recorder,
-                handoff_recorder=prepared.handoff_recorder,
-            )
+            normalized = self._normalize_prepared_items(prepared, first.new_items)
             normalized.extend(self._normalize_guardrails(first, start_sequence=len(normalized)))
             target_executed = any(
                 event.kind is EvidenceKind.TOOL_REQUEST
@@ -192,13 +186,7 @@ class OpenAIAgentsHITLApprovalAdapter(OpenAIAgentsHandoffAuthorityAdapter):
             )
 
         complete_items = _merge_run_items(first.new_items, resumed.new_items)
-        normalized = self._normalize_items(
-            complete_items,
-            start_sequence=0,
-            tool_result_recorder=prepared.tool_result_recorder,
-            environment_recorder=prepared.environment_recorder,
-            handoff_recorder=prepared.handoff_recorder,
-        )
+        normalized = self._normalize_prepared_items(prepared, complete_items)
         normalized.extend(self._normalize_guardrails(resumed, start_sequence=len(normalized)))
         stitched = self._stitch_approval_lifecycle(
             scenario=scenario,
@@ -233,20 +221,11 @@ class OpenAIAgentsHITLApprovalAdapter(OpenAIAgentsHandoffAuthorityAdapter):
         self,
         *,
         scenario: EvaluationScenario,
-        prepared: Any,
+        prepared: _PreparedExecution,
         capture: _MaxTurnsCapture,
         started: float,
     ) -> AdapterResult:
-        events = list(prepared.delivery_events)
-        events.extend(
-            self._normalize_items(
-                capture.items,
-                start_sequence=len(events),
-                tool_result_recorder=prepared.tool_result_recorder,
-                environment_recorder=prepared.environment_recorder,
-                handoff_recorder=prepared.handoff_recorder,
-            )
-        )
+        events = self._normalize_prepared_items(prepared, capture.items)
         events.append(_turn_budget_violation(len(events), scenario.authority.max_turns))
         final_state = await self._read_state()
         return AdapterResult(
@@ -261,7 +240,7 @@ class OpenAIAgentsHITLApprovalAdapter(OpenAIAgentsHandoffAuthorityAdapter):
         self,
         *,
         scenario: EvaluationScenario,
-        prepared: Any,
+        prepared: _PreparedExecution,
         first: Any,
         capture: _MaxTurnsCapture,
         call_id: str,
@@ -270,13 +249,7 @@ class OpenAIAgentsHITLApprovalAdapter(OpenAIAgentsHandoffAuthorityAdapter):
         started: float,
     ) -> AdapterResult:
         complete_items = _merge_run_items(first.new_items, capture.items)
-        normalized = self._normalize_items(
-            complete_items,
-            start_sequence=0,
-            tool_result_recorder=prepared.tool_result_recorder,
-            environment_recorder=prepared.environment_recorder,
-            handoff_recorder=prepared.handoff_recorder,
-        )
+        normalized = self._normalize_prepared_items(prepared, complete_items)
         normalized.extend(self._normalize_guardrails(first, start_sequence=len(normalized)))
 
         if capture.captured:
@@ -303,6 +276,24 @@ class OpenAIAgentsHITLApprovalAdapter(OpenAIAgentsHandoffAuthorityAdapter):
             input_tokens=capture.input_tokens,
             output_tokens=capture.output_tokens,
         )
+
+    def _normalize_prepared_items(
+        self,
+        prepared: _PreparedExecution,
+        items: Sequence[object],
+    ) -> list[EvidenceEvent]:
+        """Preserve static injection receipts before SDK and recorder-derived evidence."""
+        events = list(prepared.delivery_events)
+        events.extend(
+            self._normalize_items(
+                items,
+                start_sequence=len(events),
+                tool_result_recorder=prepared.tool_result_recorder,
+                environment_recorder=prepared.environment_recorder,
+                handoff_recorder=prepared.handoff_recorder,
+            )
+        )
+        return events
 
     def _resolve_approval_resource(
         self,
