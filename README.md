@@ -10,7 +10,7 @@
 
 **A provider-neutral quality-engineering framework for evaluating autonomous agents by observable outcomes, side effects, authority boundaries, approval intent, adversarial conditions, verified evaluation preconditions, protocol state, authorization behavior, reliability, and reproducible evidence—not by persuasive final prose.**
 
-[Documentation](docs/README.md) · [Architecture](docs/ARCHITECTURE.md) · [Evaluation Model](docs/EVALUATION_MODEL.md) · [Semantic Judging](docs/SEMANTIC_JUDGING.md) · [Handoff Authority](docs/HANDOFF_AUTHORITY.md) · [Turn-Budget Authority](docs/TURN_BUDGET_AUTHORITY.md) · [HITL Approval](docs/APPROVAL_INTENT.md) · [Side-Effect Idempotency](docs/SIDE_EFFECT_IDEMPOTENCY.md) · [Adversarial Testing](docs/ADVERSARIAL_TESTING.md) · [Retrieval Assurance](docs/RETRIEVAL_ASSURANCE.md) · [MCP Fault Lab](docs/MCP_LAB.md) · [MCP Stale Cache](docs/MCP_STALE_CACHE.md) · [MCP Identity Drift](docs/MCP_IDENTITY_DRIFT.md) · [MCP Remote Auth](docs/MCP_REMOTE_AUTH.md) · [MCP OAuth Flow](docs/MCP_OAUTH_FLOW.md) · [Evidence & Replay](docs/EVIDENCE_AND_REPLAY.md) · [Session Reports](docs/ASSURANCE_REPORTS.md) · [OpenAI Adapter](docs/OPENAI_ADAPTER.md) · [Statistics](docs/STATISTICAL_ASSURANCE.md) · [Security](docs/SECURITY.md) · [Limitations](docs/LIMITATIONS.md)
+[Documentation](docs/README.md) · [Architecture](docs/ARCHITECTURE.md) · [Evaluation Model](docs/EVALUATION_MODEL.md) · [Semantic Judging](docs/SEMANTIC_JUDGING.md) · [Handoff Authority](docs/HANDOFF_AUTHORITY.md) · [Turn-Budget Authority](docs/TURN_BUDGET_AUTHORITY.md) · [HITL Approval](docs/APPROVAL_INTENT.md) · [Side-Effect Idempotency](docs/SIDE_EFFECT_IDEMPOTENCY.md) · [Adversarial Testing](docs/ADVERSARIAL_TESTING.md) · [Attack Delivery Authority](docs/ATTACK_DELIVERY_AUTHORITY.md) · [Retrieval Assurance](docs/RETRIEVAL_ASSURANCE.md) · [MCP Fault Lab](docs/MCP_LAB.md) · [MCP Stale Cache](docs/MCP_STALE_CACHE.md) · [MCP Identity Drift](docs/MCP_IDENTITY_DRIFT.md) · [MCP Remote Auth](docs/MCP_REMOTE_AUTH.md) · [MCP OAuth Flow](docs/MCP_OAUTH_FLOW.md) · [Evidence & Replay](docs/EVIDENCE_AND_REPLAY.md) · [Session Reports](docs/ASSURANCE_REPORTS.md) · [OpenAI Adapter](docs/OPENAI_ADAPTER.md) · [Statistics](docs/STATISTICAL_ASSURANCE.md) · [Security](docs/SECURITY.md) · [Limitations](docs/LIMITATIONS.md)
 
 </div>
 
@@ -119,7 +119,7 @@ The stronger HITL path does **not** claim authenticated humans, enterprise workf
 | **Reliability** | resolved success rate, Wilson interval, empirical `pass@k`/`pass^k`; unresolved attempts stay separate |
 | **Differential evaluation** | exact paired McNemar/binomial comparison over resolved trials |
 | **Semantic judging** | optional scenario-owned rubric, exact judge-profile/calibration authority, bounded PASS/FAIL/ABSTAIN response, terminal non-critical receipt bound to the pre-semantic evidence root, and deterministic short-circuit precedence |
-| **Assurance reports** | v4 self-validating artifacts binding a minimal scenario grading profile to deterministic/semantic grading shape while rederiving trial verdicts, reliability from exact `k` + `confidence_z`, release policy, gate result, and report root |
+| **Assurance reports** | v5 self-validating artifacts binding the scenario grading profile to deterministic/semantic grading shape while rederiving resolved trial verdicts; explicit `POLICY_VIOLATION` facts retained by `BLOCKED` evidence remain blocked yet contribute non-compensatory release criticality; reliability, release policy, gate result, and report root are rederived from the bound report content |
 | **Release gate** | non-compensatory critical-safety rules plus explicit `ACCEPT`, `REJECT`, and `INCONCLUSIVE` semantics |
 | **Metamorphic assurance** | state-projection invariance and authority-monotonicity relations without golden prose |
 | **Failure minimization** | bounded deterministic counterexample reduction requiring failure reproduction |
@@ -742,13 +742,15 @@ This baseline remains the historical audited merged implementation revision. Cap
 4. [Turn-Budget Authority](docs/TURN_BUDGET_AUTHORITY.md)
 5. [Native HITL Approval Intent](docs/APPROVAL_INTENT.md)
 6. [Adversarial Testing](docs/ADVERSARIAL_TESTING.md)
-7. [MCP Protocol Fault Laboratory](docs/MCP_LAB.md)
-8. [MCP Tool-Identity Drift Assurance](docs/MCP_IDENTITY_DRIFT.md)
-9. [MCP Remote Authorization](docs/MCP_REMOTE_AUTH.md)
-10. [MCP OAuth Flow Laboratory](docs/MCP_OAUTH_FLOW.md)
-11. [OpenAI Adapter](docs/OPENAI_ADAPTER.md)
-12. [Evidence & Replay](docs/EVIDENCE_AND_REPLAY.md)
-13. [Session Assurance Reports](docs/ASSURANCE_REPORTS.md)
-14. [Statistical Assurance](docs/STATISTICAL_ASSURANCE.md)
-15. [Security](docs/SECURITY.md)
-16. [Limitations and Non-Claims](docs/LIMITATIONS.md)
+7. [Attack Delivery Authority](docs/ATTACK_DELIVERY_AUTHORITY.md)
+8. [MCP Protocol Fault Laboratory](docs/MCP_LAB.md)
+9. [MCP Tool-Identity Drift Assurance](docs/MCP_IDENTITY_DRIFT.md)
+10. [MCP Remote Authorization](docs/MCP_REMOTE_AUTH.md)
+11. [MCP OAuth Flow Laboratory](docs/MCP_OAUTH_FLOW.md)
+12. [OpenAI Adapter](docs/OPENAI_ADAPTER.md)
+13. [Evidence & Replay](docs/EVIDENCE_AND_REPLAY.md)
+14. [Session Assurance Reports](docs/ASSURANCE_REPORTS.md)
+15. [Blocked Assurance History](docs/ASSURANCE_BLOCKED_HISTORY.md)
+16. [Statistical Assurance](docs/STATISTICAL_ASSURANCE.md)
+17. [Security](docs/SECURITY.md)
+18. [Limitations and Non-Claims](docs/LIMITATIONS.md)
