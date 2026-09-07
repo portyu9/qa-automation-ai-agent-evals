@@ -31,7 +31,6 @@ mcp = [
   "starlette>=0.27,<2",
   "uvicorn>=0.31.1,<1",
 ]
-yaml = ["pyyaml>=6.0.3,<7"]
 dev = [
   "bandit>=1.8,<2",
   "mypy>=1.14,<3",
