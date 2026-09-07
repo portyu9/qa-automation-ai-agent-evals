@@ -298,7 +298,13 @@ class AssuranceReport(BaseModel):
                 else None
             )
             verified_oracle_results = tuple(trial.oracle_results)
-            if trial.verdict is not TrialVerdict.BLOCKED:
+            blocking_evidence = has_blocking_evidence(evidence)
+            if trial.verdict is TrialVerdict.BLOCKED:
+                if not blocking_evidence:
+                    raise ValueError(
+                        "blocked assurance trial contains no evaluator/runtime blocking evidence"
+                    )
+            else:
                 supplied_snapshots = tuple(
                     OracleSnapshot.from_oracle(result) for result in verified_oracle_results
                 )
@@ -311,7 +317,7 @@ class AssuranceReport(BaseModel):
                         "semantic judgment cannot coexist with deterministic oracle failure"
                     )
 
-                if has_blocking_evidence(evidence):
+                if blocking_evidence:
                     raise ValueError(
                         "non-blocked assurance trial contains evaluator/runtime blocking evidence"
                     )
