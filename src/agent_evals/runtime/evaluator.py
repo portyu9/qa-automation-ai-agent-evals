@@ -45,10 +45,17 @@ class EvaluatedTrial:
 
     @property
     def critical_violations(self) -> int:
-        return sum(
+        resolved = sum(
             result.critical and result.verdict is TrialVerdict.FAIL
             for result in self.oracle_results
         )
+        blocked_policy = int(
+            self.verdict is TrialVerdict.BLOCKED
+            and any(
+                event.kind is EvidenceKind.POLICY_VIOLATION for event in self.evidence.events
+            )
+        )
+        return resolved + blocked_policy
 
 
 class TrialRunner:
