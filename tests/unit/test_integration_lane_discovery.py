@@ -56,6 +56,6 @@ def test_optional_integration_tests_follow_lane_discovery_contract() -> None:
                 f"{name}: MCP-only optional tests require the {_MCP_PREFIX!r} filename prefix"
             )
 
-    assert not violations, "optional integration tests can escape required CI discovery:\n" + "\n".join(
-        violations
+    assert not violations, (
+        "optional integration tests can escape required CI discovery:\n" + "\n".join(violations)
     )
