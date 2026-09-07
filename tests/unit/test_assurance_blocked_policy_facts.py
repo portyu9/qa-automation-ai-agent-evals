@@ -82,7 +82,8 @@ def _blocked_trial(*, include_policy_violation: bool) -> EvaluatedTrial:
 
 
 def _report(*, include_policy_violation: bool) -> AssuranceReport:
-    trials = tuple(_pass_trial(index) for index in range(20)) + (
+    trials = (
+        *(_pass_trial(index) for index in range(20)),
         _blocked_trial(include_policy_violation=include_policy_violation),
     )
     reliability = ReliabilityReport.from_verdicts(tuple(trial.verdict for trial in trials))
