@@ -107,10 +107,12 @@ async def test_persisted_blocked_policy_fact_survives_replay_session_and_assuran
 
     assert session.critical_violations == 1
     assert (
-        ReleaseGate(policy).decide(
+        ReleaseGate(policy)
+        .decide(
             session.reliability,
             critical_violations=session.critical_violations,
-        ).decision
+        )
+        .decision
         is GateDecision.REJECT
     )
 
