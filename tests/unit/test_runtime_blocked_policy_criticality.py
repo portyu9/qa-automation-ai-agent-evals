@@ -35,10 +35,7 @@ def _blocking_error(sequence: int) -> EvidenceEvent:
 
 
 def _blocked_trial(*, policy_events: int, critical: bool = True) -> EvaluatedTrial:
-    events = [
-        _policy_event(sequence, critical=critical)
-        for sequence in range(policy_events)
-    ]
+    events = [_policy_event(sequence, critical=critical) for sequence in range(policy_events)]
     events.append(_blocking_error(len(events)))
     return EvaluatedTrial(
         evidence=TrialEvidence(
@@ -77,9 +74,7 @@ def _session(trials: tuple[EvaluatedTrial, ...]) -> EvaluationSessionResult:
         subject_identity=_SUBJECT,
         scenario_identity=_SCENARIO,
         trials=trials,
-        reliability=ReliabilityReport.from_verdicts(
-            tuple(trial.verdict for trial in trials)
-        ),
+        reliability=ReliabilityReport.from_verdicts(tuple(trial.verdict for trial in trials)),
     )
 
 
@@ -96,9 +91,9 @@ def test_blocked_explicit_policy_fact_counts_once_in_trial_and_session() -> None
 def test_multiple_blocked_policy_events_count_once_even_when_not_marked_critical() -> None:
     blocked = _blocked_trial(policy_events=2, critical=False)
 
-    assert sum(
-        event.kind is EvidenceKind.POLICY_VIOLATION for event in blocked.evidence.events
-    ) == 2
+    assert (
+        sum(event.kind is EvidenceKind.POLICY_VIOLATION for event in blocked.evidence.events) == 2
+    )
     assert all(
         not event.critical
         for event in blocked.evidence.events
@@ -125,10 +120,7 @@ def test_resolved_critical_oracle_failure_semantics_are_unchanged() -> None:
 
 def test_in_memory_release_path_rejects_permitted_blocked_known_policy_fact() -> None:
     trials = (
-        *(
-            _resolved_trial(failed=False, trial_id=f"pass-{index}")
-            for index in range(20)
-        ),
+        *(_resolved_trial(failed=False, trial_id=f"pass-{index}") for index in range(20)),
         _blocked_trial(policy_events=1),
     )
     session = _session(trials)
@@ -147,9 +139,11 @@ def test_in_memory_release_path_rejects_permitted_blocked_known_policy_fact() ->
     assert session.reliability.blocked == 1
     assert session.critical_violations == 1
     assert (
-        ReleaseGate(policy).decide(
+        ReleaseGate(policy)
+        .decide(
             session.reliability,
             critical_violations=session.critical_violations,
-        ).decision
+        )
+        .decision
         is GateDecision.REJECT
     )
