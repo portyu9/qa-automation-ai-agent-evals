@@ -124,10 +124,13 @@ def test_resolved_critical_oracle_failure_semantics_are_unchanged() -> None:
 
 
 def test_in_memory_release_path_rejects_permitted_blocked_known_policy_fact() -> None:
-    trials = tuple(
-        _resolved_trial(failed=False, trial_id=f"pass-{index}")
-        for index in range(20)
-    ) + (_blocked_trial(policy_events=1),)
+    trials = (
+        *(
+            _resolved_trial(failed=False, trial_id=f"pass-{index}")
+            for index in range(20)
+        ),
+        _blocked_trial(policy_events=1),
+    )
     session = _session(trials)
     policy = ReleasePolicy(
         min_resolved_trials=20,
