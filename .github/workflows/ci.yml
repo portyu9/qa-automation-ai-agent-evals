@@ -152,16 +152,28 @@ jobs:
           python - <<'PY'
           from pathlib import Path
           import zipfile
+
           wheels = list(Path('dist').glob('*.whl'))
           if len(wheels) != 1:
               raise SystemExit(f'expected exactly one wheel, found {len(wheels)}')
+
+          source_root = Path('src/agent_evals')
+          expected = {
+              path.relative_to(source_root.parent).as_posix()
+              for path in source_root.rglob('*')
+              if path.is_file() and (path.suffix == '.py' or path.name == 'py.typed')
+          }
+          if not expected:
+              raise SystemExit('source package inventory is unexpectedly empty')
+
           with zipfile.ZipFile(wheels[0]) as archive:
-              names = archive.namelist()
-          required = {'agent_evals/__init__.py', 'agent_evals/py.typed'}
-          missing = sorted(required.difference(names))
+              names = set(archive.namelist())
+
+          missing = sorted(expected.difference(names))
           if missing:
-              raise SystemExit(f'wheel is missing required package files: {missing}')
-          print(wheels[0])
+              raise SystemExit(f'wheel is missing source package files: {missing}')
+
+          print(f'{wheels[0]} contains all {len(expected)} source package files')
           PY
       - name: Install built wheel
         run: |
