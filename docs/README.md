@@ -219,18 +219,20 @@ The repository implements **six deliberately narrow official-MCP-stdio ↔ OpenA
 
 ## Audited implementation checkpoint
 
-Audited merged implementation source checkpoint `d98f9ca1feb1179504cd2181295a73936fd0ae6c`, CI run `33898508697`:
+Audited protected-`main` implementation checkpoint `f440d24a815c9e251f4b6fd82a5b4fc892a0ddbd`, CI run `34167153030`:
 
-- deterministic core: **349 passed, 27 deselected**;
-- branch coverage: **93.79%** against the 90% gate;
-- strict mypy: **0 issues across 42 source files**;
-- deterministic OpenAI SDK suite, including the controlled MCP stdio bridge: **15/15 passed**;
+- deterministic provider-neutral/core suite on both Python 3.11 and 3.14: **998 passed, 85 deselected**;
+- branch coverage on both quality lanes: **93.80%** against the 90% gate;
+- strict mypy on both quality lanes: **0 issues across 80 source files**;
+- Ruff and formatter on both quality lanes: green, with **237 files** formatter-clean;
+- deterministic OpenAI SDK suite, including discovered cross-feature OpenAI↔MCP composition tests: **73/73 passed**;
 - deterministic MCP protocol: **6/6 passed**;
 - deterministic MCP remote auth: **3/3 passed**;
 - deterministic MCP OAuth flow: **3/3 passed**;
-- Python **3.11 minimum / 3.14 latest**, Ruff, formatter, Bandit, dependency audit, package integrity, and all **7/7 CI jobs**: green;
-- dependency audit reported **no known vulnerabilities**; the project package itself is skipped because it is not published on PyPI.
+- documentation-link/discoverability integrity and optional-integration lane-discovery guards: exercised by the required quality lanes;
+- Bandit, package build/wheel inspection, wheel installation/import/CLI smoke, and all **7/7 required CI jobs**: green;
+- dependency audit reported **no known vulnerabilities** in both core quality environments and the complete OpenAI/MCP runtime dependency graph; the project package itself is skipped because it is not published on PyPI.
 
-This checkpoint remains a historical audited merged baseline. Capabilities added after it—including metadata delivery, ToolError recovery, host-refreshed schema drift, host-refreshed identity drift, native handoff authority, turn-budget authority, native HITL approval intent, retrieval assurance, side-effect idempotency, OpenAI cross-feature composition hardening, and calibrated semantic judging—require their own exact-head CI, merge, and post-merge `main` verification; documentation does not retroactively relabel the older checkpoint.
+This checkpoint is intentionally bound to the exact commit and CI run above. It verifies the repository behavior and controls exercised by those required jobs—including the current Assurance v5, authority, replay, retrieval, side-effect, semantic-judging, OpenAI composition, and MCP paths—but it is not a claim about untested hosted providers, external production systems, remote attestation, publisher identity, or behavior introduced after that SHA. Any later code, dependency, workflow, or documentation change requires its own exact-head and post-merge `main` verification before inheriting this checkpoint.
 
 [← Repository README](../README.md)
