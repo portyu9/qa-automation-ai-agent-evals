@@ -17,8 +17,36 @@ class EvaluationSessionResult:
     trials: tuple[EvaluatedTrial, ...]
     reliability: ReliabilityReport
 
+    def validate(self) -> None:
+        """Revalidate session identity, finalized evidence, and reliability before release use."""
+        if not self.trials:
+            raise ValueError("evaluation session requires at least one trial")
+
+        trial_ids: set[str] = set()
+        for trial in self.trials:
+            evidence = trial.evidence
+            if evidence.subject_identity != self.subject_identity:
+                raise ValueError("trial evidence subject identity does not match session")
+            if evidence.scenario_identity != self.scenario_identity:
+                raise ValueError("trial evidence scenario identity does not match session")
+            if evidence.trial_id in trial_ids:
+                raise ValueError("session contains duplicate trial IDs")
+            trial_ids.add(evidence.trial_id)
+            if evidence.evidence_root != trial.completion_evidence_root:
+                raise ValueError("evidence root changed after evaluation finalization")
+
+        self.reliability.validate()
+        expected_reliability = ReliabilityReport.from_verdicts(
+            tuple(trial.verdict for trial in self.trials),
+            k=self.reliability.k,
+            confidence_z=self.reliability.confidence_z,
+        )
+        if self.reliability != expected_reliability:
+            raise ValueError("session reliability does not recompute from trial verdicts")
+
     @property
     def critical_violations(self) -> int:
+        self.validate()
         return sum(trial.critical_violations for trial in self.trials)
 
 
