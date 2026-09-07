@@ -13,6 +13,7 @@ from pydantic import ValidationError
 
 from agent_evals.adapters.base import AdapterPreconditionError, AdapterResult
 from agent_evals.adapters.openai_agents import OpenAIAgentsAdapter, ResourceResolver
+from agent_evals.adapters.openai_composed import execute_composed_openai
 from agent_evals.contracts.models import EvaluationScenario, SubjectFingerprint
 from agent_evals.evidence.models import EvidenceEvent, EvidenceKind
 from agent_evals.side_effect.models import (
@@ -90,13 +91,16 @@ class OpenAIAgentsSideEffectIdempotencyAdapter(OpenAIAgentsAdapter):
             )
 
         runner_agent, observed = self._prepare_observed_agent(contract)
-        result = await OpenAIAgentsAdapter(
+        result = await execute_composed_openai(
             runner_agent,
             state_reader=self._state_reader,
             resource_resolver=self._resource_resolver,
             run_context=self._run_context,
             tracing_disabled=self._tracing_disabled,
-        ).execute(subject=subject, scenario=scenario, trial_id=trial_id)
+            subject=subject,
+            scenario=scenario,
+            trial_id=trial_id,
+        )
 
         events = self._bind_observation(
             result.events,
