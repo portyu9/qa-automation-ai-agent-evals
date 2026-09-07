@@ -83,9 +83,9 @@ A raw positive percentage delta is not enough to claim an established improvemen
 
 ## Assurance-report reproducibility
 
-Assurance Report v3 persists both `k` and `confidence_z` inside its reliability snapshot. On construction and every later load, reliability is rederived from the bound trial verdicts with those exact parameters before the release gate and report root are accepted.
+Assurance Report v5 persists exact `k` and `confidence_z` inside its reliability snapshot and rederives reliability from the bound terminal trial verdicts with those parameters before report-level release claims are accepted. V5 also retains the v4 scenario grading-profile binding and preserves explicit `POLICY_VIOLATION` facts from terminal `BLOCKED` evidence as bounded blocked-policy snapshots that affect non-compensatory release criticality without turning the blocked trial into completed deterministic grading.
 
-This is an intentional schema change from Assurance Report v2. Version 2 did not persist `confidence_z`, so a report created from a non-default Wilson configuration could not prove which interval contract produced its stored bounds. Version 3 uses a separate domain-separated report root and does not silently reinterpret a v2 artifact under v3 semantics.
+The schema history is explicit rather than silently reinterpreted: v2 did not persist `confidence_z`; v3 added it; v4 added `ScenarioGradingProfile`; v5 added blocked explicit-policy preservation and a new domain-separated report root. Older report schemas are rejected by the v5 model rather than read under v5 semantics. See [Session Assurance Reports](ASSURANCE_REPORTS.md).
 
 ## Release-gate semantics
 
