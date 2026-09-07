@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from agent_evals.adversarial.delivery import AttackDeliveryError, verify_attack_delivery
+from agent_evals.authority import event_agent_identity
 from agent_evals.contracts.models import EvaluationScenario
 from agent_evals.evidence.approval_intent import ApprovalIntentError, verify_approval_intent
 from agent_evals.evidence.models import EvidenceKind, TrialEvidence
@@ -17,6 +18,13 @@ _BLOCKING_EVIDENCE_KINDS = frozenset(
     {
         EvidenceKind.EVALUATION_ERROR,
         EvidenceKind.RUNTIME_ERROR,
+    }
+)
+_HANDOFF_AGENT_BOUND_KINDS = frozenset(
+    {
+        EvidenceKind.TOOL_REQUEST,
+        EvidenceKind.TOOL_RESULT,
+        EvidenceKind.APPROVAL_REQUEST,
     }
 )
 
@@ -82,6 +90,8 @@ def verify_pregrading_closure(
             reason=str(exc),
         ) from exc
 
+    _verify_composed_handoff_provenance(scenario, evidence)
+
     try:
         verify_approval_intent(scenario, evidence)
     except ApprovalIntentError as exc:
@@ -90,3 +100,52 @@ def verify_pregrading_closure(
             code="approval_intent_unverified",
             reason=str(exc),
         ) from exc
+
+
+def _verify_composed_handoff_provenance(
+    scenario: EvaluationScenario,
+    evidence: TrialEvidence,
+) -> None:
+    """Keep specialized-runtime provenance uncertainty out of deterministic subject grading.
+
+    Direct use of a weaker adapter with an ordinary handoff-authority scenario intentionally
+    remains a deterministic policy failure. The stronger pre-grading requirement activates only
+    when handoff authority is composed with an evaluator-owned specialized relation whose bridge
+    otherwise closes successfully: retrieval delivery, side-effect observation, or protocol/MCP
+    delivery. At that point missing SDK generating-agent attribution is evaluator uncertainty, not
+    evidence that the subject exceeded its delegated authority.
+    """
+    if not scenario.authority.has_handoff_authority:
+        return
+
+    specialized_relation = (
+        scenario.retrieval is not None
+        or scenario.side_effect_idempotency is not None
+        or any(event.kind is EvidenceKind.PROTOCOL_DELIVERY for event in evidence.events)
+    )
+    if not specialized_relation:
+        return
+
+    for event in evidence.events:
+        if event.kind in _HANDOFF_AGENT_BOUND_KINDS:
+            if event_agent_identity(event.payload.get("agent")) is None:
+                raise EvaluationPreconditionError(
+                    source="evaluator:handoff-provenance",
+                    code="handoff_provenance_unverified",
+                    reason=(
+                        "specialized OpenAI evidence under delegated handoff authority lacks a "
+                        f"stable generating-agent identity for {event.kind.value}"
+                    ),
+                )
+        elif event.kind is EvidenceKind.HANDOFF:
+            source_agent = event_agent_identity(event.payload.get("source_agent"))
+            target_agent = event_agent_identity(event.payload.get("target_agent"))
+            if source_agent is None or target_agent is None:
+                raise EvaluationPreconditionError(
+                    source="evaluator:handoff-provenance",
+                    code="handoff_provenance_unverified",
+                    reason=(
+                        "specialized OpenAI evidence under delegated handoff authority contains "
+                        "a handoff without stable source and target agent identities"
+                    ),
+                )
