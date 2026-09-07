@@ -53,15 +53,12 @@ def test_prepared_static_evidence_is_preserved_once_before_normalized_items() ->
 
     events = adapter._normalize_prepared_items(_prepared(static), ())
 
-    assert events == [
-        static,
-        EvidenceEvent(
-            sequence=1,
-            kind=EvidenceKind.OUTPUT,
-            source="probe:normalized",
-            payload={"marker": "normalized"},
-        ),
-    ]
+    assert len(events) == 2
+    assert events[0] is static
+    assert events[1].sequence == 1
+    assert events[1].kind is EvidenceKind.OUTPUT
+    assert events[1].source == "probe:normalized"
+    assert events[1].payload == {"marker": "normalized"}
     assert adapter.start_sequences == [1]
 
 
@@ -70,12 +67,9 @@ def test_recorder_driven_normalization_still_starts_at_zero_without_static_evide
 
     events = adapter._normalize_prepared_items(_prepared(), ())
 
-    assert events == [
-        EvidenceEvent(
-            sequence=0,
-            kind=EvidenceKind.OUTPUT,
-            source="probe:normalized",
-            payload={"marker": "normalized"},
-        )
-    ]
+    assert len(events) == 1
+    assert events[0].sequence == 0
+    assert events[0].kind is EvidenceKind.OUTPUT
+    assert events[0].source == "probe:normalized"
+    assert events[0].payload == {"marker": "normalized"}
     assert adapter.start_sequences == [0]
