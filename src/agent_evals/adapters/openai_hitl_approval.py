@@ -52,6 +52,7 @@ class OpenAIAgentsHITLApprovalAdapter(OpenAIAgentsHandoffAuthorityAdapter):
 
         try:
             from agents import RunConfig, Runner
+            from agents.exceptions import MaxTurnsExceeded
             from agents.items import ToolApprovalItem
         except ImportError as exc:  # pragma: no cover
             raise RuntimeError(
@@ -67,14 +68,25 @@ class OpenAIAgentsHITLApprovalAdapter(OpenAIAgentsHandoffAuthorityAdapter):
         )
         started = perf_counter()
 
-        first = await Runner.run(
-            prepared.agent,
-            prepared.runner_input,
-            context=prepared.run_context,
-            max_turns=scenario.authority.max_turns,
-            run_config=run_config,
-            session=prepared.session,
-        )
+        first_turn_budget = _MaxTurnsCapture()
+        try:
+            first = await Runner.run(
+                prepared.agent,
+                prepared.runner_input,
+                context=prepared.run_context,
+                max_turns=scenario.authority.max_turns,
+                run_config=run_config,
+                session=prepared.session,
+                error_handlers={"max_turns": first_turn_budget},
+            )
+        except MaxTurnsExceeded:
+            self._raise_recorder_identity_errors(prepared)
+            return await self._result_from_initial_turn_budget_exhaustion(
+                scenario=scenario,
+                prepared=prepared,
+                capture=first_turn_budget,
+                started=started,
+            )
         self._raise_recorder_identity_errors(prepared)
 
         interruptions = [
@@ -141,13 +153,28 @@ class OpenAIAgentsHITLApprovalAdapter(OpenAIAgentsHandoffAuthorityAdapter):
         else:
             state.reject(interruption)
 
-        resumed = await Runner.run(
-            prepared.agent,
-            state,
-            max_turns=scenario.authority.max_turns,
-            run_config=run_config,
-            session=prepared.session,
-        )
+        resumed_turn_budget = _MaxTurnsCapture()
+        try:
+            resumed = await Runner.run(
+                prepared.agent,
+                state,
+                max_turns=scenario.authority.max_turns,
+                run_config=run_config,
+                session=prepared.session,
+                error_handlers={"max_turns": resumed_turn_budget},
+            )
+        except MaxTurnsExceeded:
+            self._raise_recorder_identity_errors(prepared)
+            return await self._result_from_resumed_turn_budget_exhaustion(
+                scenario=scenario,
+                prepared=prepared,
+                first=first,
+                capture=resumed_turn_budget,
+                call_id=call_id,
+                arguments=arguments,
+                resource=resource,
+                started=started,
+            )
         self._raise_recorder_identity_errors(prepared)
 
         unresolved = [
@@ -200,6 +227,81 @@ class OpenAIAgentsHITLApprovalAdapter(OpenAIAgentsHandoffAuthorityAdapter):
             elapsed_ms=(perf_counter() - started) * 1000.0,
             input_tokens=usage.input_tokens,
             output_tokens=usage.output_tokens,
+        )
+
+    async def _result_from_initial_turn_budget_exhaustion(
+        self,
+        *,
+        scenario: EvaluationScenario,
+        prepared: Any,
+        capture: _MaxTurnsCapture,
+        started: float,
+    ) -> AdapterResult:
+        events = list(prepared.delivery_events)
+        events.extend(
+            self._normalize_items(
+                capture.items,
+                start_sequence=len(events),
+                tool_result_recorder=prepared.tool_result_recorder,
+                environment_recorder=prepared.environment_recorder,
+                handoff_recorder=prepared.handoff_recorder,
+            )
+        )
+        events.append(_turn_budget_violation(len(events), scenario.authority.max_turns))
+        final_state = await self._read_state()
+        return AdapterResult(
+            events=tuple(events),
+            final_state=final_state,
+            elapsed_ms=(perf_counter() - started) * 1000.0,
+            input_tokens=capture.input_tokens,
+            output_tokens=capture.output_tokens,
+        )
+
+    async def _result_from_resumed_turn_budget_exhaustion(
+        self,
+        *,
+        scenario: EvaluationScenario,
+        prepared: Any,
+        first: Any,
+        capture: _MaxTurnsCapture,
+        call_id: str,
+        arguments: str,
+        resource: str | None,
+        started: float,
+    ) -> AdapterResult:
+        complete_items = _merge_run_items(first.new_items, capture.items)
+        normalized = self._normalize_items(
+            complete_items,
+            start_sequence=0,
+            tool_result_recorder=prepared.tool_result_recorder,
+            environment_recorder=prepared.environment_recorder,
+            handoff_recorder=prepared.handoff_recorder,
+        )
+        normalized.extend(self._normalize_guardrails(first, start_sequence=len(normalized)))
+
+        if capture.captured:
+            stitched = self._stitch_approval_lifecycle(
+                scenario=scenario,
+                normalized=normalized,
+                call_id=call_id,
+                arguments=arguments,
+                resource=resource,
+            )
+        else:
+            # Never fabricate the evaluator-owned approval decision if the SDK failed to expose the
+            # accumulated resume relation. The known turn violation is still retained; normal
+            # approval verification will keep the trial BLOCKED because the stronger relation is
+            # unresolved.
+            stitched = normalized
+
+        stitched.append(_turn_budget_violation(len(stitched), scenario.authority.max_turns))
+        final_state = await self._read_state()
+        return AdapterResult(
+            events=tuple(stitched),
+            final_state=final_state,
+            elapsed_ms=(perf_counter() - started) * 1000.0,
+            input_tokens=capture.input_tokens,
+            output_tokens=capture.output_tokens,
         )
 
     def _resolve_approval_resource(
@@ -428,6 +530,37 @@ class OpenAIAgentsHITLApprovalAdapter(OpenAIAgentsHandoffAuthorityAdapter):
             input_tokens=usage.input_tokens,
             output_tokens=usage.output_tokens,
         )
+
+
+class _MaxTurnsCapture:
+    """Snapshot public SDK run-error evidence before the SDK re-raises MaxTurnsExceeded."""
+
+    def __init__(self) -> None:
+        self.captured = False
+        self.items: tuple[object, ...] = ()
+        self.input_tokens = 0
+        self.output_tokens = 0
+
+    def __call__(self, data: Any) -> None:
+        self.captured = True
+        self.items = tuple(data.run_data.new_items)
+        usage = data.context.usage
+        self.input_tokens = usage.input_tokens
+        self.output_tokens = usage.output_tokens
+        return None
+
+
+def _turn_budget_violation(sequence: int, max_turns: int) -> EvidenceEvent:
+    return EvidenceEvent(
+        sequence=sequence,
+        kind=EvidenceKind.POLICY_VIOLATION,
+        source="openai-agents:runner",
+        payload={
+            "reason": "turn budget exceeded",
+            "max_turns": max_turns,
+        },
+        critical=True,
+    )
 
 
 def _merge_run_items(first: Sequence[object], resumed: Sequence[object]) -> list[object]:

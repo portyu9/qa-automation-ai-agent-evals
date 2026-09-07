@@ -51,7 +51,13 @@ The repository pins `openai-agents==0.22.0`.
 
 Adapters that inherit the base OpenAI execution path inherit this enforcement. Specialized integrations that delegate their behavioral run to that base path retain the same bound. Integrations that own additional runtime calls remain responsible for applying the same scenario-owned bound to every multi-turn loop they own; an incomplete specialized evaluation relation is not reclassified merely to force a `FAIL`.
 
-Deterministic integration coverage uses the real pinned SDK runner with `agents.testing.ScriptedModel` and no provider API call. The regression intentionally requires more model turns than the scenario permits and proves that only the permitted turn executes, the SDK reports exhaustion, the adapter emits critical policy-violation evidence, and the evaluator returns `FAIL` rather than `PASS` or `BLOCKED`.
+`OpenAIAgentsHITLApprovalAdapter` owns two direct SDK run phases: the initial run that can produce a native approval interruption and the continuation of the same `RunState` after the evaluator applies the scenario decision. Both phases retain the scenario-owned SDK turn limit. The adapter also installs the pinned SDK's public `max_turns` error handler as an observation tap only: it snapshots the accumulated public run items and usage supplied to that handler, returns no fallback result, and therefore allows the SDK to raise its real `MaxTurnsExceeded` signal unchanged. The framework never turns budget exhaustion into a synthetic successful model output.
+
+When exhaustion occurs after a native approval decision and the SDK exposes the accumulated resumed run relation, the adapter first reconstructs the same exact approval request → evaluator decision → approved/rejected continuation evidence that ordinary HITL verification requires, then appends the critical turn-budget `POLICY_VIOLATION`. This preserves both facts: the approval relation was resolved, and the subject nevertheless exhausted its authoritative turn budget. Deterministic policy grading can therefore return critical `FAIL` instead of downgrading the confirmed violation to generic runtime uncertainty.
+
+If the SDK cannot expose enough accumulated evidence to close a stronger HITL relation, the adapter does not fabricate that relation. The confirmed policy-violation event may still be retained, but normal approval verification keeps the trial `BLOCKED` because evaluator uncertainty remains unresolved. This is the same non-compensatory precedence described above.
+
+Deterministic integration coverage uses the real pinned SDK runner with `agents.testing.ScriptedModel` and no provider API call. The base regression intentionally requires more model turns than the scenario permits. The native-HITL regression separately proves the resumed approval path: the protected tool executes exactly once after the evaluator decision, the SDK stops before another model turn, the exact approval lifecycle remains verifiable, the adapter emits the same critical turn-budget policy fact, `OutcomeOracle` can still confirm the observed terminal state, and the final evaluator verdict is `FAIL` rather than `PASS` or `BLOCKED`.
 
 ## Replay and assurance
 
@@ -69,6 +75,7 @@ This boundary does **not** claim:
 - that the pinned deterministic SDK test proves live-provider availability or live-model behavior;
 - that arbitrary custom adapters enforce the contract merely because they satisfy the Python protocol structurally;
 - that a critical turn-budget event can override an otherwise unresolved evaluator-owned precondition;
+- that the SDK error-handler snapshot is provider attestation, a signature, or an independent turn counter;
 - or that a new `TURN` evidence kind is required or desirable.
 
 The claim is narrower: **a runtime integration that owns turns must enforce the exact scenario-owned turn limit or fail closed, and a runtime-confirmed exhaustion is normalized into deterministic policy evidence rather than treated as successful execution.**
