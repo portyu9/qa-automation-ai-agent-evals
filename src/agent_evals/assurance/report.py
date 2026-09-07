@@ -10,7 +10,7 @@ from typing import Literal, Self
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from agent_evals.contracts.models import EvaluationScenario
-from agent_evals.evidence.models import TrialVerdict
+from agent_evals.evidence.models import EvidenceEvent, EvidenceKind, TrialVerdict
 from agent_evals.gates.release import GateDecision, GateResult, ReleaseGate, ReleasePolicy
 from agent_evals.oracles.deterministic import OracleResult
 from agent_evals.runtime.grading import grade_deterministic_evidence
@@ -25,9 +25,9 @@ from agent_evals.semantic.receipt import SemanticJudgmentReceipt
 from agent_evals.semantic.verification import SemanticJudgmentError, verify_semantic_judgment
 from agent_evals.statistics.reliability import ReliabilityReport
 
-_REPORT_SCHEMA: Literal["agent-evals/assurance-report/v4"] = "agent-evals/assurance-report/v4"
+_REPORT_SCHEMA: Literal["agent-evals/assurance-report/v5"] = "agent-evals/assurance-report/v5"
 _EVIDENCE_SCHEMA: Literal["agent-evals/trial-evidence/v2"] = "agent-evals/trial-evidence/v2"
-_REPORT_DOMAIN = b"agent-evals/assurance-report/v4\0"
+_REPORT_DOMAIN = b"agent-evals/assurance-report/v5\0"
 _RESOLVED_VERDICTS = frozenset({TrialVerdict.PASS, TrialVerdict.FAIL})
 _CORE_ORACLE_NAMES = frozenset({"policy", "outcome"})
 _SIDE_EFFECT_ORACLE_NAME = "side-effect-idempotency"
@@ -64,6 +64,34 @@ class OracleSnapshot(BaseModel):
             verdict=result.verdict,
             reasons=result.reasons,
             critical=result.critical,
+        )
+
+
+class BlockedPolicyViolationSnapshot(BaseModel):
+    """Explicit policy fact retained when another relation keeps a trial BLOCKED.
+
+    This is not a substitute for a completed policy oracle. It records only an explicit
+    ``POLICY_VIOLATION`` event that already exists in the exact blocked evidence envelope. The
+    event digest binds its complete event payload, source, chronology, critical flag, timestamp,
+    and kind; the duplicated source/reason fields are review material, not independent authority.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    sequence: int = Field(ge=0, strict=True)
+    event_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
+    source: str = Field(min_length=1)
+    reason: str
+
+    @classmethod
+    def from_event(cls, event: EvidenceEvent) -> Self:
+        if event.kind is not EvidenceKind.POLICY_VIOLATION:
+            raise ValueError("blocked policy snapshot requires explicit policy-violation evidence")
+        return cls(
+            sequence=event.sequence,
+            event_digest=event.digest,
+            source=event.source,
+            reason=str(event.payload.get("reason", "explicit policy violation")),
         )
 
 
@@ -114,9 +142,13 @@ class TrialAssuranceRecord(BaseModel):
     critical, and can only narrow a deterministic PASS into FAIL or INCONCLUSIVE. It cannot rescue
     a deterministic failure.
 
+    BLOCKED trials do not acquire completed oracle authority. V5 instead retains any explicit
+    policy-violation facts already present in blocked evidence so release gating does not erase a
+    known safety fact merely because a different evaluation relation remains unresolved.
+
     The evidence root identifies the exact final trial evidence. A semantic receipt separately
-    binds the exact pre-semantic evidence root; reconstructing and verifying that relation requires
-    the evidence/replay path because the report does not duplicate the full event stream.
+    binds the exact pre-semantic evidence root; reconstructing and verifying those event-level
+    relations requires the evidence/replay path because the report does not duplicate the stream.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -126,14 +158,22 @@ class TrialAssuranceRecord(BaseModel):
     verdict: TrialVerdict
     oracle_results: tuple[OracleSnapshot, ...] = ()
     semantic_judgment: SemanticJudgmentReceipt | None = None
+    blocked_policy_violations: tuple[BlockedPolicyViolationSnapshot, ...] = ()
 
     @property
     def critical_violations(self) -> int:
-        """Critical authority remains deterministic; semantic FAIL is never counted here."""
-        return sum(
+        """Count resolved critical oracle failure plus blocked explicit policy authority.
+
+        Multiple explicit policy events in one blocked trial preserve multiple review facts but
+        count as one policy-oracle-equivalent critical failure, matching ``PolicyOracle`` semantics.
+        Semantic FAIL is never critical here.
+        """
+        resolved = sum(
             result.critical and result.verdict is TrialVerdict.FAIL
             for result in self.oracle_results
         )
+        blocked_policy = int(bool(self.blocked_policy_violations))
+        return resolved + blocked_policy
 
     @model_validator(mode="after")
     def validate_trial_derivation(self) -> Self:
@@ -144,7 +184,20 @@ class TrialAssuranceRecord(BaseModel):
                 raise ValueError(
                     "blocked assurance trial cannot contain semantic judgment evidence"
                 )
+            sequences = [snapshot.sequence for snapshot in self.blocked_policy_violations]
+            digests = [snapshot.event_digest for snapshot in self.blocked_policy_violations]
+            if sequences != sorted(set(sequences)):
+                raise ValueError(
+                    "blocked policy-violation snapshots must have unique increasing sequences"
+                )
+            if len(set(digests)) != len(digests):
+                raise ValueError("blocked policy-violation event digests must be unique")
             return self
+
+        if self.blocked_policy_violations:
+            raise ValueError(
+                "non-blocked assurance trial cannot contain blocked policy-violation snapshots"
+            )
 
         deterministic_failed = any(
             result.verdict is TrialVerdict.FAIL for result in self.oracle_results
@@ -228,11 +281,10 @@ class GateSnapshot(BaseModel):
 class AssuranceReport(BaseModel):
     """Reproducible session report whose derived claims are verified on every load.
 
-    Evidence roots, deterministic oracle snapshots, optional semantic judgment receipts, the
-    scenario-derived grading profile, and terminal trial verdicts are the bound trial facts. Trial
-    verdicts are rederived with strict deterministic-over-semantic precedence. Reliability and
-    release-gate fields are then recomputed from those validated trial facts and the frozen release
-    policy.
+    Evidence roots, deterministic oracle snapshots, blocked explicit-policy facts, optional
+    semantic judgment receipts, the scenario-derived grading profile, and terminal trial verdicts
+    are the bound trial facts. Reliability and release-gate fields are recomputed from those
+    validated facts and the frozen release policy.
 
     The report root detects unacknowledged content changes. It is not a signature, MAC, trusted
     timestamp, publisher identity, or proof that the referenced evidence was honestly produced.
@@ -242,7 +294,7 @@ class AssuranceReport(BaseModel):
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    schema_version: Literal["agent-evals/assurance-report/v4"] = _REPORT_SCHEMA
+    schema_version: Literal["agent-evals/assurance-report/v5"] = _REPORT_SCHEMA
     evidence_schema: Literal["agent-evals/trial-evidence/v2"] = _EVIDENCE_SCHEMA
     subject_identity: str = Field(pattern=r"^[0-9a-f]{64}$")
     scenario_identity: str = Field(pattern=r"^[0-9a-f]{64}$")
@@ -290,6 +342,7 @@ class AssuranceReport(BaseModel):
             if evidence.trial_id in trial_ids:
                 raise ValueError("session contains duplicate trial IDs")
             trial_ids.add(evidence.trial_id)
+
             semantic = (
                 SemanticJudgmentReceipt.model_validate(
                     trial.semantic_judgment.model_dump(mode="json")
@@ -298,12 +351,19 @@ class AssuranceReport(BaseModel):
                 else None
             )
             verified_oracle_results = tuple(trial.oracle_results)
+            blocked_policy_violations: tuple[BlockedPolicyViolationSnapshot, ...] = ()
             blocking_evidence = has_blocking_evidence(evidence)
+
             if trial.verdict is TrialVerdict.BLOCKED:
                 if not blocking_evidence:
                     raise ValueError(
                         "blocked assurance trial contains no evaluator/runtime blocking evidence"
                     )
+                blocked_policy_violations = tuple(
+                    BlockedPolicyViolationSnapshot.from_event(event)
+                    for event in evidence.events
+                    if event.kind is EvidenceKind.POLICY_VIOLATION
+                )
             else:
                 supplied_snapshots = tuple(
                     OracleSnapshot.from_oracle(result) for result in verified_oracle_results
@@ -364,6 +424,7 @@ class AssuranceReport(BaseModel):
                     raise ValueError(
                         "trial semantic judgment does not match the receipt committed by final evidence"
                     )
+
             record = TrialAssuranceRecord(
                 trial_id=evidence.trial_id,
                 evidence_root=evidence.evidence_root,
@@ -372,6 +433,7 @@ class AssuranceReport(BaseModel):
                     OracleSnapshot.from_oracle(result) for result in verified_oracle_results
                 ),
                 semantic_judgment=semantic,
+                blocked_policy_violations=blocked_policy_violations,
             )
             records.append(record)
             verdicts.append(record.verdict)

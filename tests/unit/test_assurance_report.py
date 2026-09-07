@@ -133,7 +133,7 @@ def test_report_binds_trial_roots_oracles_schema_profile_and_release_decision() 
     session = session_result()
     report = _report(session)
 
-    assert report.schema_version == "agent-evals/assurance-report/v4"
+    assert report.schema_version == "agent-evals/assurance-report/v5"
     assert report.evidence_schema == "agent-evals/trial-evidence/v2"
     assert report.subject_identity == SUBJECT
     assert report.scenario_identity == SCENARIO
@@ -164,10 +164,10 @@ def test_report_json_round_trip_revalidates_all_derived_claims() -> None:
     assert loaded == report
 
 
-def test_v3_assurance_schema_is_rejected_under_v4() -> None:
+def test_v4_assurance_schema_is_rejected_under_v5() -> None:
     report = _report()
     payload = report.model_dump(mode="json")
-    payload["schema_version"] = "agent-evals/assurance-report/v3"
+    payload["schema_version"] = "agent-evals/assurance-report/v4"
 
     with pytest.raises(ValidationError, match="schema_version"):
         AssuranceReport.model_validate(payload)

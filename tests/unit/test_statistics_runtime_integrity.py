@@ -162,14 +162,14 @@ def test_paired_comparison_rejects_nonfloat_alpha() -> None:
         )
 
 
-def test_custom_confidence_round_trips_through_assurance_report_v4() -> None:
+def test_custom_confidence_round_trips_through_assurance_report_v5() -> None:
     custom_z = 1.6448536269514722
     session = _session(confidence_z=custom_z)
 
     report = _report(confidence_z=custom_z)
     loaded = AssuranceReport.model_validate_json(report.model_dump_json())
 
-    assert report.schema_version == "agent-evals/assurance-report/v4"
+    assert report.schema_version == "agent-evals/assurance-report/v5"
     assert report.reliability.confidence_z == custom_z
     assert loaded == report
     assert loaded.reliability.wilson_low == session.reliability.wilson_low
@@ -187,9 +187,13 @@ def test_confidence_parameter_participates_in_assurance_report_root() -> None:
 
 @pytest.mark.parametrize(
     "legacy_schema",
-    ["agent-evals/assurance-report/v2", "agent-evals/assurance-report/v3"],
+    [
+        "agent-evals/assurance-report/v2",
+        "agent-evals/assurance-report/v3",
+        "agent-evals/assurance-report/v4",
+    ],
 )
-def test_legacy_assurance_reports_are_not_silently_reinterpreted_as_v4(
+def test_legacy_assurance_reports_are_not_silently_reinterpreted_as_v5(
     legacy_schema: str,
 ) -> None:
     report = _report(confidence_z=1.959963984540054)
