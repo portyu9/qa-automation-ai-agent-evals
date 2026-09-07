@@ -51,9 +51,7 @@ class EvaluatedTrial:
         )
         blocked_policy = int(
             self.verdict is TrialVerdict.BLOCKED
-            and any(
-                event.kind is EvidenceKind.POLICY_VIOLATION for event in self.evidence.events
-            )
+            and any(event.kind is EvidenceKind.POLICY_VIOLATION for event in self.evidence.events)
         )
         return resolved + blocked_policy
 
@@ -348,7 +346,7 @@ class TrialRunner:
             return EvaluatedTrial(
                 evidence=self._append_evaluation_error(
                     evidence,
-                    source="evaluator:semantic-judge",
+                    source="evaluator:semantic-judgment",
                     code="semantic_judgment_invalid",
                     reason=str(exc),
                 ),
