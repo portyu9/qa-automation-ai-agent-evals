@@ -77,6 +77,7 @@ jobs:
           tests/integration/test_openai_environment_adapter.py
           tests/integration/test_openai_handoff_authority_adapter.py
           tests/integration/test_openai_hitl_approval_adapter.py
+          tests/integration/test_openai_hitl_adversarial_delivery.py
           tests/integration/test_openai_hitl_turn_budget.py
           tests/integration/test_openai_semantic_judge.py
           tests/integration/test_openai_retrieval_adapter.py
