@@ -112,9 +112,7 @@ def _report_for_blocked(blocked: EvaluatedTrial) -> AssuranceReport:
 
 
 def _report(*, include_policy_violation: bool) -> AssuranceReport:
-    return _report_for_blocked(
-        _blocked_trial(policy_violation_count=int(include_policy_violation))
-    )
+    return _report_for_blocked(_blocked_trial(policy_violation_count=int(include_policy_violation)))
 
 
 def test_blocked_explicit_policy_violation_remains_noncompensatory_at_release_gate() -> None:
