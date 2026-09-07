@@ -14,6 +14,7 @@ from agent_evals.contracts.models import (
     ScenarioKind,
     SubjectFingerprint,
 )
+from agent_evals.evidence.approval_intent import parse_approval_intent_event
 from agent_evals.evidence.models import EvidenceKind, TrialVerdict
 from agent_evals.runtime.evaluator import TrialRunner
 from agent_evals.security.taxonomy import ThreatClass
@@ -151,5 +152,5 @@ async def test_static_user_attack_delivery_survives_native_hitl_resume() -> None
     decision = next(
         event for event in evaluated.evidence.events if event.kind is EvidenceKind.APPROVAL_DECISION
     )
-    assert decision.payload["call_id"] == _CALL_ID
+    assert parse_approval_intent_event(decision).call_id == _CALL_ID
     model.assert_complete()
