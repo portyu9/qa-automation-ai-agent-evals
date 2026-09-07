@@ -72,6 +72,7 @@ jobs:
         run: >-
           pytest -m openai
           tests/integration/test_openai_adapter.py
+          tests/integration/test_openai_turn_budget.py
           tests/integration/test_openai_resource_adapter.py
           tests/integration/test_openai_environment_adapter.py
           tests/integration/test_openai_handoff_authority_adapter.py

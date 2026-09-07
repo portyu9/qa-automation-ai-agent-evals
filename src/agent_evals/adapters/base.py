@@ -55,6 +55,15 @@ class AgentAdapter(Protocol):
     Adapters translate provider-specific execution into normalized observable evidence. They do
     not grade their own behavior and they do not own the release decision.
 
+    Turn-budget enforcement is deliberately runtime-owned. An adapter that owns a multi-turn
+    execution loop must bind ``scenario.authority.max_turns`` to that runtime's actual turn limiter.
+    If the integration cannot establish or enforce that bound, it must fail closed rather than
+    return gradeable evidence that implies the bound was honored. A runtime-confirmed turn-budget
+    exhaustion must become critical ``POLICY_VIOLATION`` evidence so deterministic policy grading
+    can resolve the subject failure. The provider-neutral core independently rederives tool-call
+    and handoff budgets from normalized events; it does not infer hidden provider/runtime turns or
+    require adapters to manufacture a synthetic turn event.
+
     For repeated-session use, an adapter/operator integration is also responsible for whatever
     system-under-test isolation its reliability claim requires. ``EvaluationSession`` intentionally
     reuses the supplied adapter object and does not reset external systems or automatically apply
