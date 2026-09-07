@@ -255,10 +255,10 @@ def _report(session: EvaluationSessionResult) -> AssuranceReport:
     )
 
 
-def test_assurance_report_v4_keeps_semantic_failure_noncritical() -> None:
+def test_assurance_report_v5_keeps_semantic_failure_noncritical() -> None:
     report = _report(_session(_trial(SemanticDecision.FAIL)))
 
-    assert report.schema_version == "agent-evals/assurance-report/v4"
+    assert report.schema_version == "agent-evals/assurance-report/v5"
     assert report.grading_profile.semantic_rubric_identity == _rubric().identity
     assert report.trials[0].verdict is TrialVerdict.FAIL
     assert report.trials[0].semantic_judgment is not None
@@ -502,7 +502,7 @@ def test_assurance_report_json_reload_rejects_semantic_profile_rubric_drift() ->
         AssuranceReport.model_validate(payload)
 
 
-def test_assurance_semantic_binding_preserves_v4_report_shape() -> None:
+def test_assurance_semantic_binding_preserves_v5_report_shape() -> None:
     report = _report(_session(_trial(SemanticDecision.PASS)))
 
     assert set(report.model_dump(mode="json")) == {
@@ -517,4 +517,4 @@ def test_assurance_semantic_binding_preserves_v4_report_shape() -> None:
         "gate",
         "report_root",
     }
-    assert report.schema_version == "agent-evals/assurance-report/v4"
+    assert report.schema_version == "agent-evals/assurance-report/v5"
