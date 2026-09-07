@@ -376,18 +376,20 @@ class TrialRunner:
                 ),
             )
 
-        if EvidenceKind.ATTACK_DELIVERY in event_kinds:
-            if type(adapter) not in TrialRunner._live_attack_delivery_adapter_types():
-                return (
-                    "evaluator:attack-delivery",
-                    "attack_delivery_live_injection",
-                    (
-                        "live adapter output cannot supply evaluator-owned attack-delivery "
-                        "evidence; fresh adversarial delivery is accepted only from an exact "
-                        "framework-controlled OpenAI injector adapter or through exact evidence "
-                        "replay"
-                    ),
-                )
+        if (
+            EvidenceKind.ATTACK_DELIVERY in event_kinds
+            and type(adapter) not in TrialRunner._live_attack_delivery_adapter_types()
+        ):
+            return (
+                "evaluator:attack-delivery",
+                "attack_delivery_live_injection",
+                (
+                    "live adapter output cannot supply evaluator-owned attack-delivery "
+                    "evidence; fresh adversarial delivery is accepted only from an exact "
+                    "framework-controlled OpenAI injector adapter or through exact evidence "
+                    "replay"
+                ),
+            )
 
         if EvidenceKind.RETRIEVAL_DELIVERY in event_kinds:
             # The fixed receipt source is a durable evidence role, not a producer capability.
