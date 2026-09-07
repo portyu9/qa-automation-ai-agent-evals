@@ -51,6 +51,19 @@ def evaluated_trial(
         )
     elif verdict is TrialVerdict.FAIL:
         final_state["status"] = "wrong"
+    elif verdict is TrialVerdict.BLOCKED:
+        events = (
+            EvidenceEvent(
+                sequence=0,
+                kind=EvidenceKind.EVALUATION_ERROR,
+                source="evaluator:test",
+                payload={
+                    "code": "controlled_precondition_failure",
+                    "reason": "controlled evaluation precondition did not close",
+                },
+                critical=True,
+            ),
+        )
 
     evidence = TrialEvidence(
         trial_id=trial_id,
