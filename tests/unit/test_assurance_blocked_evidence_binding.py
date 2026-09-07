@@ -12,7 +12,7 @@ from agent_evals.statistics.reliability import ReliabilityReport
 
 _SUBJECT = "a" * 64
 _POLICY = ReleasePolicy(
-    min_resolved_trials=0,
+    min_resolved_trials=1,
     min_success_rate=0.0,
     min_wilson_low=0.0,
     max_critical_violations=0,
