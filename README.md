@@ -10,7 +10,7 @@
 
 **A provider-neutral quality-engineering framework for evaluating autonomous agents by observable outcomes, side effects, authority boundaries, approval intent, adversarial conditions, verified evaluation preconditions, protocol state, authorization behavior, reliability, and reproducible evidence—not by persuasive final prose.**
 
-[Documentation](docs/README.md) · [Architecture](docs/ARCHITECTURE.md) · [Evaluation Model](docs/EVALUATION_MODEL.md) · [Semantic Judging](docs/SEMANTIC_JUDGING.md) · [Handoff Authority](docs/HANDOFF_AUTHORITY.md) · [HITL Approval](docs/APPROVAL_INTENT.md) · [Side-Effect Idempotency](docs/SIDE_EFFECT_IDEMPOTENCY.md) · [Adversarial Testing](docs/ADVERSARIAL_TESTING.md) · [Retrieval Assurance](docs/RETRIEVAL_ASSURANCE.md) · [MCP Fault Lab](docs/MCP_LAB.md) · [MCP Stale Cache](docs/MCP_STALE_CACHE.md) · [MCP Identity Drift](docs/MCP_IDENTITY_DRIFT.md) · [MCP Remote Auth](docs/MCP_REMOTE_AUTH.md) · [MCP OAuth Flow](docs/MCP_OAUTH_FLOW.md) · [Evidence & Replay](docs/EVIDENCE_AND_REPLAY.md) · [Session Reports](docs/ASSURANCE_REPORTS.md) · [OpenAI Adapter](docs/OPENAI_ADAPTER.md) · [Statistics](docs/STATISTICAL_ASSURANCE.md) · [Security](docs/SECURITY.md) · [Limitations](docs/LIMITATIONS.md)
+[Documentation](docs/README.md) · [Architecture](docs/ARCHITECTURE.md) · [Evaluation Model](docs/EVALUATION_MODEL.md) · [Semantic Judging](docs/SEMANTIC_JUDGING.md) · [Handoff Authority](docs/HANDOFF_AUTHORITY.md) · [Turn-Budget Authority](docs/TURN_BUDGET_AUTHORITY.md) · [HITL Approval](docs/APPROVAL_INTENT.md) · [Side-Effect Idempotency](docs/SIDE_EFFECT_IDEMPOTENCY.md) · [Adversarial Testing](docs/ADVERSARIAL_TESTING.md) · [Retrieval Assurance](docs/RETRIEVAL_ASSURANCE.md) · [MCP Fault Lab](docs/MCP_LAB.md) · [MCP Stale Cache](docs/MCP_STALE_CACHE.md) · [MCP Identity Drift](docs/MCP_IDENTITY_DRIFT.md) · [MCP Remote Auth](docs/MCP_REMOTE_AUTH.md) · [MCP OAuth Flow](docs/MCP_OAUTH_FLOW.md) · [Evidence & Replay](docs/EVIDENCE_AND_REPLAY.md) · [Session Reports](docs/ASSURANCE_REPORTS.md) · [OpenAI Adapter](docs/OPENAI_ADAPTER.md) · [Statistics](docs/STATISTICAL_ASSURANCE.md) · [Security](docs/SECURITY.md) · [Limitations](docs/LIMITATIONS.md)
 
 </div>
 
@@ -61,6 +61,7 @@ This framework treats the **complete agent system** as the subject under test: m
 | **Accepted epoch ≠ handoff count** | malformed, unauthorized, wrong-source, or re-expanding handoffs do not advance active authority, approval epoch, or path identity |
 | **Same depth ≠ same authority path** | approvals bind a domain-separated accepted-path hash so sibling paths at the same epoch cannot replay one another's decision |
 | **Delegation never expands** | effective tools, resource prefixes, inherited approval requirements, and delegated budgets may preserve or narrow across a valid handoff path, never broaden |
+| **Turn budget ≠ inferred event count** | adapters that own multi-turn runtime loops enforce exact scenario `max_turns` or fail closed; the provider-neutral core does not infer hidden turns from tool, handoff, message, or output events |
 | **Adversarial derivation preserves authority** | an attack cannot grant tools, broaden resources, remove approval, reroute handoffs, or redefine success |
 | **Attack delivery is a precondition** | adversarial behavior is graded only after one exact matching receipt verifies |
 | **Availability ≠ consumption** | an environment value that subject code never reads is not a delivered attack |
@@ -114,7 +115,7 @@ The stronger HITL path does **not** claim authenticated humans, enterprise workf
 | **Replay** | exact trial/subject/scenario historical regrading including delivery-receipt, approval-intent, side-effect-observation, handoff-authority, and persisted semantic-judgment revalidation; replay never reruns subject side effects or silently calls a fresh semantic model |
 | **Outcome oracle** | independently validates required and forbidden terminal state |
 | **Side-effect idempotency oracle** | when configured, critically fails verified duplicate physical mutation across two exact attempts to one scenario-bound logical operation; ordinary scenarios retain the historical policy/outcome oracle surface |
-| **Policy oracle** | fail-closed tools/resources, legacy call/persistent approvals, stronger native approval decisions, approval-request authority, global budgets, active-agent chronology, directed handoff grants, path-local attenuation, delegated per-agent budgets, and explicit policy violations |
+| **Policy oracle** | fail-closed tools/resources, legacy call/persistent approvals, stronger native approval decisions, approval-request authority, evidence-rederived tool-call/handoff budgets, runtime-confirmed turn-budget violations, active-agent chronology, directed handoff grants, path-local attenuation, delegated per-agent budgets, and explicit policy violations |
 | **Reliability** | resolved success rate, Wilson interval, empirical `pass@k`/`pass^k`; unresolved attempts stay separate |
 | **Differential evaluation** | exact paired McNemar/binomial comparison over resolved trials |
 | **Semantic judging** | optional scenario-owned rubric, exact judge-profile/calibration authority, bounded PASS/FAIL/ABSTAIN response, terminal non-critical receipt bound to the pre-semantic evidence root, and deterministic short-circuit precedence |
@@ -475,6 +476,7 @@ Deterministic OpenAI SDK integration, including native handoff authority, native
 python -m pip install -e '.[dev,openai,mcp]'
 pytest -m openai \
   tests/integration/test_openai_adapter.py \
+  tests/integration/test_openai_turn_budget.py \
   tests/integration/test_openai_resource_adapter.py \
   tests/integration/test_openai_environment_adapter.py \
   tests/integration/test_openai_handoff_authority_adapter.py \
@@ -737,15 +739,16 @@ This baseline remains the historical audited merged implementation revision. Cap
 1. [Architecture](docs/ARCHITECTURE.md)
 2. [Evaluation Model](docs/EVALUATION_MODEL.md)
 3. [Native Handoff Authority](docs/HANDOFF_AUTHORITY.md)
-4. [Native HITL Approval Intent](docs/APPROVAL_INTENT.md)
-5. [Adversarial Testing](docs/ADVERSARIAL_TESTING.md)
-6. [MCP Protocol Fault Laboratory](docs/MCP_LAB.md)
-7. [MCP Tool-Identity Drift Assurance](docs/MCP_IDENTITY_DRIFT.md)
-8. [MCP Remote Authorization](docs/MCP_REMOTE_AUTH.md)
-9. [MCP OAuth Flow Laboratory](docs/MCP_OAUTH_FLOW.md)
-10. [OpenAI Adapter](docs/OPENAI_ADAPTER.md)
-11. [Evidence & Replay](docs/EVIDENCE_AND_REPLAY.md)
-12. [Session Assurance Reports](docs/ASSURANCE_REPORTS.md)
-13. [Statistical Assurance](docs/STATISTICAL_ASSURANCE.md)
-14. [Security](docs/SECURITY.md)
-15. [Limitations and Non-Claims](docs/LIMITATIONS.md)
+4. [Turn-Budget Authority](docs/TURN_BUDGET_AUTHORITY.md)
+5. [Native HITL Approval Intent](docs/APPROVAL_INTENT.md)
+6. [Adversarial Testing](docs/ADVERSARIAL_TESTING.md)
+7. [MCP Protocol Fault Laboratory](docs/MCP_LAB.md)
+8. [MCP Tool-Identity Drift Assurance](docs/MCP_IDENTITY_DRIFT.md)
+9. [MCP Remote Authorization](docs/MCP_REMOTE_AUTH.md)
+10. [MCP OAuth Flow Laboratory](docs/MCP_OAUTH_FLOW.md)
+11. [OpenAI Adapter](docs/OPENAI_ADAPTER.md)
+12. [Evidence & Replay](docs/EVIDENCE_AND_REPLAY.md)
+13. [Session Assurance Reports](docs/ASSURANCE_REPORTS.md)
+14. [Statistical Assurance](docs/STATISTICAL_ASSURANCE.md)
+15. [Security](docs/SECURITY.md)
+16. [Limitations and Non-Claims](docs/LIMITATIONS.md)
