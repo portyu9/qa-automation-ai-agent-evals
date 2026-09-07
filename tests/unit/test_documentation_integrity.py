@@ -9,15 +9,9 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 _DOCS_DIR = _REPO_ROOT / "docs"
 _DOCS_HUB = _DOCS_DIR / "README.md"
 
-_INLINE_TARGET = re.compile(
-    r"\[[^\]\n]*\]\((?P<target><[^>\n]+>|[^)\n]+)\)"
-)
-_REFERENCE_TARGET = re.compile(
-    r"(?m)^[ \t]*\[[^\]\n]+\]:[ \t]*(?P<target><[^>\n]+>|[^ \t\n]+)"
-)
-_HTML_TARGET = re.compile(
-    r'''(?i)\b(?:href|src)=["'](?P<target>[^"']+)["']'''
-)
+_INLINE_TARGET = re.compile(r"\[[^\]\n]*\]\((?P<target><[^>\n]+>|[^)\n]+)\)")
+_REFERENCE_TARGET = re.compile(r"(?m)^[ \t]*\[[^\]\n]+\]:[ \t]*(?P<target><[^>\n]+>|[^ \t\n]+)")
+_HTML_TARGET = re.compile(r"""(?i)\b(?:href|src)=["'](?P<target>[^"']+)["']""")
 _FENCE = re.compile(r"^[ \t]*(?P<fence>`{3,}|~{3,})")
 
 
