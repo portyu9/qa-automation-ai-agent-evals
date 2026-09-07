@@ -74,10 +74,14 @@ def _release_policy() -> ReleasePolicy:
 
 
 def _direct_release(session: EvaluationSessionResult) -> GateDecision:
-    return ReleaseGate(_release_policy()).decide(
-        session.reliability,
-        critical_violations=session.critical_violations,
-    ).decision
+    return (
+        ReleaseGate(_release_policy())
+        .decide(
+            session.reliability,
+            critical_violations=session.critical_violations,
+        )
+        .decision
+    )
 
 
 def test_unchanged_session_remains_release_gradeable() -> None:
@@ -112,7 +116,9 @@ def test_session_criticality_rejects_reliability_that_disagrees_with_trial_verdi
     inconsistent = ReliabilityReport.from_verdicts((TrialVerdict.FAIL,))
     session = _session(trial, reliability=inconsistent)
 
-    with pytest.raises(ValueError, match="session reliability does not recompute from trial verdicts"):
+    with pytest.raises(
+        ValueError, match="session reliability does not recompute from trial verdicts"
+    ):
         _ = session.critical_violations
 
 
