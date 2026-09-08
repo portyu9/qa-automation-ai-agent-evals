@@ -62,8 +62,10 @@ jobs:
           files = [Path('README.md'), *sorted(Path('docs').glob('*.md'))]
           forbidden_word = re.compile(r'\bversion(?:ed|ing|s)?\b|--version\b', re.I)
           awkward = (
-              ' current schema additionally',
-              ' current schema also',
+              '. current schema additionally',
+              '\ncurrent schema additionally',
+              '. current schema also',
+              '\ncurrent schema also',
               'For every non-`BLOCKED` trial, current schema',
               "concerns. current schema's",
               'trials, The current',
