@@ -181,6 +181,7 @@ For stale-cache and both drift bridges, refresh is deliberately **host-owned**: 
 | Document | Primary question |
 |---|---|
 | [ARCHITECTURE.md](ARCHITECTURE.md) | Where do identity, adversarial derivation, protocol faults, six MCP→agent bridges, authorization/OAuth, evidence, grading, persistence, reporting, and release authority live? |
+| [FRAMEWORK_SURFACE.md](FRAMEWORK_SURFACE.md) | Which framework, provider, protocol, evidence, and release-assurance surfaces are executable, and where are their trust boundaries documented? |
 | [EVALUATION_MODEL.md](EVALUATION_MODEL.md) | What exactly constitutes a task, trial, outcome, policy violation, semantic judgment, and verdict? |
 | [SEMANTIC_JUDGING.md](SEMANTIC_JUDGING.md) | How are rubrics, judge profiles, calibration, bounded inputs, semantic receipts, deterministic precedence, replay, and OpenAI SDK judge behavior kept evidence-bound? |
 | [HANDOFF_AUTHORITY.md](HANDOFF_AUTHORITY.md) | How are native OpenAI handoffs authorized as a scenario-bound directed graph, how is run-item agent provenance bound, and how is authority forced to attenuate across each observed hop? |
