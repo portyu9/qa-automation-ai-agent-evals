@@ -470,25 +470,14 @@ agent-evals doctor
 pytest
 ```
 
-Deterministic OpenAI SDK integration, including native handoff authority, native HITL approval, and all six controlled MCP stdio bridges:
+Run the same convention-discovered deterministic OpenAI SDK integration surface required by CI, including native handoff authority, native HITL approval, retrieval, side-effect idempotency, semantic judging, adversarial composition, and all six controlled MCP stdio bridges:
 
 ```bash
 python -m pip install -e '.[dev,openai,mcp]'
-pytest -m openai \
-  tests/integration/test_openai_adapter.py \
-  tests/integration/test_openai_turn_budget.py \
-  tests/integration/test_openai_resource_adapter.py \
-  tests/integration/test_openai_environment_adapter.py \
-  tests/integration/test_openai_handoff_authority_adapter.py \
-  tests/integration/test_openai_hitl_approval_adapter.py \
-  tests/integration/test_openai_mcp_tool_metadata_adapter.py \
-  tests/integration/test_openai_mcp_tool_result_adapter.py \
-  tests/integration/test_openai_mcp_tool_error_recovery_adapter.py \
-  tests/integration/test_openai_mcp_tool_schema_drift_adapter.py \
-  tests/integration/test_openai_mcp_tool_schema_drift_contract.py \
-  tests/integration/test_openai_mcp_tool_identity_drift_adapter.py \
-  tests/integration/test_openai_mcp_tool_stale_cache_adapter.py
+pytest -m openai tests/integration/test_openai_*.py
 ```
+
+`tests/unit/test_integration_lane_discovery.py` enforces the filename/marker routing contract, so new OpenAI integration tests cannot sit outside this discovery surface without failing the required quality lane.
 
 Deterministic MCP protocol laboratory:
 
