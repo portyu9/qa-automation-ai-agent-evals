@@ -8,6 +8,7 @@ on:
 permissions:
   contents: read
 
+# Temporary branch-only acceptance gate. Remove before merge.
 jobs:
   audit:
     runs-on: ubuntu-latest
