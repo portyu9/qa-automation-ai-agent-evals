@@ -196,7 +196,7 @@ See [Framework Surface](docs/FRAMEWORK_SURFACE.md) for the detailed executable i
 
 ## Quick start
 
-The deterministic core does not require model credentials.
+The deterministic core runs without model credentials.
 
 ```bash
 python -m venv .venv
