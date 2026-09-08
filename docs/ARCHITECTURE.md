@@ -2,151 +2,75 @@
 
 ## Purpose
 
-The framework evaluates an **agent system**, not a detached model response. The evaluated subject includes provider/model configuration, application revision, instructions, tool schemas, authority policy, memory policy, adapter identity, and adapter version.
+The framework evaluates an **agent system**, not a detached model response. The evaluated subject includes provider/model configuration, application revision, instructions, tool schemas, authority policy, memory policy, adapter identity, and adapter implementation identity.
 
 Architecture starts with identity and evidence, then derives conclusions. It never starts with a score and works backward to justify it.
 
 ## Trust model
 
-```text
-Trusted evaluation control plane
-├── subject/scenario contracts
-├── deterministic adversarial derivation
-├── controlled OpenAI attack injectors
-│   ├── USER_INPUT
-│   ├── local FunctionTool TOOL_RESULT
-│   ├── local FunctionTool TOOL_METADATA description
-│   ├── per-trial Session-history MEMORY
-│   ├── structured inline-file RESOURCE
-│   ├── first-native-handoff context
-│   └── targeted runtime-context ENVIRONMENT
-├── attack-delivery verifier
-├── deterministic retrieval assurance
-│   ├── content-addressed corpus/query/ranker/optional-poison contract
-│   ├── platform-stable integer lexical ranking + canonical result
-│   ├── exact OpenAI retrieval call/result binding
-│   ├── RetrievalDeliveryReceipt without raw corpus duplication
-│   └── replay-time semantic rederivation before grading
-├── deterministic MCP protocol fault laboratory
-│   ├── tools/list description poison
-│   ├── first tools/call result poison
-│   ├── first tools/call model-visible ToolError
-│   ├── private tools/list stale cache after server-side removal
-│   ├── tool-schema drift across cached discovery / call validation / refresh
-│   └── tool-identity drift across cached discovery / stale lookup / refresh
-├── controlled OpenAI↔MCP bridges
-│   ├── TOOL_METADATA_POISON discovery/model-visible-definition bridge
-│   │   ├── exact official tools/list target description + JSON schema
-│   │   ├── first public model-visible target definition observation
-│   │   ├── description/schema digest equality without requiring a target call
-│   │   └── MCPAgentToolMetadataReceipt
-│   ├── TOOL_RESULT_POISON same-call bridge
-│   │   ├── exactly one behavioral target call
-│   │   ├── MCPFaultReceipt for first controlled result
-│   │   ├── exact OpenAI request/result call-ID pairing
-│   │   ├── MCPAgentToolResultReceipt
-│   │   └── same-session benign recovery after behavioral run
-│   ├── TOOL_ERROR causal retry/recovery bridge
-│   │   ├── exactly two behavioral target calls
-│   │   ├── first real MCP ToolError → MCPFaultReceipt
-│   │   ├── exact model-visible error observation
-│   │   ├── distinct OpenAI error/retry call IDs
-│   │   ├── same canonical arguments
-│   │   ├── request₁ < result₁ < request₂ < result₂
-│   │   ├── exact same-session benign recovery
-│   │   └── MCPAgentToolErrorRecoveryReceipt
-│   ├── TOOL_LIST_STALE_CACHE host-refreshed removal-delivery bridge
-│   │   ├── initial protocol/model target presence
-│   │   ├── evaluator-only hidden live target removal
-│   │   ├── cached post-removal tools/list still exposes target
-│   │   ├── real unknown-tool rejection for removed target
-│   │   ├── host-owned cache invalidation after rejection
-│   │   ├── first fresh post-invalidation tools/list proves target absent
-│   │   ├── public model boundary proves target absent + exact rejection
-│   │   ├── strict six-step protocol chronology
-│   │   └── MCPAgentToolStaleCacheReceipt
-│   ├── TOOL_SCHEMA_DRIFT host-refreshed adaptation bridge
-│   │   ├── model receives bound v1 target schema
-│   │   ├── evaluator-only hidden live swap to v2
-│   │   ├── cached post-swap tools/list still exposes v1
-│   │   ├── real MCP rejection of stale v1 arguments
-│   │   ├── host-owned cache invalidation after rejection
-│   │   ├── first fresh post-invalidation tools/list exposes v2
-│   │   ├── distinct stale/recovery OpenAI call IDs
-│   │   ├── exact bound v1/v2 arguments and recovery result
-│   │   ├── strict seven-step protocol chronology
-│   │   └── MCPAgentToolSchemaDriftReceipt
-│   └── TOOL_IDENTITY_DRIFT host-refreshed adaptation bridge
-│       ├── model initially receives exact original identity
-│       ├── evaluator-only hidden live old→replacement registry swap
-│       ├── cached post-swap tools/list still exposes the original identity
-│       ├── real MCP unknown-tool rejection for removed old name
-│       ├── host-owned cache invalidation after rejection
-│       ├── first fresh post-invalidation tools/list exposes replacement only
-│       ├── public model boundary exposes replacement and no stale original
-│       ├── distinct stale/recovery OpenAI call IDs
-│       ├── exact canonical arguments and deterministic recovery result
-│       ├── strict seven-step protocol chronology
-│       └── MCPAgentToolIdentityDriftReceipt
-│
-│   all six paths use a fresh official MCPServerStdio subprocess per trial
-│   and require negotiated MCP 2026-07-28
-├── protocol-delivery semantic verifier
-├── native handoff-authority verifier
-│   ├── exact scenario-owned root agent
-│   ├── directed HandoffAuthorityGrant graph
-│   ├── public SDK generating-agent provenance
-│   └── path-local monotonic authority attenuation
-├── native HITL approval-intent verifier
-│   ├── exact ToolApprovalItem interruption
-│   ├── accepted authority epoch + path identity
-│   ├── ApprovalIntentReceipt
-│   └── same-RunState approve/reject continuation
-├── run-local side-effect idempotency observer
-│   ├── exact two-attempt scenario contract
-│   ├── real callback preserved on both attempts
-│   ├── evaluator effect state before/after each callback
-│   └── SideEffectIdempotencyReceipt + deterministic idempotency oracle
-├── MCP resource-server authorization laboratory
-│   ├── pre-bound loopback TCP + Uvicorn + Streamable HTTP
-│   ├── verifier-owned issuer/resource binding
-│   ├── SDK bearer authentication + expiry checks
-│   ├── SDK required-scope enforcement
-│   └── RFC 9728 protected-resource metadata
-├── separated MCP OAuth-flow laboratory
-│   ├── independent loopback authorization-server and resource-server origins
-│   ├── protected-resource + authorization-server metadata discovery
-│   ├── compatibility Dynamic Client Registration fallback
-│   ├── authorization code + state + PKCE S256
-│   ├── exact RFC 9207 issuer validation
-│   ├── exact RFC 8707 resource binding
-│   ├── token exchange
-│   ├── authenticated HTTP token introspection
-│   ├── protected MCP use through introspection-backed verification
-│   └── stored-authorization reuse on reconnect
-├── evidence normalization and persistence verification
-├── exact-identity replay
-├── deterministic policy / side-effect / outcome oracles
-├── optional calibrated semantic judging
-│   ├── scenario-owned content-addressed SemanticRubricSpec
-│   ├── exact content-addressed SemanticJudgeProfile
-│   ├── accepted SemanticCalibrationReceipt with false-PASS/abstention/failure/coverage gates
-│   ├── bounded objective + rubric + candidate-output judge input
-│   ├── deterministic-failure short circuit before model invocation
-│   └── terminal non-critical SemanticJudgmentReceipt bound to pre-semantic evidence root
-├── statistical assurance
-├── assurance-report verification
-└── release gate
+```mermaid
+flowchart TB
+    accTitle: Agent evaluation trust model
+    accDescr: The evaluated agent and external systems are untrusted for grading authority. Controlled provider and protocol adapters produce observations. The trusted evaluation control plane binds identities, verifies delivery and receipts, persists evidence, applies deterministic oracles, and derives release decisions. Semantic judging is subordinate.
 
-Untrusted / evaluated subject
-└── agent runtime + model + orchestration + tools + memory + resources + handoffs + app context
+    subgraph SUBJECT[Evaluated subject · no grading authority]
+      direction LR
+      AG[Agent runtime + model]
+      TL[Tools + memory + resources]
+      HF[Handoffs + approvals + application context]
+    end
 
-External / not presently attested
-└── live model providers, hosted/external MCP servers, Internet transport,
-    third-party/production authorization servers and IdPs, production memory/retrieval,
-    target systems, proxies, TLS infrastructure, cloud/IAM, production service registries,
-    and production fault injectors
+    subgraph BOUNDARY[Observed provider / protocol boundaries]
+      direction LR
+      OA[OpenAI Agents SDK]
+      MCP[MCP protocol + authorization]
+      EXT[External systems / target state]
+    end
+
+    subgraph CONTROL[Trusted evaluation control plane]
+      direction TB
+      ID[Subject + scenario + authority identities]
+      INJ[Controlled injectors + delivery verifiers]
+      RCPT[Typed receipts + normalized evidence]
+      DET[Deterministic policy / side-effect / outcome oracles]
+      REP[Persistence + replay + reports]
+      SEM[Optional calibrated semantic judge]
+      REL[Reliability + release gate]
+      ID --> INJ --> RCPT --> DET --> REP
+      DET -->|deterministic success only| SEM --> REL
+      DET -->|failure / blocked| REL
+      REP --> REL
+    end
+
+    AG <--> TL
+    AG <--> HF
+    AG <--> OA
+    OA <--> MCP
+    TL <--> EXT
+    HF --> INJ
+    OA --> INJ
+    MCP --> INJ
+    EXT --> INJ
+
+    classDef untrusted fill:#ffebe9,stroke:#cf222e,color:#24292f,stroke-width:2px,stroke-dasharray:5 3
+    classDef advisory fill:#fbefff,stroke:#8250df,color:#24292f,stroke-width:2px
+    classDef authority fill:#ddf4ff,stroke:#0969da,color:#24292f,stroke-width:2px
+    classDef evidence fill:#dafbe1,stroke:#1a7f37,color:#24292f,stroke-width:2px
+    classDef terminal fill:#dafbe1,stroke:#1a7f37,color:#24292f,stroke-width:3px
+
+    class AG,TL,HF,EXT untrusted
+    class OA,MCP,SEM advisory
+    class ID,INJ,DET,REP authority
+    class RCPT evidence
+    class REL terminal
+
+    style SUBJECT stroke:#cf222e,stroke-width:2px,stroke-dasharray:6 4
+    style BOUNDARY stroke:#8250df,stroke-width:2px,stroke-dasharray:6 4
+    style CONTROL stroke:#0969da,stroke-width:2px,stroke-dasharray:6 4
+    linkStyle default stroke:#57606a,stroke-width:1.5px
 ```
+
+**Diagram key:** red dashed = evaluated/untrusted subject or external state · purple = provider/protocol or semantic boundary · blue = deterministic evaluator authority · green = evidence and terminal release truth.
 
 External content can become evidence or adversarial stimulus. It does not become control-plane authority merely because a model, tool, MCP server, resource, session, handoff, application context, HTTP endpoint, OAuth server, authorization middleware, or external service produced it.
 
@@ -174,7 +98,7 @@ Six receipt types bridge selected MCP protocol observations into agent-trial evi
 - `MCPAgentToolResultReceipt` binds one verified MCP `TOOL_RESULT_POISON` observation to one exact agent scenario, tool name, call ID, and model-visible output;
 - `MCPAgentToolErrorRecoveryReceipt` binds one verified MCP `TOOL_ERROR` observation to one exact causal two-call agent relation: error call, model-visible error result, distinct same-argument retry call, and exact benign recovery;
 - `MCPAgentToolStaleCacheReceipt` binds one verified MCP `TOOL_LIST_STALE_CACHE` discovery relation to one exact host-refreshed removal-delivery relation: initial model-visible target, hidden live removal, cached target, real unknown-tool rejection, host invalidation, first fresh target absence, and exact target-absent model-boundary rejection delivery;
-- `MCPAgentToolSchemaDriftReceipt` binds one verified MCP `TOOL_SCHEMA_DRIFT` relation to one exact host-refreshed two-call agent relation: v1 discovery, hidden live replacement, post-mutation cached v1 discovery, stale-call rejection, host cache invalidation, first fresh v2 discovery, distinct corrected call, and exact replacement result;
+- `MCPAgentToolSchemaDriftReceipt` binds one verified MCP `TOOL_SCHEMA_DRIFT` relation to one exact host-refreshed two-call agent relation: initial discovery, hidden live replacement, post-mutation cached initial discovery, stale-call rejection, host cache invalidation, first fresh replacement discovery, distinct corrected call, and exact replacement result;
 - `MCPAgentToolIdentityDriftReceipt` binds one verified MCP `TOOL_IDENTITY_DRIFT` relation to one exact host-refreshed identity transition: original model-visible identity, hidden old→replacement swap, post-mutation cached original-name discovery, real stale-name rejection, host cache invalidation, first fresh replacement discovery, replacement-only model exposure, distinct replacement call, and exact recovery result.
 
 These identities answer different questions and do not inherit authority from one another.
@@ -259,14 +183,14 @@ These seven categories are not universal production interception claims. Determi
 
 ## MCP protocol-fault boundary
 
-`MCPFaultLab` is provider-neutral protocol test infrastructure. It uses official `mcp==2.1.1`, creates a fresh real `MCPServer`, and connects an official `Client` in `2026-07-28` mode.
+`MCPFaultLab` is provider-neutral protocol test infrastructure. It uses official `mcp`, creates a fresh real `MCPServer`, and connects an official `Client` in `repository-supported negotiated revision` mode.
 
 ```text
 content-addressed MCPFaultSpec
         ↓
 fresh MCPServer
         ↓
-official Client / protocol 2026-07-28
+official Client / repository-supported negotiated protocol revision
         ↓
 content observation or protocol-state relation
         ↓
@@ -294,7 +218,7 @@ A raw `MCPFaultReceipt` is not OpenAI `ATTACK_DELIVERY` and does not derive agen
 ```text
 MCPFaultSpec(tool_result_poison)
 → fresh MCPServerStdio
-→ protocol 2026-07-28
+→ repository-supported negotiated protocol revision
 → exactly one behavioral target call
 → first MCP result observation / MCPFaultReceipt
 → exact OpenAI TOOL_REQUEST(call_id) + TOOL_RESULT(call_id)
@@ -324,22 +248,22 @@ The normalized chronology must satisfy `request₁ < result₁ < request₂ < re
 
 ## OpenAI↔MCP schema-drift adaptation boundary
 
-`OpenAIAgentsMCPToolSchemaDriftAdapter` credits a corrected v2 call only when the model first received the bound v1 contract, the harness changed the live schema after v1 selection and before validation, real MCP validation rejected the stale call, and host-owned refresh made v2 model-visible before the corrected call.
+`OpenAIAgentsMCPToolSchemaDriftAdapter` credits a corrected replacement call only when the model first received the bound initial contract, the harness changed the live schema after initial selection and before validation, real MCP validation rejected the stale call, and host-owned refresh made replacement model-visible before the corrected call.
 
 ```text
-model v1
-→ TOOL_REQUEST(stale v1)
-→ hidden live v2 swap
+model initial
+→ TOOL_REQUEST(stale initial)
+→ hidden live replacement swap
 → real stale rejection / TOOL_RESULT
 → host cache invalidation
-→ first fresh v2 discovery
-→ model v2 + rejection
-→ TOOL_REQUEST(recovery v2)
+→ first fresh replacement discovery
+→ model replacement + rejection
+→ TOOL_REQUEST(recovery replacement)
 → TOOL_RESULT(replacement)
 → MCPAgentToolSchemaDriftReceipt / PROTOCOL_DELIVERY
 ```
 
-The strict protocol chronology is `initial-list < swap < stale-call < cache-invalidation < refreshed-list < recovery-call`. Later cached reads of already-refreshed v2 do not create extra refresh claims.
+The strict protocol chronology is `initial-list < swap < stale-call < cache-invalidation < refreshed-list < recovery-call`. Later cached reads of already-refreshed replacement do not create extra refresh claims.
 
 ## OpenAI↔MCP identity-drift adaptation boundary
 
@@ -436,12 +360,12 @@ MCP ERROR RECOVERY:
               → PROTOCOL_DELIVERY
 
 MCP SCHEMA DRIFT:
-              model-visible v1
+              model-visible initial
               → TOOL_REQUEST(stale)
               → hidden live schema swap
               → real stale rejection / TOOL_RESULT
               → host invalidation
-              → first fresh v2
+              → first fresh replacement
               → TOOL_REQUEST(recovery)
               → TOOL_RESULT(recovery)
               → PROTOCOL_DELIVERY

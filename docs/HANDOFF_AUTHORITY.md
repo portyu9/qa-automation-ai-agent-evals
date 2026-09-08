@@ -6,24 +6,35 @@ Native multi-agent handoffs change **which agent is acting**. A handoff therefor
 
 This repository implements one deterministic OpenAI Agents SDK boundary for that claim. The framework owns the authority graph and grading rules; the pinned SDK supplies run-local evidence about which agent generated each observed run item.
 
-```text
-scenario-bound root authority
-        ↓
-exact configured root agent
-        ↓
-native SDK handoff source → target
-        ↓
-exact directed HandoffAuthorityGrant
-        ↓
-path-local attenuation
-        ↓
-SDK run-item generating-agent attribution
-        ↓
-delegated tool / resource / approval / budget checks
-        ↓
-optional onward handoff with further attenuation
-        ↓
-deterministic PolicyOracle verdict
+```mermaid
+flowchart TB
+    accTitle: Native handoff authority attenuation
+    accDescr: The configured root authority reaches the exact root agent. Every observed native handoff must match one scenario-owned directed grant and may only preserve or reduce the authority that reached the source. Run-item provenance then binds later actions to the active agent before deterministic policy grading.
+
+    ROOT[Scenario-bound root authority]
+    AG[Exact configured root agent]
+    H[Observed native source → target handoff]
+    G[Exact directed HandoffAuthorityGrant]
+    ATT[Path-local authority attenuation]
+    PROV[SDK generating-agent provenance]
+    ACT[Delegated tools + resources + approvals + budgets]
+    NEXT[Optional onward handoff]
+    V[Deterministic PolicyOracle]
+
+    ROOT --> AG --> H
+    G --> ATT
+    H --> ATT --> PROV --> ACT --> V
+    ACT --> NEXT -->|repeat attenuation| H
+
+    classDef untrusted fill:#ffebe9,stroke:#cf222e,color:#24292f,stroke-width:2px,stroke-dasharray:5 3
+    classDef advisory fill:#fbefff,stroke:#8250df,color:#24292f,stroke-width:2px
+    classDef authority fill:#ddf4ff,stroke:#0969da,color:#24292f,stroke-width:2px
+    classDef terminal fill:#dafbe1,stroke:#1a7f37,color:#24292f,stroke-width:3px
+    class H,PROV advisory
+    class ROOT,G,ATT,ACT authority
+    class AG,NEXT untrusted
+    class V terminal
+    linkStyle default stroke:#57606a,stroke-width:1.5px
 ```
 
 ## Why a handoff counter is insufficient
@@ -151,7 +162,7 @@ An invalid handoff never advances the active-agent state, accepted authority epo
 
 The base adapter continues to provide the general OpenAI execution and adversarial-channel normalization contract. The stronger handoff adapter adds provenance needed for delegated-authority grading from pinned public SDK run-item surfaces.
 
-With `openai-agents==0.22.0`:
+With `openai-agents`:
 
 - public run items expose the Agent that generated the item;
 - native handoff output exposes explicit source and target Agents;

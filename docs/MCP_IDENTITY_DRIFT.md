@@ -36,7 +36,7 @@ The adapter accepts only `MCPFaultKind.TOOL_IDENTITY_DRIFT` with the existing co
 
 `fault.payload["ttl_ms"]` is the MCP server-advertised cache-hint value. The cross-domain receipt binds the same value as `mcp_cache_hint_ttl_ms`; this does not assert host-side TTL expiry. Host caching is evidenced independently by `cache_tools_list=True`, cached post-rename discovery, and evaluator-owned `invalidate_tools_cache()`. `fault.tool_name` is the exact original identity. The replacement name must be a distinct nonblank string already bound by `fault.identity`.
 
-The v1 fixture intentionally keeps the callable argument shape stable (`query: string`) so the assurance isolates **identity adaptation** rather than mixing rename and schema migration.
+The baseline fixture intentionally keeps the callable argument shape stable (`query: string`) so the assurance isolates **identity adaptation** rather than mixing rename and schema migration.
 
 ## Executable chronology
 
@@ -87,7 +87,7 @@ The hidden evaluator control tool is filtered from model-visible MCP tools. Any 
 It binds:
 
 - `TOOL_IDENTITY_DRIFT` fault identity;
-- MCP protocol revision `2026-07-28`;
+- MCP repository-supported negotiated protocol revision;
 - MCP server-advertised cache-hint TTL from `fault.payload["ttl_ms"]`;
 - exact original and replacement identities;
 - stale unknown-tool rejection digest;
@@ -162,10 +162,10 @@ It does not assert current MCP registry state or current model/provider behavior
 
 The OpenAI integration lane uses:
 
-- `openai-agents==0.22.0`;
-- `mcp==2.1.1`;
+- `openai-agents`;
+- `mcp`;
 - a fresh official `MCPServerStdio` subprocess per trial;
-- MCP protocol revision `2026-07-28`;
+- MCP repository-supported negotiated protocol revision;
 - `agents.testing.ScriptedModel` rather than a provider API call;
 - tracing disabled and sensitive trace data disabled.
 
@@ -181,7 +181,7 @@ This assurance does **not** establish:
 - automatic `notifications/tools/list_changed` handling;
 - automatic Agents SDK expiry according to the MCP cache-hint TTL;
 - arbitrary rename, alias, fallback, or multi-tool migration graphs;
-- simultaneous schema + identity migration beyond the isolated v1 contract;
+- simultaneous schema + identity migration beyond the isolated baseline contract;
 - semantic equivalence of the old and replacement tools outside the controlled harness relation;
 - cryptographic, globally unique, provider-attested, or target-attested tool identity;
 - hosted/remote/Internet MCP behavior;

@@ -35,8 +35,8 @@ Implemented controls include:
 - accepted authority epoch/path binding for native approval intent so malformed handoffs or same-depth sibling paths cannot replay approval evidence;
 - two real side-effect callbacks preserved under observation, with continuous evaluator-owned effect chronology and fail-closed receipt verification;
 - platform-stable deterministic retrieval ranking and exact `TOOL_REQUEST < RETRIEVAL_DELIVERY < TOOL_RESULT` closure;
-- official MCP `2026-07-28` protocol observations using pinned `mcp==2.1.1`;
-- six dedicated official-stdio/OpenAI bridges using a fresh `MCPServerStdio` subprocess per trial and pinned `openai-agents==0.22.0`;
+- official MCP `repository-supported negotiated revision` protocol observations using pinned `mcp`;
+- six dedicated official-stdio/OpenAI bridges using a fresh `MCPServerStdio` subprocess per trial and pinned `openai-agents`;
 - exact call-ID and request/result chronology binding for result, retry, stale-cache, schema-drift, and identity-drift bridges;
 - hidden evaluator controls filtered from model-visible MCP tools for stale-cache removal plus schema and identity mutation;
 - direct public model-boundary observation where metadata/stale-cache/schema/identity visibility or delivery is part of the assurance claim;
@@ -75,12 +75,12 @@ A valid `MCPFaultSpec` binds stable fault identity, revision, kind, original too
 The official-client protocol observation points are:
 
 ```text
-mcp:2026-07-28:tools/list:<tool>:description
-mcp:2026-07-28:tools/call:<tool>:result.content[0].text
-mcp:2026-07-28:tools/call:<tool>:error.content[0].text:message-suffix
-mcp:2026-07-28:tools/list:cache-use-stale-after-remove:<tool>:refresh-proves-absent
-mcp:2026-07-28:tools/list:schema-drift:<tool>:cached-old:call-rejects-old:refresh-new
-mcp:2026-07-28:tools/list:identity-drift:<tool>:cached-old-name:call-rejects-old:refresh-new-name
+mcp:repository-supported negotiated revision:tools/list:<tool>:description
+mcp:repository-supported negotiated revision:tools/call:<tool>:result.content[0].text
+mcp:repository-supported negotiated revision:tools/call:<tool>:error.content[0].text:message-suffix
+mcp:repository-supported negotiated revision:tools/list:cache-use-stale-after-remove:<tool>:refresh-proves-absent
+mcp:repository-supported negotiated revision:tools/list:schema-drift:<tool>:cached-old:call-rejects-old:refresh-new
+mcp:repository-supported negotiated revision:tools/list:identity-drift:<tool>:cached-old-name:call-rejects-old:refresh-new-name
 ```
 
 `payload_sha256` identifies controlled fault material. `observation_sha256` identifies the complete canonical observation. They may differ whenever the SDK transforms content or the proof is relational.
@@ -93,7 +93,7 @@ The protocol laboratory proves protocol conditions only. All six fault families 
 
 All six MCP bridge adapters create a **fresh official MCP stdio process/session** per trial. The supplied base Agent is cloned with exactly the controlled server and is rejected when preconfigured MCP servers, prefixed naming, or local target/control-name collisions would make provenance ambiguous.
 
-The connected session must negotiate exact MCP protocol `2026-07-28`. Configured intent is not accepted as negotiated-version evidence.
+The connected session must negotiate exact MCP repository-supported negotiated protocol revision. Configured intent is not accepted as negotiated-version evidence.
 
 A bridge receipt is created from **observed protocol/model/agent facts**, not merely from configured fault material. Unknown bridge sources, malformed receipts, wrong scenario identity, impossible chronology, or root mismatch fail closed before subject grading.
 
@@ -131,9 +131,9 @@ The harness owns removal; the host owns invalidation; the MCP session owns disco
 
 ### Schema-drift adaptation bridge
 
-`OpenAIAgentsMCPToolSchemaDriftAdapter` implements one host-refreshed v1→v2 contract. The first model turn must receive exact v1. Only after the model selects v1-shaped arguments does a hidden evaluator control replace the live target with v2. A post-mutation cached `tools/list` must still expose exact v1 before the stale call reaches real MCP validation, where v2 must reject the stale v1 arguments.
+`OpenAIAgentsMCPToolSchemaDriftAdapter` implements one host-refreshed initial→replacement contract. The first model turn must receive exact initial. Only after the model selects initial-shaped arguments does a hidden evaluator control replace the live target with replacement. A post-mutation cached `tools/list` must still expose exact initial before the stale call reaches real MCP validation, where replacement must reject the stale initial arguments.
 
-The host invalidates cached discovery only after that rejection. The first fresh post-invalidation `tools/list` must expose exact v2 before recovery. The recovery request uses distinct call identity, exact bound v2 arguments, and exact same-session replacement result.
+The host invalidates cached discovery only after that rejection. The first fresh post-invalidation `tools/list` must expose exact replacement before recovery. The recovery request uses distinct call identity, exact bound replacement arguments, and exact same-session replacement result.
 
 Protocol chronology must satisfy:
 
@@ -143,7 +143,7 @@ initial-list < schema-swap < cached-list < stale-call < cache-invalidation < ref
 
 `MCPAgentToolSchemaDriftReceipt` binds schema, argument, rejection/recovery, call-identity, and chronology digests without duplicating raw controlled content. `PROTOCOL_DELIVERY` closes only after the recovery result.
 
-The harness owns schema mutation; the host adapter owns invalidation; the official MCP session owns refreshed discovery; the SDK owns model-visible conversion; the model is credited only for selecting the corrected v2 call after v2 is visible.
+The harness owns schema mutation; the host adapter owns invalidation; the official MCP session owns refreshed discovery; the SDK owns model-visible conversion; the model is credited only for selecting the corrected replacement call after replacement is visible.
 
 ### Identity-drift adaptation bridge
 
@@ -207,7 +207,7 @@ Current MCP coverage does **not** establish:
 - arbitrary MCP result, error, stale-cache, schema, or identity behavior beyond the six exact controlled bridge contracts;
 - generic retry/backoff/idempotency safety beyond one same-argument ToolError retry and the separate local side-effect observer;
 - model-initiated MCP refresh or automatic `tools/list_changed` handling;
-- arbitrary JSON Schema compatibility or migration beyond the bound v1/v2 fixture;
+- arbitrary JSON Schema compatibility or migration beyond the bound initial→replacement fixture;
 - arbitrary rename, alias, fallback, or multi-tool identity migration beyond the bound identity fixture;
 - semantic equivalence of externally administered old/replacement tools merely because the harness defines a controlled relation;
 - arbitrary parallel target plans or multiple controlled MCP servers;

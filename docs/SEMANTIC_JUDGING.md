@@ -144,9 +144,9 @@ A `SemanticCalibrationCase` contains evaluator-owned labeled material:
 - expected PASS or FAIL label;
 - optional coverage tags.
 
-Calibration case/observation/receipt schemas are explicitly versioned. In case v2, `SemanticCalibrationCase.identity` is the root of a privacy-preserving `SemanticCalibrationCaseCommitment` rather than a hash that requires the raw case body to be present. The commitment binds case ID/revision, objective SHA-256, the exact evaluator-owned rubric plus its identity, candidate-output SHA-256, evaluator-owned expected PASS/FAIL label, and canonical coverage tags. Raw objective and candidate text are not duplicated into the durable observation or calibration receipt.
+Calibration case/observation/receipt schemas are explicitly revisioned. In case current calibration schema, `SemanticCalibrationCase.identity` is the root of a privacy-preserving `SemanticCalibrationCaseCommitment` rather than a hash that requires the raw case body to be present. The commitment binds case ID/revision, objective SHA-256, the exact evaluator-owned rubric plus its identity, candidate-output SHA-256, evaluator-owned expected PASS/FAIL label, and canonical coverage tags. Raw objective and candidate text are not duplicated into the durable observation or calibration receipt.
 
-Each resolved observation v2 embeds that self-validating commitment **and the bounded `SemanticJudgeResponse` itself**. The response contains criterion IDs, bounded PASS/FAIL/ABSTAIN decisions, integer scores, and the overall decision; it contains no free-form reasoning or candidate text. On every construction and load, `derive_semantic_decision(...)` reruns against the committed rubric. `observed` and `response_sha256` are derived properties rather than independently serialized claims. A failed observation carries no response and requires an explicit judge/malformed-response failure code.
+Each resolved observation current calibration schema embeds that self-validating commitment **and the bounded `SemanticJudgeResponse` itself**. The response contains criterion IDs, bounded PASS/FAIL/ABSTAIN decisions, integer scores, and the overall decision; it contains no free-form reasoning or candidate text. On every construction and load, `derive_semantic_decision(...)` reruns against the committed rubric. `observed` and `response_sha256` are derived properties rather than independently serialized claims. A failed observation carries no response and requires an explicit judge/malformed-response failure code.
 
 `expected`, coverage `tags`, `observed`, and `response_sha256` are therefore not independent durable authority fields. Class support and adversarial coverage come from the verified case commitment; correctness, false-PASS accounting, abstention, and accuracy consume only the decision rederived from the persisted structured response. Relabeling a case, injecting/removing a coverage tag, changing the rubric, or making a response contradict criterion/order/threshold/overall semantics fails validation unless the corresponding case identity changes.
 
@@ -192,9 +192,9 @@ Validation re-parses the live judge profile and calibration receipt, then requir
 
 - calibration `accepted == True`;
 - exact profile identity equality between live judge and calibration;
-- internally valid v2 case commitments, persisted structured responses, rederived response decisions/digests, calibration metrics, and receipt root.
+- internally valid current calibration schema case commitments, persisted structured responses, rederived response decisions/digests, calibration metrics, and receipt root.
 
-Current authority validation accepts calibration receipt v2. Legacy v1 calibration receipts are not silently interpreted as the stronger relation: the typed nested calibration field causes both fresh semantic-authority validation and persisted `SemanticJudgmentReceipt` replay validation to fail closed on the old schema. The outer semantic-judgment schema does not change because its own relation and hashing semantics are unchanged; it already binds and validates the complete nested calibration receipt.
+Current authority validation accepts calibration receipt current calibration schema. Legacy legacy calibration schema calibration receipts are not silently interpreted as the stronger relation: the typed nested calibration field causes both fresh semantic-authority validation and persisted `SemanticJudgmentReceipt` replay validation to fail closed on the old schema. The outer semantic-judgment schema does not change because its own relation and hashing semantics are unchanged; it already binds and validates the complete nested calibration receipt.
 
 Malformed, rejected, or drifted authority produces evaluator uncertainty rather than subject failure.
 
@@ -304,7 +304,7 @@ Replay therefore verifies historical consistency. It does not prove that the sem
 
 ## Assurance reports
 
-`AssuranceReport` v2 keeps deterministic and semantic authority visibly separate.
+`AssuranceReport` current calibration schema keeps deterministic and semantic authority visibly separate.
 
 Each `TrialAssuranceRecord` contains:
 
@@ -346,7 +346,7 @@ The fixed profile binds:
 - tracing disabled;
 - sensitive trace data disabled;
 - exact evaluator prompt digest;
-- response schema v1.
+- response schema legacy calibration schema.
 
 The parser rejects duplicate JSON keys, non-finite numeric constants, invalid JSON, non-object JSON, oversized output, and schema-invalid responses. Those are evaluator/judge failures, not subject semantic FAIL.
 

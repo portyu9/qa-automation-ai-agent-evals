@@ -171,7 +171,7 @@ The MCP system has several deliberately separate evidence layers. None is folded
 
 ### In-process protocol fault laboratory
 
-`MCPFaultSpec` / `MCPFaultReceipt` prove six deterministic official-client observations under protocol `2026-07-28`:
+`MCPFaultSpec` / `MCPFaultReceipt` prove six deterministic official-client observations under repository-supported negotiated protocol revision:
 
 - `tools/list` description poisoning;
 - first `tools/call` result poisoning;
@@ -192,11 +192,11 @@ Selected fault families have explicit cross-domain contracts:
 |---|---|---|
 | `TOOL_RESULT_POISON` | `MCPAgentToolResultReceipt` | exact target call ID/output correlation plus same-session post-run benign recovery |
 | `TOOL_ERROR` | `MCPAgentToolErrorRecoveryReceipt` | exact model-visible error, distinct same-argument retry after first result, exact same-session recovery |
-| `TOOL_SCHEMA_DRIFT` | `MCPAgentToolSchemaDriftReceipt` | v1 model-visible schema, hidden live v2 swap, real stale rejection, host invalidation, first fresh v2 discovery, exact corrected call/result |
+| `TOOL_SCHEMA_DRIFT` | `MCPAgentToolSchemaDriftReceipt` | initial model-visible schema, hidden live replacement swap, real stale rejection, host invalidation, first fresh replacement discovery, exact corrected call/result |
 
 These bridge receipts emit `PROTOCOL_DELIVERY`, not `ATTACK_DELIVERY`.
 
-For schema drift, ownership is explicit: the controlled harness owns the live server swap; the evaluator/host adapter owns one cache invalidation; the official MCP session owns first fresh post-invalidation discovery; the pinned Agents SDK owns presentation of refreshed v2 to the next model turn; and the agent/model is credited only for changing the corrected call after v2 becomes visible. This is **not** model-initiated refresh or automatic `tools/list_changed` handling.
+For schema drift, ownership is explicit: the controlled harness owns the live server swap; the evaluator/host adapter owns one cache invalidation; the official MCP session owns first fresh post-invalidation discovery; the pinned Agents SDK owns presentation of refreshed replacement to the next model turn; and the agent/model is credited only for changing the corrected call after replacement becomes visible. This is **not** model-initiated refresh or automatic `tools/list_changed` handling.
 
 ### Loopback Streamable HTTP authorization laboratory
 

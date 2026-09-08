@@ -8,7 +8,7 @@ It answers:
 
 > Can an MCP OAuth client discover the protected resource and authorization server, register when compatible fallback registration is needed, complete authorization code + PKCE with exact issuer and resource binding, exchange a code for an access token, have a separately hosted resource server validate that token through authenticated introspection, and then complete protected MCP requests without conflating any of those observations with agent behavior?
 
-The implementation uses `mcp==2.1.1`, the official `OAuthClientProvider`, official Streamable HTTP client transport, two independent pre-bound loopback TCP origins, Uvicorn, `httpx2`, and MCP protocol revision `2026-07-28`.
+The implementation uses `mcp`, the official `OAuthClientProvider`, official Streamable HTTP client transport, two independent pre-bound loopback TCP origins, Uvicorn, `httpx2`, and MCP repository-supported negotiated protocol revision.
 
 This is a deterministic protocol/security laboratory. It is not a production identity provider, production IAM deployment, or agent verdict engine.
 
@@ -68,7 +68,7 @@ That separation is the central property of this layer.
 
 `MCPOAuthFlowPolicy` is immutable and binds:
 
-- schema version;
+- schema revision;
 - stable lab ID;
 - revision;
 - MCP resource path;
@@ -109,7 +109,7 @@ The issuer is intentionally canonical and slash-terminated. Authorization-respon
 
 The deterministic authorization server exposes a registration endpoint and the official OAuth client performs Dynamic Client Registration when it has no stored client information.
 
-This is tested **compatibility fallback behavior**, not a claim that DCR is the preferred enrollment mechanism for new MCP deployments. MCP `2026-07-28` deprecates DCR in favor of Client ID Metadata Documents while retaining DCR compatibility during the transition.
+This is tested **compatibility fallback behavior**, not a claim that DCR is the preferred enrollment mechanism for new MCP deployments. MCP `repository-supported negotiated revision` deprecates DCR in favor of Client ID Metadata Documents while retaining DCR compatibility during the transition.
 
 The receipt requires exactly one registration during the first authorization flow and no second registration on the reconnect that reuses stored authorization state.
 
@@ -196,9 +196,9 @@ The laboratory does not currently exercise refresh-token rotation; reuse here me
 
 `MCPOAuthFlowReceipt` binds:
 
-- schema version;
+- schema revision;
 - exact `MCPOAuthFlowPolicy.identity`;
-- MCP protocol version;
+- MCP negotiated protocol revision;
 - transport identity `oauth-code-pkce-loopback`;
 - SHA-256 of the canonical complete observation;
 - receipt root derived from those fields.

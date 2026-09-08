@@ -45,7 +45,7 @@ The distinction between **failure** and **uncertainty** remains important. A run
 
 ## Pinned OpenAI Agents SDK boundary
 
-The repository pins `openai-agents==0.22.0`.
+The repository pins `openai-agents`.
 
 `OpenAIAgentsAdapter` passes the exact scenario value as `Runner.run(..., max_turns=scenario.authority.max_turns)`. The pinned SDK's `MaxTurnsExceeded` signal is converted to a critical `POLICY_VIOLATION` carrying the configured bound, after which `PolicyOracle` resolves the trial as a critical policy failure when the remaining evaluation preconditions are closed.
 

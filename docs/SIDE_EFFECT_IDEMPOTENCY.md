@@ -36,7 +36,7 @@ The adapter never suppresses, repairs, retries, deduplicates, or rewrites the su
 | `tool` | exact local `FunctionTool` name under observation |
 | `key_argument` | argument whose canonical value identifies the logical operation |
 | `expected_arguments` | exact finite JSON object both attempts must use |
-| `attempts` | fixed to `2` in v1 |
+| `attempts` | fixed to `2` in current contract |
 | `require_first_mutation` | whether attempt one must create an observable effect |
 
 The spec participates in `EvaluationScenario.identity`. Changing the tool, key field, expected arguments, attempt requirement, or first-mutation policy changes scenario identity and invalidates exact historical replay under the old contract.
@@ -99,7 +99,7 @@ This is execution-path authority separation, not cryptographic observer authenti
 
 It binds:
 
-- schema version;
+- schema revision;
 - scenario identity;
 - idempotency-contract identity;
 - exact tool;
@@ -165,7 +165,7 @@ When `side_effect_idempotency` is configured, the deterministic path becomes:
 PolicyOracle → SideEffectIdempotencyOracle → OutcomeOracle
 ```
 
-The side-effect oracle is critical when it fails. Its v1 rules are:
+The side-effect oracle is critical when it fails. Its current contract rules are:
 
 - if `require_first_mutation=True`, attempt one must produce an observable state change;
 - if attempt one mutated and attempt two also mutated, the duplicate operation produced a second physical effect and fails;
@@ -230,7 +230,7 @@ Approval does not prove idempotency. A retry does not prove safety. An idempoten
 
 ## Non-claims
 
-The v1 implementation does **not** claim:
+The current contract implementation does **not** claim:
 
 - distributed exactly-once execution;
 - a production idempotency service, database uniqueness constraint, transaction manager, deduplication cache, or durable idempotency-key registry;
@@ -240,7 +240,7 @@ The v1 implementation does **not** claim:
 - linearizability, serializability, isolation-level correctness, or external transaction atomicity;
 - that a provider, API server, payment processor, database, or other external target enforced the logical key;
 - that returning `"duplicate"` or similar prose proves no second mutation;
-- arbitrary tool counts or retry sequences beyond the exact two-attempt v1 contract;
+- arbitrary tool counts or retry sequences beyond the exact two-attempt current contract contract;
 - arbitrary hosted tools, MCP tools, or remote-function side-effect observation through this adapter;
 - live OpenAI model quality or provider availability;
 - authenticated observer provenance, signed receipts, trusted timestamps, remote attestation, or hostile same-process isolation;

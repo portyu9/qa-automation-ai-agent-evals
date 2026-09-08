@@ -103,7 +103,7 @@ A protocol/model rejection mismatch, missing call identity, ambiguous output sha
 
 `MCPAgentToolStaleCacheReceipt` binds:
 
-- exact bridge schema `agent-evals/mcp-agent-tool-stale-cache-receipt/v2`;
+- exact bridge schema `agent-evals/mcp-agent-tool-stale-cache-receipt/replacement`;
 - exact scenario identity;
 - a freshly revalidated nested stale-cache `MCPFaultReceipt`;
 - exact target tool name;

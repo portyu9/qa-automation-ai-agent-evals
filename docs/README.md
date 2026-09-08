@@ -11,6 +11,46 @@ This documentation is organized by the question a reviewer is trying to answer. 
 | Security / red team | [Security](SECURITY.md) → [Handoff Authority](HANDOFF_AUTHORITY.md) → [Turn-Budget Authority](TURN_BUDGET_AUTHORITY.md) → [Native HITL Approval Intent](APPROVAL_INTENT.md) → [Adversarial Testing](ADVERSARIAL_TESTING.md) → [Attack Delivery Authority](ATTACK_DELIVERY_AUTHORITY.md) → [OpenAI Adapter](OPENAI_ADAPTER.md) → [OpenAI Cross-Feature Composition](OPENAI_COMPOSITION.md) → [MCP Fault Lab](MCP_LAB.md) → [MCP Stale Cache](MCP_STALE_CACHE.md) → [MCP Identity Drift](MCP_IDENTITY_DRIFT.md) → [MCP Remote Authorization](MCP_REMOTE_AUTH.md) → [MCP OAuth Flow](MCP_OAUTH_FLOW.md) → [Evidence & Replay](EVIDENCE_AND_REPLAY.md) → [Blocked Assurance History](ASSURANCE_BLOCKED_HISTORY.md) → [Limitations](LIMITATIONS.md) |
 | Adoption / code review | [Architecture](ARCHITECTURE.md) → [Handoff Authority](HANDOFF_AUTHORITY.md) → [Turn-Budget Authority](TURN_BUDGET_AUTHORITY.md) → [Native HITL Approval Intent](APPROVAL_INTENT.md) → [Adversarial Testing](ADVERSARIAL_TESTING.md) → [Attack Delivery Authority](ATTACK_DELIVERY_AUTHORITY.md) → [OpenAI Adapter](OPENAI_ADAPTER.md) → [OpenAI Cross-Feature Composition](OPENAI_COMPOSITION.md) → [MCP Fault Lab](MCP_LAB.md) → [MCP Stale Cache](MCP_STALE_CACHE.md) → [MCP Identity Drift](MCP_IDENTITY_DRIFT.md) → repository tests → [Evidence & Replay](EVIDENCE_AND_REPLAY.md) → [Blocked Assurance History](ASSURANCE_BLOCKED_HISTORY.md) → [Security](SECURITY.md) → [Limitations](LIMITATIONS.md) |
 
+## Documentation architecture
+
+```mermaid
+flowchart TB
+    accTitle: Documentation review map
+    accDescr: Architecture and evaluation model define the core assurance contract. Specialized authority and delivery documents refine handoff, approval, side-effect, adversarial, retrieval, OpenAI, and MCP boundaries. Evidence, reports, statistics, security, and limitations close the review path.
+
+    A[Architecture]
+    E[Evaluation Model]
+    S[Semantic Judging]
+    H[Handoff + Turn Budget + Approval]
+    X[Side Effects + Adversarial + Retrieval]
+    O[OpenAI Adapter + Composition]
+    M[MCP Labs + Auth + OAuth]
+    R[Evidence + Replay + Reports]
+    T[Statistics + Metamorphic Testing]
+    L[Security + Limitations]
+
+    A --> E
+    E --> S
+    E --> H
+    E --> X
+    H --> O
+    X --> O
+    O --> M
+    O --> R
+    M --> R
+    R --> T --> L
+
+    classDef authority fill:#ddf4ff,stroke:#0969da,color:#24292f,stroke-width:2px
+    classDef advisory fill:#fbefff,stroke:#8250df,color:#24292f,stroke-width:2px
+    classDef evidence fill:#dafbe1,stroke:#1a7f37,color:#24292f,stroke-width:2px
+    classDef terminal fill:#dafbe1,stroke:#1a7f37,color:#24292f,stroke-width:3px
+    class A,E,H,X authority
+    class S,O,M advisory
+    class R,T evidence
+    class L terminal
+    linkStyle default stroke:#57606a,stroke-width:1.5px
+```
+
 ## Cross-cutting invariants
 
 ```text
@@ -122,7 +162,7 @@ MCPAgentToolStaleCacheReceipt
       target-absent model-boundary delivery relation
 
 MCPAgentToolSchemaDriftReceipt
-    = exact host-refreshed v1 rejection → v2 discovery → corrected-call relation
+    = exact host-refreshed initial rejection → replacement discovery → corrected-call relation
 
 MCPAgentToolIdentityDriftReceipt
     = exact host-refreshed original-name rejection → replacement-only discovery/model
@@ -158,8 +198,8 @@ For stale-cache and both drift bridges, refresh is deliberately **host-owned**: 
 | [MCP_REMOTE_AUTH.md](MCP_REMOTE_AUTH.md) | How is the isolated loopback Streamable HTTP resource-server bearer/scope/verifier boundary tested over real TCP? |
 | [MCP_OAUTH_FLOW.md](MCP_OAUTH_FLOW.md) | How does the separated two-origin loopback OAuth flow verify discovery, compatibility DCR, PKCE, exact issuer/resource binding, exchange, introspection, and protected MCP use? |
 | [EVIDENCE_AND_REPLAY.md](EVIDENCE_AND_REPLAY.md) | How are local evidence records committed, reverified, and replayed without overstating provenance, including typed metadata/result/error/stale-cache/schema/identity `PROTOCOL_DELIVERY` revalidation? |
-| [ASSURANCE_REPORTS.md](ASSURANCE_REPORTS.md) | How does AssuranceReport v5 rederive resolved grading, reliability, and release-gate claims while preserving explicit policy facts from `BLOCKED` evidence as digest-bound, non-compensatory release-critical snapshots? |
-| [ASSURANCE_BLOCKED_HISTORY.md](ASSURANCE_BLOCKED_HISTORY.md) | How are terminal `BLOCKED` histories bound to evaluator/runtime blocking evidence, and how does v5 preserve explicit blocked policy facts without pretending the unresolved trial was fully graded? |
+| [ASSURANCE_REPORTS.md](ASSURANCE_REPORTS.md) | How does AssuranceReport current revision rederive resolved grading, reliability, and release-gate claims while preserving explicit policy facts from `BLOCKED` evidence as digest-bound, non-compensatory release-critical snapshots? |
+| [ASSURANCE_BLOCKED_HISTORY.md](ASSURANCE_BLOCKED_HISTORY.md) | How are terminal `BLOCKED` histories bound to evaluator/runtime blocking evidence, and how does current revision preserve explicit blocked policy facts without pretending the unresolved trial was fully graded? |
 | [METAMORPHIC_TESTING.md](METAMORPHIC_TESTING.md) | Which behavioral relations can be verified without brittle golden outputs? |
 | [STATISTICAL_ASSURANCE.md](STATISTICAL_ASSURANCE.md) | How is nondeterministic behavior quantified without overstating certainty? |
 | [SECURITY.md](SECURITY.md) | Which threats and trust boundaries are actually controlled, and which claims remain external? |
@@ -215,13 +255,13 @@ Specialized OpenAI bridges do not get to weaken handoff provenance merely becaus
 
 ## MCP agent-bridge scope in one paragraph
 
-The repository implements **six deliberately narrow official-MCP-stdio ↔ OpenAI-agent assurance paths**. `OpenAIAgentsMCPToolMetadataAdapter` closes exact discovery-to-model-visible metadata exposure without requiring a call. `OpenAIAgentsMCPToolResultAdapter` correlates one controlled result to one stable OpenAI call/result and checks post-run same-session recovery. `OpenAIAgentsMCPToolErrorRecoveryAdapter` requires a real model-visible error followed causally by one same-argument retry with a distinct call ID and same-session recovery. `OpenAIAgentsMCPToolStaleCacheAdapter` proves hidden live target removal, still-stale cached discovery, real unknown-tool rejection, host invalidation, first fresh target absence, and exact rejection delivery at the target-absent public model boundary without fabricating a recovery call. `OpenAIAgentsMCPToolSchemaDriftAdapter` verifies model-visible v1, hidden live v2 replacement, real stale rejection, host invalidation, fresh v2 discovery, then one exact corrected v2 call. `OpenAIAgentsMCPToolIdentityDriftAdapter` verifies model-visible original identity, hidden live old→replacement mutation, real stale-name rejection, host invalidation, replacement-only protocol/model visibility, then one exact replacement-name call. Multi-step bridges emit `PROTOCOL_DELIVERY` only after their full relation closes. None establishes behavioral PASS by itself, and none covers hosted/remote/Internet MCP, live-provider behavior, generic cache/schema/rename migration, model-owned refresh, generic retry/cache policy, authorization, or target-side attestation.
+The repository implements **six deliberately narrow official-MCP-stdio ↔ OpenAI-agent assurance paths**. `OpenAIAgentsMCPToolMetadataAdapter` closes exact discovery-to-model-visible metadata exposure without requiring a call. `OpenAIAgentsMCPToolResultAdapter` correlates one controlled result to one stable OpenAI call/result and checks post-run same-session recovery. `OpenAIAgentsMCPToolErrorRecoveryAdapter` requires a real model-visible error followed causally by one same-argument retry with a distinct call ID and same-session recovery. `OpenAIAgentsMCPToolStaleCacheAdapter` proves hidden live target removal, still-stale cached discovery, real unknown-tool rejection, host invalidation, first fresh target absence, and exact rejection delivery at the target-absent public model boundary without fabricating a recovery call. `OpenAIAgentsMCPToolSchemaDriftAdapter` verifies model-visible initial, hidden live replacement replacement, real stale rejection, host invalidation, fresh replacement discovery, then one exact corrected replacement call. `OpenAIAgentsMCPToolIdentityDriftAdapter` verifies model-visible original identity, hidden live old→replacement mutation, real stale-name rejection, host invalidation, replacement-only protocol/model visibility, then one exact replacement-name call. Multi-step bridges emit `PROTOCOL_DELIVERY` only after their full relation closes. None establishes behavioral PASS by itself, and none covers hosted/remote/Internet MCP, live-provider behavior, generic cache/schema/rename migration, model-owned refresh, generic retry/cache policy, authorization, or target-side attestation.
 
 ## Audited implementation checkpoint
 
 Audited protected-`main` implementation checkpoint `f440d24a815c9e251f4b6fd82a5b4fc892a0ddbd`, CI run `34167153030`:
 
-- deterministic provider-neutral/core suite on both Python 3.11 and 3.14: **998 passed, 85 deselected**;
+- deterministic provider-neutral/core suite on all repository-supported Python interpreters: **998 passed, 85 deselected**;
 - branch coverage on both quality lanes: **93.80%** against the 90% gate;
 - strict mypy on both quality lanes: **0 issues across 80 source files**;
 - Ruff and formatter on both quality lanes: green, with **237 files** formatter-clean;
@@ -233,6 +273,6 @@ Audited protected-`main` implementation checkpoint `f440d24a815c9e251f4b6fd82a5b
 - Bandit, package build/wheel inspection, wheel installation/import/CLI smoke, and all **7/7 required CI jobs**: green;
 - dependency audit reported **no known vulnerabilities** in both core quality environments and the complete OpenAI/MCP runtime dependency graph; the project package itself is skipped because it is not published on PyPI.
 
-This checkpoint is intentionally bound to the exact commit and CI run above. It verifies the repository behavior and controls exercised by those required jobs—including the current Assurance v5, authority, replay, retrieval, side-effect, semantic-judging, OpenAI composition, and MCP paths—but it is not a claim about untested hosted providers, external production systems, remote attestation, publisher identity, or behavior introduced after that SHA. Any later code, dependency, workflow, or documentation change requires its own exact-head and post-merge `main` verification before inheriting this checkpoint.
+This checkpoint is intentionally bound to the exact commit and CI run above. It verifies the repository behavior and controls exercised by those required jobs—including the current Assurance current revision, authority, replay, retrieval, side-effect, semantic-judging, OpenAI composition, and MCP paths—but it is not a claim about untested hosted providers, external production systems, remote attestation, publisher identity, or behavior introduced after that SHA. Any later code, dependency, workflow, or documentation change requires its own exact-head and post-merge `main` verification before inheriting this checkpoint.
 
 [← Repository README](../README.md)

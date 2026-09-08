@@ -8,7 +8,7 @@ It answers:
 
 > Did the resource-server boundary enforce the configured authentication and authorization contract over actual HTTP, and can an authorized MCP client complete a real protocol request through that boundary?
 
-The implementation uses `mcp==2.1.1`, `httpx2`, Uvicorn, a pre-bound `127.0.0.1` TCP socket, `MCPServer.streamable_http_app()`, the official Streamable HTTP client transport, and protocol revision `2026-07-28`.
+The implementation uses `mcp`, `httpx2`, Uvicorn, a pre-bound `127.0.0.1` TCP socket, `MCPServer.streamable_http_app()`, the official Streamable HTTP client transport, and repository-supported negotiated protocol revision.
 
 It does not turn authorization evidence into an agent verdict. It also does not itself prove authorization-code issuance, PKCE, registration, or introspection; those are exercised by the separate [MCP OAuth Flow Laboratory](MCP_OAUTH_FLOW.md).
 
@@ -66,7 +66,7 @@ That label is intentionally narrower than `remote`, `Internet`, or `production` 
 
 `MCPRemoteAuthPolicy` is immutable and binds:
 
-- schema version;
+- schema revision;
 - stable lab ID;
 - revision;
 - absolute HTTPS authorization-server issuer URL;
@@ -122,9 +122,9 @@ Metadata is independent evidence. The laboratory does not infer it merely from l
 
 `MCPRemoteAuthReceipt` binds:
 
-- schema version;
+- schema revision;
 - exact `MCPRemoteAuthPolicy.identity`;
-- negotiated/adopted protocol version;
+- negotiated/adopted negotiated protocol revision;
 - transport identity;
 - SHA-256 of the canonical complete authorization observation;
 - domain-separated receipt root.

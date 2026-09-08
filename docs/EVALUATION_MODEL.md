@@ -7,7 +7,7 @@ The framework uses precise terms because agent evaluation becomes ambiguous when
 | Term | Meaning |
 |---|---|
 | **Subject** | exact agent system configuration being evaluated |
-| **Scenario** | versioned objective, initial state, authority, acceptance contract, and optional semantic rubric |
+| **Scenario** | revision-bound objective, initial state, authority, acceptance contract, and optional semantic rubric |
 | **Trial** | one attempt by one subject against one scenario |
 | **Event** | one normalized observable interaction or control-plane observation |
 | **Trajectory** | ordered event history for a trial |
@@ -80,22 +80,44 @@ When a scenario has no semantic rubric, the active deterministic oracle set rema
 
 When `EvaluationScenario.semantic_rubric` is configured, semantic grading is subordinate to those deterministic results:
 
-```text
-adapter evidence
-    ↓
-verified delivery / approval / protocol preconditions
-    ↓
-PolicyOracle + optional SideEffectIdempotencyOracle + OutcomeOracle
-    ├─ any deterministic FAIL ───────────────→ FAIL
-    │                                         semantic judge is not called
-    └─ deterministic PASS
-             ↓
-       exact accepted judge calibration
-             ↓
-       bounded semantic judgment
-             ├─ PASS ───────────────────────→ PASS
-             ├─ FAIL ───────────────────────→ FAIL (non-critical)
-             └─ ABSTAIN ────────────────────→ INCONCLUSIVE
+```mermaid
+flowchart TB
+    accTitle: Deterministic-first grading precedence
+    accDescr: Adapter evidence must satisfy required delivery, approval, protocol, and side-effect preconditions. Deterministic oracles run before semantic judging. Any deterministic failure terminates as failure without calling the semantic judge. Semantic judging may only preserve or narrow deterministic success.
+
+    A[Adapter evidence]
+    P[Verify required evaluation preconditions]
+    D[Policy oracle + optional side-effect oracle + outcome oracle]
+    J[Accepted calibrated semantic judge]
+    V{Semantic decision}
+    PASS[PASS]
+    FAIL[FAIL]
+    INC[INCONCLUSIVE]
+    BLOCK[BLOCKED]
+
+    A --> P
+    P -->|missing / invalid| BLOCK
+    P -->|verified| D
+    D -->|any deterministic failure| FAIL
+    D -->|success, no semantic rubric| PASS
+    D -->|success + semantic rubric| J --> V
+    V -->|PASS| PASS
+    V -->|FAIL| FAIL
+    V -->|ABSTAIN| INC
+
+    classDef evidence fill:#dafbe1,stroke:#1a7f37,color:#24292f,stroke-width:2px
+    classDef authority fill:#ddf4ff,stroke:#0969da,color:#24292f,stroke-width:2px
+    classDef advisory fill:#fbefff,stroke:#8250df,color:#24292f,stroke-width:2px
+    classDef bad fill:#ffebe9,stroke:#cf222e,color:#24292f,stroke-width:2px
+    classDef terminal fill:#dafbe1,stroke:#1a7f37,color:#24292f,stroke-width:3px
+
+    class A,P evidence
+    class D authority
+    class J,V advisory
+    class FAIL,BLOCK bad
+    class PASS terminal
+    class INC advisory
+    linkStyle default stroke:#57606a,stroke-width:1.5px
 ```
 
 A semantic result cannot rescue a deterministic failure. The runtime intentionally short-circuits semantic invocation when policy or outcome grading has already failed. This is stronger than merely choosing the deterministic result after both graders run: the subordinate judge receives no subject output for a deterministically failed trial.
@@ -144,12 +166,26 @@ The optional OpenAI Agents SDK implementation serializes this object as canonica
 
 A semantic judgment is persisted as one terminal, non-critical `SEMANTIC_JUDGMENT` event. Its receipt binds the exact evidence root that existed **before** the semantic event was appended. That avoids a circular hash while preserving a checkable causal relation:
 
-```text
-subject evidence root
-        ↓ exact digest bound into receipt
-SemanticJudgmentReceipt
-        ↓ terminal non-critical event
-final TrialEvidence root
+```mermaid
+flowchart LR
+    accTitle: Semantic receipt binding to pre-semantic evidence
+    accDescr: Subject evidence is finalized before semantic evaluation. Its exact root is bound into the semantic judgment receipt. The receipt is then appended as one terminal non-critical event, producing the final trial evidence root without a circular hash.
+
+    E[Subject evidence]
+    R1[Pre-semantic evidence root]
+    J[SemanticJudgmentReceipt]
+    EV[Terminal non-critical semantic event]
+    R2[Final TrialEvidence root]
+
+    E --> R1 -->|exact digest bound| J --> EV --> R2
+
+    classDef evidence fill:#dafbe1,stroke:#1a7f37,color:#24292f,stroke-width:2px
+    classDef advisory fill:#fbefff,stroke:#8250df,color:#24292f,stroke-width:2px
+    classDef terminal fill:#dafbe1,stroke:#1a7f37,color:#24292f,stroke-width:3px
+    class E,R1 evidence
+    class J,EV advisory
+    class R2 terminal
+    linkStyle default stroke:#57606a,stroke-width:1.5px
 ```
 
 The receipt binds scenario identity, subject identity, rubric identity, judge profile, accepted calibration identity, bounded judge-input digest, structured-response digest, derived decision, criterion results, and an outer domain-separated root.
@@ -166,7 +202,7 @@ A replayed semantic receipt therefore says, "this exact historical judgment rema
 
 Meaning-level dimensions such as groundedness, completeness, or answer quality are useful, but they answer different questions from deterministic state and safety gates.
 
-A system can therefore receive a semantic PASS and still be release-ineligible because of an unauthorized side effect. Conversely, a semantically poor answer can yield a non-critical semantic FAIL even when all state and policy checks passed. These conclusions are intentionally separate in `AssuranceReport` v4.
+A system can therefore receive a semantic PASS and still be release-ineligible because of an unauthorized side effect. Conversely, a semantically poor answer can yield a non-critical semantic FAIL even when all state and policy checks passed. These conclusions are intentionally separate in `AssuranceReport` predecessor revision.
 
 ## Capability and regression use
 
