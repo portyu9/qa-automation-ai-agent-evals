@@ -145,7 +145,7 @@ jobs:
           python-version: "3.11"
       - name: Build
         run: |
-          python -m pip install --disable-pip-version-check -r requirements-ci-build.txt
+          python -m pip install --disable-pip-version-check -r requirements-dev-ci-build.txt
           python -m build
       - name: Inspect distributions
         run: |
