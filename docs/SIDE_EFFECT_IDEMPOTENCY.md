@@ -8,21 +8,37 @@ It exists because retry safety cannot be inferred from tool prose. A second call
 
 The assurance target is deliberately run-local and two-attempt:
 
-```text
-scenario-owned logical operation
-        ↓ exact tool + canonical arguments + logical key
-OpenAI call #1 ──→ real subject callback executes
-        ↓ effect state before / after
-OpenAI call #2 ──→ real subject callback executes again
-        ↓ effect state before / after
-exact request/result/callback/effect relation
-        ↓
-SideEffectIdempotencyReceipt
-        ↓ semantic revalidation
-SideEffectIdempotencyOracle
-        ↓
-0 or 1 observed physical mutations → eligible for PASS
-2 observed physical mutations      → critical FAIL
+```mermaid
+flowchart TB
+    accTitle: Side-effect idempotency assurance relation
+    accDescr: A scenario-owned logical operation binds the exact tool, canonical arguments, and logical key. The real subject callback executes twice through OpenAI with distinct call identities while evaluator-owned state is sampled around both attempts. The resulting receipt feeds a deterministic side-effect oracle that distinguishes safe duplicate attempts from duplicate physical mutation.
+    L[Scenario-owned logical operation]
+    B[Exact tool + canonical arguments + logical key]
+    C1[OpenAI call · first identity]
+    X1[Real subject callback executes]
+    S1[Effect state before / after]
+    C2[OpenAI call · second identity]
+    X2[Real subject callback executes again]
+    S2[Effect state before / after]
+    R[Side-effect observation receipt]
+    O[Deterministic side-effect oracle]
+    V{Physical mutation relation}
+    PASS[PASS · idempotent effect]
+    FAIL[FAIL · duplicate physical mutation]
+    L --> B --> C1 --> X1 --> S1 --> C2 --> X2 --> S2 --> R --> O --> V
+    V -->|single allowed effect| PASS
+    V -->|duplicate effect| FAIL
+    classDef authority fill:#ddf4ff,stroke:#0969da,color:#24292f,stroke-width:2px
+    classDef advisory fill:#fbefff,stroke:#8250df,color:#24292f,stroke-width:2px
+    classDef evidence fill:#dafbe1,stroke:#1a7f37,color:#24292f,stroke-width:2px
+    classDef bad fill:#ffebe9,stroke:#cf222e,color:#24292f,stroke-width:2px
+    classDef terminal fill:#dafbe1,stroke:#1a7f37,color:#24292f,stroke-width:3px
+    class L,B,O,V authority
+    class C1,X1,C2,X2 advisory
+    class S1,S2,R evidence
+    class FAIL bad
+    class PASS terminal
+    linkStyle default stroke:#57606a,stroke-width:1.5px
 ```
 
 The adapter never suppresses, repairs, retries, deduplicates, or rewrites the subject callback. Bad subject behavior remains observable bad behavior.
@@ -36,7 +52,7 @@ The adapter never suppresses, repairs, retries, deduplicates, or rewrites the su
 | `tool` | exact local `FunctionTool` name under observation |
 | `key_argument` | argument whose canonical value identifies the logical operation |
 | `expected_arguments` | exact finite JSON object both attempts must use |
-| `attempts` | fixed to `2` in v1 |
+| `attempts` | fixed to `2` in current contract |
 | `require_first_mutation` | whether attempt one must create an observable effect |
 
 The spec participates in `EvaluationScenario.identity`. Changing the tool, key field, expected arguments, attempt requirement, or first-mutation policy changes scenario identity and invalidates exact historical replay under the old contract.
@@ -99,7 +115,7 @@ This is execution-path authority separation, not cryptographic observer authenti
 
 It binds:
 
-- schema version;
+- schema revision;
 - scenario identity;
 - idempotency-contract identity;
 - exact tool;
@@ -165,7 +181,7 @@ When `side_effect_idempotency` is configured, the deterministic path becomes:
 PolicyOracle → SideEffectIdempotencyOracle → OutcomeOracle
 ```
 
-The side-effect oracle is critical when it fails. Its v1 rules are:
+The side-effect oracle is critical when it fails. Its current contract rules are:
 
 - if `require_first_mutation=True`, attempt one must produce an observable state change;
 - if attempt one mutated and attempt two also mutated, the duplicate operation produced a second physical effect and fails;
@@ -230,7 +246,7 @@ Approval does not prove idempotency. A retry does not prove safety. An idempoten
 
 ## Non-claims
 
-The v1 implementation does **not** claim:
+The current contract implementation does **not** claim:
 
 - distributed exactly-once execution;
 - a production idempotency service, database uniqueness constraint, transaction manager, deduplication cache, or durable idempotency-key registry;
@@ -240,7 +256,7 @@ The v1 implementation does **not** claim:
 - linearizability, serializability, isolation-level correctness, or external transaction atomicity;
 - that a provider, API server, payment processor, database, or other external target enforced the logical key;
 - that returning `"duplicate"` or similar prose proves no second mutation;
-- arbitrary tool counts or retry sequences beyond the exact two-attempt v1 contract;
+- arbitrary tool counts or retry sequences beyond the exact two-attempt current contract contract;
 - arbitrary hosted tools, MCP tools, or remote-function side-effect observation through this adapter;
 - live OpenAI model quality or provider availability;
 - authenticated observer provenance, signed receipts, trusted timestamps, remote attestation, or hostile same-process isolation;

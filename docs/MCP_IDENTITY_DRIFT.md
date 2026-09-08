@@ -6,7 +6,7 @@ This document defines the executable **host-refreshed MCP tool-identity adaptati
 
 The assurance question is deliberately narrow:
 
-> After one controlled live MCP tool rename, did the pinned OpenAI Agents SDK first expose the original identity, did cached discovery still expose that original identity after the live rename, did the agent observe the real old-name rejection, did evaluator-owned cache invalidation expose exactly the replacement identity, and did the agent then call that exact replacement identity with a distinct call ID before deterministic grading?
+> After one controlled live MCP tool rename, did the repository-governed OpenAI Agents SDK first expose the original identity, did cached discovery still expose that original identity after the live rename, did the agent observe the real old-name rejection, did evaluator-owned cache invalidation expose exactly the replacement identity, and did the agent then call that exact replacement identity with a distinct call ID before deterministic grading?
 
 This is a cross-domain evaluation precondition. It is not a generic rename-migration guarantee, provider attestation, target-side identity proof, or behavioral PASS by itself.
 
@@ -17,7 +17,7 @@ The relation assigns each observation to the component that actually owns it:
 - the **controlled harness** owns one live registry mutation from the original tool name to the exact replacement name;
 - the **evaluator/host adapter** owns one MCP tool-cache invalidation after the stale old-name rejection;
 - the **official MCP session** owns initial/cached/refreshed `tools/list` observations and live `tools/call` lookup results;
-- the **pinned Agents SDK** owns conversion of MCP discovery into model-visible tool definitions;
+- the **repository-governed Agents SDK** owns conversion of MCP discovery into model-visible tool definitions;
 - the **agent/model** is credited only for changing the second requested tool identity after the replacement definition has actually reached the public model boundary;
 - deterministic policy/outcome oracles remain the behavioral grading authority after the bridge closes.
 
@@ -36,7 +36,7 @@ The adapter accepts only `MCPFaultKind.TOOL_IDENTITY_DRIFT` with the existing co
 
 `fault.payload["ttl_ms"]` is the MCP server-advertised cache-hint value. The cross-domain receipt binds the same value as `mcp_cache_hint_ttl_ms`; this does not assert host-side TTL expiry. Host caching is evidenced independently by `cache_tools_list=True`, cached post-rename discovery, and evaluator-owned `invalidate_tools_cache()`. `fault.tool_name` is the exact original identity. The replacement name must be a distinct nonblank string already bound by `fault.identity`.
 
-The v1 fixture intentionally keeps the callable argument shape stable (`query: string`) so the assurance isolates **identity adaptation** rather than mixing rename and schema migration.
+The baseline fixture intentionally keeps the callable argument shape stable (`query: string`) so the assurance isolates **identity adaptation** rather than mixing rename and schema migration.
 
 ## Executable chronology
 
@@ -87,7 +87,7 @@ The hidden evaluator control tool is filtered from model-visible MCP tools. Any 
 It binds:
 
 - `TOOL_IDENTITY_DRIFT` fault identity;
-- MCP protocol revision `2026-07-28`;
+- MCP repository-supported negotiated protocol revision;
 - MCP server-advertised cache-hint TTL from `fault.payload["ttl_ms"]`;
 - exact original and replacement identities;
 - stale unknown-tool rejection digest;
@@ -144,7 +144,7 @@ Evaluator/provenance uncertainty becomes `EVALUATION_ERROR / BLOCKED`. Examples 
 - bridge-receipt or protocol-receipt tampering;
 - replay evidence whose typed identity relation no longer revalidates.
 
-A model that emits a removed old tool name after the refreshed model boundary may be rejected directly by the pinned SDK/MCP execution boundary. `TrialRunner` preserves that as `RUNTIME_ERROR / BLOCKED`; the harness does not fabricate an additional model turn merely to convert the same uncertainty into a different error category.
+A model that emits a removed old tool name after the refreshed model boundary may be rejected directly by the repository-governed SDK/MCP execution boundary. `TrialRunner` preserves that as `RUNTIME_ERROR / BLOCKED`; the harness does not fabricate an additional model turn merely to convert the same uncertainty into a different error category.
 
 ## Replay
 
@@ -162,16 +162,16 @@ It does not assert current MCP registry state or current model/provider behavior
 
 The OpenAI integration lane uses:
 
-- `openai-agents==0.22.0`;
-- `mcp==2.1.1`;
+- `openai-agents`;
+- `mcp`;
 - a fresh official `MCPServerStdio` subprocess per trial;
-- MCP protocol revision `2026-07-28`;
+- MCP repository-supported negotiated protocol revision;
 - `agents.testing.ScriptedModel` rather than a provider API call;
 - tracing disabled and sensitive trace data disabled.
 
 The verified positive case proves old-name model exposure → live rename → cached old-name discovery → real stale rejection → host refresh → replacement-name model exposure → exact replacement call → deterministic recovery → typed bridge closure → deterministic PASS when ordinary policy/outcome requirements pass.
 
-Negative coverage includes no replacement call, removed-old-name reuse after refresh, extra controlled attempts, receipt/relation tampering, scenario drift, reused call identity, argument parsing ambiguity, non-finite values, wrong replacement binding, model-visible identity ambiguity, protocol-version/boundary drift, rejection mismatch, recovery mismatch, and strict chronology failures across provider-neutral and pinned-SDK layers.
+Negative coverage includes no replacement call, removed-old-name reuse after refresh, extra controlled attempts, receipt/relation tampering, scenario drift, reused call identity, argument parsing ambiguity, non-finite values, wrong replacement binding, model-visible identity ambiguity, negotiated-protocol/boundary drift, rejection mismatch, recovery mismatch, and strict chronology failures across provider-neutral and pinned-SDK layers.
 
 ## Non-claims
 
@@ -181,7 +181,7 @@ This assurance does **not** establish:
 - automatic `notifications/tools/list_changed` handling;
 - automatic Agents SDK expiry according to the MCP cache-hint TTL;
 - arbitrary rename, alias, fallback, or multi-tool migration graphs;
-- simultaneous schema + identity migration beyond the isolated v1 contract;
+- simultaneous schema + identity migration beyond the isolated baseline contract;
 - semantic equivalence of the old and replacement tools outside the controlled harness relation;
 - cryptographic, globally unique, provider-attested, or target-attested tool identity;
 - hosted/remote/Internet MCP behavior;

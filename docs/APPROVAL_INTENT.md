@@ -15,29 +15,37 @@ The stronger contract is opt-in. It does not silently change legacy scenarios.
 
 For an approval decision, the executable relation is:
 
-```text
-scenario-bound ApprovalIntentSpec
-        ↓
-native SDK ToolApprovalItem interruption
-        ↓
-APPROVAL_REQUEST
-  exact generating agent
-  exact tool
-  stable call identity
-  canonical finite-JSON argument digest
-  exact normalized resource when scoped
-  accepted handoff-authority epoch
-  exact accepted handoff-path hash
-        ↓
-framework-owned APPROVAL_DECISION receipt
-        ↓ same SDK RunState
-approve ──────────────── reject
-  ↓                         ↓
-matching TOOL_REQUEST       no executable TOOL_REQUEST
-  ↓                         ↓
-matching TOOL_RESULT        explicit rejection TOOL_RESULT
-  ↓                         ↓
-deterministic policy/outcome grading
+```mermaid
+flowchart TB
+    accTitle: Native HITL approval intent lifecycle
+    accDescr: A scenario-owned approval intent targets one exact pending native invocation. The evaluator records the approval request with call, argument, resource, and accepted authority-path identity, binds an approve or reject decision in a typed receipt, resumes the same run state, verifies the exact continuation, then permits deterministic grading.
+
+    S[Scenario-bound ApprovalIntentSpec]
+    I[Native ToolApprovalItem interruption]
+    R[APPROVAL_REQUEST]
+    D[Framework-owned APPROVAL_DECISION receipt]
+    Q{Decision}
+    AR[Exact matching TOOL_REQUEST]
+    AO[Exact matching TOOL_RESULT]
+    RR[No protected TOOL_REQUEST]
+    RO[Explicit rejection TOOL_RESULT]
+    V[Verify approval relation]
+    G[Deterministic policy + outcome grading]
+
+    S --> I --> R --> D --> Q
+    Q -->|approve| AR --> AO --> V
+    Q -->|reject| RR --> RO --> V
+    V --> G
+
+    classDef advisory fill:#fbefff,stroke:#8250df,color:#24292f,stroke-width:2px
+    classDef authority fill:#ddf4ff,stroke:#0969da,color:#24292f,stroke-width:2px
+    classDef evidence fill:#dafbe1,stroke:#1a7f37,color:#24292f,stroke-width:2px
+    classDef terminal fill:#dafbe1,stroke:#1a7f37,color:#24292f,stroke-width:3px
+    class I,Q advisory
+    class S,V authority
+    class R,D,AR,AO,RR,RO evidence
+    class G terminal
+    linkStyle default stroke:#57606a,stroke-width:1.5px
 ```
 
 The evaluator verifies the complete relation before deterministic grading. A receipt is not treated as opaque trusted JSON merely because it is structurally valid.
@@ -81,7 +89,7 @@ A pending approval must never be counted as a completed execution merely because
 
 `ApprovalIntentReceipt` binds:
 
-- `receipt_schema` — exact receipt contract version;
+- `receipt_schema` — exact receipt contract identity;
 - `scenario_identity` — the complete scenario identity;
 - `decision` — `approve` or `reject`;
 - `agent` — exact run-local generating-agent identity;
@@ -236,7 +244,7 @@ An approval workflow cannot turn an unauthorized pending action into an authoriz
 
 ## OpenAI Agents SDK boundary
 
-`OpenAIAgentsHITLApprovalAdapter` is built on the pinned `openai-agents==0.22.0` public SDK surface. For fresh `APPROVAL_DECISION` evidence, `TrialRunner` reserves live producer authority to the **exact** built-in adapter type; a custom adapter, copied adapter name, source label, or subclass does not inherit that authority. Provider-neutral adapters remain free to emit ordinary observations, but they cannot manufacture the framework-owned stronger decision that changes authorization state.
+`OpenAIAgentsHITLApprovalAdapter` is built on the pinned `openai-agents` public SDK surface. For fresh `APPROVAL_DECISION` evidence, `TrialRunner` reserves live producer authority to the **exact** built-in adapter type; a custom adapter, copied adapter name, source label, or subclass does not inherit that authority. Provider-neutral adapters remain free to emit ordinary observations, but they cannot manufacture the framework-owned stronger decision that changes authorization state.
 
 The deterministic integration tests exercise real SDK mechanics with `agents.testing.ScriptedModel` and no provider API call:
 
@@ -336,7 +344,7 @@ This path does **not** establish:
 - organization/user identity or tenant membership;
 - arbitrary hosted-tool or MCP approval behavior;
 - authorization of an external target merely because evaluator-owned evidence says an invocation was approved;
-- general human-in-the-loop safety for systems outside the exact pinned SDK boundary.
+- general human-in-the-loop safety for systems outside the exact repository-governed SDK boundary.
 
 The claim is intentionally narrower: **one evaluator-owned decision is integrity-bound to one exact native SDK approval interruption and its exact observed continuation inside the controlled deterministic harness.**
 

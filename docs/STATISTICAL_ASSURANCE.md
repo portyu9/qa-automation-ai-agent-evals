@@ -83,9 +83,9 @@ A raw positive percentage delta is not enough to claim an established improvemen
 
 ## Assurance-report reproducibility
 
-Assurance Report v5 persists exact `k` and `confidence_z` inside its reliability snapshot and rederives reliability from the bound terminal trial verdicts with those parameters before report-level release claims are accepted. V5 also retains the v4 scenario grading-profile binding and preserves explicit `POLICY_VIOLATION` facts from terminal `BLOCKED` evidence as bounded blocked-policy snapshots that affect non-compensatory release criticality without turning the blocked trial into completed deterministic grading.
+The current Assurance Report schema persists exact `k` and `confidence_z` inside its reliability snapshot and rederives reliability from the bound terminal trial verdicts with those parameters before report-level release claims are accepted. The current schema also retains the predecessor schema's scenario grading-profile binding and preserves explicit `POLICY_VIOLATION` facts from terminal `BLOCKED` evidence as bounded blocked-policy snapshots that affect non-compensatory release criticality without turning the blocked trial into completed deterministic grading.
 
-The schema history is explicit rather than silently reinterpreted: v2 did not persist `confidence_z`; v3 added it; v4 added `ScenarioGradingProfile`; v5 added blocked explicit-policy preservation and a new domain-separated report root. Older report schemas are rejected by the v5 model rather than read under v5 semantics. See [Session Assurance Reports](ASSURANCE_REPORTS.md).
+The schema history is explicit rather than silently reinterpreted: the legacy schema did not persist `confidence_z`; an earlier schema added it; the predecessor schema added `ScenarioGradingProfile`; the current schema added blocked explicit-policy preservation and a new domain-separated report root. Older report schemas are rejected by the current report model rather than read under the current schema's semantics. See [Session Assurance Reports](ASSURANCE_REPORTS.md).
 
 ## Release-gate semantics
 

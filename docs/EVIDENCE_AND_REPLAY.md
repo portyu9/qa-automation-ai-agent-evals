@@ -11,6 +11,35 @@ These capabilities solve two different problems:
 
 Neither capability establishes who originally wrote the bytes, proves that a provider is currently available, or re-executes a side effect.
 
+## Persistence and replay control flow
+
+```mermaid
+flowchart LR
+    accTitle: Evidence persistence and exact-identity replay
+    accDescr: TrialEvidence is canonicalized and committed with a manifest after bounded integrity checks. Reads reverify file, manifest, payload, identity, hash, and semantic root. Exact-identity replay re-emits only verified historical evidence, after which required receipt relations and deterministic oracles are applied again without recreating external side effects.
+
+    T[TrialEvidence]
+    C[Canonical serialization + size bounds]
+    W[No-clobber payload publication]
+    M[Manifest commit marker]
+    R[Bounded read + filesystem checks]
+    V[Payload hash + identity + evidence-root verification]
+    A[EvidenceReplayAdapter]
+    P[Required receipt / relation revalidation]
+    D[Deterministic regrading]
+
+    T --> C --> W --> M --> R --> V --> A --> P --> D
+
+    classDef authority fill:#ddf4ff,stroke:#0969da,color:#24292f,stroke-width:2px
+    classDef evidence fill:#dafbe1,stroke:#1a7f37,color:#24292f,stroke-width:2px
+    classDef terminal fill:#dafbe1,stroke:#1a7f37,color:#24292f,stroke-width:3px
+    class C,R,V,P,D authority
+    class T,W,M,A evidence
+    linkStyle default stroke:#57606a,stroke-width:1.5px
+```
+
+**Diagram key:** green = evidence/artifact state · blue = evaluator verification or grading authority.
+
 ## Three identities, three jobs
 
 The store deliberately does not overload one hash with several meanings.
@@ -189,7 +218,7 @@ The metadata replay verifier does not recreate MCP discovery or a model request.
 
 The stale-cache replay verifier does not reconnect to MCP or recreate removal/cache invalidation. It revalidates the nested stale-cache protocol receipt, scenario/tool/MCP-cache-hint binding (`mcp_cache_hint_ttl_ms` at the bridge boundary), target-present and target-absent model digests, exact stale call ID and argument digest, exact protocol/model rejection digest, strict six-step protocol chronology, and the persisted normalized request < result < delivery relation. See [MCP Stale-Cache Tool-Removal Assurance](MCP_STALE_CACHE.md).
 
-The schema-drift replay verifier does not recreate a refresh. It checks that the historical receipt still proves the exact recorded relation: bound v1/cached/v2 schema digests, stale/recovery argument digests, matching protocol/model-visible observations, distinct call identities, strict `initial-list < swap < cached-list < stale-call < cache-invalidation < refreshed-list < recovery-call` chronology, and a valid domain-separated root.
+The schema-drift replay verifier does not recreate a refresh. It checks that the historical receipt still proves the exact recorded relation: bound initial/cached/replacement schema digests, stale/recovery argument digests, matching protocol/model-visible observations, distinct call identities, strict `initial-list < swap < cached-list < stale-call < cache-invalidation < refreshed-list < recovery-call` chronology, and a valid domain-separated root.
 
 The identity-drift replay verifier likewise does not reconnect to MCP or recreate a rename/cache refresh. It revalidates the nested `TOOL_IDENTITY_DRIFT` protocol receipt, exact original and replacement identities, initial/refreshed model-visible controlled identity sets, distinct stale/recovery call IDs, strict finite canonical argument digests, protocol/model rejection and recovery digests, the same seven-leg protocol chronology, scenario identity, and domain-separated bridge root. A historical receipt therefore proves only that the persisted run contained that exact host-refreshed identity-adaptation relation; it does not assert current MCP registry or model behavior. See [MCP Tool-Identity Drift Assurance](MCP_IDENTITY_DRIFT.md).
 

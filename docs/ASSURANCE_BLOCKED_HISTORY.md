@@ -4,7 +4,7 @@ Assurance construction treats a terminal `BLOCKED` verdict as an evaluator/runti
 
 ## Bidirectional invariant
 
-When `AssuranceReport.from_session()` constructs `agent-evals/assurance-report/v5` from an `EvaluationSessionResult`, the trial verdict and the final evidence envelope must agree in both directions:
+When `AssuranceReport.from_session()` constructs `agent-evals/assurance-report/<schema>` from an `EvaluationSessionResult`, the trial verdict and the final evidence envelope must agree in both directions:
 
 - a `BLOCKED` trial must contain blocking evidence recognized by the runtime's canonical `has_blocking_evidence()` predicate;
 - a non-`BLOCKED` trial must not contain that blocking evidence.
@@ -25,7 +25,7 @@ Instead, construction verifies that the terminal blocked classification has dura
 
 A blocked run can contain an explicit `POLICY_VIOLATION` that is already a resolved fact. One concrete example is native HITL turn-budget handling: the adapter can know that the subject exceeded the configured turn budget while a different approval-continuation relation remains unverifiable. The trial must stay `BLOCKED`, because the missing relation prevents valid complete grading, but the known policy violation must not disappear from release authority.
 
-Assurance v5 therefore adds `BlockedPolicyViolationSnapshot` to blocked trial records. Each snapshot is derived only by `AssuranceReport.from_session()` from an actual `POLICY_VIOLATION` event in the exact final `TrialEvidence` and records:
+The current Assurance schema therefore adds `BlockedPolicyViolationSnapshot` to blocked trial records. Each snapshot is derived only by `AssuranceReport.from_session()` from an actual `POLICY_VIOLATION` event in the exact final `TrialEvidence` and records:
 
 - the event sequence;
 - the exact event digest;
@@ -34,7 +34,7 @@ Assurance v5 therefore adds `BlockedPolicyViolationSnapshot` to blocked trial re
 
 The event digest commits to the complete event, including its kind, payload, source, sequence, observed timestamp, and event-level critical flag. The duplicated source and reason are review material; they are not independent evidence authority.
 
-V5 does not create policy snapshots for non-blocked trials. Those trials continue to derive critical policy authority from completed deterministic oracle results.
+The current schema does not create policy snapshots for non-blocked trials. Those trials continue to derive critical policy authority from completed deterministic oracle results.
 
 ## Release-gate semantics
 
@@ -51,7 +51,7 @@ This preserves both sides of the framework's central distinction:
 
 ## Resolved history
 
-For `PASS`, `FAIL`, and `INCONCLUSIVE` trials, Assurance v5 rejects any evaluator/runtime blocking evidence and re-establishes the ordinary pre-grading closure before accepting deterministic oracle facts and, when configured, semantic judgment evidence.
+For `PASS`, `FAIL`, and `INCONCLUSIVE` trials, the current Assurance schema rejects any evaluator/runtime blocking evidence and re-establishes the ordinary pre-grading closure before accepting deterministic oracle facts and, when configured, semantic judgment evidence.
 
 This keeps the classification boundary explicit:
 
@@ -61,16 +61,16 @@ This keeps the classification boundary explicit:
 
 ## Standalone report parsing
 
-The serialized Assurance Report intentionally stores evidence roots rather than duplicating every evidence event. V5 additionally stores the bounded blocked-policy snapshots described above. Loading a standalone v5 report can therefore recompute report-level shape, critical-violation count, reliability, gate output, and `report_root`, but it still cannot independently reconstruct the complete event stream referenced by an `evidence_root`.
+The serialized Assurance Report intentionally stores evidence roots rather than duplicating every evidence event. The current schema additionally stores the bounded blocked-policy snapshots described above. Loading a standalone current-schema report can therefore recompute report-level shape, critical-violation count, reliability, gate output, and `report_root`, but it still cannot independently reconstruct the complete event stream referenced by an `evidence_root`.
 
 The exact correspondence between each blocked-policy snapshot and its source event is established when constructing the report from the exact session/evidence objects. Historical event-level re-establishment still requires the exact evidence/replay path. The `report_root` binds the snapshots into report content, but remains a content-integrity commitment rather than a signature, trusted timestamp, publisher identity, or proof of honest evidence production.
 
-## Versioning
+## Schema evolution
 
-This hardening changes the Assurance Report derivation surface, so it is versioned rather than silently changing v4 semantics:
+This hardening changes the Assurance Report derivation surface, so it uses a distinct revision rather than silently changing the predecessor schema's semantics:
 
-- evidence: `agent-evals/trial-evidence/v2` (unchanged)
-- assurance report: `agent-evals/assurance-report/v5`
-- report-root domain: `agent-evals/assurance-report/v5\0`
+- evidence: `agent-evals/trial-evidence/<schema>` (unchanged)
+- assurance report: `agent-evals/assurance-report/<schema>`
+- report-root domain: `agent-evals/assurance-report/<schema>\0`
 
-V4 reports are rejected by the v5 model rather than being interpreted under the new blocked-policy criticality rules.
+Predecessor reports are rejected by the current report model rather than being interpreted under the new blocked-policy criticality rules.

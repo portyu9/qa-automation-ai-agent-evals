@@ -8,7 +8,7 @@ It answers:
 
 > Did the resource-server boundary enforce the configured authentication and authorization contract over actual HTTP, and can an authorized MCP client complete a real protocol request through that boundary?
 
-The implementation uses `mcp==2.1.1`, `httpx2`, Uvicorn, a pre-bound `127.0.0.1` TCP socket, `MCPServer.streamable_http_app()`, the official Streamable HTTP client transport, and protocol revision `2026-07-28`.
+The implementation uses `mcp`, `httpx2`, Uvicorn, a pre-bound `127.0.0.1` TCP socket, `MCPServer.streamable_http_app()`, the official Streamable HTTP client transport, and repository-supported negotiated protocol revision.
 
 It does not turn authorization evidence into an agent verdict. It also does not itself prove authorization-code issuance, PKCE, registration, or introspection; those are exercised by the separate [MCP OAuth Flow Laboratory](MCP_OAUTH_FLOW.md).
 
@@ -32,24 +32,27 @@ The SDK is **not** credited with issuer/resource validation that the custom veri
 
 The test does not use an in-process ASGI client.
 
-```text
-MCPRemoteAuthPolicy
-        ↓
-pre-bound 127.0.0.1 TCP socket
-        ↓
-Uvicorn
-        ↓
-MCP Streamable HTTP resource server
-        ↓
-bearer authentication / scope middleware
-        ↓
-protected MCP protocol endpoint
-        ↓
-real HTTP client + official MCP Streamable HTTP client
-        ↓
-MCPRemoteAuthProbeResult
-        ↓
-MCPRemoteAuthReceipt
+```mermaid
+flowchart TB
+    accTitle: MCP remote authorization network boundary
+    accDescr: A content-addressed remote-auth policy configures a pre-bound loopback socket and Uvicorn-hosted MCP resource server. Bearer authentication and scope middleware protect the protocol endpoint. Real HTTP and official MCP clients produce a probe result that is integrity-bound into the authorization receipt.
+    P[MCPRemoteAuthPolicy]
+    S[Pre-bound loopback TCP socket]
+    U[Uvicorn]
+    R[MCP Streamable HTTP resource server]
+    A[Bearer authentication + scope middleware]
+    E[Protected MCP endpoint]
+    C[Real HTTP + official MCP clients]
+    O[MCPRemoteAuthProbeResult]
+    RC[MCPRemoteAuthReceipt]
+    P --> S --> U --> R --> A --> E --> C --> O --> RC
+    classDef authority fill:#ddf4ff,stroke:#0969da,color:#24292f,stroke-width:2px
+    classDef boundary fill:#ffebe9,stroke:#cf222e,color:#24292f,stroke-width:2px,stroke-dasharray:5 3
+    classDef evidence fill:#dafbe1,stroke:#1a7f37,color:#24292f,stroke-width:2px
+    class P authority
+    class S,U,R,A,E,C boundary
+    class O,RC evidence
+    linkStyle default stroke:#57606a,stroke-width:1.5px
 ```
 
 A socket is bound before Uvicorn starts, preventing a check-then-bind race when selecting an ephemeral port. Server startup and shutdown are bounded, and the listener is closed even when the probe fails.
@@ -66,7 +69,7 @@ That label is intentionally narrower than `remote`, `Internet`, or `production` 
 
 `MCPRemoteAuthPolicy` is immutable and binds:
 
-- schema version;
+- schema revision;
 - stable lab ID;
 - revision;
 - absolute HTTPS authorization-server issuer URL;
@@ -82,14 +85,25 @@ The policy rejects malformed issuer URLs, invalid resource paths, blank/duplicat
 
 The test constructs deterministic non-secret token values and a verifier-owned token record set. It then observes this matrix through real HTTP:
 
-```text
-missing token           → 401 invalid_token
-unknown token           → 401 invalid_token
-expired token           → 401 invalid_token
-wrong issuer            → verifier rejects → 401 invalid_token
-wrong resource          → verifier rejects → 401 invalid_token
-missing required scope  → 403 insufficient_scope
-valid scoped token      → tools/list + protected tools/call succeed
+```mermaid
+flowchart TB
+    accTitle: Deterministic MCP authorization matrix
+    accDescr: Missing, unknown, expired, issuer-mismatched, or resource-mismatched bearer credentials are rejected as unauthenticated. Missing required scope is authenticated but forbidden. Only a valid scoped token proceeds to protected discovery and tool invocation.
+    Q{Observed credential case}
+    U[Unauthenticated rejection]
+    F[Insufficient-scope rejection]
+    V[Valid scoped bearer]
+    P[Protected tools/list + tools/call succeed]
+    Q -->|missing / unknown / expired / wrong issuer / wrong resource| U
+    Q -->|missing required scope| F
+    Q -->|valid scoped token| V --> P
+    classDef advisory fill:#fbefff,stroke:#8250df,color:#24292f,stroke-width:2px
+    classDef bad fill:#ffebe9,stroke:#cf222e,color:#24292f,stroke-width:2px
+    classDef terminal fill:#dafbe1,stroke:#1a7f37,color:#24292f,stroke-width:3px
+    class Q advisory
+    class U,F bad
+    class V,P terminal
+    linkStyle default stroke:#57606a,stroke-width:1.5px
 ```
 
 Both 401 and 403 challenges must expose the protected-resource metadata location through `WWW-Authenticate`.
@@ -122,9 +136,9 @@ Metadata is independent evidence. The laboratory does not infer it merely from l
 
 `MCPRemoteAuthReceipt` binds:
 
-- schema version;
+- schema revision;
 - exact `MCPRemoteAuthPolicy.identity`;
-- negotiated/adopted protocol version;
+- negotiated protocol revision;
 - transport identity;
 - SHA-256 of the canonical complete authorization observation;
 - domain-separated receipt root.

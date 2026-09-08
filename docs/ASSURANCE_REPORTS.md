@@ -2,39 +2,39 @@
 
 ## Purpose
 
-`AssuranceReport` is a self-validating session-level artifact for review, CI handoff, and later audit. Version `agent-evals/assurance-report/v5` binds the `agent-evals/trial-evidence/v2` schema, exact trial evidence roots, the scenario-derived grading profile introduced in v4, deterministic oracle snapshots for resolved grading, explicit policy facts retained by blocked trials, subordinate semantic judgments when required, reproducible reliability configuration, frozen release policy, and the release-gate decision derived from that session.
+`AssuranceReport` is a self-validating session-level artifact for review, CI handoff, and later audit. The current `agent-evals/assurance-report/<schema>` contract binds the `agent-evals/trial-evidence/<schema>` schema, exact trial evidence roots, the scenario-derived grading profile introduced in the predecessor schema, deterministic oracle snapshots for resolved grading, explicit policy facts retained by blocked trials, subordinate semantic judgments when required, reproducible reliability configuration, frozen release policy, and the release-gate decision derived from that session.
 
 The report is deliberately **not** another execution or grading authority. It preserves conclusions and verifies the report-level derivation that can be recomputed from the artifact itself.
 
-## Why v5 exists
+## Why the current schema exists
 
-Assurance v4 correctly separated `BLOCKED` from subject failure: blocked trials could not carry completed oracle snapshots or finalized semantic grading authority, and construction required durable evaluator/runtime blocking evidence. That prevented unknown evaluation outcomes from being mislabeled as bad subject behavior.
+The predecessor Assurance schema correctly separated `BLOCKED` from subject failure: blocked trials could not carry completed oracle snapshots or finalized semantic grading authority, and construction required durable evaluator/runtime blocking evidence. That prevented unknown evaluation outcomes from being mislabeled as bad subject behavior.
 
 One safety fact was still lost. A trial can be correctly `BLOCKED` because one evaluation relation remains unresolved while also containing an explicit `POLICY_VIOLATION` that is already known. Native HITL turn-budget handling is a concrete example: the adapter can preserve a known turn-budget violation while refusing to fabricate a missing approval-continuation relation. Full deterministic grading is invalid, so the trial must remain `BLOCKED`; however, the known policy violation must not disappear when the report computes release criticality.
 
-V4 derived `critical_violations` only from failed critical deterministic oracle snapshots. Because blocked trials correctly have no oracle snapshots, a release policy that tolerated one blocked trial could accept a session even when that blocked evidence retained an explicit policy violation and the policy required `max_critical_violations=0`.
+The predecessor schema derived `critical_violations` only from failed critical deterministic oracle snapshots. Because blocked trials correctly have no oracle snapshots, a release policy that tolerated one blocked trial could accept a session even when that blocked evidence retained an explicit policy violation and the policy required `max_critical_violations=0`.
 
-V5 closes that fail-open shape without regrading blocked evidence.
+The current schema closes that fail-open shape without regrading blocked evidence.
 
-## Version boundary
+## Schema boundary
 
-V5 changes the Assurance artifact derivation surface and therefore uses a new schema and root domain rather than silently changing v4 semantics:
+The current schema changes the Assurance artifact derivation surface and therefore uses a new schema and root domain rather than silently changing the predecessor schema's semantics:
 
-- assurance report: `agent-evals/assurance-report/v5`
-- evidence: `agent-evals/trial-evidence/v2` (unchanged)
-- report-root domain: `agent-evals/assurance-report/v5\0`
+- assurance report: `agent-evals/assurance-report/<schema>`
+- evidence: `agent-evals/trial-evidence/<schema>` (unchanged)
+- report-root domain: `agent-evals/assurance-report/<schema>\0`
 
-V4 artifacts are rejected by the v5 model. A v4 report is not silently interpreted under v5 criticality semantics.
+The predecessor schema artifacts are rejected by the current report model. A predecessor-schema report is not silently interpreted under the current schema's criticality semantics.
 
 Historically:
 
-- v3 added exact Wilson `confidence_z` persistence;
-- v4 added `ScenarioGradingProfile`, closing report-level semantic and side-effect grading-shape omission gaps;
-- v5 retains those guarantees and adds blocked explicit-policy fact preservation.
+- an earlier schema added exact Wilson `confidence_z` persistence;
+- the predecessor schema added `ScenarioGradingProfile`, closing report-level semantic and side-effect grading-shape omission gaps;
+- the current schema retains those guarantees and adds blocked explicit-policy fact preservation.
 
 ## Authority separation
 
-V5 keeps four authority classes distinct:
+The current schema keeps four authority classes distinct:
 
 1. **deterministic oracle snapshots** — completed framework grading for non-blocked trials. Framework-owned tuples are rederived from exact scenario/evidence during `from_session()` and must exactly equal the finalized runtime tuple;
 2. **blocked explicit-policy snapshots** — bounded facts copied only from actual `POLICY_VIOLATION` events in blocked evidence. They affect release criticality but do not make the blocked trial fully graded;
@@ -45,47 +45,53 @@ Semantic grading remains subordinate to deterministic grading. It can narrow det
 
 Blocked policy snapshots remain subordinate to the original evidence. They are not synthetic policy-oracle results and do not convert `BLOCKED` into `FAIL`.
 
-```text
-exact EvaluationScenario
-        ↓ identity check + grading-profile derivation
-ScenarioGradingProfile
-        ↓
-exact final TrialEvidence + completion root
-        ├─ resolved trial
-        │    ↓ shared pre-grading closure
-        │  rederived deterministic oracle tuple
-        │    ↓ exact equality with finalized tuple
-        │  deterministic snapshots
-        │    └─ optional exact SemanticJudgmentReceipt after deterministic PASS
-        │
-        └─ BLOCKED trial
-             ↓ durable EVALUATION_ERROR / RUNTIME_ERROR required
-           no completed oracle tuple
-           no semantic authority
-             ↓ extract only actual POLICY_VIOLATION events
-           BlockedPolicyViolationSnapshot tuple
-        ↓
-terminal trial verdicts + exact k + confidence_z
-        ↓
-recomputed reliability
-        ↓ + deterministic critical failures
-          + blocked policy-oracle-equivalent critical failures
-          + frozen ReleasePolicy
-release-gate decision + reasons
-        ↓
-canonical v5 report_root
+```mermaid
+flowchart TB
+    accTitle: Assurance report derivation from exact scenario and trial evidence
+    accDescr: The exact evaluation scenario derives a grading profile and is identity-checked against final trial evidence. Resolved trials rederive deterministic oracle snapshots and optional semantic evidence. Blocked trials preserve only explicit policy-violation facts without fabricating completed grading. Terminal trial records feed reliability and the frozen release policy to derive the canonical assurance report root.
+    S[Exact EvaluationScenario]
+    P[ScenarioGradingProfile]
+    E[Exact final TrialEvidence + completion root]
+    Q{Terminal trial state}
+    C[Shared pre-grading closure]
+    O[Re-derived deterministic oracle tuple]
+    OS[Deterministic snapshots]
+    SJ[Optional exact SemanticJudgmentReceipt]
+    B[Durable blocking evidence]
+    BP[BlockedPolicyViolationSnapshot tuple]
+    T[Terminal trial records]
+    R[Recomputed reliability]
+    F[Frozen ReleasePolicy + critical facts]
+    G[Release-gate decision + reasons]
+    ROOT[Canonical report root]
+    S -->|identity check + profile derivation| P --> E --> Q
+    Q -->|resolved| C --> O --> OS --> T
+    OS -->|deterministic PASS + rubric| SJ --> T
+    Q -->|BLOCKED| B --> BP --> T
+    T --> R --> F --> G --> ROOT
+    classDef authority fill:#ddf4ff,stroke:#0969da,color:#24292f,stroke-width:2px
+    classDef evidence fill:#dafbe1,stroke:#1a7f37,color:#24292f,stroke-width:2px
+    classDef advisory fill:#fbefff,stroke:#8250df,color:#24292f,stroke-width:2px
+    classDef blocked fill:#ffebe9,stroke:#cf222e,color:#24292f,stroke-width:2px,stroke-dasharray:5 3
+    classDef terminal fill:#dafbe1,stroke:#1a7f37,color:#24292f,stroke-width:3px
+    class S,P,C,O,R,F,G authority
+    class E,OS,BP,T evidence
+    class SJ advisory
+    class B blocked
+    class ROOT terminal
+    linkStyle default stroke:#57606a,stroke-width:1.5px
 ```
 
 ## Scenario grading profile
 
-`ScenarioGradingProfile` remains the minimal scenario disclosure surface introduced in v4. It records only scenario facts that determine report-level grading shape:
+`ScenarioGradingProfile` remains the minimal scenario disclosure surface introduced in the predecessor schema. It records only scenario facts that determine report-level grading shape:
 
 - `semantic_rubric_identity` — exact rubric identity or `null`;
 - `side_effect_idempotency_identity` — exact side-effect contract identity or `null`.
 
 The profile intentionally does not serialize the full scenario objective, state, authority, retrieval material, approval intent, required/forbidden outcomes, or tags. Those remain bound by `scenario_identity` and require the exact scenario/evidence replay path when their historical relations must be re-established.
 
-For every non-`BLOCKED` trial, v5 enforces:
+For every non-`BLOCKED` trial, the current schema enforces:
 
 - `policy` and `outcome` exist exactly once;
 - `side-effect-idempotency` exists exactly when the profile requires it;
@@ -128,7 +134,7 @@ If semantic grading is present, construction validates the semantic event/receip
 
 A `BLOCKED` trial must contain durable evaluator/runtime blocking evidence recognized by `has_blocking_evidence()`. It cannot carry completed oracle results or semantic judgment authority.
 
-V5 does **not** run deterministic oracles over blocked evidence. Doing so would turn evaluator uncertainty into subject failure when grading prerequisites did not close.
+The current schema does **not** run deterministic oracles over blocked evidence. Doing so would turn evaluator uncertainty into subject failure when grading prerequisites did not close.
 
 Instead, construction scans the exact blocked event stream for explicit `POLICY_VIOLATION` events and creates `BlockedPolicyViolationSnapshot` records only from those existing events.
 
@@ -183,10 +189,10 @@ Shape constraints are strict:
 
 ## Session-level record
 
-At session level v5 records:
+At session level, the current schema records:
 
-- schema version `agent-evals/assurance-report/v5`;
-- evidence schema `agent-evals/trial-evidence/v2`;
+- schema revision `agent-evals/assurance-report/<schema>`;
+- evidence schema `agent-evals/trial-evidence/<schema>`;
 - subject identity;
 - scenario identity;
 - `ScenarioGradingProfile`;
@@ -200,9 +206,9 @@ Blocked policy snapshots are part of each trial record and therefore part of `re
 
 ## What is recomputed on every load
 
-Standalone Pydantic loading is not passive parsing. A v5 report must re-establish all report-level derivations available from the serialized artifact, including:
+Standalone Pydantic loading is not passive parsing. A current report must re-establish all report-level derivations available from the serialized artifact, including:
 
-1. exact v5 assurance schema and supported v2 evidence schema;
+1. the exact current assurance schema and supported evidence schema;
 2. unique trial IDs;
 3. blocked/non-blocked record shape;
 4. unique deterministic oracle names;
@@ -217,7 +223,7 @@ Standalone Pydantic loading is not passive parsing. A v5 report must re-establis
 13. reliability from trial verdicts using exact `k` and `confidence_z`;
 14. critical-violation count from resolved deterministic critical failures plus blocked policy-oracle-equivalent failures;
 15. release-gate decision and reasons from reliability, criticality, and frozen policy;
-16. canonical v5 `report_root` over the complete report content.
+16. canonical current `report_root` over the complete report content.
 
 A caller cannot remove a blocked policy snapshot, change its review fields, alter a gate decision, or change criticality without also changing report content and recomputing the dependent root/gate. As with every content hash, an attacker who can rewrite the entire artifact can recompute a new internally consistent root; authenticated authorship is outside this artifact's claims.
 
@@ -272,8 +278,8 @@ report = AssuranceReport.from_session(
 )
 
 verified = AssuranceReport.model_validate_json(report.model_dump_json())
-assert verified.schema_version == "agent-evals/assurance-report/v5"
-assert verified.evidence_schema == "agent-evals/trial-evidence/v2"
+assert verified.schema_version == "agent-evals/assurance-report/<schema>"
+assert verified.evidence_schema == "agent-evals/trial-evidence/<schema>"
 assert verified.scenario_identity == scenario.identity
 assert verified.report_root == report.report_root
 ```
@@ -293,8 +299,8 @@ The assurance and evidence layers remain intentionally separate:
 - `LocalEvidenceStore` verifies persisted `TrialEvidence`;
 - `EvidenceReplayAdapter` can resubmit historical evidence through evaluator-owned replay under exact subject/scenario identity;
 - semantic replay validates historical semantic authority without calling a fresh semantic model;
-- `AssuranceReport.from_session()` uses exact scenario/evidence to re-establish construction-time relations and derive v5 blocked policy snapshots;
-- standalone v5 parsing revalidates the report-level commitments it actually contains;
+- `AssuranceReport.from_session()` uses exact scenario/evidence to re-establish construction-time relations and derive the current schema's blocked policy snapshots;
+- standalone current-schema parsing revalidates the report-level commitments it actually contains;
 - exact evidence replay remains the authority for reconstructing event-level chronology and snapshot-to-event correspondence.
 
 The report can answer, "Does this stored session conclusion internally follow from the grading facts, blocked policy facts, grading-shape contract, statistical contract, and policy it contains?" It cannot by itself answer, "Would fresh execution produce the same observations now?"
@@ -310,4 +316,4 @@ The report can answer, "Does this stored session conclusion internally follow fr
 - remote attestation;
 - proof that the referenced evidence was honestly produced.
 
-Those are separate deployment and provenance concerns. V5's guarantee is narrower and testable: known explicit policy facts retained by blocked evidence are no longer erased at the report/release boundary, while unresolved grading relations remain unresolved.
+Those are separate deployment and provenance concerns. The current schema's guarantee is narrower and testable: known explicit policy facts retained by blocked evidence are no longer erased at the report/release boundary, while unresolved grading relations remain unresolved.

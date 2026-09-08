@@ -8,7 +8,7 @@ It answers:
 
 > Can an MCP OAuth client discover the protected resource and authorization server, register when compatible fallback registration is needed, complete authorization code + PKCE with exact issuer and resource binding, exchange a code for an access token, have a separately hosted resource server validate that token through authenticated introspection, and then complete protected MCP requests without conflating any of those observations with agent behavior?
 
-The implementation uses `mcp==2.1.1`, the official `OAuthClientProvider`, official Streamable HTTP client transport, two independent pre-bound loopback TCP origins, Uvicorn, `httpx2`, and MCP protocol revision `2026-07-28`.
+The implementation uses `mcp`, the official `OAuthClientProvider`, official Streamable HTTP client transport, two independent pre-bound loopback TCP origins, Uvicorn, `httpx2`, and MCP repository-supported negotiated protocol revision.
 
 This is a deterministic protocol/security laboratory. It is not a production identity provider, production IAM deployment, or agent verdict engine.
 
@@ -18,23 +18,19 @@ This is a deterministic protocol/security laboratory. It is not a production ide
 
 `MCPOAuthFlowLab` asks a different question: whether the **OAuth client / authorization-server / resource-server protocol path** closes end to end.
 
-```text
-MCPRemoteAuthPolicy
-    → resource-server bearer/scope/verifier observations
-    → MCPRemoteAuthReceipt
-
-MCPOAuthFlowPolicy
-    → PRM discovery
-    → authorization-server metadata
-    → compatible DCR fallback
-    → authorization request + state + PKCE S256 + resource
-    → authorization response + exact iss
-    → code exchange
-    → access token
-    → authenticated HTTP introspection by separate resource server
-    → protected MCP tools/list + tools/call
-    → stored-authorization reuse
-    → MCPOAuthFlowReceipt
+```mermaid
+flowchart LR
+    accTitle: Separate MCP resource-server and OAuth assurance domains
+    accDescr: Resource-server authorization starts from deterministic token records and verifies bearer, verifier, and scope enforcement. OAuth-flow assurance separately verifies discovery, registration compatibility, authorization code plus PKCE, token exchange, introspection, protected MCP use, and stored-authorization reuse.
+    RP[MCPRemoteAuthPolicy] --> RE[Bearer + verifier + scope observations] --> RR[MCPRemoteAuthReceipt]
+    OP[MCPOAuthFlowPolicy] --> OD[Discovery + registration compatibility + authorize + PKCE + token] --> OI[Authenticated introspection + protected MCP + reuse] --> OR[MCPOAuthFlowReceipt]
+    classDef authority fill:#ddf4ff,stroke:#0969da,color:#24292f,stroke-width:2px
+    classDef boundary fill:#ffebe9,stroke:#cf222e,color:#24292f,stroke-width:2px,stroke-dasharray:5 3
+    classDef evidence fill:#dafbe1,stroke:#1a7f37,color:#24292f,stroke-width:2px
+    class RP,OP authority
+    class RE,OD,OI boundary
+    class RR,OR evidence
+    linkStyle default stroke:#57606a,stroke-width:1.5px
 ```
 
 A resource server can enforce bearer and scope rules correctly while an OAuth authorization flow is broken. Conversely, a client can complete an authorization flow while resource-server enforcement is wrong. Separate identities, tests, and CI jobs keep those failures attributable.
@@ -43,21 +39,22 @@ A resource server can enforce bearer and scope rules correctly while an OAuth au
 
 The laboratory binds two different ephemeral loopback origins before starting either server:
 
-```text
-OAuthClientProvider
-        │
-        ├── HTTP discovery / registration / authorize / token
-        ▼
-Authorization Server origin A
-127.0.0.1:<as-port>
-        │
-        │ authenticated introspection
-        ▼
-Resource Server origin B
-127.0.0.1:<rs-port>/mcp
-        ▲
-        │ Streamable HTTP + bearer
-        └── official MCP client
+```mermaid
+flowchart LR
+    accTitle: MCP OAuth laboratory network topology
+    accDescr: The official OAuth client uses one loopback authorization-server origin for discovery, registration, authorization, and token exchange. A separate resource-server origin protects MCP over Streamable HTTP and validates bearer tokens by authenticated HTTP introspection back to the authorization server.
+    C[OAuthClientProvider]
+    AS[Authorization Server · loopback origin A]
+    RS[Resource Server · loopback origin B]
+    MCP[Official MCP client]
+    C -->|discovery / registration / authorize / token| AS
+    AS -->|authenticated introspection response| RS
+    MCP -->|Streamable HTTP + bearer| RS
+    classDef advisory fill:#fbefff,stroke:#8250df,color:#24292f,stroke-width:2px
+    classDef boundary fill:#ffebe9,stroke:#cf222e,color:#24292f,stroke-width:2px,stroke-dasharray:5 3
+    class C,MCP advisory
+    class AS,RS boundary
+    linkStyle default stroke:#57606a,stroke-width:1.5px
 ```
 
 The resource server does not share the authorization server's in-memory token map as its verification mechanism. Its verifier sends an HTTP introspection request to the authorization-server origin using deterministic Basic client authentication. The returned active-token metadata is then checked for exact issuer and exact resource before an MCP `AccessToken` is constructed.
@@ -68,7 +65,7 @@ That separation is the central property of this layer.
 
 `MCPOAuthFlowPolicy` is immutable and binds:
 
-- schema version;
+- schema revision;
 - stable lab ID;
 - revision;
 - MCP resource path;
@@ -109,7 +106,7 @@ The issuer is intentionally canonical and slash-terminated. Authorization-respon
 
 The deterministic authorization server exposes a registration endpoint and the official OAuth client performs Dynamic Client Registration when it has no stored client information.
 
-This is tested **compatibility fallback behavior**, not a claim that DCR is the preferred enrollment mechanism for new MCP deployments. MCP `2026-07-28` deprecates DCR in favor of Client ID Metadata Documents while retaining DCR compatibility during the transition.
+This is tested **compatibility fallback behavior**, not a claim that DCR is the preferred enrollment mechanism for new MCP deployments. MCP `repository-supported negotiated revision` deprecates DCR in favor of Client ID Metadata Documents while retaining DCR compatibility during the transition.
 
 The receipt requires exactly one registration during the first authorization flow and no second registration on the reconnect that reuses stored authorization state.
 
@@ -196,9 +193,9 @@ The laboratory does not currently exercise refresh-token rotation; reuse here me
 
 `MCPOAuthFlowReceipt` binds:
 
-- schema version;
+- schema revision;
 - exact `MCPOAuthFlowPolicy.identity`;
-- MCP protocol version;
+- MCP negotiated protocol revision;
 - transport identity `oauth-code-pkce-loopback`;
 - SHA-256 of the canonical complete observation;
 - receipt root derived from those fields.

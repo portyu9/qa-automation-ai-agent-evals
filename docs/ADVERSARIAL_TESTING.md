@@ -2,24 +2,44 @@
 
 ## Purpose
 
-The adversarial layer turns stable threat identifiers into **content-addressed, versioned evaluation stimuli** and requires evidence that the controlled evaluation environment actually delivered the exact stimulus before subject behavior is graded.
+The adversarial layer turns stable threat identifiers into **content-addressed, revision-bound evaluation stimuli** and requires evidence that the controlled evaluation environment actually delivered the exact stimulus before subject behavior is graded.
 
 An `AttackFixture` deterministically derives an `EvaluationScenario`; an `AdversarialCampaign` binds a canonical attack set to one exact base scenario; an `AttackDeliveryReceipt` binds the exact scenario, attack, channel, injection point, and canonical payload digest observed by the trusted evaluation control plane.
 
 The attack definition is test input. The delivery receipt is an evaluation precondition. Neither is grading authority.
 
-```text
-base scenario + content-addressed attack
-        ↓ deterministic derivation
-security scenario preserving the full base evaluation contract
-        ↓
-controlled injector
-        ↓ exact successful delivery evidence
-ATTACK_DELIVERY
-        ↓ scenario-required precondition verification
-active deterministic oracles + optional subordinate semantic grading
-        ↓
-trial verdict → reliability → release gate
+```mermaid
+flowchart TB
+    accTitle: Adversarial scenario derivation and delivery gate
+    accDescr: A content-addressed attack deterministically derives a security scenario while preserving the base evaluation contract. A controlled injector must produce exact delivery evidence before active deterministic oracles and optional subordinate semantic grading can produce a trial verdict and downstream release decision.
+    B[Base scenario]
+    A[Content-addressed attack]
+    D[Deterministic security-scenario derivation]
+    S[Security scenario preserving base evaluation contract]
+    I[Controlled injector]
+    E[ATTACK_DELIVERY evidence]
+    V[Scenario-required delivery verification]
+    O[Deterministic oracles]
+    J[Optional subordinate semantic grading]
+    T[Trial verdict]
+    R[Reliability]
+    G[Release gate]
+    B --> D
+    A --> D --> S --> I --> E --> V --> O
+    O --> T
+    O -->|deterministic success + rubric| J --> T
+    T --> R --> G
+    classDef untrusted fill:#ffebe9,stroke:#cf222e,color:#24292f,stroke-width:2px,stroke-dasharray:5 3
+    classDef authority fill:#ddf4ff,stroke:#0969da,color:#24292f,stroke-width:2px
+    classDef evidence fill:#dafbe1,stroke:#1a7f37,color:#24292f,stroke-width:2px
+    classDef advisory fill:#fbefff,stroke:#8250df,color:#24292f,stroke-width:2px
+    classDef terminal fill:#dafbe1,stroke:#1a7f37,color:#24292f,stroke-width:3px
+    class A,I untrusted
+    class B,D,S,V,O,R authority
+    class E evidence
+    class J advisory
+    class T,G terminal
+    linkStyle default stroke:#57606a,stroke-width:1.5px
 ```
 
 If delivery cannot be verified, the trial is `BLOCKED` before deterministic subject grading. A configured or attempted attack is never treated as proof that the agent actually received or consumed the stimulus.
@@ -171,7 +191,7 @@ The MCP system has several deliberately separate evidence layers. None is folded
 
 ### In-process protocol fault laboratory
 
-`MCPFaultSpec` / `MCPFaultReceipt` prove six deterministic official-client observations under protocol `2026-07-28`:
+`MCPFaultSpec` / `MCPFaultReceipt` prove six deterministic official-client observations under repository-supported negotiated protocol revision:
 
 - `tools/list` description poisoning;
 - first `tools/call` result poisoning;
@@ -192,11 +212,11 @@ Selected fault families have explicit cross-domain contracts:
 |---|---|---|
 | `TOOL_RESULT_POISON` | `MCPAgentToolResultReceipt` | exact target call ID/output correlation plus same-session post-run benign recovery |
 | `TOOL_ERROR` | `MCPAgentToolErrorRecoveryReceipt` | exact model-visible error, distinct same-argument retry after first result, exact same-session recovery |
-| `TOOL_SCHEMA_DRIFT` | `MCPAgentToolSchemaDriftReceipt` | v1 model-visible schema, hidden live v2 swap, real stale rejection, host invalidation, first fresh v2 discovery, exact corrected call/result |
+| `TOOL_SCHEMA_DRIFT` | `MCPAgentToolSchemaDriftReceipt` | initial model-visible schema, hidden live replacement swap, real stale rejection, host invalidation, first fresh replacement discovery, exact corrected call/result |
 
 These bridge receipts emit `PROTOCOL_DELIVERY`, not `ATTACK_DELIVERY`.
 
-For schema drift, ownership is explicit: the controlled harness owns the live server swap; the evaluator/host adapter owns one cache invalidation; the official MCP session owns first fresh post-invalidation discovery; the pinned Agents SDK owns presentation of refreshed v2 to the next model turn; and the agent/model is credited only for changing the corrected call after v2 becomes visible. This is **not** model-initiated refresh or automatic `tools/list_changed` handling.
+For schema drift, ownership is explicit: the controlled harness owns the live server swap; the evaluator/host adapter owns one cache invalidation; the official MCP session owns first fresh post-invalidation discovery; the repository-governed Agents SDK owns presentation of refreshed replacement to the next model turn; and the agent/model is credited only for changing the corrected call after replacement becomes visible. This is **not** model-initiated refresh or automatic `tools/list_changed` handling.
 
 ### Loopback Streamable HTTP authorization laboratory
 

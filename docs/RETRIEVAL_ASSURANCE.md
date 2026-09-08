@@ -126,7 +126,7 @@ Missing, duplicated, malformed, reordered, foreign, or unreconstructable retriev
 The adapter:
 
 1. requires a scenario-owned retrieval contract;
-2. requires a real pinned OpenAI Agents SDK `Agent` instance;
+2. requires a real repository-governed OpenAI Agents SDK `Agent` instance;
 3. rejects collision with a preconfigured tool using the retrieval tool name;
 4. computes the evaluator-owned active ranking before execution;
 5. clones the agent with one evaluator-owned retrieval `FunctionTool`;

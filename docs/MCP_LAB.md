@@ -2,7 +2,7 @@
 
 ## Purpose
 
-The MCP fault laboratory exercises **real Model Context Protocol behavior** without replacing the protocol with local function mocks. It uses official `mcp==2.1.1`, a fresh in-process `MCPServer`, the official `Client`, and protocol revision `2026-07-28`.
+The MCP fault laboratory exercises **real Model Context Protocol behavior** without replacing the protocol with local function mocks. It uses official `mcp`, a fresh in-process `MCPServer`, the official `Client`, and repository-supported negotiated protocol revision.
 
 Its primary question is deliberately narrow:
 
@@ -10,13 +10,13 @@ Its primary question is deliberately narrow:
 
 The answer is recorded as `MCPFaultReceipt`. That receipt is protocol evidence. **By itself** it is not an autonomous-agent verdict, an OpenAI `AttackDeliveryReceipt`, release authority, remote-transport assurance, or target-side attestation.
 
-Six separate deterministic integration paths consume selected fault contracts through a fresh official MCP stdio server and the pinned OpenAI Agents SDK:
+Six separate deterministic integration paths consume selected fault contracts through a fresh official MCP stdio server and the repository-governed OpenAI Agents SDK:
 
 - `TOOL_METADATA_POISON` — exact controlled target description observed through official MCP discovery and bound to the exact target tool definition supplied at the public model boundary, without requiring a target call;
 - `TOOL_RESULT_POISON` — exact same-call result delivery with post-run same-session recovery;
 - `TOOL_ERROR` — exact model-visible error followed by one causal same-argument retry and benign recovery on the same session;
 - `TOOL_LIST_STALE_CACHE` — exact initial target exposure, hidden live removal, cached post-removal target discovery, real unknown-tool rejection, evaluator-owned cache invalidation, first fresh target-absent discovery, and exact target-absent public-model exposure carrying the same rejection;
-- `TOOL_SCHEMA_DRIFT` — exact v1 model-visible schema, hidden live v2 replacement, cached post-mutation v1 discovery, real stale-call rejection, evaluator-owned cache invalidation, first fresh v2 discovery, and one corrected v2 behavioral call on the same session;
+- `TOOL_SCHEMA_DRIFT` — exact initial model-visible schema, hidden live schema replacement, cached post-mutation initial discovery, real stale-call rejection, evaluator-owned cache invalidation, first fresh replacement discovery, and one corrected replacement behavioral call on the same session;
 - `TOOL_IDENTITY_DRIFT` — exact original model-visible identity, hidden live old→replacement registry mutation, cached post-mutation original-name discovery, real old-name rejection, evaluator-owned cache invalidation, first fresh replacement discovery, and one exact replacement-name behavioral call on the same session.
 
 Those dedicated bridges are described under [Relationship to agent adversarial testing](#relationship-to-agent-adversarial-testing), in [MCP Stale-Cache Tool-Removal Assurance](MCP_STALE_CACHE.md), in [MCP Tool-Identity Drift Assurance](MCP_IDENTITY_DRIFT.md), and in [OpenAI Agents SDK Adapter](OPENAI_ADAPTER.md). They do not broaden one another or the standalone protocol receipts. The stale-cache, schema-drift, and identity-drift bridges do not claim model-initiated refresh or automatic `tools/list_changed` handling.
@@ -38,16 +38,27 @@ The last three are relational protocol-state faults. Their standalone laboratory
 
 ## Discovery, call validity, and agent behavior are different claims
 
-```text
-cached discovery
-      ≠
-current server contract
-      ≠
-call-time validity
-      ≠
-refreshed discovery
-      ≠
-agent behavior
+```mermaid
+flowchart LR
+    accTitle: MCP discovery, validation, refresh, and agent behavior are separate claims
+    accDescr: Cached discovery may differ from current server truth. Call-time validation is a separate observation. Refreshed discovery establishes a later client view. None of those protocol observations alone proves autonomous agent behavior.
+
+    C[Cached discovery]
+    S[Current server contract]
+    V[Call-time validity]
+    R[Refreshed discovery]
+    A[Agent behavior]
+
+    C -. not equivalent .-> S
+    S -. not equivalent .-> V
+    V -. not equivalent .-> R
+    R -. not equivalent .-> A
+
+    classDef boundary fill:#ffebe9,stroke:#cf222e,color:#24292f,stroke-width:2px,stroke-dasharray:5 3
+    classDef advisory fill:#fbefff,stroke:#8250df,color:#24292f,stroke-width:2px
+    class C,S,V,R boundary
+    class A advisory
+    linkStyle default stroke:#57606a,stroke-width:1.5px
 ```
 
 A stale `tools/list` response can be objectively real while a subsequent `tools/call` is evaluated against newer server truth. Conversely, a successful current call does not prove the client previously held current discovery. Neither observation alone says whether an autonomous agent noticed, understood, or resisted the condition.
@@ -58,43 +69,60 @@ The six agent bridges do not invalidate this rule. They add **fault-specific pro
 - result poison must be paired with one exact OpenAI target request/result identity and logical model-visible output;
 - ToolError recovery must additionally prove distinct call identities, same canonical arguments, exact error/recovery outputs, and strict chronology `request₁ < result₁ < request₂ < result₂` before the second call can be credited as a retry;
 - stale-cache removal delivery must additionally prove initial model-visible target presence, hidden live removal, cached post-removal target presence, real unknown-tool rejection, one host invalidation, first fresh target absence, exact rejection delivery to the target-absent public model boundary, one stable call identity, exact bound arguments, and no extra controlled target request;
-- schema-drift adaptation must additionally prove v1 model-visible discovery, a hidden evaluator-owned live swap, cached post-mutation v1 discovery, real stale-call rejection, one host cache invalidation, first fresh post-invalidation v2 discovery, distinct stale/recovery call identities, exact bound v1/v2 arguments, and recovery only after v2 becomes model-visible;
+- schema-drift adaptation must additionally prove initial model-visible discovery, a hidden evaluator-owned live swap, cached post-mutation initial discovery, real stale-call rejection, one host cache invalidation, first fresh post-invalidation replacement discovery, distinct stale/recovery call identities, exact bound initial→replacement arguments, and recovery only after replacement becomes model-visible;
 - identity-drift adaptation must additionally prove exact original model-visible identity, hidden old→replacement mutation, cached post-mutation original-name discovery, real unknown-tool rejection, one host cache invalidation, first fresh replacement-only discovery, exact replacement model visibility, distinct call IDs, exact arguments/results, and recovery only after the replacement identity is visible.
 
 ## Protocol paths
 
 ### Direct content faults
 
-```text
-MCPFaultSpec
-    ↓
-fresh official MCPServer
-    ↓
-official Client / protocol 2026-07-28
-    ↓
-tools/list / tools/call
-    ↓
-exact public-client observation
-    ↓
-MCPFaultReceipt
+```mermaid
+flowchart TB
+    accTitle: Direct MCP protocol-fault observation path
+    accDescr: A content-addressed fault specification configures a fresh official server. The official client observes discovery or call behavior under the negotiated protocol revision. Only an exact public-client observation closes the protocol receipt.
+
+    F[MCPFaultSpec]
+    S[Fresh official MCPServer]
+    C[Official Client + negotiated protocol]
+    P[tools/list or tools/call]
+    O[Exact public-client observation]
+    R[MCPFaultReceipt]
+
+    F --> S --> C --> P --> O --> R
+
+    classDef authority fill:#ddf4ff,stroke:#0969da,color:#24292f,stroke-width:2px
+    classDef boundary fill:#ffebe9,stroke:#cf222e,color:#24292f,stroke-width:2px,stroke-dasharray:5 3
+    classDef evidence fill:#dafbe1,stroke:#1a7f37,color:#24292f,stroke-width:2px
+    class F authority
+    class S,C,P,O boundary
+    class R evidence
+    linkStyle default stroke:#57606a,stroke-width:1.5px
 ```
 
 ### Stale discovery
 
-```text
-initial tools/list → target present + positive MCP cache-hint TTL
-server.remove_tool(target)
-normal tools/list  → cached target still present
-refresh tools/list → target absent
-                     ↓
-              MCPFaultReceipt
+```mermaid
+flowchart LR
+    accTitle: MCP stale-discovery relation
+    accDescr: Initial discovery exposes a target with a positive cache hint. The server removes that target while normal discovery still returns the cached entry. A forced refresh finally proves target absence, and only then can the protocol receipt close.
+    I[Initial tools/list · target present]
+    M[Server removes target]
+    C[Cached tools/list · target still present]
+    R[Forced refresh · target absent]
+    E[MCPFaultReceipt]
+    I --> M --> C --> R --> E
+    classDef boundary fill:#ffebe9,stroke:#cf222e,color:#24292f,stroke-width:2px,stroke-dasharray:5 3
+    classDef evidence fill:#dafbe1,stroke:#1a7f37,color:#24292f,stroke-width:2px
+    class I,M,C,R boundary
+    class E evidence
+    linkStyle default stroke:#57606a,stroke-width:1.5px
 ```
 
 The dedicated stale-cache agent bridge adds a cross-domain relation to the standalone discovery proof: the target must be model-visible before selection, the harness removes it before live lookup, cached host discovery must still advertise it, the live call must reject, and host-owned invalidation must make target absence plus the exact rejection visible at the next public model boundary. No replacement call is manufactured. See [MCP Stale-Cache Tool-Removal Assurance](MCP_STALE_CACHE.md).
 
 ### Schema drift
 
-The v1 fixture binds an exact before/after contract:
+The initial fixture binds an exact before/after contract:
 
 ```text
 initial required schema      = {query: string}
@@ -103,7 +131,7 @@ replacement required schema  = {customer_id: integer, include_history: boolean}
 
 The standalone protocol proof requires initial old discovery, the live schema mutation, cached old discovery after that mutation, current-server rejection of old arguments, refreshed new discovery, and successful new-schema invocation. The cache is never treated as the call validator.
 
-The agent bridge adds a separate behavioral relation. Its hidden server-side swap occurs only after the model has selected the v1-shaped call, and the host invalidates cached discovery only after the real stale-call rejection. That design prevents the model from being credited for a refresh action it did not perform.
+The agent bridge adds a separate behavioral relation. Its hidden server-side swap occurs only after the model has selected the initial-shaped call, and the host invalidates cached discovery only after the real stale-call rejection. That design prevents the model from being credited for a refresh action it did not perform.
 
 ### Identity drift
 
@@ -115,7 +143,7 @@ The dedicated agent bridge adds a stronger cross-domain requirement: the public 
 
 `MCPFaultSpec` binds:
 
-- schema version;
+- schema revision;
 - stable fault ID and revision;
 - `MCPFaultKind`;
 - exact original tool name;
@@ -132,7 +160,7 @@ The lab does not invent unbound mutation parameters at runtime.
 `MCPFaultReceipt` binds:
 
 - exact fault identity and kind;
-- protocol version;
+- negotiated protocol revision;
 - original tool name;
 - concrete observation point;
 - SHA-256 of controlled canonical fault material;
@@ -173,12 +201,12 @@ This separation is framework execution-path ownership, not cryptographic produce
 ## Concrete protocol observation points
 
 ```text
-mcp:2026-07-28:tools/list:<tool>:description
-mcp:2026-07-28:tools/call:<tool>:result.content[0].text
-mcp:2026-07-28:tools/call:<tool>:error.content[0].text:message-suffix
-mcp:2026-07-28:tools/list:cache-use-stale-after-remove:<tool>:refresh-proves-absent
-mcp:2026-07-28:tools/list:schema-drift:<tool>:cached-old:call-rejects-old:refresh-new
-mcp:2026-07-28:tools/list:identity-drift:<tool>:cached-old-name:call-rejects-old:refresh-new-name
+mcp:repository-supported negotiated revision:tools/list:<tool>:description
+mcp:repository-supported negotiated revision:tools/call:<tool>:result.content[0].text
+mcp:repository-supported negotiated revision:tools/call:<tool>:error.content[0].text:message-suffix
+mcp:repository-supported negotiated revision:tools/list:cache-use-stale-after-remove:<tool>:refresh-proves-absent
+mcp:repository-supported negotiated revision:tools/list:schema-drift:<tool>:cached-old:call-rejects-old:refresh-new
+mcp:repository-supported negotiated revision:tools/list:identity-drift:<tool>:cached-old-name:call-rejects-old:refresh-new-name
 ```
 
 A receipt is never created merely because a fault object exists or the server was mutated.
@@ -191,7 +219,7 @@ Every protocol probe creates a fresh server. Content result/error faults are fir
 
 These controls detect evaluator defects such as sticky fault state and cross-test cache contamination.
 
-The standalone protocol-lab recovery checks and the agent bridges answer different questions. The lab proves the protocol relation. The ToolError bridge proves the **agent-visible first error causally precedes one behavioral retry**. The stale-cache bridge proves the **removed target's real rejection causally precedes host-refreshed target absence plus exact rejection delivery at the public model boundary**, without inventing a recovery call. The schema-drift bridge proves the **agent's corrected v2 call occurs only after host-owned refresh makes v2 model-visible**. The identity-drift bridge proves the **agent's replacement-name call occurs only after host-owned refresh makes that exact replacement identity model-visible**.
+The standalone protocol-lab recovery checks and the agent bridges answer different questions. The lab proves the protocol relation. The ToolError bridge proves the **agent-visible first error causally precedes one behavioral retry**. The stale-cache bridge proves the **removed target's real rejection causally precedes host-refreshed target absence plus exact rejection delivery at the public model boundary**, without inventing a recovery call. The schema-drift bridge proves the **agent's corrected replacement call occurs only after host-owned refresh makes replacement model-visible**. The identity-drift bridge proves the **agent's replacement-name call occurs only after host-owned refresh makes that exact replacement identity model-visible**.
 
 ## CI boundary
 
@@ -241,7 +269,7 @@ exact target description observed through official tools/list
         ↓
 MCPFaultReceipt
         ↓
-pinned Agents SDK converts the MCP target to a model Tool
+repository-governed Agents SDK converts the MCP target to a model Tool
         ↓
 public Model observer sees exactly one target definition
 + exact description equivalence
@@ -260,55 +288,57 @@ The target does **not** need to be called. That is intentional: poisoned discove
 
 `OpenAIAgentsMCPToolResultAdapter` implements one explicit cross-domain contract for `TOOL_RESULT_POISON`:
 
-```text
-MCPFaultSpec(tool_result_poison)
-        ↓
-fresh official MCPServerStdio subprocess
-        ↓
-agent makes exactly one target MCP call
-        ↓
-exact first result observed → MCPFaultReceipt
-        ↓
-exact OpenAI TOOL_REQUEST call_id
-+ exactly one matching TOOL_RESULT
-+ output equivalence
-+ same-session benign recovery after the run
-        ↓
-MCPAgentToolResultReceipt
-        ↓
-PROTOCOL_DELIVERY
-        ↓
-deterministic agent trial grading
+```mermaid
+flowchart TB
+    accTitle: MCP tool-result poison delivery relation
+    accDescr: A tool-result poison fault configures a fresh official MCP stdio server. The evaluated agent must make exactly one target call. The exact poisoned protocol result is observed and then bound to the same agent call/result relation before protocol delivery can be accepted for grading.
+    F[MCPFaultSpec · tool-result poison]
+    S[Fresh official MCPServerStdio]
+    C[Exactly one target MCP call]
+    P[Exact poisoned protocol result]
+    R[MCPFaultReceipt]
+    A[Same agent TOOL_REQUEST / TOOL_RESULT relation]
+    B[Protocol-delivery bridge receipt]
+    V[Deterministic grading precondition]
+    F --> S --> C --> P --> R --> A --> B --> V
+    classDef boundary fill:#ffebe9,stroke:#cf222e,color:#24292f,stroke-width:2px,stroke-dasharray:5 3
+    classDef evidence fill:#dafbe1,stroke:#1a7f37,color:#24292f,stroke-width:2px
+    classDef authority fill:#ddf4ff,stroke:#0969da,color:#24292f,stroke-width:2px
+    class F,S,C,P boundary
+    class R,A,B evidence
+    class V authority
+    linkStyle default stroke:#57606a,stroke-width:1.5px
 ```
 
 The behavioral run makes exactly one target call. Recovery occurs only after the run, through the same live session and same arguments, so benign recovery cannot contaminate the agent transcript.
 
-Missing consumption, multiple target calls, protocol-version drift, malformed result shape, agent-evidence ambiguity, output mismatch, or recovery mismatch fails closed as evaluator uncertainty.
+Missing consumption, multiple target calls, negotiated-protocol drift, malformed result shape, agent-evidence ambiguity, output mismatch, or recovery mismatch fails closed as evaluator uncertainty.
 
 ### ToolError retry/recovery bridge
 
 `OpenAIAgentsMCPToolErrorRecoveryAdapter` implements a distinct two-call behavioral contract for `TOOL_ERROR`:
 
-```text
-MCPFaultSpec(tool_error)
-        ↓
-fresh official MCPServerStdio subprocess
-        ↓
-TOOL_REQUEST(error_call_id)
-        ↓
-real first-call MCP ToolError → MCPFaultReceipt
-        ↓ exact model-visible error equivalence
-TOOL_RESULT(error_call_id)
-        ↓
-TOOL_REQUEST(retry_call_id; same canonical arguments)
-        ↓ same live MCP session
-TOOL_RESULT(retry_call_id; exact benign recovery)
-        ↓
-MCPAgentToolErrorRecoveryReceipt
-        ↓
-PROTOCOL_DELIVERY
-        ↓
-deterministic agent trial grading
+```mermaid
+flowchart TB
+    accTitle: MCP transient tool-error recovery relation
+    accDescr: A controlled MCP tool error is delivered to one exact agent call. Recovery requires a causal retry using the same canonical arguments and an exact benign result. The protocol and agent evidence must close the same chronology before the recovery relation is accepted.
+    F[MCPFaultSpec · tool error]
+    S[Fresh official MCPServerStdio]
+    R1[TOOL_REQUEST · initial call]
+    E[Exact MCP error result]
+    D1[Error-delivery evidence]
+    R2[One causal retry · same arguments]
+    OK[Exact benign recovery]
+    D2[Recovery bridge receipt]
+    V[Deterministic grading precondition]
+    F --> S --> R1 --> E --> D1 --> R2 --> OK --> D2 --> V
+    classDef boundary fill:#ffebe9,stroke:#cf222e,color:#24292f,stroke-width:2px,stroke-dasharray:5 3
+    classDef evidence fill:#dafbe1,stroke:#1a7f37,color:#24292f,stroke-width:2px
+    classDef authority fill:#ddf4ff,stroke:#0969da,color:#24292f,stroke-width:2px
+    class F,S,R1,E,R2,OK boundary
+    class D1,D2 evidence
+    class V authority
+    linkStyle default stroke:#57606a,stroke-width:1.5px
 ```
 
 The adapter requires exactly two target calls, distinct non-empty OpenAI call IDs, canonical argument equality, exactly one normalized result for each call, exact error/recovery observation equivalence, and strict normalized chronology:
@@ -319,7 +349,7 @@ request₁ < result₁ < request₂ < result₂
 
 That chronology is an assurance condition, not presentation detail. If two identical calls are pre-issued before the first error result, the second call is **not** accepted as a retry and evaluation blocks with `mcp_error_retry_causality_unverified`.
 
-Missing retry, more than one retry, changed arguments, protocol-version drift, malformed/ambiguous evidence, wrong error representation, wrong recovery, or non-causal ordering fails closed as evaluator uncertainty.
+Missing retry, more than one retry, changed arguments, negotiated-protocol drift, malformed/ambiguous evidence, wrong error representation, wrong recovery, or non-causal ordering fails closed as evaluator uncertainty.
 
 ### Stale-cache host-refresh/removal-delivery bridge
 
@@ -330,23 +360,23 @@ Missing retry, more than one retry, changed arguments, protocol-version drift, m
 `OpenAIAgentsMCPToolSchemaDriftAdapter` implements a separate two-call behavioral contract for `TOOL_SCHEMA_DRIFT`:
 
 ```text
-model receives v1 schema
+model receives initial schema
         ↓
-TOOL_REQUEST(stale_call_id; v1 arguments)
+TOOL_REQUEST(stale_call_id; initial arguments)
         ↓
-hidden evaluator-only live swap to v2
+hidden evaluator-only live swap to replacement
         ↓
-real MCP validation rejects stale v1 arguments
+real MCP validation rejects stale initial arguments
         ↓
 TOOL_RESULT(stale_call_id; exact model-visible rejection)
         ↓
 host invalidates cached tool discovery once
         ↓
-first fresh post-invalidation tools/list exposes v2
+first fresh post-invalidation tools/list exposes replacement
         ↓
-model receives v2 schema + stale rejection
+model receives replacement schema + stale rejection
         ↓
-TOOL_REQUEST(recovery_call_id; exact v2 arguments)
+TOOL_REQUEST(recovery_call_id; exact replacement arguments)
         ↓ same live MCP session
 TOOL_RESULT(recovery_call_id; exact replacement result)
         ↓
@@ -357,44 +387,42 @@ PROTOCOL_DELIVERY
 deterministic agent trial grading
 ```
 
-The adapter requires exactly two target calls, distinct non-empty OpenAI call IDs, exact bound v1/v2 schemas and arguments, one real stale rejection, one host cache invalidation, refreshed v2 discovery before recovery, exact protocol/model-visible rejection equivalence, exact replacement-result equivalence, and strict protocol chronology:
+The adapter requires exactly two target calls, distinct non-empty OpenAI call IDs, exact bound initial→replacement schemas and arguments, one real stale rejection, one host cache invalidation, refreshed replacement discovery before recovery, exact protocol/model-visible rejection equivalence, exact replacement-result equivalence, and strict protocol chronology:
 
 ```text
 initial-list < swap < stale-call < cache-invalidation < refreshed-list < recovery-call
 ```
 
-Later SDK turns may reuse the already-refreshed v2 cache. The bridge therefore distinguishes one fresh post-invalidation discovery from harmless cached reads. Recovery before refreshed discovery, repeated stale arguments, extra target calls, control-tool leakage, wrong schema/result observations, or receipt tampering fails closed as evaluator uncertainty.
+Later SDK turns may reuse the already-refreshed replacement cache. The bridge therefore distinguishes one fresh post-invalidation discovery from harmless cached reads. Recovery before refreshed discovery, repeated stale arguments, extra target calls, control-tool leakage, wrong schema/result observations, or receipt tampering fails closed as evaluator uncertainty.
 
 ### Identity-drift host-refresh/adaptation bridge
 
 `OpenAIAgentsMCPToolIdentityDriftAdapter` implements a separate two-call behavioral contract for `TOOL_IDENTITY_DRIFT`:
 
-```text
-model receives exact original identity
-        ↓
-TOOL_REQUEST(stale_call_id; original name)
-        ↓
-hidden evaluator-only live old→replacement swap
-        ↓
-real MCP lookup rejects removed old name
-        ↓
-TOOL_RESULT(stale_call_id; exact model-visible unknown-tool rejection)
-        ↓
-host invalidates cached tool discovery
-        ↓
-first fresh post-invalidation tools/list exposes replacement only
-        ↓
-model receives exact replacement identity + stale rejection
-        ↓
-TOOL_REQUEST(recovery_call_id; exact replacement name)
-        ↓ same live MCP session
-TOOL_RESULT(recovery_call_id; exact deterministic recovery)
-        ↓
-MCPAgentToolIdentityDriftReceipt
-        ↓
-PROTOCOL_DELIVERY
-        ↓
-deterministic agent trial grading
+```mermaid
+flowchart TB
+    accTitle: MCP identity-drift stale-name recovery relation
+    accDescr: The model first sees the original tool identity and issues a stale-name call. The evaluator changes only the live server identity. The stale call must be rejected, host-owned cache invalidation must expose only the replacement identity, and recovery requires one exact replacement-name call after refreshed model visibility.
+    M1[Model sees original identity]
+    C1[TOOL_REQUEST · original name]
+    SW[Evaluator-only live original → replacement swap]
+    RJ[Real stale-name rejection]
+    INV[Host-owned cache invalidation]
+    M2[Model sees replacement identity only]
+    C2[TOOL_REQUEST · replacement name]
+    OK[Exact recovery result]
+    R[Identity-drift bridge receipt]
+    V[Deterministic grading precondition]
+    M1 --> C1 --> SW --> RJ --> INV --> M2 --> C2 --> OK --> R --> V
+    classDef boundary fill:#ffebe9,stroke:#cf222e,color:#24292f,stroke-width:2px,stroke-dasharray:5 3
+    classDef advisory fill:#fbefff,stroke:#8250df,color:#24292f,stroke-width:2px
+    classDef evidence fill:#dafbe1,stroke:#1a7f37,color:#24292f,stroke-width:2px
+    classDef authority fill:#ddf4ff,stroke:#0969da,color:#24292f,stroke-width:2px
+    class M1,M2 advisory
+    class C1,SW,RJ,INV,C2,OK boundary
+    class R evidence
+    class V authority
+    linkStyle default stroke:#57606a,stroke-width:1.5px
 ```
 
 The adapter requires exactly two controlled attempts; exact original then replacement identities; distinct non-empty OpenAI call IDs; strict finite canonical argument provenance; one real unknown-tool stale rejection; host invalidation only after that rejection; refreshed replacement-only protocol and model-visible identity sets; exact recovery output; and strict protocol chronology:
@@ -403,7 +431,7 @@ The adapter requires exactly two controlled attempts; exact original then replac
 initial-list < swap < stale-call < cache-invalidation < refreshed-list < recovery-call
 ```
 
-The harness owns the rename and the host adapter owns invalidation. The model is credited only for choosing the replacement after it is actually visible. Missing recovery, stale-name reuse, an unbound identity, call-ID reuse, extra controlled attempts, recovery before refresh, ambiguous discovery/model exposure, wrong arguments/results, control-tool leakage, or receipt tampering fails closed. A removed old name emitted after refresh may also be rejected directly by the pinned SDK/MCP boundary and is preserved as `RUNTIME_ERROR / BLOCKED` rather than being repaired. See [MCP Tool-Identity Drift Assurance](MCP_IDENTITY_DRIFT.md).
+The harness owns the rename and the host adapter owns invalidation. The model is credited only for choosing the replacement after it is actually visible. Missing recovery, stale-name reuse, an unbound identity, call-ID reuse, extra controlled attempts, recovery before refresh, ambiguous discovery/model exposure, wrong arguments/results, control-tool leakage, or receipt tampering fails closed. A removed old name emitted after refresh may also be rejected directly by the repository-governed SDK/MCP boundary and is preserved as `RUNTIME_ERROR / BLOCKED` rather than being repaired. See [MCP Tool-Identity Drift Assurance](MCP_IDENTITY_DRIFT.md).
 
 All six bridges establish delivery/recovery/adaptation preconditions only. They do not assert safe subject behavior; deterministic policy/outcome oracles still decide PASS/FAIL.
 
@@ -416,7 +444,7 @@ The six-fault protocol laboratory plus the six dedicated bridges do **not** esta
 - universal agent behavior for arbitrary MCP tool results, errors, schema changes, or identity migrations;
 - generic retry/backoff/idempotency correctness beyond the exact one-retry ToolError relation;
 - model-initiated MCP refresh or automatic `tools/list_changed` handling;
-- arbitrary schema compatibility, coercion/default/optional-field semantics, or arbitrary schema migrations beyond the bound v1/v2 fixture;
+- arbitrary schema compatibility, coercion/default/optional-field semantics, or arbitrary schema migrations beyond the bound initial→replacement fixture;
 - arbitrary rename, alias, fallback, or multi-tool migration graphs beyond the bound identity-drift fixture;
 - semantic equivalence of old and replacement tools merely because the controlled fixture binds them into one relation;
 - multiple controlled MCP servers or arbitrary parallel target plans;

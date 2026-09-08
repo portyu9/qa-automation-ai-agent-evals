@@ -8,18 +8,36 @@ This framework treats semantic judging as **subordinate evidence**, not as relea
 
 The hard boundary is:
 
-```text
-verified execution evidence
-        ↓
-deterministic policy + outcome grading
-        ├─ FAIL ─────────────────────────────→ trial FAIL
-        │                                     semantic judge is not invoked
-        └─ PASS
-             ↓
-       accepted calibrated semantic judge
-             ├─ PASS ────────────────────────→ trial PASS
-             ├─ FAIL ────────────────────────→ trial FAIL, non-critical
-             └─ ABSTAIN ─────────────────────→ trial INCONCLUSIVE
+```mermaid
+flowchart TB
+    accTitle: Semantic judging remains subordinate to deterministic grading
+    accDescr: Verified execution evidence is graded deterministically first. Deterministic failure terminates the trial without invoking the semantic judge. Only deterministic success with a configured rubric reaches the calibrated semantic judge, whose result may preserve success, narrow it to non-critical failure, or abstain to evaluator uncertainty.
+    E[Verified execution evidence]
+    D[Deterministic policy + outcome grading]
+    Q{Deterministic result}
+    F[Trial FAIL]
+    P0[Trial PASS · no semantic rubric]
+    J[Calibrated semantic judge]
+    SQ{Semantic decision}
+    P[Trial PASS]
+    SF[Trial FAIL · non-critical semantic reason]
+    I[Trial INCONCLUSIVE]
+    E --> D --> Q
+    Q -->|FAIL| F
+    Q -->|PASS + no rubric| P0
+    Q -->|PASS + rubric| J --> SQ
+    SQ -->|PASS| P
+    SQ -->|FAIL| SF
+    SQ -->|ABSTAIN| I
+    classDef authority fill:#ddf4ff,stroke:#0969da,color:#24292f,stroke-width:2px
+    classDef advisory fill:#fbefff,stroke:#8250df,color:#24292f,stroke-width:2px
+    classDef bad fill:#ffebe9,stroke:#cf222e,color:#24292f,stroke-width:2px
+    classDef terminal fill:#dafbe1,stroke:#1a7f37,color:#24292f,stroke-width:3px
+    class E,D,Q authority
+    class J,SQ,I advisory
+    class F,SF bad
+    class P0,P terminal
+    linkStyle default stroke:#57606a,stroke-width:1.5px
 ```
 
 A semantic judge cannot override authorization, approval, protocol-delivery, state, or other deterministic evaluation failures.
@@ -122,7 +140,7 @@ The input itself is content-addressed. `SemanticJudgmentReceipt` stores its dige
 - provider;
 - model name;
 - model revision label;
-- adapter name and version;
+- adapter identity and implementation revision;
 - evaluator prompt-template digest;
 - expected response schema;
 - behavior-configuration digest.
@@ -144,9 +162,9 @@ A `SemanticCalibrationCase` contains evaluator-owned labeled material:
 - expected PASS or FAIL label;
 - optional coverage tags.
 
-Calibration case/observation/receipt schemas are explicitly versioned. In case v2, `SemanticCalibrationCase.identity` is the root of a privacy-preserving `SemanticCalibrationCaseCommitment` rather than a hash that requires the raw case body to be present. The commitment binds case ID/revision, objective SHA-256, the exact evaluator-owned rubric plus its identity, candidate-output SHA-256, evaluator-owned expected PASS/FAIL label, and canonical coverage tags. Raw objective and candidate text are not duplicated into the durable observation or calibration receipt.
+Calibration case/observation/receipt schemas are explicitly revisioned. In the current calibration schema, `SemanticCalibrationCase.identity` is the root of a privacy-preserving `SemanticCalibrationCaseCommitment` rather than a hash that requires the raw case body to be present. The commitment binds case ID/revision, objective SHA-256, the exact evaluator-owned rubric plus its identity, candidate-output SHA-256, evaluator-owned expected PASS/FAIL label, and canonical coverage tags. Raw objective and candidate text are not duplicated into the durable observation or calibration receipt.
 
-Each resolved observation v2 embeds that self-validating commitment **and the bounded `SemanticJudgeResponse` itself**. The response contains criterion IDs, bounded PASS/FAIL/ABSTAIN decisions, integer scores, and the overall decision; it contains no free-form reasoning or candidate text. On every construction and load, `derive_semantic_decision(...)` reruns against the committed rubric. `observed` and `response_sha256` are derived properties rather than independently serialized claims. A failed observation carries no response and requires an explicit judge/malformed-response failure code.
+Each resolved observation embeds that self-validating commitment **and the bounded `SemanticJudgeResponse` itself**. The response contains criterion IDs, bounded PASS/FAIL/ABSTAIN decisions, integer scores, and the overall decision; it contains no free-form reasoning or candidate text. On every construction and load, `derive_semantic_decision(...)` reruns against the committed rubric. `observed` and `response_sha256` are derived properties rather than independently serialized claims. A failed observation carries no response and requires an explicit judge/malformed-response failure code.
 
 `expected`, coverage `tags`, `observed`, and `response_sha256` are therefore not independent durable authority fields. Class support and adversarial coverage come from the verified case commitment; correctness, false-PASS accounting, abstention, and accuracy consume only the decision rederived from the persisted structured response. Relabeling a case, injecting/removing a coverage tag, changing the rubric, or making a response contradict criterion/order/threshold/overall semantics fails validation unless the corresponding case identity changes.
 
@@ -192,9 +210,9 @@ Validation re-parses the live judge profile and calibration receipt, then requir
 
 - calibration `accepted == True`;
 - exact profile identity equality between live judge and calibration;
-- internally valid v2 case commitments, persisted structured responses, rederived response decisions/digests, calibration metrics, and receipt root.
+- internally valid current-schema case commitments, persisted structured responses, rederived response decisions/digests, calibration metrics, and receipt root.
 
-Current authority validation accepts calibration receipt v2. Legacy v1 calibration receipts are not silently interpreted as the stronger relation: the typed nested calibration field causes both fresh semantic-authority validation and persisted `SemanticJudgmentReceipt` replay validation to fail closed on the old schema. The outer semantic-judgment schema does not change because its own relation and hashing semantics are unchanged; it already binds and validates the complete nested calibration receipt.
+Current authority validation accepts the current calibration receipt schema. Legacy calibration receipts are not silently interpreted as the stronger relation: the typed nested calibration field causes both fresh semantic-authority validation and persisted `SemanticJudgmentReceipt` replay validation to fail closed on the old schema. The outer semantic-judgment schema does not change because its own relation and hashing semantics are unchanged; it already binds and validates the complete nested calibration receipt.
 
 Malformed, rejected, or drifted authority produces evaluator uncertainty rather than subject failure.
 
@@ -304,7 +322,7 @@ Replay therefore verifies historical consistency. It does not prove that the sem
 
 ## Assurance reports
 
-`AssuranceReport` v2 keeps deterministic and semantic authority visibly separate.
+`AssuranceReport` current calibration schema keeps deterministic and semantic authority visibly separate.
 
 Each `TrialAssuranceRecord` contains:
 
@@ -346,11 +364,11 @@ The fixed profile binds:
 - tracing disabled;
 - sensitive trace data disabled;
 - exact evaluator prompt digest;
-- response schema v1.
+- response schema legacy calibration schema.
 
 The parser rejects duplicate JSON keys, non-finite numeric constants, invalid JSON, non-object JSON, oversized output, and schema-invalid responses. Those are evaluator/judge failures, not subject semantic FAIL.
 
-CI uses `agents.testing.ScriptedModel`, so the integration test exercises the real pinned SDK runner/model interface without provider credentials or an external API call.
+CI uses `agents.testing.ScriptedModel`, so the integration test exercises the real repository-governed SDK runner/model interface without provider credentials or an external API call.
 
 ## What this feature does not claim
 
@@ -362,7 +380,7 @@ The current semantic layer does not claim:
 - human-equivalent review;
 - authenticated human approval;
 - a cryptographic signature over judge output;
-- provider-side model-version attestation;
+- provider-side model-revision attestation;
 - calibration transfer across model/prompt/configuration drift;
 - current-model liveness during replay;
 - authenticated publisher identity for replayed semantic evidence;
