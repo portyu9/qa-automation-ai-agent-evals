@@ -344,7 +344,7 @@ This path does **not** establish:
 - organization/user identity or tenant membership;
 - arbitrary hosted-tool or MCP approval behavior;
 - authorization of an external target merely because evaluator-owned evidence says an invocation was approved;
-- general human-in-the-loop safety for systems outside the exact pinned SDK boundary.
+- general human-in-the-loop safety for systems outside the exact repository-governed SDK boundary.
 
 The claim is intentionally narrower: **one evaluator-owned decision is integrity-bound to one exact native SDK approval interruption and its exact observed continuation inside the controlled deterministic harness.**
 

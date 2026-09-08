@@ -10,13 +10,13 @@ Its primary question is deliberately narrow:
 
 The answer is recorded as `MCPFaultReceipt`. That receipt is protocol evidence. **By itself** it is not an autonomous-agent verdict, an OpenAI `AttackDeliveryReceipt`, release authority, remote-transport assurance, or target-side attestation.
 
-Six separate deterministic integration paths consume selected fault contracts through a fresh official MCP stdio server and the pinned OpenAI Agents SDK:
+Six separate deterministic integration paths consume selected fault contracts through a fresh official MCP stdio server and the repository-governed OpenAI Agents SDK:
 
 - `TOOL_METADATA_POISON` — exact controlled target description observed through official MCP discovery and bound to the exact target tool definition supplied at the public model boundary, without requiring a target call;
 - `TOOL_RESULT_POISON` — exact same-call result delivery with post-run same-session recovery;
 - `TOOL_ERROR` — exact model-visible error followed by one causal same-argument retry and benign recovery on the same session;
 - `TOOL_LIST_STALE_CACHE` — exact initial target exposure, hidden live removal, cached post-removal target discovery, real unknown-tool rejection, evaluator-owned cache invalidation, first fresh target-absent discovery, and exact target-absent public-model exposure carrying the same rejection;
-- `TOOL_SCHEMA_DRIFT` — exact initial model-visible schema, hidden live replacement replacement, cached post-mutation initial discovery, real stale-call rejection, evaluator-owned cache invalidation, first fresh replacement discovery, and one corrected replacement behavioral call on the same session;
+- `TOOL_SCHEMA_DRIFT` — exact initial model-visible schema, hidden live schema replacement, cached post-mutation initial discovery, real stale-call rejection, evaluator-owned cache invalidation, first fresh replacement discovery, and one corrected replacement behavioral call on the same session;
 - `TOOL_IDENTITY_DRIFT` — exact original model-visible identity, hidden live old→replacement registry mutation, cached post-mutation original-name discovery, real old-name rejection, evaluator-owned cache invalidation, first fresh replacement discovery, and one exact replacement-name behavioral call on the same session.
 
 Those dedicated bridges are described under [Relationship to agent adversarial testing](#relationship-to-agent-adversarial-testing), in [MCP Stale-Cache Tool-Removal Assurance](MCP_STALE_CACHE.md), in [MCP Tool-Identity Drift Assurance](MCP_IDENTITY_DRIFT.md), and in [OpenAI Agents SDK Adapter](OPENAI_ADAPTER.md). They do not broaden one another or the standalone protocol receipts. The stale-cache, schema-drift, and identity-drift bridges do not claim model-initiated refresh or automatic `tools/list_changed` handling.
@@ -101,13 +101,21 @@ flowchart TB
 
 ### Stale discovery
 
-```text
-initial tools/list → target present + positive MCP cache-hint TTL
-server.remove_tool(target)
-normal tools/list  → cached target still present
-refresh tools/list → target absent
-                     ↓
-              MCPFaultReceipt
+```mermaid
+flowchart LR
+    accTitle: MCP stale-discovery relation
+    accDescr: Initial discovery exposes a target with a positive cache hint. The server removes that target while normal discovery still returns the cached entry. A forced refresh finally proves target absence, and only then can the protocol receipt close.
+    I[Initial tools/list · target present]
+    M[Server removes target]
+    C[Cached tools/list · target still present]
+    R[Forced refresh · target absent]
+    E[MCPFaultReceipt]
+    I --> M --> C --> R --> E
+    classDef boundary fill:#ffebe9,stroke:#cf222e,color:#24292f,stroke-width:2px,stroke-dasharray:5 3
+    classDef evidence fill:#dafbe1,stroke:#1a7f37,color:#24292f,stroke-width:2px
+    class I,M,C,R boundary
+    class E evidence
+    linkStyle default stroke:#57606a,stroke-width:1.5px
 ```
 
 The dedicated stale-cache agent bridge adds a cross-domain relation to the standalone discovery proof: the target must be model-visible before selection, the harness removes it before live lookup, cached host discovery must still advertise it, the live call must reject, and host-owned invalidation must make target absence plus the exact rejection visible at the next public model boundary. No replacement call is manufactured. See [MCP Stale-Cache Tool-Removal Assurance](MCP_STALE_CACHE.md).
@@ -261,7 +269,7 @@ exact target description observed through official tools/list
         ↓
 MCPFaultReceipt
         ↓
-pinned Agents SDK converts the MCP target to a model Tool
+repository-governed Agents SDK converts the MCP target to a model Tool
         ↓
 public Model observer sees exactly one target definition
 + exact description equivalence
@@ -423,7 +431,7 @@ The adapter requires exactly two controlled attempts; exact original then replac
 initial-list < swap < stale-call < cache-invalidation < refreshed-list < recovery-call
 ```
 
-The harness owns the rename and the host adapter owns invalidation. The model is credited only for choosing the replacement after it is actually visible. Missing recovery, stale-name reuse, an unbound identity, call-ID reuse, extra controlled attempts, recovery before refresh, ambiguous discovery/model exposure, wrong arguments/results, control-tool leakage, or receipt tampering fails closed. A removed old name emitted after refresh may also be rejected directly by the pinned SDK/MCP boundary and is preserved as `RUNTIME_ERROR / BLOCKED` rather than being repaired. See [MCP Tool-Identity Drift Assurance](MCP_IDENTITY_DRIFT.md).
+The harness owns the rename and the host adapter owns invalidation. The model is credited only for choosing the replacement after it is actually visible. Missing recovery, stale-name reuse, an unbound identity, call-ID reuse, extra controlled attempts, recovery before refresh, ambiguous discovery/model exposure, wrong arguments/results, control-tool leakage, or receipt tampering fails closed. A removed old name emitted after refresh may also be rejected directly by the repository-governed SDK/MCP boundary and is preserved as `RUNTIME_ERROR / BLOCKED` rather than being repaired. See [MCP Tool-Identity Drift Assurance](MCP_IDENTITY_DRIFT.md).
 
 All six bridges establish delivery/recovery/adaptation preconditions only. They do not assert safe subject behavior; deterministic policy/outcome oracles still decide PASS/FAIL.
 

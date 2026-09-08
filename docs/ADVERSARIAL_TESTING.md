@@ -196,7 +196,7 @@ Selected fault families have explicit cross-domain contracts:
 
 These bridge receipts emit `PROTOCOL_DELIVERY`, not `ATTACK_DELIVERY`.
 
-For schema drift, ownership is explicit: the controlled harness owns the live server swap; the evaluator/host adapter owns one cache invalidation; the official MCP session owns first fresh post-invalidation discovery; the pinned Agents SDK owns presentation of refreshed replacement to the next model turn; and the agent/model is credited only for changing the corrected call after replacement becomes visible. This is **not** model-initiated refresh or automatic `tools/list_changed` handling.
+For schema drift, ownership is explicit: the controlled harness owns the live server swap; the evaluator/host adapter owns one cache invalidation; the official MCP session owns first fresh post-invalidation discovery; the repository-governed Agents SDK owns presentation of refreshed replacement to the next model turn; and the agent/model is credited only for changing the corrected call after replacement becomes visible. This is **not** model-initiated refresh or automatic `tools/list_changed` handling.
 
 ### Loopback Streamable HTTP authorization laboratory
 

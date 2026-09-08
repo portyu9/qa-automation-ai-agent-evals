@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This contract proves one exact **host-refreshed stale-tool removal delivery** relation across a live official MCP stdio session and the pinned OpenAI Agents SDK. It closes the cross-domain gap for `MCPFaultKind.TOOL_LIST_STALE_CACHE` without claiming that the model requested refresh, that the SDK autonomously recovered, or that target absence alone is safe agent behavior.
+This contract proves one exact **host-refreshed stale-tool removal delivery** relation across a live official MCP stdio session and the repository-governed OpenAI Agents SDK. It closes the cross-domain gap for `MCPFaultKind.TOOL_LIST_STALE_CACHE` without claiming that the model requested refresh, that the SDK autonomously recovered, or that target absence alone is safe agent behavior.
 
 The controlled relation is:
 
@@ -44,7 +44,7 @@ Ownership is intentionally non-overlapping:
 - the **controlled harness** owns live removal of the target tool;
 - the **evaluator/host adapter** owns the one cache invalidation after the real stale-call rejection;
 - the **official MCP session** owns initial/cached/refreshed discovery and call-time lookup results;
-- the **pinned Agents SDK** owns conversion of MCP discovery into the tool set supplied through the public `Model` boundary;
+- the **repository-governed Agents SDK** owns conversion of MCP discovery into the tool set supplied through the public `Model` boundary;
 - the **agent/model** owns its selected requests, but is not credited for the host-owned refresh;
 - deterministic framework policy/outcome oracles remain behavioral grading authority.
 
@@ -179,7 +179,7 @@ The adapter blocks for conditions including:
 - extra controlled target request after refresh;
 - malformed/tampered receipt material or replay chronology.
 
-If a model emits the removed target after the refreshed public model boundary and the pinned SDK rejects that request before another normal model turn, the runtime failure is preserved. The evaluator does not repair the subject or synthesize a continuation.
+If a model emits the removed target after the refreshed public model boundary and the repository-governed SDK rejects that request before another normal model turn, the runtime failure is preserved. The evaluator does not repair the subject or synthesize a continuation.
 
 ## Deterministic verification
 

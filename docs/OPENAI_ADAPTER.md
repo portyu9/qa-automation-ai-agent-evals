@@ -4,7 +4,7 @@
 
 The OpenAI integration turns documented OpenAI Agents SDK execution surfaces into provider-neutral evaluation evidence while keeping state verification, policy authority, protocol truth, and release authority outside the SDK.
 
-The integration is pinned to `openai-agents`. MCP integration is pinned separately to `mcp`. Pinning both sides makes normalization, tool-output conversion, call identity, approval interruption/resume behavior, protocol negotiation, retry chronology, tool-discovery semantics, and run-item agent attribution explicit reviewable contracts rather than floating assumptions.
+OpenAI and MCP dependency releases are governed by the repository manifests and lock inputs. Governing both sides makes normalization, tool-output conversion, call identity, approval interruption/resume behavior, protocol negotiation, retry chronology, tool-discovery semantics, and run-item agent attribution explicit reviewable contracts rather than floating assumptions.
 
 Twelve adapter boundaries are intentionally distinct:
 
@@ -116,26 +116,25 @@ flowchart TB
 
 ### Native handoff authority attenuation
 
-```text
-AuthorityPolicy(root_agent + directed HandoffAuthorityGrant graph)
-        ↓
-OpenAIAgentsHandoffAuthorityAdapter
-        ↓ root Agent.name must match before execution
-native SDK HandoffOutputItem(source_agent, target_agent)
-        + public RunItemBase.agent.name
-        + stable tool call identities
-        ↓
-agent-attributed TOOL_REQUEST / TOOL_RESULT / APPROVAL_REQUEST
-        ↓
-TrialEvidence
-        +
-scenario-owned authority graph
-        ↓
-PolicyOracle active-agent chronology
-        ↓
-child tools/resources/approvals/budgets may preserve or narrow only
-        ↓
-deterministic policy PASS / critical FAIL contribution
+```mermaid
+flowchart TB
+    accTitle: OpenAI native handoff authority path
+    accDescr: Scenario-owned authority and the configured root agent enter the specialized handoff adapter. Native SDK handoff and generating-agent provenance become attributed evidence. The policy oracle checks active-agent chronology and path-local attenuation before accepting delegated actions.
+    P[AuthorityPolicy + directed grants]
+    A[OpenAIAgentsHandoffAuthorityAdapter]
+    H[Native HandoffOutputItem]
+    R[Attributed tool / result / approval evidence]
+    E[TrialEvidence + scenario authority graph]
+    V[PolicyOracle active-agent chronology]
+    G[Deterministic policy verdict]
+    P --> A --> H --> R --> E --> V --> G
+    classDef authority fill:#ddf4ff,stroke:#0969da,color:#24292f,stroke-width:2px
+    classDef advisory fill:#fbefff,stroke:#8250df,color:#24292f,stroke-width:2px
+    classDef evidence fill:#dafbe1,stroke:#1a7f37,color:#24292f,stroke-width:2px
+    class P,V,G authority
+    class A,H advisory
+    class R,E evidence
+    linkStyle default stroke:#57606a,stroke-width:1.5px
 ```
 
 This path does not introduce a provider-owned authorization decision or a new handoff receipt domain. SDK agent names are run-local provenance identities. `AuthorityPolicy` and `PolicyOracle` remain the authorization authority.
@@ -146,31 +145,30 @@ See [Native Handoff Authority](HANDOFF_AUTHORITY.md) for the graph, attenuation,
 
 ### Native HITL approval-intent binding
 
-```text
-EvaluationScenario.approval_intent
-        ↓ exact agent + tool + approve/reject intent
-OpenAIAgentsHITLApprovalAdapter
-        ↓
-native SDK ToolApprovalItem
-        ↓
-APPROVAL_REQUEST
-  generating agent + tool + stable call ID
-  canonical finite-JSON arguments
-  normalized resource when scoped
-  accepted authority epoch + exact accepted path hash
-        ↓
-ApprovalIntentReceipt / APPROVAL_DECISION
-        ↓ same SDK RunState
-state.approve(...) or state.reject(...)
-        ↓
-Runner.run(..., state=same_run_state)
-        ↓
-approve: exact matching TOOL_REQUEST + TOOL_RESULT once
-reject: explicit rejection TOOL_RESULT and no protected TOOL_REQUEST
-        ↓
-verify_approval_intent(...)
-        ↓
-PolicyOracle + OutcomeOracle
+```mermaid
+flowchart TB
+    accTitle: OpenAI native approval continuation path
+    accDescr: The scenario binds exact approval intent. A native approval interruption becomes an approval request and typed decision receipt. The same run state is resumed through approve or reject, and the evaluator verifies the exact continuation before deterministic grading.
+    S[Scenario approval intent]
+    A[OpenAIAgentsHITLApprovalAdapter]
+    I[Native ToolApprovalItem]
+    R[APPROVAL_REQUEST + ApprovalIntentReceipt]
+    Q{Approve or reject}
+    AP[Matching executable request + result]
+    RJ[Explicit rejection result + no protected request]
+    V[verify_approval_intent]
+    G[Policy + outcome oracles]
+    S --> A --> I --> R --> Q
+    Q -->|approve| AP --> V
+    Q -->|reject| RJ --> V
+    V --> G
+    classDef authority fill:#ddf4ff,stroke:#0969da,color:#24292f,stroke-width:2px
+    classDef advisory fill:#fbefff,stroke:#8250df,color:#24292f,stroke-width:2px
+    classDef evidence fill:#dafbe1,stroke:#1a7f37,color:#24292f,stroke-width:2px
+    class S,V,G authority
+    class A,I,Q advisory
+    class R,AP,RJ evidence
+    linkStyle default stroke:#57606a,stroke-width:1.5px
 ```
 
 A pending SDK approval item is not normalized as an executed tool request. `APPROVAL_REQUEST` records the exact invocation awaiting review; executable `TOOL_REQUEST` evidence appears only if the resumed run actually reaches the protected tool invocation.
@@ -183,50 +181,58 @@ Legacy call-scoped and persistent tool-scoped `APPROVAL` evidence remains suppor
 
 ### Run-local side-effect idempotency observer
 
-```text
-EvaluationScenario.side_effect_idempotency
-        ↓ exact tool + logical key + canonical arguments
-OpenAIAgentsSideEffectIdempotencyAdapter
-        ↓ copied SDK FunctionTool wrapper only
-TOOL_REQUEST(call-1) → real subject callback
-        ↓ evaluator effect_reader before / after
-TOOL_RESULT(call-1)
-        ↓
-TOOL_REQUEST(call-2; distinct ID, same exact arguments) → real subject callback
-        ↓ evaluator effect_reader before / after
-TOOL_RESULT(call-2)
-        ↓ continuous effect chronology
-SideEffectIdempotencyReceipt / SIDE_EFFECT_OBSERVATION
-        ↓ verify_side_effect_observation(...)
-PolicyOracle → SideEffectIdempotencyOracle → OutcomeOracle
+```mermaid
+sequenceDiagram
+    accTitle: Run-local side-effect idempotency observation
+    accDescr: The specialized adapter invokes the real subject callback twice with the same canonical logical operation but distinct call identities. Evaluator-owned effect snapshots surround each attempt. The resulting receipt proves continuous before-and-after state and feeds deterministic side-effect grading.
+    autonumber
+    actor E as Evaluator
+    participant A as Side-effect adapter
+    participant T as Real subject tool callback
+    participant S as Effect-state reader
+    E->>A: exact logical operation contract
+    A->>S: read before first attempt
+    A->>T: first request
+    T-->>A: first result / exception path
+    A->>S: read after first attempt
+    A->>S: read before second attempt
+    A->>T: second request · distinct call identity
+    T-->>A: second result / exception path
+    A->>S: read after second attempt
+    A-->>E: side-effect receipt + normalized evidence
+    Note over E,S: Green evidence is accepted only after chronology and continuity revalidation
+    %% Color semantics are expressed by trust-boundary boxes below.
 ```
 
-The observer does not intercept the first call and synthesize a duplicate result. Both subject callbacks execute through the pinned SDK. The wrapper preserves the original return value and exception path while collecting digest-only observation material in `finally`. Missing call identity, malformed/changed arguments, effect-reader failure, missing/duplicate results, reused call identity, non-continuous effect state, or any relation that cannot be reconstructed is evaluator uncertainty and blocks the trial.
+The observer does not intercept the first call and synthesize a duplicate result. Both subject callbacks execute through the repository-governed SDK. The wrapper preserves the original return value and exception path while collecting digest-only observation material in `finally`. Missing call identity, malformed/changed arguments, effect-reader failure, missing/duplicate results, reused call identity, non-continuous effect state, or any relation that cannot be reconstructed is evaluator uncertainty and blocks the trial.
 
 Once the relation is verified, a second physical mutation is resolved subject behavior and remains critical `FAIL`. Replay revalidates the persisted receipt and chronology without invoking the callback or `effect_reader` again. The boundary is exactly two local `FunctionTool` attempts in one controlled run; it does not establish distributed exactly-once semantics, durable idempotency storage, crash/concurrency safety, arbitrary hosted/MCP tool behavior, or external-target enforcement. See [Side-Effect Idempotency Assurance](SIDE_EFFECT_IDEMPOTENCY.md).
 
 ### Deterministic retrieval-delivery bridge
 
-```text
-EvaluationScenario.retrieval
-        ↓
-content-addressed corpus + exact query + integer ranker profile
-        ↓ optional insertion-only controlled poison relation
-canonical active ranking
-        ↓
-OpenAIAgentsRetrievalAdapter adds one evaluator-owned FunctionTool
-        ↓
-exact model-selected query + stable call ID
-        ↓
-TOOL_REQUEST
-        ↓
-RETRIEVAL_DELIVERY
-        ↓
-TOOL_RESULT(exact canonical ranked JSON)
-        ↓
-verify_retrieval_delivery(...)
-        ↓
-framework-owned deterministic oracles
+```mermaid
+flowchart TB
+    accTitle: Deterministic retrieval delivery bridge
+    accDescr: A scenario-owned corpus, exact query, ranker profile, and optional controlled poison derive one canonical active ranking. The OpenAI retrieval adapter exposes one evaluator-owned tool, binds the exact selected query and call identity, and emits a delivery receipt before the exact ranked result is treated as model-visible evidence.
+    S[Retrieval contract]
+    C[Content-addressed corpus + query + ranker]
+    P[Optional controlled poison relation]
+    K[Canonical active ranking]
+    A[OpenAIAgentsRetrievalAdapter]
+    Q[Exact model-selected query + call identity]
+    R[RETRIEVAL_DELIVERY receipt]
+    O[Exact canonical ranked TOOL_RESULT]
+    V[verify_retrieval_delivery]
+    S --> C
+    P --> K
+    C --> K --> A --> Q --> R --> O --> V
+    classDef authority fill:#ddf4ff,stroke:#0969da,color:#24292f,stroke-width:2px
+    classDef advisory fill:#fbefff,stroke:#8250df,color:#24292f,stroke-width:2px
+    classDef evidence fill:#dafbe1,stroke:#1a7f37,color:#24292f,stroke-width:2px
+    class S,C,K,V authority
+    class P,A,Q advisory
+    class R,O evidence
+    linkStyle default stroke:#57606a,stroke-width:1.5px
 ```
 
 The target call must occur exactly once and must use only the exact scenario-bound query. A wrong query receives a fixed rejection payload and not the bound context. The receipt binds scenario/contract/corpus/query/ranker/poison identities, ranked-hit provenance/content digests, call ID, and the exact model-visible result digest. This is a separate evaluation-precondition domain, not an eighth generic attack channel. It does not establish OpenAI File Search, hosted vector stores, embedding/ANN quality, production RAG ingestion/chunking/filtering/citation behavior, live-provider delivery, or safe model behavior. See [Retrieval Provenance and Poisoning Assurance](RETRIEVAL_ASSURANCE.md).
@@ -244,7 +250,7 @@ exact target description observed through official tools/list
         ↓
 MCPFaultReceipt
         ↓
-pinned SDK converts MCP target to a model-visible Tool
+repository-governed SDK converts MCP target to a model-visible Tool
         ↓
 public Model observer sees exactly one target Tool
 + exact target name
@@ -583,7 +589,7 @@ This one-call rule is deliberate. A second agent-visible recovery result would m
 
 ### SDK representation conversion
 
-The pinned Agents SDK retains a single MCP text block in `ToolCallOutputItem.output` as a logical structured value:
+The repository-governed Agents SDK retains a single MCP text block in `ToolCallOutputItem.output` as a logical structured value:
 
 ```json
 {"type": "text", "text": "..."}
@@ -733,7 +739,7 @@ Inside the deterministic harness it proves:
 
 1. the connected official MCP stdio session negotiated repository-supported negotiated protocol revision;
 2. the first target call returned the bound real `ToolError` observation;
-3. the pinned Agents SDK exposed the exact expected logical error result to the deterministic model path;
+3. the repository-governed Agents SDK exposed the exact expected logical error result to the deterministic model path;
 4. the agent produced a distinct second target call only after the first result in normalized chronology;
 5. the retry used the same canonical arguments;
 6. the retry recovered to the exact configured benign value on the same live session;
@@ -756,7 +762,7 @@ Ownership is intentionally split:
 - the controlled harness owns the hidden live schema replacement;
 - the evaluator/host adapter owns one MCP tool-cache invalidation after the stale rejection;
 - the official MCP session owns the first fresh post-invalidation `tools/list` observation;
-- the pinned Agents SDK owns conversion of refreshed MCP schema into next-turn model tool definitions and may reuse that replacement cache later;
+- the repository-governed Agents SDK owns conversion of refreshed MCP schema into next-turn model tool definitions and may reuse that replacement cache later;
 - the agent/model is credited only for changing the second target call after replacement is model-visible.
 
 The adapter does **not** claim model-initiated refresh, automatic `tools/list_changed` handling, or automatic Agents SDK expiry according to the MCP cache hint. The hint is protocol evidence; host-cache behavior is demonstrated separately by `cache_tools_list=True`, observed cached post-mutation discovery, and evaluator-owned `invalidate_tools_cache()`.
@@ -826,7 +832,7 @@ Inside the deterministic harness it proves:
 2. the first model turn received the bound initial target schema and not the evaluator control tool;
 3. the model selected the bound initial-shaped call;
 4. the live server changed to replacement before that call reached real validation;
-5. real replacement validation rejected the stale initial arguments and the pinned SDK made that rejection model-visible;
+5. real replacement validation rejected the stale initial arguments and the repository-governed SDK made that rejection model-visible;
 6. the host invalidated cached discovery once and the first fresh post-invalidation listing exposed the bound replacement contract;
 7. only after replacement became model-visible did the agent issue the distinct exact replacement-shaped recovery call;
 8. that call returned the bound replacement result on the same session;
@@ -849,7 +855,7 @@ Ownership is intentionally split:
 - the controlled harness owns the live old→replacement registry mutation;
 - the evaluator/host adapter owns MCP tool-cache invalidation after the stale old-name rejection;
 - the official MCP session owns cached/refreshed `tools/list` observations and call-time lookup results;
-- the pinned Agents SDK owns conversion of MCP tools into public model-visible definitions;
+- the repository-governed Agents SDK owns conversion of MCP tools into public model-visible definitions;
 - the agent/model is credited only for selecting the exact replacement name after that identity is visible.
 
 The adapter does **not** claim model-initiated refresh, automatic `tools/list_changed` handling, or automatic Agents SDK expiry according to the MCP cache hint. The hint is protocol evidence; host-cache behavior is demonstrated separately by `cache_tools_list=True`, observed cached post-mutation discovery, and evaluator-owned `invalidate_tools_cache()`.
@@ -878,7 +884,7 @@ request(original) < result(rejection) < request(replacement) < result(recovery)
 
 Missing recovery, more than two controlled attempts, stale-name reuse, an unbound third identity, reused call ID, malformed/changed arguments, result ambiguity, or non-causal ordering blocks evaluation.
 
-A removed old name emitted after refresh may be rejected by the pinned SDK/MCP boundary before another model turn is possible. That runtime failure is preserved as `RUNTIME_ERROR / BLOCKED`; the evaluator does not synthesize a fake continuation.
+A removed old name emitted after refresh may be rejected by the repository-governed SDK/MCP boundary before another model turn is possible. That runtime failure is preserved as `RUNTIME_ERROR / BLOCKED`; the evaluator does not synthesize a fake continuation.
 
 ### Protocol chronology and receipt closure
 
@@ -989,7 +995,7 @@ Handoff-authority and approval-intent evidence record run-local SDK agent names.
 
 ## Deterministic SDK verification
 
-The repository uses `agents.testing.ScriptedModel` against the real pinned Agents SDK without provider API calls.
+The repository uses `agents.testing.ScriptedModel` against the real repository-governed Agents SDK without provider API calls.
 
 The handoff-authority suite verifies one-hop and two-hop native handoffs, actual public run-item agent attribution, request/result owner consistency, path-local tool/resource/budget attenuation, legacy-adapter fail-closed behavior, and root mismatch before model execution.
 

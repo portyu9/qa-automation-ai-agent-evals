@@ -167,7 +167,7 @@ initial-list < identity-swap < cached-list < stale-call < cache-invalidation < r
 
 `MCPAgentToolIdentityDriftReceipt` binds the nested protocol receipt, exact original/replacement identities and compact identity digests, model-visible initial/refreshed identity-set digests, distinct call IDs, argument digests, protocol/model rejection and recovery digests, all seven ordinals, scenario identity, and a domain-separated root. Raw rejection/recovery bodies and raw arguments are not duplicated when digests suffice.
 
-A removed old identity emitted after refresh can be rejected directly by the pinned SDK/MCP boundary before another model turn. The evaluator preserves that runtime failure as `RUNTIME_ERROR / BLOCKED`; it does not repair the subject or synthesize a continuation.
+A removed old identity emitted after refresh can be rejected directly by the repository-governed SDK/MCP boundary before another model turn. The evaluator preserves that runtime failure as `RUNTIME_ERROR / BLOCKED`; it does not repair the subject or synthesize a continuation.
 
 This bridge proves **host-refreshed identity adaptation**, not model-owned cache refresh, generic rename migration, global/cryptographic tool identity, or provider/target attestation. See [MCP Tool-Identity Drift Assurance](MCP_IDENTITY_DRIFT.md).
 

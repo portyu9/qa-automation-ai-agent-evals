@@ -6,7 +6,7 @@ This document defines the executable **host-refreshed MCP tool-identity adaptati
 
 The assurance question is deliberately narrow:
 
-> After one controlled live MCP tool rename, did the pinned OpenAI Agents SDK first expose the original identity, did cached discovery still expose that original identity after the live rename, did the agent observe the real old-name rejection, did evaluator-owned cache invalidation expose exactly the replacement identity, and did the agent then call that exact replacement identity with a distinct call ID before deterministic grading?
+> After one controlled live MCP tool rename, did the repository-governed OpenAI Agents SDK first expose the original identity, did cached discovery still expose that original identity after the live rename, did the agent observe the real old-name rejection, did evaluator-owned cache invalidation expose exactly the replacement identity, and did the agent then call that exact replacement identity with a distinct call ID before deterministic grading?
 
 This is a cross-domain evaluation precondition. It is not a generic rename-migration guarantee, provider attestation, target-side identity proof, or behavioral PASS by itself.
 
@@ -17,7 +17,7 @@ The relation assigns each observation to the component that actually owns it:
 - the **controlled harness** owns one live registry mutation from the original tool name to the exact replacement name;
 - the **evaluator/host adapter** owns one MCP tool-cache invalidation after the stale old-name rejection;
 - the **official MCP session** owns initial/cached/refreshed `tools/list` observations and live `tools/call` lookup results;
-- the **pinned Agents SDK** owns conversion of MCP discovery into model-visible tool definitions;
+- the **repository-governed Agents SDK** owns conversion of MCP discovery into model-visible tool definitions;
 - the **agent/model** is credited only for changing the second requested tool identity after the replacement definition has actually reached the public model boundary;
 - deterministic policy/outcome oracles remain the behavioral grading authority after the bridge closes.
 
@@ -144,7 +144,7 @@ Evaluator/provenance uncertainty becomes `EVALUATION_ERROR / BLOCKED`. Examples 
 - bridge-receipt or protocol-receipt tampering;
 - replay evidence whose typed identity relation no longer revalidates.
 
-A model that emits a removed old tool name after the refreshed model boundary may be rejected directly by the pinned SDK/MCP execution boundary. `TrialRunner` preserves that as `RUNTIME_ERROR / BLOCKED`; the harness does not fabricate an additional model turn merely to convert the same uncertainty into a different error category.
+A model that emits a removed old tool name after the refreshed model boundary may be rejected directly by the repository-governed SDK/MCP execution boundary. `TrialRunner` preserves that as `RUNTIME_ERROR / BLOCKED`; the harness does not fabricate an additional model turn merely to convert the same uncertainty into a different error category.
 
 ## Replay
 

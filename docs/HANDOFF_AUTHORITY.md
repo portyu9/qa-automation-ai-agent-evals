@@ -4,7 +4,7 @@
 
 Native multi-agent handoffs change **which agent is acting**. A handoff therefore cannot be treated as only a routing event or only a counter against `max_handoffs`: the receiving agent must have an explicit, scenario-bound authority grant, and that grant must never broaden the authority that reached the source agent.
 
-This repository implements one deterministic OpenAI Agents SDK boundary for that claim. The framework owns the authority graph and grading rules; the pinned SDK supplies run-local evidence about which agent generated each observed run item.
+This repository implements one deterministic OpenAI Agents SDK boundary for that claim. The framework owns the authority graph and grading rules; the repository-governed SDK supplies run-local evidence about which agent generated each observed run item.
 
 ```mermaid
 flowchart TB
@@ -160,7 +160,7 @@ An invalid handoff never advances the active-agent state, accepted authority epo
 
 `OpenAIAgentsHandoffAuthorityAdapter` is deliberately separate from the base `OpenAIAgentsAdapter`.
 
-The base adapter continues to provide the general OpenAI execution and adversarial-channel normalization contract. The stronger handoff adapter adds provenance needed for delegated-authority grading from pinned public SDK run-item surfaces.
+The base adapter continues to provide the general OpenAI execution and adversarial-channel normalization contract. The stronger handoff adapter adds provenance needed for delegated-authority grading from repository-governed public SDK run-item surfaces.
 
 With `openai-agents`:
 

@@ -25,7 +25,7 @@ Instead, construction verifies that the terminal blocked classification has dura
 
 A blocked run can contain an explicit `POLICY_VIOLATION` that is already a resolved fact. One concrete example is native HITL turn-budget handling: the adapter can know that the subject exceeded the configured turn budget while a different approval-continuation relation remains unverifiable. The trial must stay `BLOCKED`, because the missing relation prevents valid complete grading, but the known policy violation must not disappear from release authority.
 
-Assurance current schema therefore adds `BlockedPolicyViolationSnapshot` to blocked trial records. Each snapshot is derived only by `AssuranceReport.from_session()` from an actual `POLICY_VIOLATION` event in the exact final `TrialEvidence` and records:
+The current Assurance schema therefore adds `BlockedPolicyViolationSnapshot` to blocked trial records. Each snapshot is derived only by `AssuranceReport.from_session()` from an actual `POLICY_VIOLATION` event in the exact final `TrialEvidence` and records:
 
 - the event sequence;
 - the exact event digest;
@@ -34,7 +34,7 @@ Assurance current schema therefore adds `BlockedPolicyViolationSnapshot` to bloc
 
 The event digest commits to the complete event, including its kind, payload, source, sequence, observed timestamp, and event-level critical flag. The duplicated source and reason are review material; they are not independent evidence authority.
 
-current schema does not create policy snapshots for non-blocked trials. Those trials continue to derive critical policy authority from completed deterministic oracle results.
+The current schema does not create policy snapshots for non-blocked trials. Those trials continue to derive critical policy authority from completed deterministic oracle results.
 
 ## Release-gate semantics
 
@@ -51,7 +51,7 @@ This preserves both sides of the framework's central distinction:
 
 ## Resolved history
 
-For `PASS`, `FAIL`, and `INCONCLUSIVE` trials, Assurance current schema rejects any evaluator/runtime blocking evidence and re-establishes the ordinary pre-grading closure before accepting deterministic oracle facts and, when configured, semantic judgment evidence.
+For `PASS`, `FAIL`, and `INCONCLUSIVE` trials, The current Assurance schema rejects any evaluator/runtime blocking evidence and re-establishes the ordinary pre-grading closure before accepting deterministic oracle facts and, when configured, semantic judgment evidence.
 
 This keeps the classification boundary explicit:
 
@@ -65,7 +65,7 @@ The serialized Assurance Report intentionally stores evidence roots rather than 
 
 The exact correspondence between each blocked-policy snapshot and its source event is established when constructing the report from the exact session/evidence objects. Historical event-level re-establishment still requires the exact evidence/replay path. The `report_root` binds the snapshots into report content, but remains a content-integrity commitment rather than a signature, trusted timestamp, publisher identity, or proof of honest evidence production.
 
-## Versioning
+## Schema evolution
 
 This hardening changes the Assurance Report derivation surface, so it uses a distinct revision rather than silently changing predecessor schema semantics:
 

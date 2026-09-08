@@ -2,29 +2,29 @@
 
 ## Purpose
 
-`AssuranceReport` is a self-validating session-level artifact for review, CI handoff, and later audit. Version `agent-evals/assurance-report/<schema>` binds the `agent-evals/trial-evidence/<schema>` schema, exact trial evidence roots, the scenario-derived grading profile introduced in predecessor schema, deterministic oracle snapshots for resolved grading, explicit policy facts retained by blocked trials, subordinate semantic judgments when required, reproducible reliability configuration, frozen release policy, and the release-gate decision derived from that session.
+`AssuranceReport` is a self-validating session-level artifact for review, CI handoff, and later audit. The current `agent-evals/assurance-report/<schema>` contract binds the `agent-evals/trial-evidence/<schema>` schema, exact trial evidence roots, the scenario-derived grading profile introduced in predecessor schema, deterministic oracle snapshots for resolved grading, explicit policy facts retained by blocked trials, subordinate semantic judgments when required, reproducible reliability configuration, frozen release policy, and the release-gate decision derived from that session.
 
 The report is deliberately **not** another execution or grading authority. It preserves conclusions and verifies the report-level derivation that can be recomputed from the artifact itself.
 
-## Why current schema exists
+## Why the current schema exists
 
-Assurance predecessor schema correctly separated `BLOCKED` from subject failure: blocked trials could not carry completed oracle snapshots or finalized semantic grading authority, and construction required durable evaluator/runtime blocking evidence. That prevented unknown evaluation outcomes from being mislabeled as bad subject behavior.
+The predecessor Assurance schema correctly separated `BLOCKED` from subject failure: blocked trials could not carry completed oracle snapshots or finalized semantic grading authority, and construction required durable evaluator/runtime blocking evidence. That prevented unknown evaluation outcomes from being mislabeled as bad subject behavior.
 
 One safety fact was still lost. A trial can be correctly `BLOCKED` because one evaluation relation remains unresolved while also containing an explicit `POLICY_VIOLATION` that is already known. Native HITL turn-budget handling is a concrete example: the adapter can preserve a known turn-budget violation while refusing to fabricate a missing approval-continuation relation. Full deterministic grading is invalid, so the trial must remain `BLOCKED`; however, the known policy violation must not disappear when the report computes release criticality.
 
-predecessor schema derived `critical_violations` only from failed critical deterministic oracle snapshots. Because blocked trials correctly have no oracle snapshots, a release policy that tolerated one blocked trial could accept a session even when that blocked evidence retained an explicit policy violation and the policy required `max_critical_violations=0`.
+The predecessor schema derived `critical_violations` only from failed critical deterministic oracle snapshots. Because blocked trials correctly have no oracle snapshots, a release policy that tolerated one blocked trial could accept a session even when that blocked evidence retained an explicit policy violation and the policy required `max_critical_violations=0`.
 
-current schema closes that fail-open shape without regrading blocked evidence.
+The current schema closes that fail-open shape without regrading blocked evidence.
 
-## Version boundary
+## Schema boundary
 
-current schema changes the Assurance artifact derivation surface and therefore uses a new schema and root domain rather than silently changing predecessor schema semantics:
+The current schema changes the Assurance artifact derivation surface and therefore uses a new schema and root domain rather than silently changing predecessor schema semantics:
 
 - assurance report: `agent-evals/assurance-report/<schema>`
 - evidence: `agent-evals/trial-evidence/<schema>` (unchanged)
 - report-root domain: `agent-evals/assurance-report/<schema>\0`
 
-predecessor schema artifacts are rejected by the current report model. A predecessor schema report is not silently interpreted under current schema criticality semantics.
+The predecessor schema artifacts are rejected by the current report model. A predecessor schema report is not silently interpreted under current schema criticality semantics.
 
 Historically:
 
@@ -34,7 +34,7 @@ Historically:
 
 ## Authority separation
 
-current schema keeps four authority classes distinct:
+The current schema keeps four authority classes distinct:
 
 1. **deterministic oracle snapshots** — completed framework grading for non-blocked trials. Framework-owned tuples are rederived from exact scenario/evidence during `from_session()` and must exactly equal the finalized runtime tuple;
 2. **blocked explicit-policy snapshots** — bounded facts copied only from actual `POLICY_VIOLATION` events in blocked evidence. They affect release criticality but do not make the blocked trial fully graded;
@@ -128,7 +128,7 @@ If semantic grading is present, construction validates the semantic event/receip
 
 A `BLOCKED` trial must contain durable evaluator/runtime blocking evidence recognized by `has_blocking_evidence()`. It cannot carry completed oracle results or semantic judgment authority.
 
-current schema does **not** run deterministic oracles over blocked evidence. Doing so would turn evaluator uncertainty into subject failure when grading prerequisites did not close.
+The current schema does **not** run deterministic oracles over blocked evidence. Doing so would turn evaluator uncertainty into subject failure when grading prerequisites did not close.
 
 Instead, construction scans the exact blocked event stream for explicit `POLICY_VIOLATION` events and creates `BlockedPolicyViolationSnapshot` records only from those existing events.
 
@@ -183,7 +183,7 @@ Shape constraints are strict:
 
 ## Session-level record
 
-At session level current schema records:
+At session level, the current schema records:
 
 - schema revision `agent-evals/assurance-report/<schema>`;
 - evidence schema `agent-evals/trial-evidence/<schema>`;
@@ -202,7 +202,7 @@ Blocked policy snapshots are part of each trial record and therefore part of `re
 
 Standalone Pydantic loading is not passive parsing. A current report must re-establish all report-level derivations available from the serialized artifact, including:
 
-1. exact current schema assurance schema and supported legacy evidence schema;
+1. the exact current assurance schema and supported evidence schema;
 2. unique trial IDs;
 3. blocked/non-blocked record shape;
 4. unique deterministic oracle names;
@@ -217,7 +217,7 @@ Standalone Pydantic loading is not passive parsing. A current report must re-est
 13. reliability from trial verdicts using exact `k` and `confidence_z`;
 14. critical-violation count from resolved deterministic critical failures plus blocked policy-oracle-equivalent failures;
 15. release-gate decision and reasons from reliability, criticality, and frozen policy;
-16. canonical current schema `report_root` over the complete report content.
+16. canonical current `report_root` over the complete report content.
 
 A caller cannot remove a blocked policy snapshot, change its review fields, alter a gate decision, or change criticality without also changing report content and recomputing the dependent root/gate. As with every content hash, an attacker who can rewrite the entire artifact can recompute a new internally consistent root; authenticated authorship is outside this artifact's claims.
 

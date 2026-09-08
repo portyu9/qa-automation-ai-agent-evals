@@ -118,7 +118,7 @@ tool_identity_drift
 
 All six fault kinds have explicit agent bridges. `tool_list_stale_cache` now proves only one exact host-refreshed removal-delivery relation; it does not imply generic cache coherence, model-owned refresh, or behavioral recovery. The metadata bridge proves exact model-visible exposure, not attention, interpretation, compliance, resistance, or safe behavior.
 
-The schema- and identity-drift bridges are not blanket promotions of cache semantics. Their ownership is explicit: the harness owns the live mutation, the evaluator/host adapter owns cache invalidation, the official MCP session supplies the first fresh post-invalidation listing, the pinned Agents SDK converts that listing into model tool definitions, and the agent is credited only for changing its next target call after the replacement contract/identity becomes model-visible. Neither path claims model-initiated refresh or automatic `tools/list_changed` handling.
+The schema- and identity-drift bridges are not blanket promotions of cache semantics. Their ownership is explicit: the harness owns the live mutation, the evaluator/host adapter owns cache invalidation, the official MCP session supplies the first fresh post-invalidation listing, the repository-governed Agents SDK converts that listing into model tool definitions, and the agent is credited only for changing its next target call after the replacement contract/identity becomes model-visible. Neither path claims model-initiated refresh or automatic `tools/list_changed` handling.
 
 For identity drift specifically, tool names are exact run-local protocol/model identities within the controlled relation; the receipt does not elevate them into cryptographic or globally authenticated tool principals. See [MCP Tool-Identity Drift Assurance](MCP_IDENTITY_DRIFT.md).
 
@@ -290,7 +290,7 @@ This is **host-refreshed identity adaptation**, not model-owned cache refresh or
 
 ## SDK representation is not protocol identity
 
-The pinned Agents SDK may serialize one logical text result differently across internal `ToolCallOutputItem.output` and Responses replay input. The bridges compare logical public outputs represented by normalized evidence rather than pretending incidental wire spellings are the same object.
+The repository-governed Agents SDK may serialize one logical text result differently across internal `ToolCallOutputItem.output` and Responses replay input. The bridges compare logical public outputs represented by normalized evidence rather than pretending incidental wire spellings are the same object.
 
 For schema drift, the bridge binds canonical projections of the raw MCP schemas while integration tests separately assert actual model-visible tool definitions. For identity drift, the bridge separately binds raw protocol discovery identities and the controlled identity sets supplied at the public model boundary. Protocol observation is therefore not inferred from model visibility, and model visibility is not inferred from protocol discovery.
 
