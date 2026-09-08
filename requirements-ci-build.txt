@@ -1,0 +1,3 @@
+# Required package-build frontend for the Package integrity CI job.
+# Kept in a pip manifest so Dependabot owns this executable CI dependency.
+build==1.6.0
