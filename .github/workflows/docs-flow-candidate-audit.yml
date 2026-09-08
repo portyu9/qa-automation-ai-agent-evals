@@ -1,0 +1,39 @@
+name: docs-flow-candidate-audit
+
+on:
+  push:
+    branches:
+      - docs/evergreen-openai-mermaid
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Classify remaining text-fence diagram candidates
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+
+          files = [Path('README.md'), *sorted(Path('docs').glob('*.md'))]
+          candidates = []
+          for path in files:
+              text = path.read_text(encoding='utf-8')
+              for index, block in enumerate(re.findall(r'```text\n(.*?)\n```', text, flags=re.S), 1):
+                  lines = [line.rstrip() for line in block.splitlines() if line.strip()]
+                  if len(lines) < 4:
+                      continue
+                  flow_score = sum(token in block for token in ('↓', '→', '<->', '->', '├', '└', '│', '┌', '┐'))
+                  code_score = sum(token in block for token in ('{', '}', '"', 'def ', 'class ', '= ', '://', '.py', '.json'))
+                  if flow_score >= 2 and flow_score >= code_score:
+                      preview = ' | '.join(line.strip() for line in lines[:5])
+                      candidates.append((str(path), index, flow_score, code_score, preview))
+          for item in candidates:
+              print('CANDIDATE\t' + '\t'.join(map(str, item)))
+          print(f'SUMMARY\tcandidates={len(candidates)}')
+          PY
