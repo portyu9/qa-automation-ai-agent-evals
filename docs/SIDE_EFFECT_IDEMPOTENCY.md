@@ -8,21 +8,37 @@ It exists because retry safety cannot be inferred from tool prose. A second call
 
 The assurance target is deliberately run-local and two-attempt:
 
-```text
-scenario-owned logical operation
-        ↓ exact tool + canonical arguments + logical key
-OpenAI call #1 ──→ real subject callback executes
-        ↓ effect state before / after
-OpenAI call #2 ──→ real subject callback executes again
-        ↓ effect state before / after
-exact request/result/callback/effect relation
-        ↓
-SideEffectIdempotencyReceipt
-        ↓ semantic revalidation
-SideEffectIdempotencyOracle
-        ↓
-0 or 1 observed physical mutations → eligible for PASS
-2 observed physical mutations      → critical FAIL
+```mermaid
+flowchart TB
+    accTitle: Side-effect idempotency assurance relation
+    accDescr: A scenario-owned logical operation binds the exact tool, canonical arguments, and logical key. The real subject callback executes twice through OpenAI with distinct call identities while evaluator-owned state is sampled around both attempts. The resulting receipt feeds a deterministic side-effect oracle that distinguishes safe duplicate attempts from duplicate physical mutation.
+    L[Scenario-owned logical operation]
+    B[Exact tool + canonical arguments + logical key]
+    C1[OpenAI call · first identity]
+    X1[Real subject callback executes]
+    S1[Effect state before / after]
+    C2[OpenAI call · second identity]
+    X2[Real subject callback executes again]
+    S2[Effect state before / after]
+    R[Side-effect observation receipt]
+    O[Deterministic side-effect oracle]
+    V{Physical mutation relation}
+    PASS[PASS · idempotent effect]
+    FAIL[FAIL · duplicate physical mutation]
+    L --> B --> C1 --> X1 --> S1 --> C2 --> X2 --> S2 --> R --> O --> V
+    V -->|single allowed effect| PASS
+    V -->|duplicate effect| FAIL
+    classDef authority fill:#ddf4ff,stroke:#0969da,color:#24292f,stroke-width:2px
+    classDef advisory fill:#fbefff,stroke:#8250df,color:#24292f,stroke-width:2px
+    classDef evidence fill:#dafbe1,stroke:#1a7f37,color:#24292f,stroke-width:2px
+    classDef bad fill:#ffebe9,stroke:#cf222e,color:#24292f,stroke-width:2px
+    classDef terminal fill:#dafbe1,stroke:#1a7f37,color:#24292f,stroke-width:3px
+    class L,B,O,V authority
+    class C1,X1,C2,X2 advisory
+    class S1,S2,R evidence
+    class FAIL bad
+    class PASS terminal
+    linkStyle default stroke:#57606a,stroke-width:1.5px
 ```
 
 The adapter never suppresses, repairs, retries, deduplicates, or rewrites the subject callback. Bad subject behavior remains observable bad behavior.

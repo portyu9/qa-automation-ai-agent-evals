@@ -395,7 +395,7 @@ Even a valid `ApprovalIntentReceipt` remains evaluator-owned evidence. It is not
 
 The framework now has an optional calibrated semantic judge, but deterministic state and policy authority remain primary. Semantic judgment is invoked only after deterministic policy/outcome PASS, cannot rescue deterministic failure, and is accepted only under an exact judge profile plus accepted calibration receipt. Semantic FAIL is non-critical; ABSTAIN is `INCONCLUSIVE`; missing/untrusted/malformed judging is `BLOCKED`.
 
-This does not establish deterministic semantic truth, human-equivalent review, universal prompt-injection resistance, or provider-side model-version attestation. See [Calibrated Semantic Judging](SEMANTIC_JUDGING.md).
+This does not establish deterministic semantic truth, human-equivalent review, universal prompt-injection resistance, or provider-side model-revision attestation. See [Calibrated Semantic Judging](SEMANTIC_JUDGING.md).
 
 ### Delivery, approval, and protocol receipts are not target-side attestation
 

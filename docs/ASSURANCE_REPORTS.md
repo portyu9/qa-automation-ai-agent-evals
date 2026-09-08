@@ -45,35 +45,41 @@ Semantic grading remains subordinate to deterministic grading. It can narrow det
 
 Blocked policy snapshots remain subordinate to the original evidence. They are not synthetic policy-oracle results and do not convert `BLOCKED` into `FAIL`.
 
-```text
-exact EvaluationScenario
-        ↓ identity check + grading-profile derivation
-ScenarioGradingProfile
-        ↓
-exact final TrialEvidence + completion root
-        ├─ resolved trial
-        │    ↓ shared pre-grading closure
-        │  rederived deterministic oracle tuple
-        │    ↓ exact equality with finalized tuple
-        │  deterministic snapshots
-        │    └─ optional exact SemanticJudgmentReceipt after deterministic PASS
-        │
-        └─ BLOCKED trial
-             ↓ durable EVALUATION_ERROR / RUNTIME_ERROR required
-           no completed oracle tuple
-           no semantic authority
-             ↓ extract only actual POLICY_VIOLATION events
-           BlockedPolicyViolationSnapshot tuple
-        ↓
-terminal trial verdicts + exact k + confidence_z
-        ↓
-recomputed reliability
-        ↓ + deterministic critical failures
-          + blocked policy-oracle-equivalent critical failures
-          + frozen ReleasePolicy
-release-gate decision + reasons
-        ↓
-canonical current report_root
+```mermaid
+flowchart TB
+    accTitle: Assurance report derivation from exact scenario and trial evidence
+    accDescr: The exact evaluation scenario derives a grading profile and is identity-checked against final trial evidence. Resolved trials rederive deterministic oracle snapshots and optional semantic evidence. Blocked trials preserve only explicit policy-violation facts without fabricating completed grading. Terminal trial records feed reliability and the frozen release policy to derive the canonical assurance report root.
+    S[Exact EvaluationScenario]
+    P[ScenarioGradingProfile]
+    E[Exact final TrialEvidence + completion root]
+    Q{Terminal trial state}
+    C[Shared pre-grading closure]
+    O[Re-derived deterministic oracle tuple]
+    OS[Deterministic snapshots]
+    SJ[Optional exact SemanticJudgmentReceipt]
+    B[Durable blocking evidence]
+    BP[BlockedPolicyViolationSnapshot tuple]
+    T[Terminal trial records]
+    R[Recomputed reliability]
+    F[Frozen ReleasePolicy + critical facts]
+    G[Release-gate decision + reasons]
+    ROOT[Canonical report root]
+    S -->|identity check + profile derivation| P --> E --> Q
+    Q -->|resolved| C --> O --> OS --> T
+    OS -->|deterministic PASS + rubric| SJ --> T
+    Q -->|BLOCKED| B --> BP --> T
+    T --> R --> F --> G --> ROOT
+    classDef authority fill:#ddf4ff,stroke:#0969da,color:#24292f,stroke-width:2px
+    classDef evidence fill:#dafbe1,stroke:#1a7f37,color:#24292f,stroke-width:2px
+    classDef advisory fill:#fbefff,stroke:#8250df,color:#24292f,stroke-width:2px
+    classDef blocked fill:#ffebe9,stroke:#cf222e,color:#24292f,stroke-width:2px,stroke-dasharray:5 3
+    classDef terminal fill:#dafbe1,stroke:#1a7f37,color:#24292f,stroke-width:3px
+    class S,P,C,O,R,F,G authority
+    class E,OS,BP,T evidence
+    class SJ advisory
+    class B blocked
+    class ROOT terminal
+    linkStyle default stroke:#57606a,stroke-width:1.5px
 ```
 
 ## Scenario grading profile

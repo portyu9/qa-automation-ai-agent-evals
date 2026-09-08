@@ -303,59 +303,55 @@ framework-owned deterministic oracles
 
 ### Dedicated MCP ToolError retry/recovery bridge
 
-```text
-MCPFaultSpec(kind=tool_error)
-        ↓
-OpenAIAgentsMCPToolErrorRecoveryAdapter
-        ↓ fresh official MCPServerStdio subprocess
-negotiated MCP protocol = repository-supported negotiated revision
-        ↓
-TOOL_REQUEST(error_call_id)
-        ↓
-real MCP ToolError → MCPFaultReceipt
-        ↓ exact model-visible error equivalence
-TOOL_RESULT(error_call_id)
-        ↓ strict causal chronology
-TOOL_REQUEST(retry_call_id; same canonical arguments)
-        ↓ same live MCP session
-TOOL_RESULT(retry_call_id; exact benign recovery)
-        ↓
-MCPAgentToolErrorRecoveryReceipt
-        ↓
-PROTOCOL_DELIVERY inserted after the recovery result
-        ↓
-TrialEvidence
-        ↓
-framework-owned deterministic oracles
+```mermaid
+flowchart TB
+    accTitle: OpenAI to MCP tool-error recovery bridge
+    accDescr: The specialized OpenAI adapter drives a fresh official MCP stdio server under the repository-supported negotiated protocol. The first target call receives the controlled error. The same model run must make one causal same-argument retry, receive the benign recovery result, and produce an exact bridge receipt before provider-neutral grading.
+    F[MCPFaultSpec · tool error]
+    A[OpenAIAgentsMCPToolErrorRecoveryAdapter]
+    S[Fresh official MCPServerStdio]
+    P[Repository-supported negotiated protocol]
+    C1[Initial model-selected target call]
+    ER[Exact controlled error delivery]
+    C2[Causal retry · same canonical arguments]
+    OK[Exact benign result]
+    R[OpenAI↔MCP recovery receipt]
+    E[Provider-neutral evidence]
+    F --> A --> S --> P --> C1 --> ER --> C2 --> OK --> R --> E
+    classDef boundary fill:#ffebe9,stroke:#cf222e,color:#24292f,stroke-width:2px,stroke-dasharray:5 3
+    classDef advisory fill:#fbefff,stroke:#8250df,color:#24292f,stroke-width:2px
+    classDef evidence fill:#dafbe1,stroke:#1a7f37,color:#24292f,stroke-width:2px
+    class F,S,P,ER,OK boundary
+    class A,C1,C2 advisory
+    class R,E evidence
+    linkStyle default stroke:#57606a,stroke-width:1.5px
 ```
 
 ### Dedicated MCP stale-cache removal-delivery bridge
 
-```text
-MCPFaultSpec(kind=tool_list_stale_cache)
-        ↓
-OpenAIAgentsMCPToolStaleCacheAdapter
-        ↓ fresh official MCPServerStdio subprocess
-model/protocol target present
-        ↓
-TOOL_REQUEST(stale_call_id; {query: stale})
-        ↓
-hidden evaluator-only live target removal
-        ↓
-cached tools/list still exposes target
-        ↓
-real MCP unknown-tool rejection / TOOL_RESULT
-        ↓
-host adapter invalidates MCP tool cache
-        ↓
-first fresh tools/list + public Model boundary prove target absent
-+ exact rejection + same call ID
-        ↓
-MCPAgentToolStaleCacheReceipt
-        ↓
-PROTOCOL_DELIVERY inserted after the stale result
-        ↓
-TrialEvidence → framework-owned deterministic oracles
+```mermaid
+flowchart TB
+    accTitle: OpenAI to MCP stale-cache refresh bridge
+    accDescr: The model and protocol initially expose the target. The evaluator removes it only from live server state while cached discovery remains stale. A real stale target call must be rejected. The host then invalidates its cache, fresh discovery and model visibility omit the target, and exact rejection delivery closes the bridge receipt.
+    F[MCPFaultSpec · stale cache]
+    A[OpenAIAgentsMCPToolStaleCacheAdapter]
+    I[Initial model + protocol target present]
+    RM[Evaluator-only live target removal]
+    C[Cached discovery still shows target]
+    CALL[Model issues stale target call]
+    RJ[Real unknown-tool rejection]
+    INV[Host-owned cache invalidation]
+    FR[Fresh discovery · target absent]
+    MV[Refreshed model visibility · target absent]
+    R[Stale-cache bridge receipt]
+    F --> A --> I --> RM --> C --> CALL --> RJ --> INV --> FR --> MV --> R
+    classDef boundary fill:#ffebe9,stroke:#cf222e,color:#24292f,stroke-width:2px,stroke-dasharray:5 3
+    classDef advisory fill:#fbefff,stroke:#8250df,color:#24292f,stroke-width:2px
+    classDef evidence fill:#dafbe1,stroke:#1a7f37,color:#24292f,stroke-width:2px
+    class F,RM,C,RJ,INV,FR boundary
+    class A,I,CALL,MV advisory
+    class R evidence
+    linkStyle default stroke:#57606a,stroke-width:1.5px
 ```
 
 This is host-refreshed removal delivery, not model-owned refresh or automatic behavioral recovery. Exactly one controlled target request/result pair closes the bridge; the evaluator does not fabricate a replacement call. See [MCP Stale-Cache Tool-Removal Assurance](MCP_STALE_CACHE.md).
@@ -402,42 +398,31 @@ framework-owned deterministic oracles
 
 ### Dedicated MCP identity-drift adaptation bridge
 
-```text
-MCPFaultSpec(kind=tool_identity_drift)
-        ↓
-OpenAIAgentsMCPToolIdentityDriftAdapter
-        ↓ fresh official MCPServerStdio subprocess
-negotiated MCP protocol = repository-supported negotiated revision
-        ↓
-model receives exact original tool identity
-        ↓
-TOOL_REQUEST(stale_call_id; original name)
-        ↓
-evaluator-only hidden live old→replacement registry swap
-        ↓
-cached tools/list still exposes the original identity after the live swap
-        ↓
-real MCP lookup rejects the removed original name
-        ↓
-TOOL_RESULT(stale_call_id; exact model-visible unknown-tool rejection)
-        ↓
-host adapter invalidates MCP tool cache
-        ↓
-first fresh post-invalidation tools/list exposes replacement only
-        ↓
-model receives exact replacement identity + stale rejection
-        ↓
-TOOL_REQUEST(recovery_call_id; exact replacement name)
-        ↓ same live MCP session
-TOOL_RESULT(recovery_call_id; exact deterministic recovery)
-        ↓
-MCPAgentToolIdentityDriftReceipt
-        ↓
-PROTOCOL_DELIVERY inserted after the recovery result
-        ↓
-TrialEvidence
-        ↓
-framework-owned deterministic oracles
+```mermaid
+flowchart TB
+    accTitle: OpenAI to MCP identity-drift adaptation bridge
+    accDescr: The model first receives the original tool identity. The evaluator performs a hidden live identity replacement while cached discovery remains stale. The original-name call is rejected, host-owned cache invalidation exposes only the replacement identity, and the model must then make one correct replacement-name call before the bridge receipt closes.
+    F[MCPFaultSpec · identity drift]
+    A[OpenAIAgentsMCPToolIdentityDriftAdapter]
+    P[Repository-supported negotiated protocol]
+    M1[Model sees original identity]
+    SW[Evaluator-only live identity replacement]
+    C[Cached discovery retains original identity]
+    OLD[Original-name call]
+    RJ[Real rejection]
+    INV[Host-owned cache invalidation]
+    M2[Refreshed model sees replacement identity only]
+    NEW[Replacement-name call]
+    OK[Exact recovery result]
+    R[Identity-drift bridge receipt]
+    F --> A --> P --> M1 --> SW --> C --> OLD --> RJ --> INV --> M2 --> NEW --> OK --> R
+    classDef boundary fill:#ffebe9,stroke:#cf222e,color:#24292f,stroke-width:2px,stroke-dasharray:5 3
+    classDef advisory fill:#fbefff,stroke:#8250df,color:#24292f,stroke-width:2px
+    classDef evidence fill:#dafbe1,stroke:#1a7f37,color:#24292f,stroke-width:2px
+    class F,P,SW,C,RJ,INV,OK boundary
+    class A,M1,OLD,M2,NEW advisory
+    class R evidence
+    linkStyle default stroke:#57606a,stroke-width:1.5px
 ```
 
 All six MCP paths are bridges between evidence domains, not conversions of MCP protocol evidence into grading authority. A bridge establishes a narrowly defined delivery/recovery/adaptation precondition. The agent still passes or fails only through deterministic subject evidence and oracles.
@@ -570,7 +555,7 @@ The base Agent is rejected when it already has MCP servers, uses prefixed MCP to
 
 For MCP replacement, the authoritative negotiated revision is the connected `ClientSession.protocol_version`; legacy `server_initialize_result.protocol_version` is only a fallback for older initialization paths.
 
-All six adapters require negotiated repository-supported negotiated protocol revision. A different or unavailable version is an evaluation precondition failure, not a subject failure.
+All six adapters require repository-supported negotiated protocol revision. A different or unavailable negotiated revision is an evaluation precondition failure, not a subject failure.
 
 ---
 
@@ -741,7 +726,7 @@ That placement is intentional. The receipt represents the full error → retry �
 
 Inside the deterministic harness it proves:
 
-1. the connected official MCP stdio session negotiated repository-supported negotiated protocol revision;
+1. the connected official MCP stdio session repository-supported negotiated protocol revision;
 2. the first target call returned the bound real `ToolError` observation;
 3. the repository-governed Agents SDK exposed the exact expected logical error result to the deterministic model path;
 4. the agent produced a distinct second target call only after the first result in normalized chronology;
@@ -964,7 +949,7 @@ A bridge closure is an evaluation precondition. It is not a behavioral verdict.
 
 ## Fail-closed preconditions
 
-Malformed attack payloads, missing or ambiguous local targets, unsupported target types, unusable call identities, unsupported environment context, handoff root mismatch, missing or contradictory SDK agent attribution, request/result call-owner mismatch, malformed approval-intent arguments or receipt, missing/ambiguous approval continuation, approval resource/authority-path mismatch, MCP server ambiguity, protocol-version mismatch, missing protocol evidence, mismatched agent evidence, changed retry arguments, non-causal retry chronology, schema-control leakage, incomplete schema chronology, recovery before refreshed schema discovery, wrong schema contracts/arguments/results, identity-control leakage, incomplete identity chronology, ambiguous original/replacement model exposure, stale-name reuse, recovery before refreshed identity discovery, wrong replacement identity/arguments/results, reused identity call IDs, or failed recovery raise `AdapterPreconditionError` or are converted by evaluator-owned semantic verification into `EVALUATION_ERROR / BLOCKED`.
+Malformed attack payloads, missing or ambiguous local targets, unsupported target types, unusable call identities, unsupported environment context, handoff root mismatch, missing or contradictory SDK agent attribution, request/result call-owner mismatch, malformed approval-intent arguments or receipt, missing/ambiguous approval continuation, approval resource/authority-path mismatch, MCP server ambiguity, negotiated-protocol mismatch, missing protocol evidence, mismatched agent evidence, changed retry arguments, non-causal retry chronology, schema-control leakage, incomplete schema chronology, recovery before refreshed schema discovery, wrong schema contracts/arguments/results, identity-control leakage, incomplete identity chronology, ambiguous original/replacement model exposure, stale-name reuse, recovery before refreshed identity discovery, wrong replacement identity/arguments/results, reused identity call IDs, or failed recovery raise `AdapterPreconditionError` or are converted by evaluator-owned semantic verification into `EVALUATION_ERROR / BLOCKED`.
 
 `TrialRunner` converts adapter precondition failures into `EVALUATION_ERROR / BLOCKED` with no completed subject oracles. Provider/runtime failures remain `RUNTIME_ERROR / BLOCKED`.
 

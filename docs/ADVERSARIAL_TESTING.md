@@ -2,24 +2,44 @@
 
 ## Purpose
 
-The adversarial layer turns stable threat identifiers into **content-addressed, versioned evaluation stimuli** and requires evidence that the controlled evaluation environment actually delivered the exact stimulus before subject behavior is graded.
+The adversarial layer turns stable threat identifiers into **content-addressed, revision-bound evaluation stimuli** and requires evidence that the controlled evaluation environment actually delivered the exact stimulus before subject behavior is graded.
 
 An `AttackFixture` deterministically derives an `EvaluationScenario`; an `AdversarialCampaign` binds a canonical attack set to one exact base scenario; an `AttackDeliveryReceipt` binds the exact scenario, attack, channel, injection point, and canonical payload digest observed by the trusted evaluation control plane.
 
 The attack definition is test input. The delivery receipt is an evaluation precondition. Neither is grading authority.
 
-```text
-base scenario + content-addressed attack
-        ↓ deterministic derivation
-security scenario preserving the full base evaluation contract
-        ↓
-controlled injector
-        ↓ exact successful delivery evidence
-ATTACK_DELIVERY
-        ↓ scenario-required precondition verification
-active deterministic oracles + optional subordinate semantic grading
-        ↓
-trial verdict → reliability → release gate
+```mermaid
+flowchart TB
+    accTitle: Adversarial scenario derivation and delivery gate
+    accDescr: A content-addressed attack deterministically derives a security scenario while preserving the base evaluation contract. A controlled injector must produce exact delivery evidence before active deterministic oracles and optional subordinate semantic grading can produce a trial verdict and downstream release decision.
+    B[Base scenario]
+    A[Content-addressed attack]
+    D[Deterministic security-scenario derivation]
+    S[Security scenario preserving base evaluation contract]
+    I[Controlled injector]
+    E[ATTACK_DELIVERY evidence]
+    V[Scenario-required delivery verification]
+    O[Deterministic oracles]
+    J[Optional subordinate semantic grading]
+    T[Trial verdict]
+    R[Reliability]
+    G[Release gate]
+    B --> D
+    A --> D --> S --> I --> E --> V --> O
+    O --> T
+    O -->|deterministic success + rubric| J --> T
+    T --> R --> G
+    classDef untrusted fill:#ffebe9,stroke:#cf222e,color:#24292f,stroke-width:2px,stroke-dasharray:5 3
+    classDef authority fill:#ddf4ff,stroke:#0969da,color:#24292f,stroke-width:2px
+    classDef evidence fill:#dafbe1,stroke:#1a7f37,color:#24292f,stroke-width:2px
+    classDef advisory fill:#fbefff,stroke:#8250df,color:#24292f,stroke-width:2px
+    classDef terminal fill:#dafbe1,stroke:#1a7f37,color:#24292f,stroke-width:3px
+    class A,I untrusted
+    class B,D,S,V,O,R authority
+    class E evidence
+    class J advisory
+    class T,G terminal
+    linkStyle default stroke:#57606a,stroke-width:1.5px
 ```
 
 If delivery cannot be verified, the trial is `BLOCKED` before deterministic subject grading. A configured or attempted attack is never treated as proof that the agent actually received or consumed the stimulus.

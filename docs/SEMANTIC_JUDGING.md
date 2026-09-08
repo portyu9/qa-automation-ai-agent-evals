@@ -8,18 +8,36 @@ This framework treats semantic judging as **subordinate evidence**, not as relea
 
 The hard boundary is:
 
-```text
-verified execution evidence
-        ↓
-deterministic policy + outcome grading
-        ├─ FAIL ─────────────────────────────→ trial FAIL
-        │                                     semantic judge is not invoked
-        └─ PASS
-             ↓
-       accepted calibrated semantic judge
-             ├─ PASS ────────────────────────→ trial PASS
-             ├─ FAIL ────────────────────────→ trial FAIL, non-critical
-             └─ ABSTAIN ─────────────────────→ trial INCONCLUSIVE
+```mermaid
+flowchart TB
+    accTitle: Semantic judging remains subordinate to deterministic grading
+    accDescr: Verified execution evidence is graded deterministically first. Deterministic failure terminates the trial without invoking the semantic judge. Only deterministic success with a configured rubric reaches the calibrated semantic judge, whose result may preserve success, narrow it to non-critical failure, or abstain to evaluator uncertainty.
+    E[Verified execution evidence]
+    D[Deterministic policy + outcome grading]
+    Q{Deterministic result}
+    F[Trial FAIL]
+    P0[Trial PASS · no semantic rubric]
+    J[Calibrated semantic judge]
+    SQ{Semantic decision}
+    P[Trial PASS]
+    SF[Trial FAIL · non-critical semantic reason]
+    I[Trial INCONCLUSIVE]
+    E --> D --> Q
+    Q -->|FAIL| F
+    Q -->|PASS + no rubric| P0
+    Q -->|PASS + rubric| J --> SQ
+    SQ -->|PASS| P
+    SQ -->|FAIL| SF
+    SQ -->|ABSTAIN| I
+    classDef authority fill:#ddf4ff,stroke:#0969da,color:#24292f,stroke-width:2px
+    classDef advisory fill:#fbefff,stroke:#8250df,color:#24292f,stroke-width:2px
+    classDef bad fill:#ffebe9,stroke:#cf222e,color:#24292f,stroke-width:2px
+    classDef terminal fill:#dafbe1,stroke:#1a7f37,color:#24292f,stroke-width:3px
+    class E,D,Q authority
+    class J,SQ,I advisory
+    class F,SF bad
+    class P0,P terminal
+    linkStyle default stroke:#57606a,stroke-width:1.5px
 ```
 
 A semantic judge cannot override authorization, approval, protocol-delivery, state, or other deterministic evaluation failures.
@@ -122,7 +140,7 @@ The input itself is content-addressed. `SemanticJudgmentReceipt` stores its dige
 - provider;
 - model name;
 - model revision label;
-- adapter name and version;
+- adapter identity and implementation revision;
 - evaluator prompt-template digest;
 - expected response schema;
 - behavior-configuration digest.
@@ -362,7 +380,7 @@ The current semantic layer does not claim:
 - human-equivalent review;
 - authenticated human approval;
 - a cryptographic signature over judge output;
-- provider-side model-version attestation;
+- provider-side model-revision attestation;
 - calibration transfer across model/prompt/configuration drift;
 - current-model liveness during replay;
 - authenticated publisher identity for replayed semantic evidence;

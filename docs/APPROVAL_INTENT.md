@@ -89,7 +89,7 @@ A pending approval must never be counted as a completed execution merely because
 
 `ApprovalIntentReceipt` binds:
 
-- `receipt_schema` — exact receipt contract version;
+- `receipt_schema` — exact receipt contract identity;
 - `scenario_identity` — the complete scenario identity;
 - `decision` — `approve` or `reject`;
 - `agent` — exact run-local generating-agent identity;

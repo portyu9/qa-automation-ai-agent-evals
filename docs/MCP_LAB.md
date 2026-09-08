@@ -288,55 +288,57 @@ The target does **not** need to be called. That is intentional: poisoned discove
 
 `OpenAIAgentsMCPToolResultAdapter` implements one explicit cross-domain contract for `TOOL_RESULT_POISON`:
 
-```text
-MCPFaultSpec(tool_result_poison)
-        ↓
-fresh official MCPServerStdio subprocess
-        ↓
-agent makes exactly one target MCP call
-        ↓
-exact first result observed → MCPFaultReceipt
-        ↓
-exact OpenAI TOOL_REQUEST call_id
-+ exactly one matching TOOL_RESULT
-+ output equivalence
-+ same-session benign recovery after the run
-        ↓
-MCPAgentToolResultReceipt
-        ↓
-PROTOCOL_DELIVERY
-        ↓
-deterministic agent trial grading
+```mermaid
+flowchart TB
+    accTitle: MCP tool-result poison delivery relation
+    accDescr: A tool-result poison fault configures a fresh official MCP stdio server. The evaluated agent must make exactly one target call. The exact poisoned protocol result is observed and then bound to the same agent call/result relation before protocol delivery can be accepted for grading.
+    F[MCPFaultSpec · tool-result poison]
+    S[Fresh official MCPServerStdio]
+    C[Exactly one target MCP call]
+    P[Exact poisoned protocol result]
+    R[MCPFaultReceipt]
+    A[Same agent TOOL_REQUEST / TOOL_RESULT relation]
+    B[Protocol-delivery bridge receipt]
+    V[Deterministic grading precondition]
+    F --> S --> C --> P --> R --> A --> B --> V
+    classDef boundary fill:#ffebe9,stroke:#cf222e,color:#24292f,stroke-width:2px,stroke-dasharray:5 3
+    classDef evidence fill:#dafbe1,stroke:#1a7f37,color:#24292f,stroke-width:2px
+    classDef authority fill:#ddf4ff,stroke:#0969da,color:#24292f,stroke-width:2px
+    class F,S,C,P boundary
+    class R,A,B evidence
+    class V authority
+    linkStyle default stroke:#57606a,stroke-width:1.5px
 ```
 
 The behavioral run makes exactly one target call. Recovery occurs only after the run, through the same live session and same arguments, so benign recovery cannot contaminate the agent transcript.
 
-Missing consumption, multiple target calls, protocol-version drift, malformed result shape, agent-evidence ambiguity, output mismatch, or recovery mismatch fails closed as evaluator uncertainty.
+Missing consumption, multiple target calls, negotiated-protocol drift, malformed result shape, agent-evidence ambiguity, output mismatch, or recovery mismatch fails closed as evaluator uncertainty.
 
 ### ToolError retry/recovery bridge
 
 `OpenAIAgentsMCPToolErrorRecoveryAdapter` implements a distinct two-call behavioral contract for `TOOL_ERROR`:
 
-```text
-MCPFaultSpec(tool_error)
-        ↓
-fresh official MCPServerStdio subprocess
-        ↓
-TOOL_REQUEST(error_call_id)
-        ↓
-real first-call MCP ToolError → MCPFaultReceipt
-        ↓ exact model-visible error equivalence
-TOOL_RESULT(error_call_id)
-        ↓
-TOOL_REQUEST(retry_call_id; same canonical arguments)
-        ↓ same live MCP session
-TOOL_RESULT(retry_call_id; exact benign recovery)
-        ↓
-MCPAgentToolErrorRecoveryReceipt
-        ↓
-PROTOCOL_DELIVERY
-        ↓
-deterministic agent trial grading
+```mermaid
+flowchart TB
+    accTitle: MCP transient tool-error recovery relation
+    accDescr: A controlled MCP tool error is delivered to one exact agent call. Recovery requires a causal retry using the same canonical arguments and an exact benign result. The protocol and agent evidence must close the same chronology before the recovery relation is accepted.
+    F[MCPFaultSpec · tool error]
+    S[Fresh official MCPServerStdio]
+    R1[TOOL_REQUEST · initial call]
+    E[Exact MCP error result]
+    D1[Error-delivery evidence]
+    R2[One causal retry · same arguments]
+    OK[Exact benign recovery]
+    D2[Recovery bridge receipt]
+    V[Deterministic grading precondition]
+    F --> S --> R1 --> E --> D1 --> R2 --> OK --> D2 --> V
+    classDef boundary fill:#ffebe9,stroke:#cf222e,color:#24292f,stroke-width:2px,stroke-dasharray:5 3
+    classDef evidence fill:#dafbe1,stroke:#1a7f37,color:#24292f,stroke-width:2px
+    classDef authority fill:#ddf4ff,stroke:#0969da,color:#24292f,stroke-width:2px
+    class F,S,R1,E,R2,OK boundary
+    class D1,D2 evidence
+    class V authority
+    linkStyle default stroke:#57606a,stroke-width:1.5px
 ```
 
 The adapter requires exactly two target calls, distinct non-empty OpenAI call IDs, canonical argument equality, exactly one normalized result for each call, exact error/recovery observation equivalence, and strict normalized chronology:
@@ -347,7 +349,7 @@ request₁ < result₁ < request₂ < result₂
 
 That chronology is an assurance condition, not presentation detail. If two identical calls are pre-issued before the first error result, the second call is **not** accepted as a retry and evaluation blocks with `mcp_error_retry_causality_unverified`.
 
-Missing retry, more than one retry, changed arguments, protocol-version drift, malformed/ambiguous evidence, wrong error representation, wrong recovery, or non-causal ordering fails closed as evaluator uncertainty.
+Missing retry, more than one retry, changed arguments, negotiated-protocol drift, malformed/ambiguous evidence, wrong error representation, wrong recovery, or non-causal ordering fails closed as evaluator uncertainty.
 
 ### Stale-cache host-refresh/removal-delivery bridge
 
@@ -397,32 +399,30 @@ Later SDK turns may reuse the already-refreshed replacement cache. The bridge th
 
 `OpenAIAgentsMCPToolIdentityDriftAdapter` implements a separate two-call behavioral contract for `TOOL_IDENTITY_DRIFT`:
 
-```text
-model receives exact original identity
-        ↓
-TOOL_REQUEST(stale_call_id; original name)
-        ↓
-hidden evaluator-only live old→replacement swap
-        ↓
-real MCP lookup rejects removed old name
-        ↓
-TOOL_RESULT(stale_call_id; exact model-visible unknown-tool rejection)
-        ↓
-host invalidates cached tool discovery
-        ↓
-first fresh post-invalidation tools/list exposes replacement only
-        ↓
-model receives exact replacement identity + stale rejection
-        ↓
-TOOL_REQUEST(recovery_call_id; exact replacement name)
-        ↓ same live MCP session
-TOOL_RESULT(recovery_call_id; exact deterministic recovery)
-        ↓
-MCPAgentToolIdentityDriftReceipt
-        ↓
-PROTOCOL_DELIVERY
-        ↓
-deterministic agent trial grading
+```mermaid
+flowchart TB
+    accTitle: MCP identity-drift stale-name recovery relation
+    accDescr: The model first sees the original tool identity and issues a stale-name call. The evaluator changes only the live server identity. The stale call must be rejected, host-owned cache invalidation must expose only the replacement identity, and recovery requires one exact replacement-name call after refreshed model visibility.
+    M1[Model sees original identity]
+    C1[TOOL_REQUEST · original name]
+    SW[Evaluator-only live original → replacement swap]
+    RJ[Real stale-name rejection]
+    INV[Host-owned cache invalidation]
+    M2[Model sees replacement identity only]
+    C2[TOOL_REQUEST · replacement name]
+    OK[Exact recovery result]
+    R[Identity-drift bridge receipt]
+    V[Deterministic grading precondition]
+    M1 --> C1 --> SW --> RJ --> INV --> M2 --> C2 --> OK --> R --> V
+    classDef boundary fill:#ffebe9,stroke:#cf222e,color:#24292f,stroke-width:2px,stroke-dasharray:5 3
+    classDef advisory fill:#fbefff,stroke:#8250df,color:#24292f,stroke-width:2px
+    classDef evidence fill:#dafbe1,stroke:#1a7f37,color:#24292f,stroke-width:2px
+    classDef authority fill:#ddf4ff,stroke:#0969da,color:#24292f,stroke-width:2px
+    class M1,M2 advisory
+    class C1,SW,RJ,INV,C2,OK boundary
+    class R evidence
+    class V authority
+    linkStyle default stroke:#57606a,stroke-width:1.5px
 ```
 
 The adapter requires exactly two controlled attempts; exact original then replacement identities; distinct non-empty OpenAI call IDs; strict finite canonical argument provenance; one real unknown-tool stale rejection; host invalidation only after that rejection; refreshed replacement-only protocol and model-visible identity sets; exact recovery output; and strict protocol chronology:

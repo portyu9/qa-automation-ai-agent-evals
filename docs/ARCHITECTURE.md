@@ -76,7 +76,7 @@ External content can become evidence or adversarial stimulus. It does not become
 
 ## Identity domains
 
-`SubjectFingerprint` binds provider, model, application revision, instructions, tool schema, policy, memory policy, and adapter identity/version. `EvaluationScenario` binds scenario ID/revision, objective, initial state, authority, required/forbidden outcomes, classification, tags, approval intent, optional side-effect-idempotency contract, optional `SemanticRubricSpec`, and optional `RetrievalContractSpec`. Behavior-bearing material therefore participates in scenario identity rather than living as untracked runtime configuration.
+`SubjectFingerprint` binds provider, model, application revision, instructions, tool schema, policy, memory policy, and adapter implementation identity. `EvaluationScenario` binds scenario ID/revision, objective, initial state, authority, required/forbidden outcomes, classification, tags, approval intent, optional side-effect-idempotency contract, optional `SemanticRubricSpec`, and optional `RetrievalContractSpec`. Behavior-bearing material therefore participates in scenario identity rather than living as untracked runtime configuration.
 
 `AttackFixture` and `AdversarialCampaign` add deterministic adversarial identity without changing base authority or redefining success.
 

@@ -93,7 +93,7 @@ The protocol laboratory proves protocol conditions only. All six fault families 
 
 All six MCP bridge adapters create a **fresh official MCP stdio process/session** per trial. The supplied base Agent is cloned with exactly the controlled server and is rejected when preconfigured MCP servers, prefixed naming, or local target/control-name collisions would make provenance ambiguous.
 
-The connected session must negotiate exact MCP repository-supported negotiated protocol revision. Configured intent is not accepted as negotiated-version evidence.
+The connected session must negotiate exact repository-supported MCP protocol revision. Configured intent is not accepted as negotiated-revision evidence.
 
 A bridge receipt is created from **observed protocol/model/agent facts**, not merely from configured fault material. Unknown bridge sources, malformed receipts, wrong scenario identity, impossible chronology, or root mismatch fail closed before subject grading.
 

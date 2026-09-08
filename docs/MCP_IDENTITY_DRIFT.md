@@ -171,7 +171,7 @@ The OpenAI integration lane uses:
 
 The verified positive case proves old-name model exposure → live rename → cached old-name discovery → real stale rejection → host refresh → replacement-name model exposure → exact replacement call → deterministic recovery → typed bridge closure → deterministic PASS when ordinary policy/outcome requirements pass.
 
-Negative coverage includes no replacement call, removed-old-name reuse after refresh, extra controlled attempts, receipt/relation tampering, scenario drift, reused call identity, argument parsing ambiguity, non-finite values, wrong replacement binding, model-visible identity ambiguity, protocol-version/boundary drift, rejection mismatch, recovery mismatch, and strict chronology failures across provider-neutral and pinned-SDK layers.
+Negative coverage includes no replacement call, removed-old-name reuse after refresh, extra controlled attempts, receipt/relation tampering, scenario drift, reused call identity, argument parsing ambiguity, non-finite values, wrong replacement binding, model-visible identity ambiguity, negotiated-protocol/boundary drift, rejection mismatch, recovery mismatch, and strict chronology failures across provider-neutral and pinned-SDK layers.
 
 ## Non-claims
 
