@@ -212,7 +212,7 @@ Optional integration lanes are installed through the repository extras defined i
 python -m pip install -e '.[dev,openai,mcp]'
 ```
 
-The manifests and lock inputs are the authoritative source for supported interpreter and dependency requirements. Documentation intentionally avoids duplicating those release pins.
+The manifests and lock inputs are the authoritative source for supported interpreter and dependency requirements. Documentation keeps those release pins in executable configuration instead of duplicating them here.
 
 ## Evidence hierarchy
 
