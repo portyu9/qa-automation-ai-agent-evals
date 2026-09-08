@@ -150,9 +150,38 @@ jobs:
       - name: Inspect distributions
         run: |
           python - <<'PY'
+          from configparser import ConfigParser
+          from email.parser import BytesParser
           from pathlib import Path
           import tarfile
+          import tomllib
           import zipfile
+
+          project = tomllib.loads(Path('pyproject.toml').read_text(encoding='utf-8'))['project']
+          expected_name = project['name']
+          expected_version = project['version']
+          expected_python = project['requires-python']
+          expected_extras = set(project.get('optional-dependencies', {}))
+          expected_script = project['scripts']['agent-evals']
+
+          def verify_metadata(message, *, label):
+              actual = {
+                  'Name': message.get('Name'),
+                  'Version': message.get('Version'),
+                  'Requires-Python': message.get('Requires-Python'),
+              }
+              expected = {
+                  'Name': expected_name,
+                  'Version': expected_version,
+                  'Requires-Python': expected_python,
+              }
+              if actual != expected:
+                  raise SystemExit(f'{label} core metadata mismatch: {actual} != {expected}')
+              extras = set(message.get_all('Provides-Extra', []))
+              if extras != expected_extras:
+                  raise SystemExit(
+                      f'{label} optional extras mismatch: {sorted(extras)} != {sorted(expected_extras)}'
+                  )
 
           wheels = list(Path('dist').glob('*.whl'))
           sdists = list(Path('dist').glob('*.tar.gz'))
@@ -176,6 +205,32 @@ jobs:
           }
           with zipfile.ZipFile(wheels[0]) as archive:
               wheel_files = set(archive.namelist())
+              metadata_paths = [name for name in wheel_files if name.endswith('.dist-info/METADATA')]
+              entrypoint_paths = [
+                  name for name in wheel_files if name.endswith('.dist-info/entry_points.txt')
+              ]
+              if len(metadata_paths) != 1:
+                  raise SystemExit(
+                      f'expected exactly one wheel METADATA file, found {len(metadata_paths)}'
+                  )
+              if len(entrypoint_paths) != 1:
+                  raise SystemExit(
+                      'expected exactly one wheel entry_points.txt file, '
+                      f'found {len(entrypoint_paths)}'
+                  )
+              verify_metadata(
+                  BytesParser().parsebytes(archive.read(metadata_paths[0])),
+                  label='wheel',
+              )
+              entrypoints = ConfigParser()
+              entrypoints.read_string(archive.read(entrypoint_paths[0]).decode('utf-8'))
+              actual_script = entrypoints.get('console_scripts', 'agent-evals', fallback=None)
+              if actual_script != expected_script:
+                  raise SystemExit(
+                      f'wheel console entry point mismatch: {actual_script!r} != {expected_script!r}'
+                  )
+              if not any(Path(name).name == 'LICENSE' for name in wheel_files):
+                  raise SystemExit('wheel is missing the declared LICENSE file')
 
           missing_wheel = sorted(expected_wheel.difference(wheel_files))
           if missing_wheel:
@@ -187,11 +242,17 @@ jobs:
                   for member in archive.getmembers()
                   if member.isfile()
               }
-
-          roots = {name.split('/', 1)[0] for name in sdist_files if '/' in name}
-          if len(roots) != 1:
-              raise SystemExit(f'expected one sdist archive root, found {sorted(roots)}')
-          sdist_root = roots.pop()
+              roots = {name.split('/', 1)[0] for name in sdist_files if '/' in name}
+              if len(roots) != 1:
+                  raise SystemExit(f'expected one sdist archive root, found {sorted(roots)}')
+              sdist_root = roots.pop()
+              pkg_info = f'{sdist_root}/PKG-INFO'
+              if pkg_info not in sdist_files:
+                  raise SystemExit('sdist is missing PKG-INFO')
+              pkg_info_file = archive.extractfile(pkg_info)
+              if pkg_info_file is None:
+                  raise SystemExit('could not read sdist PKG-INFO')
+              verify_metadata(BytesParser().parse(pkg_info_file), label='sdist')
 
           expected_sdist = {f'{sdist_root}/{path.as_posix()}' for path in source_files}
           expected_sdist.update(
@@ -202,16 +263,38 @@ jobs:
               raise SystemExit(f'sdist is missing required files: {missing_sdist}')
 
           print(f'{wheels[0]} contains all {len(expected_wheel)} source package files')
+          print(f'{wheels[0]} metadata, extras, entry point, and license match pyproject.toml')
           print(f'{sdists[0]} contains all source package files and required project metadata')
+          print(f'{sdists[0]} metadata and extras match pyproject.toml')
           PY
       - name: Install built wheel
         run: |
           python -m pip install --disable-pip-version-check dist/*.whl
           python -c "import agent_evals; print(agent_evals.__name__)"
           agent-evals --help >/dev/null
+          python - <<'PY'
+          import json
+          import subprocess
+          from importlib.metadata import version
+
+          expected = version('qa-automation-ai-agent-evals')
+          doctor = json.loads(subprocess.check_output(['agent-evals', 'doctor'], text=True))
+          if doctor['version'] != expected:
+              raise SystemExit(f'doctor version mismatch: {doctor["version"]!r} != {expected!r}')
+          PY
       - name: Install from built source distribution
         run: |
           python -m pip uninstall -y qa-automation-ai-agent-evals
           python -m pip install --disable-pip-version-check --no-deps dist/*.tar.gz
           python -c "import agent_evals; print(agent_evals.__name__)"
           agent-evals --help >/dev/null
+          python - <<'PY'
+          import json
+          import subprocess
+          from importlib.metadata import version
+
+          expected = version('qa-automation-ai-agent-evals')
+          doctor = json.loads(subprocess.check_output(['agent-evals', 'doctor'], text=True))
+          if doctor['version'] != expected:
+              raise SystemExit(f'doctor version mismatch: {doctor["version"]!r} != {expected!r}')
+          PY
