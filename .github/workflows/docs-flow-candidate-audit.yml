@@ -13,7 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Classify remaining text-fence diagram candidates
+      - name: Classify remaining text-fence diagram candidates and version wording
         shell: bash
         run: |
           python - <<'PY'
@@ -22,8 +22,13 @@ jobs:
 
           files = [Path('README.md'), *sorted(Path('docs').glob('*.md'))]
           candidates = []
+          version_words = []
+          version_re = re.compile(r'\bversion(?:ed|ing|s)?\b|--version\b', re.I)
           for path in files:
               text = path.read_text(encoding='utf-8')
+              for lineno, line in enumerate(text.splitlines(), 1):
+                  if version_re.search(line):
+                      version_words.append((str(path), lineno, line.strip()))
               for index, block in enumerate(re.findall(r'```text\n(.*?)\n```', text, flags=re.S), 1):
                   lines = [line.rstrip() for line in block.splitlines() if line.strip()]
                   if len(lines) < 4:
@@ -35,5 +40,7 @@ jobs:
                       candidates.append((str(path), index, flow_score, code_score, preview))
           for item in candidates:
               print('CANDIDATE\t' + '\t'.join(map(str, item)))
-          print(f'SUMMARY\tcandidates={len(candidates)}')
+          for item in version_words:
+              print('VERSION_WORD\t' + '\t'.join(map(str, item)))
+          print(f'SUMMARY\tcandidates={len(candidates)}\tversion_word_lines={len(version_words)}')
           PY
