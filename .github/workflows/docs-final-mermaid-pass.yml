@@ -1,0 +1,450 @@
+name: docs-final-mermaid-pass
+
+on:
+  push:
+    branches:
+      - docs/evergreen-openai-mermaid
+
+permissions:
+  contents: write
+
+jobs:
+  finalize:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Convert remaining workflow diagrams and remove residual version wording
+        shell: bash
+        run: |
+          python - <<'PY'
+          from __future__ import annotations
+
+          from pathlib import Path
+          import re
+          import subprocess
+          import textwrap
+
+          def clean(value: str) -> str:
+              return textwrap.dedent(value).strip()
+
+          def replace_text_fence_containing(path: str, needle: str, replacement: str) -> None:
+              file = Path(path)
+              text = file.read_text(encoding='utf-8')
+              matches = list(re.finditer(r'```text\n(.*?)\n```', text, flags=re.S))
+              selected = [m for m in matches if needle in m.group(1)]
+              if len(selected) != 1:
+                  raise RuntimeError(f'{path}: expected one text fence containing {needle!r}, found {len(selected)}')
+              match = selected[0]
+              file.write_text(text[:match.start()] + replacement + text[match.end():], encoding='utf-8')
+
+          adversarial = clean(r'''
+          ```mermaid
+          flowchart TB
+              accTitle: Adversarial scenario derivation and delivery gate
+              accDescr: A content-addressed attack deterministically derives a security scenario while preserving the base evaluation contract. A controlled injector must produce exact delivery evidence before active deterministic oracles and optional subordinate semantic grading can produce a trial verdict and downstream release decision.
+              B[Base scenario]
+              A[Content-addressed attack]
+              D[Deterministic security-scenario derivation]
+              S[Security scenario preserving base evaluation contract]
+              I[Controlled injector]
+              E[ATTACK_DELIVERY evidence]
+              V[Scenario-required delivery verification]
+              O[Deterministic oracles]
+              J[Optional subordinate semantic grading]
+              T[Trial verdict]
+              R[Reliability]
+              G[Release gate]
+              B --> D
+              A --> D --> S --> I --> E --> V --> O
+              O --> T
+              O -->|deterministic success + rubric| J --> T
+              T --> R --> G
+              classDef untrusted fill:#ffebe9,stroke:#cf222e,color:#24292f,stroke-width:2px,stroke-dasharray:5 3
+              classDef authority fill:#ddf4ff,stroke:#0969da,color:#24292f,stroke-width:2px
+              classDef evidence fill:#dafbe1,stroke:#1a7f37,color:#24292f,stroke-width:2px
+              classDef advisory fill:#fbefff,stroke:#8250df,color:#24292f,stroke-width:2px
+              classDef terminal fill:#dafbe1,stroke:#1a7f37,color:#24292f,stroke-width:3px
+              class A,I untrusted
+              class B,D,S,V,O,R authority
+              class E evidence
+              class J advisory
+              class T,G terminal
+              linkStyle default stroke:#57606a,stroke-width:1.5px
+          ```
+          ''')
+
+          report = clean(r'''
+          ```mermaid
+          flowchart TB
+              accTitle: Assurance report derivation from exact scenario and trial evidence
+              accDescr: The exact evaluation scenario derives a grading profile and is identity-checked against final trial evidence. Resolved trials rederive deterministic oracle snapshots and optional semantic evidence. Blocked trials preserve only explicit policy-violation facts without fabricating completed grading. Terminal trial records feed reliability and the frozen release policy to derive the canonical assurance report root.
+              S[Exact EvaluationScenario]
+              P[ScenarioGradingProfile]
+              E[Exact final TrialEvidence + completion root]
+              Q{Terminal trial state}
+              C[Shared pre-grading closure]
+              O[Re-derived deterministic oracle tuple]
+              OS[Deterministic snapshots]
+              SJ[Optional exact SemanticJudgmentReceipt]
+              B[Durable blocking evidence]
+              BP[BlockedPolicyViolationSnapshot tuple]
+              T[Terminal trial records]
+              R[Recomputed reliability]
+              F[Frozen ReleasePolicy + critical facts]
+              G[Release-gate decision + reasons]
+              ROOT[Canonical report root]
+              S -->|identity check + profile derivation| P --> E --> Q
+              Q -->|resolved| C --> O --> OS --> T
+              OS -->|deterministic PASS + rubric| SJ --> T
+              Q -->|BLOCKED| B --> BP --> T
+              T --> R --> F --> G --> ROOT
+              classDef authority fill:#ddf4ff,stroke:#0969da,color:#24292f,stroke-width:2px
+              classDef evidence fill:#dafbe1,stroke:#1a7f37,color:#24292f,stroke-width:2px
+              classDef advisory fill:#fbefff,stroke:#8250df,color:#24292f,stroke-width:2px
+              classDef blocked fill:#ffebe9,stroke:#cf222e,color:#24292f,stroke-width:2px,stroke-dasharray:5 3
+              classDef terminal fill:#dafbe1,stroke:#1a7f37,color:#24292f,stroke-width:3px
+              class S,P,C,O,R,F,G authority
+              class E,OS,BP,T evidence
+              class SJ advisory
+              class B blocked
+              class ROOT terminal
+              linkStyle default stroke:#57606a,stroke-width:1.5px
+          ```
+          ''')
+
+          mcp_result = clean(r'''
+          ```mermaid
+          flowchart TB
+              accTitle: MCP tool-result poison delivery relation
+              accDescr: A tool-result poison fault configures a fresh official MCP stdio server. The evaluated agent must make exactly one target call. The exact poisoned protocol result is observed and then bound to the same agent call/result relation before protocol delivery can be accepted for grading.
+              F[MCPFaultSpec · tool-result poison]
+              S[Fresh official MCPServerStdio]
+              C[Exactly one target MCP call]
+              P[Exact poisoned protocol result]
+              R[MCPFaultReceipt]
+              A[Same agent TOOL_REQUEST / TOOL_RESULT relation]
+              B[Protocol-delivery bridge receipt]
+              V[Deterministic grading precondition]
+              F --> S --> C --> P --> R --> A --> B --> V
+              classDef boundary fill:#ffebe9,stroke:#cf222e,color:#24292f,stroke-width:2px,stroke-dasharray:5 3
+              classDef evidence fill:#dafbe1,stroke:#1a7f37,color:#24292f,stroke-width:2px
+              classDef authority fill:#ddf4ff,stroke:#0969da,color:#24292f,stroke-width:2px
+              class F,S,C,P boundary
+              class R,A,B evidence
+              class V authority
+              linkStyle default stroke:#57606a,stroke-width:1.5px
+          ```
+          ''')
+
+          mcp_error = clean(r'''
+          ```mermaid
+          flowchart TB
+              accTitle: MCP transient tool-error recovery relation
+              accDescr: A controlled MCP tool error is delivered to one exact agent call. Recovery requires a causal retry using the same canonical arguments and an exact benign result. The protocol and agent evidence must close the same chronology before the recovery relation is accepted.
+              F[MCPFaultSpec · tool error]
+              S[Fresh official MCPServerStdio]
+              R1[TOOL_REQUEST · initial call]
+              E[Exact MCP error result]
+              D1[Error-delivery evidence]
+              R2[One causal retry · same arguments]
+              OK[Exact benign recovery]
+              D2[Recovery bridge receipt]
+              V[Deterministic grading precondition]
+              F --> S --> R1 --> E --> D1 --> R2 --> OK --> D2 --> V
+              classDef boundary fill:#ffebe9,stroke:#cf222e,color:#24292f,stroke-width:2px,stroke-dasharray:5 3
+              classDef evidence fill:#dafbe1,stroke:#1a7f37,color:#24292f,stroke-width:2px
+              classDef authority fill:#ddf4ff,stroke:#0969da,color:#24292f,stroke-width:2px
+              class F,S,R1,E,R2,OK boundary
+              class D1,D2 evidence
+              class V authority
+              linkStyle default stroke:#57606a,stroke-width:1.5px
+          ```
+          ''')
+
+          mcp_identity = clean(r'''
+          ```mermaid
+          flowchart TB
+              accTitle: MCP identity-drift stale-name recovery relation
+              accDescr: The model first sees the original tool identity and issues a stale-name call. The evaluator changes only the live server identity. The stale call must be rejected, host-owned cache invalidation must expose only the replacement identity, and recovery requires one exact replacement-name call after refreshed model visibility.
+              M1[Model sees original identity]
+              C1[TOOL_REQUEST · original name]
+              SW[Evaluator-only live original → replacement swap]
+              RJ[Real stale-name rejection]
+              INV[Host-owned cache invalidation]
+              M2[Model sees replacement identity only]
+              C2[TOOL_REQUEST · replacement name]
+              OK[Exact recovery result]
+              R[Identity-drift bridge receipt]
+              V[Deterministic grading precondition]
+              M1 --> C1 --> SW --> RJ --> INV --> M2 --> C2 --> OK --> R --> V
+              classDef boundary fill:#ffebe9,stroke:#cf222e,color:#24292f,stroke-width:2px,stroke-dasharray:5 3
+              classDef advisory fill:#fbefff,stroke:#8250df,color:#24292f,stroke-width:2px
+              classDef evidence fill:#dafbe1,stroke:#1a7f37,color:#24292f,stroke-width:2px
+              classDef authority fill:#ddf4ff,stroke:#0969da,color:#24292f,stroke-width:2px
+              class M1,M2 advisory
+              class C1,SW,RJ,INV,C2,OK boundary
+              class R evidence
+              class V authority
+              linkStyle default stroke:#57606a,stroke-width:1.5px
+          ```
+          ''')
+
+          openai_error = clean(r'''
+          ```mermaid
+          flowchart TB
+              accTitle: OpenAI to MCP tool-error recovery bridge
+              accDescr: The specialized OpenAI adapter drives a fresh official MCP stdio server under the repository-supported negotiated protocol. The first target call receives the controlled error. The same model run must make one causal same-argument retry, receive the benign recovery result, and produce an exact bridge receipt before provider-neutral grading.
+              F[MCPFaultSpec · tool error]
+              A[OpenAIAgentsMCPToolErrorRecoveryAdapter]
+              S[Fresh official MCPServerStdio]
+              P[Repository-supported negotiated protocol]
+              C1[Initial model-selected target call]
+              ER[Exact controlled error delivery]
+              C2[Causal retry · same canonical arguments]
+              OK[Exact benign result]
+              R[OpenAI↔MCP recovery receipt]
+              E[Provider-neutral evidence]
+              F --> A --> S --> P --> C1 --> ER --> C2 --> OK --> R --> E
+              classDef boundary fill:#ffebe9,stroke:#cf222e,color:#24292f,stroke-width:2px,stroke-dasharray:5 3
+              classDef advisory fill:#fbefff,stroke:#8250df,color:#24292f,stroke-width:2px
+              classDef evidence fill:#dafbe1,stroke:#1a7f37,color:#24292f,stroke-width:2px
+              class F,S,P,ER,OK boundary
+              class A,C1,C2 advisory
+              class R,E evidence
+              linkStyle default stroke:#57606a,stroke-width:1.5px
+          ```
+          ''')
+
+          openai_stale = clean(r'''
+          ```mermaid
+          flowchart TB
+              accTitle: OpenAI to MCP stale-cache refresh bridge
+              accDescr: The model and protocol initially expose the target. The evaluator removes it only from live server state while cached discovery remains stale. A real stale target call must be rejected. The host then invalidates its cache, fresh discovery and model visibility omit the target, and exact rejection delivery closes the bridge receipt.
+              F[MCPFaultSpec · stale cache]
+              A[OpenAIAgentsMCPToolStaleCacheAdapter]
+              I[Initial model + protocol target present]
+              RM[Evaluator-only live target removal]
+              C[Cached discovery still shows target]
+              CALL[Model issues stale target call]
+              RJ[Real unknown-tool rejection]
+              INV[Host-owned cache invalidation]
+              FR[Fresh discovery · target absent]
+              MV[Refreshed model visibility · target absent]
+              R[Stale-cache bridge receipt]
+              F --> A --> I --> RM --> C --> CALL --> RJ --> INV --> FR --> MV --> R
+              classDef boundary fill:#ffebe9,stroke:#cf222e,color:#24292f,stroke-width:2px,stroke-dasharray:5 3
+              classDef advisory fill:#fbefff,stroke:#8250df,color:#24292f,stroke-width:2px
+              classDef evidence fill:#dafbe1,stroke:#1a7f37,color:#24292f,stroke-width:2px
+              class F,RM,C,RJ,INV,FR boundary
+              class A,I,CALL,MV advisory
+              class R evidence
+              linkStyle default stroke:#57606a,stroke-width:1.5px
+          ```
+          ''')
+
+          openai_identity = clean(r'''
+          ```mermaid
+          flowchart TB
+              accTitle: OpenAI to MCP identity-drift adaptation bridge
+              accDescr: The model first receives the original tool identity. The evaluator performs a hidden live identity replacement while cached discovery remains stale. The original-name call is rejected, host-owned cache invalidation exposes only the replacement identity, and the model must then make one correct replacement-name call before the bridge receipt closes.
+              F[MCPFaultSpec · identity drift]
+              A[OpenAIAgentsMCPToolIdentityDriftAdapter]
+              P[Repository-supported negotiated protocol]
+              M1[Model sees original identity]
+              SW[Evaluator-only live identity replacement]
+              C[Cached discovery retains original identity]
+              OLD[Original-name call]
+              RJ[Real rejection]
+              INV[Host-owned cache invalidation]
+              M2[Refreshed model sees replacement identity only]
+              NEW[Replacement-name call]
+              OK[Exact recovery result]
+              R[Identity-drift bridge receipt]
+              F --> A --> P --> M1 --> SW --> C --> OLD --> RJ --> INV --> M2 --> NEW --> OK --> R
+              classDef boundary fill:#ffebe9,stroke:#cf222e,color:#24292f,stroke-width:2px,stroke-dasharray:5 3
+              classDef advisory fill:#fbefff,stroke:#8250df,color:#24292f,stroke-width:2px
+              classDef evidence fill:#dafbe1,stroke:#1a7f37,color:#24292f,stroke-width:2px
+              class F,P,SW,C,RJ,INV,OK boundary
+              class A,M1,OLD,M2,NEW advisory
+              class R evidence
+              linkStyle default stroke:#57606a,stroke-width:1.5px
+          ```
+          ''')
+
+          semantic = clean(r'''
+          ```mermaid
+          flowchart TB
+              accTitle: Semantic judging remains subordinate to deterministic grading
+              accDescr: Verified execution evidence is graded deterministically first. Deterministic failure terminates the trial without invoking the semantic judge. Only deterministic success with a configured rubric reaches the calibrated semantic judge, whose result may preserve success, narrow it to non-critical failure, or abstain to evaluator uncertainty.
+              E[Verified execution evidence]
+              D[Deterministic policy + outcome grading]
+              Q{Deterministic result}
+              F[Trial FAIL]
+              P0[Trial PASS · no semantic rubric]
+              J[Calibrated semantic judge]
+              SQ{Semantic decision}
+              P[Trial PASS]
+              SF[Trial FAIL · non-critical semantic reason]
+              I[Trial INCONCLUSIVE]
+              E --> D --> Q
+              Q -->|FAIL| F
+              Q -->|PASS + no rubric| P0
+              Q -->|PASS + rubric| J --> SQ
+              SQ -->|PASS| P
+              SQ -->|FAIL| SF
+              SQ -->|ABSTAIN| I
+              classDef authority fill:#ddf4ff,stroke:#0969da,color:#24292f,stroke-width:2px
+              classDef advisory fill:#fbefff,stroke:#8250df,color:#24292f,stroke-width:2px
+              classDef bad fill:#ffebe9,stroke:#cf222e,color:#24292f,stroke-width:2px
+              classDef terminal fill:#dafbe1,stroke:#1a7f37,color:#24292f,stroke-width:3px
+              class E,D,Q authority
+              class J,SQ,I advisory
+              class F,SF bad
+              class P0,P terminal
+              linkStyle default stroke:#57606a,stroke-width:1.5px
+          ```
+          ''')
+
+          side_effect = clean(r'''
+          ```mermaid
+          flowchart TB
+              accTitle: Side-effect idempotency assurance relation
+              accDescr: A scenario-owned logical operation binds the exact tool, canonical arguments, and logical key. The real subject callback executes twice through OpenAI with distinct call identities while evaluator-owned state is sampled around both attempts. The resulting receipt feeds a deterministic side-effect oracle that distinguishes safe duplicate attempts from duplicate physical mutation.
+              L[Scenario-owned logical operation]
+              B[Exact tool + canonical arguments + logical key]
+              C1[OpenAI call · first identity]
+              X1[Real subject callback executes]
+              S1[Effect state before / after]
+              C2[OpenAI call · second identity]
+              X2[Real subject callback executes again]
+              S2[Effect state before / after]
+              R[Side-effect observation receipt]
+              O[Deterministic side-effect oracle]
+              V{Physical mutation relation}
+              PASS[PASS · idempotent effect]
+              FAIL[FAIL · duplicate physical mutation]
+              L --> B --> C1 --> X1 --> S1 --> C2 --> X2 --> S2 --> R --> O --> V
+              V -->|single allowed effect| PASS
+              V -->|duplicate effect| FAIL
+              classDef authority fill:#ddf4ff,stroke:#0969da,color:#24292f,stroke-width:2px
+              classDef advisory fill:#fbefff,stroke:#8250df,color:#24292f,stroke-width:2px
+              classDef evidence fill:#dafbe1,stroke:#1a7f37,color:#24292f,stroke-width:2px
+              classDef bad fill:#ffebe9,stroke:#cf222e,color:#24292f,stroke-width:2px
+              classDef terminal fill:#dafbe1,stroke:#1a7f37,color:#24292f,stroke-width:3px
+              class L,B,O,V authority
+              class C1,X1,C2,X2 advisory
+              class S1,S2,R evidence
+              class FAIL bad
+              class PASS terminal
+              linkStyle default stroke:#57606a,stroke-width:1.5px
+          ```
+          ''')
+
+          replace_text_fence_containing('docs/ADVERSARIAL_TESTING.md', 'base scenario + content-addressed attack', adversarial)
+          replace_text_fence_containing('docs/ASSURANCE_REPORTS.md', 'exact EvaluationScenario', report)
+          replace_text_fence_containing('docs/MCP_LAB.md', 'MCPFaultSpec(tool_result_poison)', mcp_result)
+          replace_text_fence_containing('docs/MCP_LAB.md', 'MCPFaultSpec(tool_error)', mcp_error)
+          replace_text_fence_containing('docs/MCP_LAB.md', 'model receives exact original identity', mcp_identity)
+          replace_text_fence_containing('docs/OPENAI_ADAPTER.md', 'MCPFaultSpec(kind=tool_error)', openai_error)
+          replace_text_fence_containing('docs/OPENAI_ADAPTER.md', 'MCPFaultSpec(kind=tool_list_stale_cache)', openai_stale)
+          replace_text_fence_containing('docs/OPENAI_ADAPTER.md', 'MCPFaultSpec(kind=tool_identity_drift)', openai_identity)
+          replace_text_fence_containing('docs/SEMANTIC_JUDGING.md', 'verified execution evidence', semantic)
+          replace_text_fence_containing('docs/SIDE_EFFECT_IDEMPOTENCY.md', 'scenario-owned logical operation', side_effect)
+
+          replacements = {
+              'README.md': {
+                  'executable dependency/version truth lives in manifests and lock inputs': 'executable dependency and interpreter truth lives in manifests and lock inputs',
+                  'Documentation intentionally avoids duplicating those version pins.': 'Documentation intentionally avoids duplicating those release pins.',
+              },
+              'docs/ADVERSARIAL_TESTING.md': {
+                  'content-addressed, versioned evaluation stimuli': 'content-addressed, revision-bound evaluation stimuli',
+              },
+              'docs/APPROVAL_INTENT.md': {
+                  '`receipt_schema` — exact receipt contract version;': '`receipt_schema` — exact receipt contract identity;',
+              },
+              'docs/ARCHITECTURE.md': {
+                  'adapter identity/version': 'adapter implementation identity',
+              },
+              'docs/LIMITATIONS.md': {
+                  'provider-side model-version attestation': 'provider-side model-revision attestation',
+              },
+              'docs/MCP_IDENTITY_DRIFT.md': {
+                  'protocol-version/boundary drift': 'negotiated-protocol/boundary drift',
+              },
+              'docs/MCP_LAB.md': {
+                  'protocol-version drift': 'negotiated-protocol drift',
+              },
+              'docs/OPENAI_ADAPTER.md': {
+                  'negotiated repository-supported negotiated protocol revision': 'repository-supported negotiated protocol revision',
+                  'A different or unavailable version is an evaluation precondition failure, not a subject failure.': 'A different or unavailable negotiated revision is an evaluation precondition failure, not a subject failure.',
+                  'protocol-version mismatch': 'negotiated-protocol mismatch',
+              },
+              'docs/SECURITY.md': {
+                  'exact MCP repository-supported negotiated protocol revision': 'exact repository-supported MCP protocol revision',
+                  'negotiated-version evidence': 'negotiated-revision evidence',
+              },
+              'docs/SEMANTIC_JUDGING.md': {
+                  'adapter name and version': 'adapter identity and implementation revision',
+                  'provider-side model-version attestation': 'provider-side model-revision attestation',
+              },
+          }
+
+          for filename, mapping in replacements.items():
+              path = Path(filename)
+              text = path.read_text(encoding='utf-8')
+              for old, new in mapping.items():
+                  if old not in text:
+                      raise RuntimeError(f'{filename}: missing expected wording {old!r}')
+                  text = text.replace(old, new)
+              path.write_text(text, encoding='utf-8')
+
+          files = [Path('README.md'), *sorted(Path('docs').glob('*.md'))]
+          version_re = re.compile(r'\bversion(?:ed|ing|s)?\b|--version\b', re.I)
+          version_lines = []
+          mermaid_errors = []
+          candidates = []
+          mermaid_count = 0
+          text_count = 0
+
+          for path in files:
+              text = path.read_text(encoding='utf-8')
+              text_count += text.count('```text')
+              for lineno, line in enumerate(text.splitlines(), 1):
+                  if version_re.search(line):
+                      version_lines.append(f'{path}:{lineno}: {line}')
+              for index, block in enumerate(re.findall(r'```mermaid\n(.*?)\n```', text, flags=re.S), 1):
+                  mermaid_count += 1
+                  if 'accTitle:' not in block or 'accDescr:' not in block:
+                      mermaid_errors.append(f'{path}: Mermaid {index} missing accessibility metadata')
+                  if 'classDef ' not in block and 'box rgba' not in block:
+                      mermaid_errors.append(f'{path}: Mermaid {index} missing explicit color semantics')
+              for index, block in enumerate(re.findall(r'```text\n(.*?)\n```', text, flags=re.S), 1):
+                  lines = [line.rstrip() for line in block.splitlines() if line.strip()]
+                  if len(lines) < 4:
+                      continue
+                  flow_score = sum(token in block for token in ('↓', '→', '<->', '->', '├', '└', '│', '┌', '┐'))
+                  code_score = sum(token in block for token in ('{', '}', '"', 'def ', 'class ', '= ', '://', '.py', '.json'))
+                  if flow_score >= 2 and flow_score >= code_score:
+                      candidates.append((str(path), index, lines[0]))
+
+          allowed_candidate = ('docs/EVIDENCE_AND_REPLAY.md', '<store-root>/')
+          unexpected = [item for item in candidates if not (item[0] == allowed_candidate[0] and item[2] == allowed_candidate[1])]
+
+          for line in version_lines:
+              print('VERSION_WORD\t' + line)
+          for line in mermaid_errors:
+              print('MERMAID\t' + line)
+          for item in candidates:
+              print('TEXT_CANDIDATE\t' + '\t'.join(map(str, item)))
+          print(f'SUMMARY\tfiles={len(files)}\tversion_word_lines={len(version_lines)}\tmermaid_fences={mermaid_count}\ttext_fences={text_count}\tmermaid_errors={len(mermaid_errors)}\tworkflow_candidates={len(candidates)}\tunexpected_candidates={len(unexpected)}')
+
+          if version_lines or mermaid_errors or unexpected:
+              raise SystemExit('final documentation acceptance failed')
+
+          subprocess.run(['git', 'config', 'user.name', 'github-actions[bot]'], check=True)
+          subprocess.run(['git', 'config', 'user.email', '41898282+github-actions[bot]@users.noreply.github.com'], check=True)
+          subprocess.run(['git', 'rm', '.github/workflows/docs-final-mermaid-pass.yml', '.github/workflows/docs-flow-candidate-audit.yml'], check=True)
+          subprocess.run(['git', 'add', 'README.md', 'docs'], check=True)
+          subprocess.run(['git', 'commit', '-m', 'docs: complete evergreen Mermaid refactor'], check=True)
+          subprocess.run(['git', 'push', 'origin', 'HEAD:docs/evergreen-openai-mermaid'], check=True)
+          PY
