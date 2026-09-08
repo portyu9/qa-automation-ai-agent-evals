@@ -1,0 +1,323 @@
+name: docs-polish
+
+on:
+  push:
+    branches:
+      - docs/evergreen-openai-mermaid
+
+permissions:
+  contents: write
+
+jobs:
+  polish:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Polish wording and convert remaining high-value workflows
+        shell: bash
+        run: |
+          python - <<'PY'
+          from __future__ import annotations
+
+          import pathlib
+          import subprocess
+          import textwrap
+
+          def clean(value: str) -> str:
+              return textwrap.dedent(value).strip()
+
+          def replace_first_text_fence_after(text: str, heading: str, replacement: str) -> str:
+              h = text.find(heading)
+              if h < 0:
+                  raise RuntimeError(f'missing heading: {heading}')
+              start = text.find('```text', h)
+              if start < 0:
+                  raise RuntimeError(f'missing text fence after: {heading}')
+              end = text.find('\n```', start + len('```text'))
+              if end < 0:
+                  raise RuntimeError(f'unclosed text fence after: {heading}')
+              return text[:start] + replacement + text[end + len('\n```'):]
+
+          common = {
+              'hidden live replacement replacement': 'hidden live schema replacement',
+              'Assurance current schema': 'The current Assurance schema',
+              'Assurance predecessor schema': 'The predecessor Assurance schema',
+              '\ncurrent schema ': '\nThe current schema ',
+              '\npredecessor schema ': '\nThe predecessor schema ',
+              'In case current calibration schema,': 'In the current calibration schema,',
+              'Each resolved observation current calibration schema embeds': 'Each resolved observation embeds',
+              'internally valid current calibration schema case commitments': 'internally valid current-schema case commitments',
+              'Current authority validation accepts calibration receipt current calibration schema.': 'Current authority validation accepts the current calibration receipt schema.',
+              'Legacy legacy calibration schema calibration receipts': 'Legacy calibration receipts',
+              'negotiated/adopted negotiated protocol revision': 'negotiated protocol revision',
+              'pinned OpenAI Agents SDK': 'repository-governed OpenAI Agents SDK',
+              'pinned Agents SDK': 'repository-governed Agents SDK',
+              'pinned public SDK': 'repository-governed public SDK',
+              'pinned SDK': 'repository-governed SDK',
+          }
+
+          for path in [pathlib.Path('README.md'), *sorted(pathlib.Path('docs').glob('*.md'))]:
+              text = path.read_text(encoding='utf-8')
+              for old, new in common.items():
+                  text = text.replace(old, new)
+              path.write_text(text, encoding='utf-8')
+
+          p = pathlib.Path('docs/ASSURANCE_REPORTS.md')
+          text = p.read_text(encoding='utf-8')
+          text = text.replace(
+              '`AssuranceReport` is a self-validating session-level artifact for review, CI handoff, and later audit. Version `agent-evals/assurance-report/<schema>` binds the `agent-evals/trial-evidence/<schema>` schema,',
+              '`AssuranceReport` is a self-validating session-level artifact for review, CI handoff, and later audit. The current `agent-evals/assurance-report/<schema>` contract binds the `agent-evals/trial-evidence/<schema>` schema,',
+          )
+          text = text.replace('## Why current schema exists', '## Why the current schema exists')
+          text = text.replace('## Version boundary', '## Schema boundary')
+          text = text.replace('At session level current schema records:', 'At session level, the current schema records:')
+          text = text.replace('exact current schema assurance schema and supported legacy evidence schema;', 'the exact current assurance schema and supported evidence schema;')
+          text = text.replace('canonical current schema `report_root`', 'canonical current `report_root`')
+          p.write_text(text, encoding='utf-8')
+
+          p = pathlib.Path('docs/ASSURANCE_BLOCKED_HISTORY.md')
+          text = p.read_text(encoding='utf-8')
+          text = text.replace('## Versioning', '## Schema evolution')
+          p.write_text(text, encoding='utf-8')
+
+          p = pathlib.Path('docs/OPENAI_ADAPTER.md')
+          text = p.read_text(encoding='utf-8')
+          text = text.replace(
+              'The integration is pinned to `openai-agents`. MCP integration is pinned separately to `mcp`. Pinning both sides makes',
+              'OpenAI and MCP dependency releases are governed by the repository manifests and lock inputs. Governing both sides makes',
+          )
+
+          handoff = clean(r'''
+          ```mermaid
+          flowchart TB
+              accTitle: OpenAI native handoff authority path
+              accDescr: Scenario-owned authority and the configured root agent enter the specialized handoff adapter. Native SDK handoff and generating-agent provenance become attributed evidence. The policy oracle checks active-agent chronology and path-local attenuation before accepting delegated actions.
+              P[AuthorityPolicy + directed grants]
+              A[OpenAIAgentsHandoffAuthorityAdapter]
+              H[Native HandoffOutputItem]
+              R[Attributed tool / result / approval evidence]
+              E[TrialEvidence + scenario authority graph]
+              V[PolicyOracle active-agent chronology]
+              G[Deterministic policy verdict]
+              P --> A --> H --> R --> E --> V --> G
+              classDef authority fill:#ddf4ff,stroke:#0969da,color:#24292f,stroke-width:2px
+              classDef advisory fill:#fbefff,stroke:#8250df,color:#24292f,stroke-width:2px
+              classDef evidence fill:#dafbe1,stroke:#1a7f37,color:#24292f,stroke-width:2px
+              class P,V,G authority
+              class A,H advisory
+              class R,E evidence
+              linkStyle default stroke:#57606a,stroke-width:1.5px
+          ```
+          ''')
+
+          approval = clean(r'''
+          ```mermaid
+          flowchart TB
+              accTitle: OpenAI native approval continuation path
+              accDescr: The scenario binds exact approval intent. A native approval interruption becomes an approval request and typed decision receipt. The same run state is resumed through approve or reject, and the evaluator verifies the exact continuation before deterministic grading.
+              S[Scenario approval intent]
+              A[OpenAIAgentsHITLApprovalAdapter]
+              I[Native ToolApprovalItem]
+              R[APPROVAL_REQUEST + ApprovalIntentReceipt]
+              Q{Approve or reject}
+              AP[Matching executable request + result]
+              RJ[Explicit rejection result + no protected request]
+              V[verify_approval_intent]
+              G[Policy + outcome oracles]
+              S --> A --> I --> R --> Q
+              Q -->|approve| AP --> V
+              Q -->|reject| RJ --> V
+              V --> G
+              classDef authority fill:#ddf4ff,stroke:#0969da,color:#24292f,stroke-width:2px
+              classDef advisory fill:#fbefff,stroke:#8250df,color:#24292f,stroke-width:2px
+              classDef evidence fill:#dafbe1,stroke:#1a7f37,color:#24292f,stroke-width:2px
+              class S,V,G authority
+              class A,I,Q advisory
+              class R,AP,RJ evidence
+              linkStyle default stroke:#57606a,stroke-width:1.5px
+          ```
+          ''')
+
+          side_effect = clean(r'''
+          ```mermaid
+          sequenceDiagram
+              accTitle: Run-local side-effect idempotency observation
+              accDescr: The specialized adapter invokes the real subject callback twice with the same canonical logical operation but distinct call identities. Evaluator-owned effect snapshots surround each attempt. The resulting receipt proves continuous before-and-after state and feeds deterministic side-effect grading.
+              autonumber
+              actor E as Evaluator
+              participant A as Side-effect adapter
+              participant T as Real subject tool callback
+              participant S as Effect-state reader
+              E->>A: exact logical operation contract
+              A->>S: read before first attempt
+              A->>T: first request
+              T-->>A: first result / exception path
+              A->>S: read after first attempt
+              A->>S: read before second attempt
+              A->>T: second request · distinct call identity
+              T-->>A: second result / exception path
+              A->>S: read after second attempt
+              A-->>E: side-effect receipt + normalized evidence
+              Note over E,S: Green evidence is accepted only after chronology and continuity revalidation
+              %% Color semantics are expressed by trust-boundary boxes below.
+          ```
+          ''')
+
+          retrieval = clean(r'''
+          ```mermaid
+          flowchart TB
+              accTitle: Deterministic retrieval delivery bridge
+              accDescr: A scenario-owned corpus, exact query, ranker profile, and optional controlled poison derive one canonical active ranking. The OpenAI retrieval adapter exposes one evaluator-owned tool, binds the exact selected query and call identity, and emits a delivery receipt before the exact ranked result is treated as model-visible evidence.
+              S[Retrieval contract]
+              C[Content-addressed corpus + query + ranker]
+              P[Optional controlled poison relation]
+              K[Canonical active ranking]
+              A[OpenAIAgentsRetrievalAdapter]
+              Q[Exact model-selected query + call identity]
+              R[RETRIEVAL_DELIVERY receipt]
+              O[Exact canonical ranked TOOL_RESULT]
+              V[verify_retrieval_delivery]
+              S --> C
+              P --> K
+              C --> K --> A --> Q --> R --> O --> V
+              classDef authority fill:#ddf4ff,stroke:#0969da,color:#24292f,stroke-width:2px
+              classDef advisory fill:#fbefff,stroke:#8250df,color:#24292f,stroke-width:2px
+              classDef evidence fill:#dafbe1,stroke:#1a7f37,color:#24292f,stroke-width:2px
+              class S,C,K,V authority
+              class P,A,Q advisory
+              class R,O evidence
+              linkStyle default stroke:#57606a,stroke-width:1.5px
+          ```
+          ''')
+
+          text = replace_first_text_fence_after(text, '### Native handoff authority attenuation', handoff)
+          text = replace_first_text_fence_after(text, '### Native HITL approval-intent binding', approval)
+          text = replace_first_text_fence_after(text, '### Run-local side-effect idempotency observer', side_effect)
+          text = replace_first_text_fence_after(text, '### Deterministic retrieval-delivery bridge', retrieval)
+          p.write_text(text, encoding='utf-8')
+
+          p = pathlib.Path('docs/MCP_LAB.md')
+          text = p.read_text(encoding='utf-8')
+          stale = clean(r'''
+          ```mermaid
+          flowchart LR
+              accTitle: MCP stale-discovery relation
+              accDescr: Initial discovery exposes a target with a positive cache hint. The server removes that target while normal discovery still returns the cached entry. A forced refresh finally proves target absence, and only then can the protocol receipt close.
+              I[Initial tools/list · target present]
+              M[Server removes target]
+              C[Cached tools/list · target still present]
+              R[Forced refresh · target absent]
+              E[MCPFaultReceipt]
+              I --> M --> C --> R --> E
+              classDef boundary fill:#ffebe9,stroke:#cf222e,color:#24292f,stroke-width:2px,stroke-dasharray:5 3
+              classDef evidence fill:#dafbe1,stroke:#1a7f37,color:#24292f,stroke-width:2px
+              class I,M,C,R boundary
+              class E evidence
+              linkStyle default stroke:#57606a,stroke-width:1.5px
+          ```
+          ''')
+          text = replace_first_text_fence_after(text, '### Stale discovery', stale)
+          p.write_text(text, encoding='utf-8')
+
+          p = pathlib.Path('docs/MCP_OAUTH_FLOW.md')
+          text = p.read_text(encoding='utf-8')
+          separation = clean(r'''
+          ```mermaid
+          flowchart LR
+              accTitle: Separate MCP resource-server and OAuth assurance domains
+              accDescr: Resource-server authorization starts from deterministic token records and verifies bearer, verifier, and scope enforcement. OAuth-flow assurance separately verifies discovery, registration compatibility, authorization code plus PKCE, token exchange, introspection, protected MCP use, and stored-authorization reuse.
+              RP[MCPRemoteAuthPolicy] --> RE[Bearer + verifier + scope observations] --> RR[MCPRemoteAuthReceipt]
+              OP[MCPOAuthFlowPolicy] --> OD[Discovery + registration compatibility + authorize + PKCE + token] --> OI[Authenticated introspection + protected MCP + reuse] --> OR[MCPOAuthFlowReceipt]
+              classDef authority fill:#ddf4ff,stroke:#0969da,color:#24292f,stroke-width:2px
+              classDef boundary fill:#ffebe9,stroke:#cf222e,color:#24292f,stroke-width:2px,stroke-dasharray:5 3
+              classDef evidence fill:#dafbe1,stroke:#1a7f37,color:#24292f,stroke-width:2px
+              class RP,OP authority
+              class RE,OD,OI boundary
+              class RR,OR evidence
+              linkStyle default stroke:#57606a,stroke-width:1.5px
+          ```
+          ''')
+          topology = clean(r'''
+          ```mermaid
+          flowchart LR
+              accTitle: MCP OAuth laboratory network topology
+              accDescr: The official OAuth client uses one loopback authorization-server origin for discovery, registration, authorization, and token exchange. A separate resource-server origin protects MCP over Streamable HTTP and validates bearer tokens by authenticated HTTP introspection back to the authorization server.
+              C[OAuthClientProvider]
+              AS[Authorization Server · loopback origin A]
+              RS[Resource Server · loopback origin B]
+              MCP[Official MCP client]
+              C -->|discovery / registration / authorize / token| AS
+              AS -->|authenticated introspection response| RS
+              MCP -->|Streamable HTTP + bearer| RS
+              classDef advisory fill:#fbefff,stroke:#8250df,color:#24292f,stroke-width:2px
+              classDef boundary fill:#ffebe9,stroke:#cf222e,color:#24292f,stroke-width:2px,stroke-dasharray:5 3
+              class C,MCP advisory
+              class AS,RS boundary
+              linkStyle default stroke:#57606a,stroke-width:1.5px
+          ```
+          ''')
+          text = replace_first_text_fence_after(text, '## Why this is separate from `MCPRemoteAuthLab`', separation)
+          text = replace_first_text_fence_after(text, '## Network and trust topology', topology)
+          p.write_text(text, encoding='utf-8')
+
+          p = pathlib.Path('docs/MCP_REMOTE_AUTH.md')
+          text = p.read_text(encoding='utf-8')
+          network = clean(r'''
+          ```mermaid
+          flowchart TB
+              accTitle: MCP remote authorization network boundary
+              accDescr: A content-addressed remote-auth policy configures a pre-bound loopback socket and Uvicorn-hosted MCP resource server. Bearer authentication and scope middleware protect the protocol endpoint. Real HTTP and official MCP clients produce a probe result that is integrity-bound into the authorization receipt.
+              P[MCPRemoteAuthPolicy]
+              S[Pre-bound loopback TCP socket]
+              U[Uvicorn]
+              R[MCP Streamable HTTP resource server]
+              A[Bearer authentication + scope middleware]
+              E[Protected MCP endpoint]
+              C[Real HTTP + official MCP clients]
+              O[MCPRemoteAuthProbeResult]
+              RC[MCPRemoteAuthReceipt]
+              P --> S --> U --> R --> A --> E --> C --> O --> RC
+              classDef authority fill:#ddf4ff,stroke:#0969da,color:#24292f,stroke-width:2px
+              classDef boundary fill:#ffebe9,stroke:#cf222e,color:#24292f,stroke-width:2px,stroke-dasharray:5 3
+              classDef evidence fill:#dafbe1,stroke:#1a7f37,color:#24292f,stroke-width:2px
+              class P authority
+              class S,U,R,A,E,C boundary
+              class O,RC evidence
+              linkStyle default stroke:#57606a,stroke-width:1.5px
+          ```
+          ''')
+          matrix = clean(r'''
+          ```mermaid
+          flowchart TB
+              accTitle: Deterministic MCP authorization matrix
+              accDescr: Missing, unknown, expired, issuer-mismatched, or resource-mismatched bearer credentials are rejected as unauthenticated. Missing required scope is authenticated but forbidden. Only a valid scoped token proceeds to protected discovery and tool invocation.
+              Q{Observed credential case}
+              U[Unauthenticated rejection]
+              F[Insufficient-scope rejection]
+              V[Valid scoped bearer]
+              P[Protected tools/list + tools/call succeed]
+              Q -->|missing / unknown / expired / wrong issuer / wrong resource| U
+              Q -->|missing required scope| F
+              Q -->|valid scoped token| V --> P
+              classDef advisory fill:#fbefff,stroke:#8250df,color:#24292f,stroke-width:2px
+              classDef bad fill:#ffebe9,stroke:#cf222e,color:#24292f,stroke-width:2px
+              classDef terminal fill:#dafbe1,stroke:#1a7f37,color:#24292f,stroke-width:3px
+              class Q advisory
+              class U,F bad
+              class V,P terminal
+              linkStyle default stroke:#57606a,stroke-width:1.5px
+          ```
+          ''')
+          text = replace_first_text_fence_after(text, '## Network boundary', network)
+          text = replace_first_text_fence_after(text, '## Deterministic authorization matrix', matrix)
+          p.write_text(text, encoding='utf-8')
+
+          # Self-delete this one-shot workflow from the final branch diff.
+          subprocess.run(['git', 'config', 'user.name', 'github-actions[bot]'], check=True)
+          subprocess.run(['git', 'config', 'user.email', '41898282+github-actions[bot]@users.noreply.github.com'], check=True)
+          subprocess.run(['git', 'rm', '.github/workflows/docs-polish.yml'], check=True)
+          subprocess.run(['git', 'add', 'README.md', 'docs'], check=True)
+          subprocess.run(['git', 'commit', '-m', 'docs: polish evergreen assurance guides'], check=True)
+          subprocess.run(['git', 'push', 'origin', 'HEAD:docs/evergreen-openai-mermaid'], check=True)
+          PY
