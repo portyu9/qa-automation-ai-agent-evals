@@ -187,9 +187,13 @@ sequenceDiagram
     accDescr: The specialized adapter invokes the real subject callback twice with the same canonical logical operation but distinct call identities. Evaluator-owned effect snapshots surround each attempt. The resulting receipt proves continuous before-and-after state and feeds deterministic side-effect grading.
     autonumber
     actor E as Evaluator
-    participant A as Side-effect adapter
-    participant T as Real subject tool callback
-    participant S as Effect-state reader
+    box rgba(9,105,218,0.08) Evaluator-owned control and observation
+      participant A as Side-effect adapter
+      participant S as Effect-state reader
+    end
+    box rgba(207,34,46,0.08) Evaluated subject boundary
+      participant T as Real subject tool callback
+    end
     E->>A: exact logical operation contract
     A->>S: read before first attempt
     A->>T: first request
