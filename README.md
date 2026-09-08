@@ -5,7 +5,7 @@
 ### Evidence-Bound TEVV for Agentic Systems
 
 [![Python](https://img.shields.io/badge/Python-Supported-3776AB?logo=python&logoColor=white&style=flat-square)](pyproject.toml)
-[![OpenAI Agents SDK](https://img.shields.io/badge/OpenAI%20Agents%20SDK-Integrated-000000?logo=openai&logoColor=white&style=flat-square)](docs/OPENAI_ADAPTER.md)
+[![OpenAI Agents SDK](https://img.shields.io/badge/OpenAI%20Agents%20SDK-Integrated-000000?style=flat-square)](docs/OPENAI_ADAPTER.md)
 [![MIT License](https://img.shields.io/badge/License-MIT-2ea44f?style=flat-square)](LICENSE)
 [![Architecture](https://img.shields.io/badge/Architecture-Evidence--Bound-111827?style=flat-square)](docs/ARCHITECTURE.md)
 
