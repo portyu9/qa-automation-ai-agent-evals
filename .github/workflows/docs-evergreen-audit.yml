@@ -1,0 +1,47 @@
+name: docs-evergreen-audit
+
+on:
+  push:
+    branches:
+      - docs/evergreen-openai-mermaid
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Find version-like documentation literals and diagram candidates
+        shell: bash
+        run: |
+          python - <<'PY'
+          from __future__ import annotations
+
+          import pathlib
+          import re
+
+          files = [pathlib.Path('README.md'), *sorted(pathlib.Path('docs').glob('*.md'))]
+          patterns = {
+              'python-runtime': re.compile(r'\bPython\s+\d+\.\d+(?:\s*[|/+,-]\s*\d+\.\d+)*', re.I),
+              'semantic-version': re.compile(r'(?<![\w/.-])v\d+(?:\.\d+){0,2}\b', re.I),
+              'three-part-version': re.compile(r'(?<![\w.-])\d+\.\d+\.\d+(?![\w.-])'),
+              'exact-package-pin': re.compile(r'==\s*\d+(?:\.\d+)+'),
+              'named-version': re.compile(r'\b(?:version|schema|report|protocol|format|model)\s+(?:v?\d+(?:\.\d+)*)\b', re.I),
+          }
+
+          hits = 0
+          text_fences = 0
+          mermaid_fences = 0
+          for path in files:
+              text = path.read_text(encoding='utf-8')
+              text_fences += text.count('```text')
+              mermaid_fences += text.count('```mermaid')
+              for lineno, line in enumerate(text.splitlines(), 1):
+                  matched = [name for name, pat in patterns.items() if pat.search(line)]
+                  if matched:
+                      hits += 1
+                      print(f'VERSION\t{path}:{lineno}\t{",".join(matched)}\t{line}')
+          print(f'SUMMARY\tfiles={len(files)}\tversion_lines={hits}\ttext_fences={text_fences}\tmermaid_fences={mermaid_fences}')
+          PY
