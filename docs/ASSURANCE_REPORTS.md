@@ -2,7 +2,7 @@
 
 ## Purpose
 
-`AssuranceReport` is a self-validating session-level artifact for review, CI handoff, and later audit. The current `agent-evals/assurance-report/<schema>` contract binds the `agent-evals/trial-evidence/<schema>` schema, exact trial evidence roots, the scenario-derived grading profile introduced in predecessor schema, deterministic oracle snapshots for resolved grading, explicit policy facts retained by blocked trials, subordinate semantic judgments when required, reproducible reliability configuration, frozen release policy, and the release-gate decision derived from that session.
+`AssuranceReport` is a self-validating session-level artifact for review, CI handoff, and later audit. The current `agent-evals/assurance-report/<schema>` contract binds the `agent-evals/trial-evidence/<schema>` schema, exact trial evidence roots, the scenario-derived grading profile introduced in the predecessor schema, deterministic oracle snapshots for resolved grading, explicit policy facts retained by blocked trials, subordinate semantic judgments when required, reproducible reliability configuration, frozen release policy, and the release-gate decision derived from that session.
 
 The report is deliberately **not** another execution or grading authority. It preserves conclusions and verifies the report-level derivation that can be recomputed from the artifact itself.
 
@@ -18,19 +18,19 @@ The current schema closes that fail-open shape without regrading blocked evidenc
 
 ## Schema boundary
 
-The current schema changes the Assurance artifact derivation surface and therefore uses a new schema and root domain rather than silently changing predecessor schema semantics:
+The current schema changes the Assurance artifact derivation surface and therefore uses a new schema and root domain rather than silently changing the predecessor schema's semantics:
 
 - assurance report: `agent-evals/assurance-report/<schema>`
 - evidence: `agent-evals/trial-evidence/<schema>` (unchanged)
 - report-root domain: `agent-evals/assurance-report/<schema>\0`
 
-The predecessor schema artifacts are rejected by the current report model. A predecessor schema report is not silently interpreted under current schema criticality semantics.
+The predecessor schema artifacts are rejected by the current report model. A predecessor-schema report is not silently interpreted under the current schema's criticality semantics.
 
 Historically:
 
-- earlier schema added exact Wilson `confidence_z` persistence;
-- predecessor schema added `ScenarioGradingProfile`, closing report-level semantic and side-effect grading-shape omission gaps;
-- current schema retains those guarantees and adds blocked explicit-policy fact preservation.
+- an earlier schema added exact Wilson `confidence_z` persistence;
+- the predecessor schema added `ScenarioGradingProfile`, closing report-level semantic and side-effect grading-shape omission gaps;
+- the current schema retains those guarantees and adds blocked explicit-policy fact preservation.
 
 ## Authority separation
 
@@ -84,14 +84,14 @@ flowchart TB
 
 ## Scenario grading profile
 
-`ScenarioGradingProfile` remains the minimal scenario disclosure surface introduced in predecessor schema. It records only scenario facts that determine report-level grading shape:
+`ScenarioGradingProfile` remains the minimal scenario disclosure surface introduced in the predecessor schema. It records only scenario facts that determine report-level grading shape:
 
 - `semantic_rubric_identity` — exact rubric identity or `null`;
 - `side_effect_idempotency_identity` — exact side-effect contract identity or `null`.
 
 The profile intentionally does not serialize the full scenario objective, state, authority, retrieval material, approval intent, required/forbidden outcomes, or tags. Those remain bound by `scenario_identity` and require the exact scenario/evidence replay path when their historical relations must be re-established.
 
-For every non-`BLOCKED` trial, current schema enforces:
+For every non-`BLOCKED` trial, the current schema enforces:
 
 - `policy` and `outcome` exist exactly once;
 - `side-effect-idempotency` exists exactly when the profile requires it;
@@ -299,8 +299,8 @@ The assurance and evidence layers remain intentionally separate:
 - `LocalEvidenceStore` verifies persisted `TrialEvidence`;
 - `EvidenceReplayAdapter` can resubmit historical evidence through evaluator-owned replay under exact subject/scenario identity;
 - semantic replay validates historical semantic authority without calling a fresh semantic model;
-- `AssuranceReport.from_session()` uses exact scenario/evidence to re-establish construction-time relations and derive current schema blocked policy snapshots;
-- standalone current schema parsing revalidates the report-level commitments it actually contains;
+- `AssuranceReport.from_session()` uses exact scenario/evidence to re-establish construction-time relations and derive the current schema's blocked policy snapshots;
+- standalone current-schema parsing revalidates the report-level commitments it actually contains;
 - exact evidence replay remains the authority for reconstructing event-level chronology and snapshot-to-event correspondence.
 
 The report can answer, "Does this stored session conclusion internally follow from the grading facts, blocked policy facts, grading-shape contract, statistical contract, and policy it contains?" It cannot by itself answer, "Would fresh execution produce the same observations now?"
@@ -316,4 +316,4 @@ The report can answer, "Does this stored session conclusion internally follow fr
 - remote attestation;
 - proof that the referenced evidence was honestly produced.
 
-Those are separate deployment and provenance concerns. current schema's guarantee is narrower and testable: known explicit policy facts retained by blocked evidence are no longer erased at the report/release boundary, while unresolved grading relations remain unresolved.
+Those are separate deployment and provenance concerns. The current schema's guarantee is narrower and testable: known explicit policy facts retained by blocked evidence are no longer erased at the report/release boundary, while unresolved grading relations remain unresolved.

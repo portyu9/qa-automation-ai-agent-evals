@@ -51,7 +51,7 @@ This preserves both sides of the framework's central distinction:
 
 ## Resolved history
 
-For `PASS`, `FAIL`, and `INCONCLUSIVE` trials, The current Assurance schema rejects any evaluator/runtime blocking evidence and re-establishes the ordinary pre-grading closure before accepting deterministic oracle facts and, when configured, semantic judgment evidence.
+For `PASS`, `FAIL`, and `INCONCLUSIVE` trials, the current Assurance schema rejects any evaluator/runtime blocking evidence and re-establishes the ordinary pre-grading closure before accepting deterministic oracle facts and, when configured, semantic judgment evidence.
 
 This keeps the classification boundary explicit:
 
@@ -61,16 +61,16 @@ This keeps the classification boundary explicit:
 
 ## Standalone report parsing
 
-The serialized Assurance Report intentionally stores evidence roots rather than duplicating every evidence event. current schema additionally stores the bounded blocked-policy snapshots described above. Loading a standalone current report can therefore recompute report-level shape, critical-violation count, reliability, gate output, and `report_root`, but it still cannot independently reconstruct the complete event stream referenced by an `evidence_root`.
+The serialized Assurance Report intentionally stores evidence roots rather than duplicating every evidence event. The current schema additionally stores the bounded blocked-policy snapshots described above. Loading a standalone current-schema report can therefore recompute report-level shape, critical-violation count, reliability, gate output, and `report_root`, but it still cannot independently reconstruct the complete event stream referenced by an `evidence_root`.
 
 The exact correspondence between each blocked-policy snapshot and its source event is established when constructing the report from the exact session/evidence objects. Historical event-level re-establishment still requires the exact evidence/replay path. The `report_root` binds the snapshots into report content, but remains a content-integrity commitment rather than a signature, trusted timestamp, publisher identity, or proof of honest evidence production.
 
 ## Schema evolution
 
-This hardening changes the Assurance Report derivation surface, so it uses a distinct revision rather than silently changing predecessor schema semantics:
+This hardening changes the Assurance Report derivation surface, so it uses a distinct revision rather than silently changing the predecessor schema's semantics:
 
 - evidence: `agent-evals/trial-evidence/<schema>` (unchanged)
 - assurance report: `agent-evals/assurance-report/<schema>`
 - report-root domain: `agent-evals/assurance-report/<schema>\0`
 
-predecessor reports are rejected by the current report model rather than being interpreted under the new blocked-policy criticality rules.
+Predecessor reports are rejected by the current report model rather than being interpreted under the new blocked-policy criticality rules.
