@@ -32,7 +32,7 @@
 | **Evidence model** | immutable ordered events, content-addressed identities, typed receipts, local persistence verification, replay, and report rederivation |
 | **Reliability** | repeated trials, uncertainty-aware statistics, differential evaluation, non-compensatory safety rules, and deterministic release gates |
 | **Security posture** | trust boundaries are explicit; external content may contribute evidence but does not acquire evaluator authority |
-| **Documentation policy** | README and `/docs` describe evergreen contracts; executable dependency and interpreter truth lives in manifests and lock inputs |
+| **Documentation policy** | README and `/docs` describe evergreen contracts; executable dependency and interpreter truth lives in project manifests and repository-owned requirement files |
 
 ## Architecture at a glance
 
@@ -212,7 +212,7 @@ Optional integration lanes are installed through the repository extras defined i
 python -m pip install -e '.[dev,openai,mcp]'
 ```
 
-The manifests and lock inputs are the authoritative source for supported interpreter and dependency requirements. Documentation keeps those release pins in executable configuration instead of duplicating them here.
+The project manifests and repository-owned requirement files are the authoritative source for supported interpreter and dependency requirements. Documentation keeps those executable requirements in repository configuration instead of duplicating them here.
 
 ## Evidence hierarchy
 
