@@ -6,15 +6,14 @@ on:
       - docs/evergreen-openai-mermaid
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  rewrite-and-audit:
-    if: github.actor != 'github-actions[bot]'
+  audit:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Rewrite evergreen docs and add architectural Mermaid
+      - name: Validate evergreen documentation and Mermaid quality
         shell: bash
         run: |
           python - <<'PY'
@@ -22,565 +21,9 @@ jobs:
 
           import pathlib
           import re
-          import subprocess
-          import textwrap
 
-          ROOT = pathlib.Path('.')
-          files = [ROOT / 'README.md', *sorted((ROOT / 'docs').glob('*.md'))]
-
-          def clean(block: str) -> str:
-              return textwrap.dedent(block).strip()
-
-          def replace_first_text_fence_after(text: str, heading: str, replacement: str) -> str:
-              h = text.find(heading)
-              if h < 0:
-                  raise RuntimeError(f'missing heading: {heading}')
-              start = text.find('```text', h)
-              if start < 0:
-                  raise RuntimeError(f'missing text fence after: {heading}')
-              end = text.find('\n```', start + len('```text'))
-              if end < 0:
-                  raise RuntimeError(f'unclosed text fence after: {heading}')
-              end += len('\n```')
-              return text[:start] + replacement + text[end:]
-
-          def insert_before(text: str, marker: str, block: str, signature: str) -> str:
-              if signature in text:
-                  return text
-              if marker not in text:
-                  raise RuntimeError(f'missing insertion marker: {marker}')
-              return text.replace(marker, block + '\n\n' + marker, 1)
-
-          architecture = clean(r'''
-          ```mermaid
-          flowchart TB
-              accTitle: Agent evaluation trust model
-              accDescr: The evaluated agent and external systems are untrusted for grading authority. Controlled provider and protocol adapters produce observations. The trusted evaluation control plane binds identities, verifies delivery and receipts, persists evidence, applies deterministic oracles, and derives release decisions. Semantic judging is subordinate.
-
-              subgraph SUBJECT[Evaluated subject · no grading authority]
-                direction LR
-                AG[Agent runtime + model]
-                TL[Tools + memory + resources]
-                HF[Handoffs + approvals + application context]
-              end
-
-              subgraph BOUNDARY[Observed provider / protocol boundaries]
-                direction LR
-                OA[OpenAI Agents SDK]
-                MCP[MCP protocol + authorization]
-                EXT[External systems / target state]
-              end
-
-              subgraph CONTROL[Trusted evaluation control plane]
-                direction TB
-                ID[Subject + scenario + authority identities]
-                INJ[Controlled injectors + delivery verifiers]
-                RCPT[Typed receipts + normalized evidence]
-                DET[Deterministic policy / side-effect / outcome oracles]
-                REP[Persistence + replay + reports]
-                SEM[Optional calibrated semantic judge]
-                REL[Reliability + release gate]
-                ID --> INJ --> RCPT --> DET --> REP
-                DET -->|deterministic success only| SEM --> REL
-                DET -->|failure / blocked| REL
-                REP --> REL
-              end
-
-              AG <--> TL
-              AG <--> HF
-              AG <--> OA
-              OA <--> MCP
-              TL <--> EXT
-              HF --> INJ
-              OA --> INJ
-              MCP --> INJ
-              EXT --> INJ
-
-              classDef untrusted fill:#ffebe9,stroke:#cf222e,color:#24292f,stroke-width:2px,stroke-dasharray:5 3
-              classDef advisory fill:#fbefff,stroke:#8250df,color:#24292f,stroke-width:2px
-              classDef authority fill:#ddf4ff,stroke:#0969da,color:#24292f,stroke-width:2px
-              classDef evidence fill:#dafbe1,stroke:#1a7f37,color:#24292f,stroke-width:2px
-              classDef terminal fill:#dafbe1,stroke:#1a7f37,color:#24292f,stroke-width:3px
-
-              class AG,TL,HF,EXT untrusted
-              class OA,MCP,SEM advisory
-              class ID,INJ,DET,REP authority
-              class RCPT evidence
-              class REL terminal
-
-              style SUBJECT stroke:#cf222e,stroke-width:2px,stroke-dasharray:6 4
-              style BOUNDARY stroke:#8250df,stroke-width:2px,stroke-dasharray:6 4
-              style CONTROL stroke:#0969da,stroke-width:2px,stroke-dasharray:6 4
-              linkStyle default stroke:#57606a,stroke-width:1.5px
-          ```
-
-          **Diagram key:** red dashed = evaluated/untrusted subject or external state · purple = provider/protocol or semantic boundary · blue = deterministic evaluator authority · green = evidence and terminal release truth.
-          ''')
-
-          grading = clean(r'''
-          ```mermaid
-          flowchart TB
-              accTitle: Deterministic-first grading precedence
-              accDescr: Adapter evidence must satisfy required delivery, approval, protocol, and side-effect preconditions. Deterministic oracles run before semantic judging. Any deterministic failure terminates as failure without calling the semantic judge. Semantic judging may only preserve or narrow deterministic success.
-
-              A[Adapter evidence]
-              P[Verify required evaluation preconditions]
-              D[Policy oracle + optional side-effect oracle + outcome oracle]
-              J[Accepted calibrated semantic judge]
-              V{Semantic decision}
-              PASS[PASS]
-              FAIL[FAIL]
-              INC[INCONCLUSIVE]
-              BLOCK[BLOCKED]
-
-              A --> P
-              P -->|missing / invalid| BLOCK
-              P -->|verified| D
-              D -->|any deterministic failure| FAIL
-              D -->|success, no semantic rubric| PASS
-              D -->|success + semantic rubric| J --> V
-              V -->|PASS| PASS
-              V -->|FAIL| FAIL
-              V -->|ABSTAIN| INC
-
-              classDef evidence fill:#dafbe1,stroke:#1a7f37,color:#24292f,stroke-width:2px
-              classDef authority fill:#ddf4ff,stroke:#0969da,color:#24292f,stroke-width:2px
-              classDef advisory fill:#fbefff,stroke:#8250df,color:#24292f,stroke-width:2px
-              classDef bad fill:#ffebe9,stroke:#cf222e,color:#24292f,stroke-width:2px
-              classDef terminal fill:#dafbe1,stroke:#1a7f37,color:#24292f,stroke-width:3px
-
-              class A,P evidence
-              class D authority
-              class J,V advisory
-              class FAIL,BLOCK bad
-              class PASS terminal
-              class INC advisory
-              linkStyle default stroke:#57606a,stroke-width:1.5px
-          ```
-          ''')
-
-          semantic_binding = clean(r'''
-          ```mermaid
-          flowchart LR
-              accTitle: Semantic receipt binding to pre-semantic evidence
-              accDescr: Subject evidence is finalized before semantic evaluation. Its exact root is bound into the semantic judgment receipt. The receipt is then appended as one terminal non-critical event, producing the final trial evidence root without a circular hash.
-
-              E[Subject evidence]
-              R1[Pre-semantic evidence root]
-              J[SemanticJudgmentReceipt]
-              EV[Terminal non-critical semantic event]
-              R2[Final TrialEvidence root]
-
-              E --> R1 -->|exact digest bound| J --> EV --> R2
-
-              classDef evidence fill:#dafbe1,stroke:#1a7f37,color:#24292f,stroke-width:2px
-              classDef advisory fill:#fbefff,stroke:#8250df,color:#24292f,stroke-width:2px
-              classDef terminal fill:#dafbe1,stroke:#1a7f37,color:#24292f,stroke-width:3px
-              class E,R1 evidence
-              class J,EV advisory
-              class R2 terminal
-              linkStyle default stroke:#57606a,stroke-width:1.5px
-          ```
-          ''')
-
-          handoff = clean(r'''
-          ```mermaid
-          flowchart TB
-              accTitle: Native handoff authority attenuation
-              accDescr: The configured root authority reaches the exact root agent. Every observed native handoff must match one scenario-owned directed grant and may only preserve or reduce the authority that reached the source. Run-item provenance then binds later actions to the active agent before deterministic policy grading.
-
-              ROOT[Scenario-bound root authority]
-              AG[Exact configured root agent]
-              H[Observed native source → target handoff]
-              G[Exact directed HandoffAuthorityGrant]
-              ATT[Path-local authority attenuation]
-              PROV[SDK generating-agent provenance]
-              ACT[Delegated tools + resources + approvals + budgets]
-              NEXT[Optional onward handoff]
-              V[Deterministic PolicyOracle]
-
-              ROOT --> AG --> H
-              G --> ATT
-              H --> ATT --> PROV --> ACT --> V
-              ACT --> NEXT -->|repeat attenuation| H
-
-              classDef untrusted fill:#ffebe9,stroke:#cf222e,color:#24292f,stroke-width:2px,stroke-dasharray:5 3
-              classDef advisory fill:#fbefff,stroke:#8250df,color:#24292f,stroke-width:2px
-              classDef authority fill:#ddf4ff,stroke:#0969da,color:#24292f,stroke-width:2px
-              classDef terminal fill:#dafbe1,stroke:#1a7f37,color:#24292f,stroke-width:3px
-              class H,PROV advisory
-              class ROOT,G,ATT,ACT authority
-              class AG,NEXT untrusted
-              class V terminal
-              linkStyle default stroke:#57606a,stroke-width:1.5px
-          ```
-          ''')
-
-          approval = clean(r'''
-          ```mermaid
-          flowchart TB
-              accTitle: Native HITL approval intent lifecycle
-              accDescr: A scenario-owned approval intent targets one exact pending native invocation. The evaluator records the approval request with call, argument, resource, and accepted authority-path identity, binds an approve or reject decision in a typed receipt, resumes the same run state, verifies the exact continuation, then permits deterministic grading.
-
-              S[Scenario-bound ApprovalIntentSpec]
-              I[Native ToolApprovalItem interruption]
-              R[APPROVAL_REQUEST]
-              D[Framework-owned APPROVAL_DECISION receipt]
-              Q{Decision}
-              AR[Exact matching TOOL_REQUEST]
-              AO[Exact matching TOOL_RESULT]
-              RR[No protected TOOL_REQUEST]
-              RO[Explicit rejection TOOL_RESULT]
-              V[Verify approval relation]
-              G[Deterministic policy + outcome grading]
-
-              S --> I --> R --> D --> Q
-              Q -->|approve| AR --> AO --> V
-              Q -->|reject| RR --> RO --> V
-              V --> G
-
-              classDef advisory fill:#fbefff,stroke:#8250df,color:#24292f,stroke-width:2px
-              classDef authority fill:#ddf4ff,stroke:#0969da,color:#24292f,stroke-width:2px
-              classDef evidence fill:#dafbe1,stroke:#1a7f37,color:#24292f,stroke-width:2px
-              classDef terminal fill:#dafbe1,stroke:#1a7f37,color:#24292f,stroke-width:3px
-              class I,Q advisory
-              class S,V authority
-              class R,D,AR,AO,RR,RO evidence
-              class G terminal
-              linkStyle default stroke:#57606a,stroke-width:1.5px
-          ```
-          ''')
-
-          mcp_claims = clean(r'''
-          ```mermaid
-          flowchart LR
-              accTitle: MCP discovery, validation, refresh, and agent behavior are separate claims
-              accDescr: Cached discovery may differ from current server truth. Call-time validation is a separate observation. Refreshed discovery establishes a later client view. None of those protocol observations alone proves autonomous agent behavior.
-
-              C[Cached discovery]
-              S[Current server contract]
-              V[Call-time validity]
-              R[Refreshed discovery]
-              A[Agent behavior]
-
-              C -. not equivalent .-> S
-              S -. not equivalent .-> V
-              V -. not equivalent .-> R
-              R -. not equivalent .-> A
-
-              classDef boundary fill:#ffebe9,stroke:#cf222e,color:#24292f,stroke-width:2px,stroke-dasharray:5 3
-              classDef advisory fill:#fbefff,stroke:#8250df,color:#24292f,stroke-width:2px
-              class C,S,V,R boundary
-              class A advisory
-              linkStyle default stroke:#57606a,stroke-width:1.5px
-          ```
-          ''')
-
-          mcp_direct = clean(r'''
-          ```mermaid
-          flowchart TB
-              accTitle: Direct MCP protocol-fault observation path
-              accDescr: A content-addressed fault specification configures a fresh official server. The official client observes discovery or call behavior under the negotiated protocol revision. Only an exact public-client observation closes the protocol receipt.
-
-              F[MCPFaultSpec]
-              S[Fresh official MCPServer]
-              C[Official Client + negotiated protocol]
-              P[tools/list or tools/call]
-              O[Exact public-client observation]
-              R[MCPFaultReceipt]
-
-              F --> S --> C --> P --> O --> R
-
-              classDef authority fill:#ddf4ff,stroke:#0969da,color:#24292f,stroke-width:2px
-              classDef boundary fill:#ffebe9,stroke:#cf222e,color:#24292f,stroke-width:2px,stroke-dasharray:5 3
-              classDef evidence fill:#dafbe1,stroke:#1a7f37,color:#24292f,stroke-width:2px
-              class F authority
-              class S,C,P,O boundary
-              class R evidence
-              linkStyle default stroke:#57606a,stroke-width:1.5px
-          ```
-          ''')
-
-          openai_overview = clean(r'''
-          ## Adapter control flow
-
-          ```mermaid
-          flowchart LR
-              accTitle: OpenAI Agents SDK to provider-neutral evidence flow
-              accDescr: Scenario contracts configure a specialized OpenAI adapter. The real SDK executes the controlled interaction. Public SDK observations and exact specialized receipts are normalized into TrialEvidence. Provider-neutral verification and deterministic oracles retain grading authority outside the SDK.
-
-              S[EvaluationScenario + subject identity]
-              A[Specialized OpenAI adapter]
-              SDK[OpenAI Agents SDK]
-              OBS[Public SDK observations]
-              R[Specialized typed receipts when required]
-              E[Provider-neutral TrialEvidence]
-              V[Delivery / authority / chronology verification]
-              D[Deterministic oracles]
-
-              S --> A --> SDK --> OBS --> E
-              A --> R --> E
-              E --> V --> D
-
-              classDef authority fill:#ddf4ff,stroke:#0969da,color:#24292f,stroke-width:2px
-              classDef advisory fill:#fbefff,stroke:#8250df,color:#24292f,stroke-width:2px
-              classDef evidence fill:#dafbe1,stroke:#1a7f37,color:#24292f,stroke-width:2px
-              class S,V,D authority
-              class A,SDK,OBS advisory
-              class R,E evidence
-              linkStyle default stroke:#57606a,stroke-width:1.5px
-          ```
-
-          **Diagram key:** purple = SDK/provider execution boundary · blue = evaluator-owned authority · green = normalized evidence or typed receipt.
-          ''')
-
-          semantic_judge = clean(r'''
-          ```mermaid
-          flowchart TB
-              accTitle: Bounded OpenAI semantic judging path
-              accDescr: Objective, exact rubric, and candidate output become canonical bounded JSON under an evaluator-owned prompt. The SDK model runs with no tools. Strict structured output is revalidated by the evaluator, which rederives criterion and overall decisions before binding a semantic receipt to the exact pre-semantic evidence root.
-
-              I[SemanticJudgeInput]
-              J[Canonical JSON + fixed evaluator prompt]
-              M[Concrete SDK model · tools disabled]
-              O[Strict bounded JSON response]
-              V[Duplicate-key + finite-value + schema validation]
-              D[Evaluator rederives criteria + overall decision]
-              R[SemanticJudgmentReceipt]
-
-              I --> J --> M --> O --> V --> D --> R
-
-              classDef authority fill:#ddf4ff,stroke:#0969da,color:#24292f,stroke-width:2px
-              classDef advisory fill:#fbefff,stroke:#8250df,color:#24292f,stroke-width:2px
-              classDef evidence fill:#dafbe1,stroke:#1a7f37,color:#24292f,stroke-width:2px
-              class I,J,V,D authority
-              class M,O advisory
-              class R evidence
-              linkStyle default stroke:#57606a,stroke-width:1.5px
-          ```
-          ''')
-
-          local_channels = clean(r'''
-          ```mermaid
-          flowchart TB
-              accTitle: Scoped OpenAI adversarial channel normalization
-              accDescr: A controlled scenario and optional attack fixture configure isolated SDK execution. One of the explicitly supported local or SDK boundaries delivers the condition. Public SDK observations plus an independent state reader become provider-neutral evidence, which must pass exact attack-delivery verification before deterministic grading.
-
-              S[Controlled scenario + optional AttackFixture]
-              A[OpenAIAgentsAdapter]
-              C[Scoped local / SDK channel]
-              SDK[OpenAI Agents SDK execution]
-              O[Public result + item + session + handoff + tool-context observations]
-              E[Provider-neutral EvidenceEvent stream + independent state reader]
-              T[TrialEvidence]
-              V[Exact ATTACK_DELIVERY verification when adversarial]
-              D[Deterministic oracles]
-
-              S --> A --> C --> SDK --> O --> E --> T --> V --> D
-
-              classDef authority fill:#ddf4ff,stroke:#0969da,color:#24292f,stroke-width:2px
-              classDef advisory fill:#fbefff,stroke:#8250df,color:#24292f,stroke-width:2px
-              classDef evidence fill:#dafbe1,stroke:#1a7f37,color:#24292f,stroke-width:2px
-              class S,V,D authority
-              class A,C,SDK,O advisory
-              class E,T evidence
-              linkStyle default stroke:#57606a,stroke-width:1.5px
-          ```
-          ''')
-
-          evidence_overview = clean(r'''
-          ## Persistence and replay control flow
-
-          ```mermaid
-          flowchart LR
-              accTitle: Evidence persistence and exact-identity replay
-              accDescr: TrialEvidence is canonicalized and committed with a manifest after bounded integrity checks. Reads reverify file, manifest, payload, identity, hash, and semantic root. Exact-identity replay re-emits only verified historical evidence, after which required receipt relations and deterministic oracles are applied again without recreating external side effects.
-
-              T[TrialEvidence]
-              C[Canonical serialization + size bounds]
-              W[No-clobber payload publication]
-              M[Manifest commit marker]
-              R[Bounded read + filesystem checks]
-              V[Payload hash + identity + evidence-root verification]
-              A[EvidenceReplayAdapter]
-              P[Required receipt / relation revalidation]
-              D[Deterministic regrading]
-
-              T --> C --> W --> M --> R --> V --> A --> P --> D
-
-              classDef authority fill:#ddf4ff,stroke:#0969da,color:#24292f,stroke-width:2px
-              classDef evidence fill:#dafbe1,stroke:#1a7f37,color:#24292f,stroke-width:2px
-              classDef terminal fill:#dafbe1,stroke:#1a7f37,color:#24292f,stroke-width:3px
-              class C,R,V,P,D authority
-              class T,W,M,A evidence
-              linkStyle default stroke:#57606a,stroke-width:1.5px
-          ```
-
-          **Diagram key:** green = evidence/artifact state · blue = evaluator verification or grading authority.
-          ''')
-
-          docs_map = clean(r'''
-          ## Documentation architecture
-
-          ```mermaid
-          flowchart TB
-              accTitle: Documentation review map
-              accDescr: Architecture and evaluation model define the core assurance contract. Specialized authority and delivery documents refine handoff, approval, side-effect, adversarial, retrieval, OpenAI, and MCP boundaries. Evidence, reports, statistics, security, and limitations close the review path.
-
-              A[Architecture]
-              E[Evaluation Model]
-              S[Semantic Judging]
-              H[Handoff + Turn Budget + Approval]
-              X[Side Effects + Adversarial + Retrieval]
-              O[OpenAI Adapter + Composition]
-              M[MCP Labs + Auth + OAuth]
-              R[Evidence + Replay + Reports]
-              T[Statistics + Metamorphic Testing]
-              L[Security + Limitations]
-
-              A --> E
-              E --> S
-              E --> H
-              E --> X
-              H --> O
-              X --> O
-              O --> M
-              O --> R
-              M --> R
-              R --> T --> L
-
-              classDef authority fill:#ddf4ff,stroke:#0969da,color:#24292f,stroke-width:2px
-              classDef advisory fill:#fbefff,stroke:#8250df,color:#24292f,stroke-width:2px
-              classDef evidence fill:#dafbe1,stroke:#1a7f37,color:#24292f,stroke-width:2px
-              classDef terminal fill:#dafbe1,stroke:#1a7f37,color:#24292f,stroke-width:3px
-              class A,E,H,X authority
-              class S,O,M advisory
-              class R,T evidence
-              class L terminal
-              linkStyle default stroke:#57606a,stroke-width:1.5px
-          ```
-          ''')
-
-          for path in files:
-              text = path.read_text(encoding='utf-8')
-
-              # Exact package/runtime pins are executable-manifest truth, not prose truth.
-              text = re.sub(r'openai-agents==\d+(?:\.\d+)+', 'openai-agents', text)
-              text = re.sub(r'mcp==\d+(?:\.\d+)+', 'mcp', text)
-              text = text.replace('both Python 3.11 and 3.14', 'all repository-supported Python interpreters')
-              text = text.replace('Python 3.11 and 3.14', 'the repository-supported Python interpreters')
-              text = text.replace('Python 3.11 | 3.14', 'Python')
-              text = re.sub(r'Python\s+\d+\.\d+(?:\s*(?:\||and|/)\s*\d+\.\d+)*', 'repository-supported Python', text)
-
-              # Public docs describe the negotiated protocol contract without duplicating its revision pin.
-              text = text.replace('2026-07-28', 'repository-supported negotiated revision')
-              text = text.replace('protocol revision `repository-supported negotiated revision`', 'repository-supported negotiated protocol revision')
-              text = text.replace('protocol revision repository-supported negotiated revision', 'repository-supported negotiated protocol revision')
-              text = text.replace('protocol `repository-supported negotiated revision`', 'repository-supported negotiated protocol revision')
-              text = text.replace('protocol repository-supported negotiated revision', 'repository-supported negotiated protocol revision')
-
-              # Avoid embedding concrete schema identifiers in prose.
-              text = re.sub(r'agent-evals/assurance-report/v\d+', 'agent-evals/assurance-report/<schema>', text, flags=re.I)
-              text = re.sub(r'agent-evals/trial-evidence/v\d+', 'agent-evals/trial-evidence/<schema>', text, flags=re.I)
-
-              # File-specific historical terminology keeps meaning while removing numeric revision labels.
-              if path.name in {'ASSURANCE_REPORTS.md', 'ASSURANCE_BLOCKED_HISTORY.md', 'STATISTICAL_ASSURANCE.md'}:
-                  text = re.sub(r'\bv5\b', 'current schema', text, flags=re.I)
-                  text = re.sub(r'\bv4\b', 'predecessor schema', text, flags=re.I)
-                  text = re.sub(r'\bv3\b', 'earlier schema', text, flags=re.I)
-                  text = re.sub(r'\bv2\b', 'legacy schema', text, flags=re.I)
-                  text = re.sub(r'\bv1\b', 'earliest schema', text, flags=re.I)
-              elif path.name == 'SEMANTIC_JUDGING.md':
-                  text = re.sub(r'AssuranceReport\s+v\d+', 'AssuranceReport', text, flags=re.I)
-                  text = re.sub(r'\bv2\b', 'current calibration schema', text, flags=re.I)
-                  text = re.sub(r'\bv1\b', 'legacy calibration schema', text, flags=re.I)
-              elif path.name == 'SIDE_EFFECT_IDEMPOTENCY.md':
-                  text = re.sub(r'\bv1\b', 'current contract', text, flags=re.I)
-                  text = re.sub(r'\bv2\b', 'replacement contract', text, flags=re.I)
-              elif path.name == 'MCP_IDENTITY_DRIFT.md':
-                  text = re.sub(r'\bv1\b', 'baseline', text, flags=re.I)
-                  text = re.sub(r'\bv2\b', 'replacement', text, flags=re.I)
-              else:
-                  text = re.sub(r'\bv1\s*[/→-]\s*v2\b', 'initial→replacement', text, flags=re.I)
-                  text = re.sub(r'\bv1\b', 'initial', text, flags=re.I)
-                  text = re.sub(r'\bv2\b', 'replacement', text, flags=re.I)
-                  text = re.sub(r'\bv3\b', 'earlier revision', text, flags=re.I)
-                  text = re.sub(r'\bv4\b', 'predecessor revision', text, flags=re.I)
-                  text = re.sub(r'\bv5\b', 'current revision', text, flags=re.I)
-
-              # Any remaining standalone three-part package release belongs in manifests rather than Markdown.
-              text = re.sub(
-                  r'(?<![\w.-])\d+\.\d+\.\d+(?![\w.-])',
-                  'manifest-pinned release',
-                  text,
-              )
-
-              # Evergreen wording for identities/contracts.
-              text = text.replace('versioned objective', 'revision-bound objective')
-              text = text.replace('explicitly versioned', 'explicitly revisioned')
-              text = text.replace('it is versioned rather than', 'it uses a distinct revision rather than')
-              text = text.replace('adapter/version', 'adapter identity')
-              text = text.replace('adapter version', 'adapter implementation identity')
-              text = text.replace('schema version', 'schema revision')
-              text = text.replace('protocol version', 'negotiated protocol revision')
-
-              # Clean common artifacts of versionless rewrites.
-              text = text.replace('current schema report', 'current report')
-              text = text.replace('current schema model', 'current report model')
-              text = text.replace('predecessor schema reports', 'predecessor reports')
-              text = text.replace('legacy schema evidence schema', 'legacy evidence schema')
-              text = text.replace('replacement revision', 'replacement')
-              text = text.replace('initial revision', 'initial')
-
-              path.write_text(text, encoding='utf-8')
-
-          # Convert high-value ASCII control flows to accessible, color-coded Mermaid.
-          p = ROOT / 'docs' / 'ARCHITECTURE.md'
-          text = p.read_text(encoding='utf-8')
-          text = replace_first_text_fence_after(text, '## Trust model', architecture)
-          p.write_text(text, encoding='utf-8')
-
-          p = ROOT / 'docs' / 'EVALUATION_MODEL.md'
-          text = p.read_text(encoding='utf-8')
-          text = replace_first_text_fence_after(text, '## Grading precedence', grading)
-          text = replace_first_text_fence_after(text, '## Semantic evidence binding', semantic_binding)
-          p.write_text(text, encoding='utf-8')
-
-          p = ROOT / 'docs' / 'HANDOFF_AUTHORITY.md'
-          text = p.read_text(encoding='utf-8')
-          text = replace_first_text_fence_after(text, '## Purpose', handoff)
-          p.write_text(text, encoding='utf-8')
-
-          p = ROOT / 'docs' / 'APPROVAL_INTENT.md'
-          text = p.read_text(encoding='utf-8')
-          text = replace_first_text_fence_after(text, '## Assurance relation', approval)
-          p.write_text(text, encoding='utf-8')
-
-          p = ROOT / 'docs' / 'MCP_LAB.md'
-          text = p.read_text(encoding='utf-8')
-          text = replace_first_text_fence_after(text, '## Discovery, call validity, and agent behavior are different claims', mcp_claims)
-          text = replace_first_text_fence_after(text, '### Direct content faults', mcp_direct)
-          p.write_text(text, encoding='utf-8')
-
-          p = ROOT / 'docs' / 'OPENAI_ADAPTER.md'
-          text = p.read_text(encoding='utf-8')
-          text = insert_before(text, '## Trust boundary', openai_overview, '## Adapter control flow')
-          text = replace_first_text_fence_after(text, '### Calibrated semantic judge', semantic_judge)
-          text = replace_first_text_fence_after(text, '### Seven local/SDK adversarial channels', local_channels)
-          p.write_text(text, encoding='utf-8')
-
-          p = ROOT / 'docs' / 'EVIDENCE_AND_REPLAY.md'
-          text = p.read_text(encoding='utf-8')
-          text = insert_before(text, '## Three identities, three jobs', evidence_overview, '## Persistence and replay control flow')
-          p.write_text(text, encoding='utf-8')
-
-          p = ROOT / 'docs' / 'README.md'
-          text = p.read_text(encoding='utf-8')
-          text = insert_before(text, '## Cross-cutting invariants', docs_map, '## Documentation architecture')
-          p.write_text(text, encoding='utf-8')
-
-          # Final acceptance scan for displayed version literals.
-          patterns = {
+          files = [pathlib.Path('README.md'), *sorted(pathlib.Path('docs').glob('*.md'))]
+          version_patterns = {
               'python-runtime': re.compile(r'\bPython\s+\d+\.\d+(?:\s*[|/+,-]\s*\d+\.\d+)*', re.I),
               'semantic-version': re.compile(r'(?<![\w/.-])v\d+(?:\.\d+){0,2}\b', re.I),
               'three-part-version': re.compile(r'(?<![\w.-])\d+\.\d+\.\d+(?![\w.-])'),
@@ -588,31 +31,50 @@ jobs:
               'named-version': re.compile(r'\b(?:version|schema|report|protocol|format|model)\s+(?:v?\d+(?:\.\d+)*)\b', re.I),
           }
 
-          hits = []
-          text_fences = 0
-          mermaid_fences = 0
+          version_hits: list[str] = []
+          mermaid_errors: list[str] = []
+          link_errors: list[str] = []
+          mermaid_count = 0
+          text_fence_count = 0
+
           for path in files:
               text = path.read_text(encoding='utf-8')
-              text_fences += text.count('```text')
-              mermaid_fences += text.count('```mermaid')
+              text_fence_count += text.count('```text')
+
               for lineno, line in enumerate(text.splitlines(), 1):
-                  matched = [name for name, pat in patterns.items() if pat.search(line)]
+                  matched = [name for name, pattern in version_patterns.items() if pattern.search(line)]
                   if matched:
-                      hits.append((path, lineno, matched, line))
+                      version_hits.append(f'{path}:{lineno}: {",".join(matched)}: {line}')
 
-          for path, lineno, matched, line in hits:
-              print(f'REMAINING_VERSION\t{path}:{lineno}\t{",".join(matched)}\t{line}')
-          print(f'SUMMARY\tfiles={len(files)}\tversion_lines={len(hits)}\ttext_fences={text_fences}\tmermaid_fences={mermaid_fences}')
-          if hits:
-              raise SystemExit('version-literal acceptance gate failed')
+              for index, block in enumerate(re.findall(r'```mermaid\n(.*?)\n```', text, flags=re.S), 1):
+                  mermaid_count += 1
+                  if 'accTitle:' not in block or 'accDescr:' not in block:
+                      mermaid_errors.append(f'{path}: Mermaid {index} lacks accTitle/accDescr')
+                  if 'classDef ' not in block and 'box rgba' not in block:
+                      mermaid_errors.append(f'{path}: Mermaid {index} lacks explicit color semantics')
 
-          subprocess.run(['git', 'config', 'user.name', 'github-actions[bot]'], check=True)
-          subprocess.run(['git', 'config', 'user.email', '41898282+github-actions[bot]@users.noreply.github.com'], check=True)
-          subprocess.run(['git', 'add', 'README.md', 'docs'], check=True)
-          staged = subprocess.run(['git', 'diff', '--cached', '--quiet'])
-          if staged.returncode == 0:
-              print('No documentation changes to commit.')
-          else:
-              subprocess.run(['git', 'commit', '-m', 'docs: make documentation evergreen and diagram-rich'], check=True)
-              subprocess.run(['git', 'push', 'origin', 'HEAD:docs/evergreen-openai-mermaid'], check=True)
+              for target in re.findall(r'\[[^\]]+\]\(([^)]+\.md)(?:#[^)]+)?\)', text):
+                  if '://' in target:
+                      continue
+                  resolved = (path.parent / target).resolve()
+                  if not resolved.exists():
+                      link_errors.append(f'{path}: broken Markdown link -> {target}')
+
+          for label, errors in (
+              ('VERSION', version_hits),
+              ('MERMAID', mermaid_errors),
+              ('LINK', link_errors),
+          ):
+              for error in errors:
+                  print(f'{label}\t{error}')
+
+          print(
+              'SUMMARY\t'
+              f'files={len(files)}\tversion_lines={len(version_hits)}\t'
+              f'text_fences={text_fence_count}\tmermaid_fences={mermaid_count}\t'
+              f'mermaid_errors={len(mermaid_errors)}\tlink_errors={len(link_errors)}'
+          )
+
+          if version_hits or mermaid_errors or link_errors:
+              raise SystemExit('documentation acceptance gate failed')
           PY
