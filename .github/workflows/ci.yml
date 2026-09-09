@@ -179,6 +179,8 @@ jobs:
           import tomllib
           import zipfile
 
+          from packaging.specifiers import SpecifierSet
+
           project = tomllib.loads(Path('pyproject.toml').read_text(encoding='utf-8'))['project']
           expected_name = project['name']
           expected_version = project['version']
@@ -187,18 +189,22 @@ jobs:
           expected_script = project['scripts']['agent-evals']
 
           def verify_metadata(message, *, label):
-              actual = {
-                  'Name': message.get('Name'),
-                  'Version': message.get('Version'),
-                  'Requires-Python': message.get('Requires-Python'),
-              }
-              expected = {
-                  'Name': expected_name,
-                  'Version': expected_version,
-                  'Requires-Python': expected_python,
-              }
-              if actual != expected:
-                  raise SystemExit(f'{label} core metadata mismatch: {actual} != {expected}')
+              actual_name = message.get('Name')
+              actual_version = message.get('Version')
+              actual_python = message.get('Requires-Python')
+              if actual_name != expected_name or actual_version != expected_version:
+                  raise SystemExit(
+                      f'{label} core metadata mismatch: '
+                      f'name={actual_name!r}/{expected_name!r}, '
+                      f'version={actual_version!r}/{expected_version!r}'
+                  )
+              if actual_python is None:
+                  raise SystemExit(f'{label} metadata is missing Requires-Python')
+              if SpecifierSet(actual_python) != SpecifierSet(expected_python):
+                  raise SystemExit(
+                      f'{label} Requires-Python mismatch: '
+                      f'{actual_python!r} != {expected_python!r}'
+                  )
               extras = set(message.get_all('Provides-Extra', []))
               if extras != expected_extras:
                   raise SystemExit(
