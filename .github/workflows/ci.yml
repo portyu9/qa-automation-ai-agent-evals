@@ -14,14 +14,31 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  policy:
+    name: Repository policy
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: "3.11"
+      - name: Validate runtime and CI support contract
+        run: python .github/scripts/validate_runtime_policy.py
+
   quality:
     name: Quality / Python ${{ matrix.python-version }}
-    runs-on: ubuntu-latest
+    needs: policy
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.11", "3.14"]
+        python-version: ["3.11", "3.12", "3.13", "3.14"]
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -51,7 +68,8 @@ jobs:
 
   openai-adapter:
     name: OpenAI adapter / deterministic SDK
-    runs-on: ubuntu-latest
+    needs: policy
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - name: Checkout
@@ -75,7 +93,8 @@ jobs:
 
   mcp-lab:
     name: MCP fault lab / deterministic protocol
-    runs-on: ubuntu-latest
+    needs: policy
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - name: Checkout
@@ -94,7 +113,8 @@ jobs:
 
   mcp-remote-auth:
     name: MCP remote auth / loopback HTTP
-    runs-on: ubuntu-latest
+    needs: policy
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - name: Checkout
@@ -113,7 +133,8 @@ jobs:
 
   mcp-oauth-flow:
     name: MCP OAuth flow / separated AS-RS
-    runs-on: ubuntu-latest
+    needs: policy
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - name: Checkout
@@ -132,7 +153,8 @@ jobs:
 
   package:
     name: Package integrity
-    runs-on: ubuntu-latest
+    needs: policy
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - name: Checkout
@@ -157,6 +179,8 @@ jobs:
           import tomllib
           import zipfile
 
+          from packaging.specifiers import SpecifierSet
+
           project = tomllib.loads(Path('pyproject.toml').read_text(encoding='utf-8'))['project']
           expected_name = project['name']
           expected_version = project['version']
@@ -165,18 +189,22 @@ jobs:
           expected_script = project['scripts']['agent-evals']
 
           def verify_metadata(message, *, label):
-              actual = {
-                  'Name': message.get('Name'),
-                  'Version': message.get('Version'),
-                  'Requires-Python': message.get('Requires-Python'),
-              }
-              expected = {
-                  'Name': expected_name,
-                  'Version': expected_version,
-                  'Requires-Python': expected_python,
-              }
-              if actual != expected:
-                  raise SystemExit(f'{label} core metadata mismatch: {actual} != {expected}')
+              actual_name = message.get('Name')
+              actual_version = message.get('Version')
+              actual_python = message.get('Requires-Python')
+              if actual_name != expected_name or actual_version != expected_version:
+                  raise SystemExit(
+                      f'{label} core metadata mismatch: '
+                      f'name={actual_name!r}/{expected_name!r}, '
+                      f'version={actual_version!r}/{expected_version!r}'
+                  )
+              if actual_python is None:
+                  raise SystemExit(f'{label} metadata is missing Requires-Python')
+              if SpecifierSet(actual_python) != SpecifierSet(expected_python):
+                  raise SystemExit(
+                      f'{label} Requires-Python mismatch: '
+                      f'{actual_python!r} != {expected_python!r}'
+                  )
               extras = set(message.get_all('Provides-Extra', []))
               if extras != expected_extras:
                   raise SystemExit(
@@ -298,3 +326,32 @@ jobs:
           if doctor['version'] != expected:
               raise SystemExit(f'doctor version mismatch: {doctor["version"]!r} != {expected!r}')
           PY
+
+  ci-gate:
+    name: ci-gate
+    if: always()
+    needs:
+      - policy
+      - quality
+      - openai-adapter
+      - mcp-lab
+      - mcp-remote-auth
+      - mcp-oauth-flow
+      - package
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    steps:
+      - name: Evaluate required CI jobs
+        env:
+          POLICY: ${{ needs.policy.result }}
+          QUALITY: ${{ needs.quality.result }}
+          OPENAI_ADAPTER: ${{ needs['openai-adapter'].result }}
+          MCP_LAB: ${{ needs['mcp-lab'].result }}
+          MCP_REMOTE_AUTH: ${{ needs['mcp-remote-auth'].result }}
+          MCP_OAUTH_FLOW: ${{ needs['mcp-oauth-flow'].result }}
+          PACKAGE: ${{ needs.package.result }}
+        run: |
+          set -euo pipefail
+          for result in "$POLICY" "$QUALITY" "$OPENAI_ADAPTER" "$MCP_LAB" "$MCP_REMOTE_AUTH" "$MCP_OAUTH_FLOW" "$PACKAGE"; do
+            [[ "$result" == "success" ]] || { echo "required job result=$result"; exit 1; }
+          done
