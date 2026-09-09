@@ -49,7 +49,9 @@ if project.get("requires-python") != REQUIRES_PYTHON:
     fail(f"project.requires-python must be exactly {REQUIRES_PYTHON!r}")
 
 classifiers = set(project.get("classifiers", []))
-expected_classifiers = {f"Programming Language :: Python :: {version}" for version in SUPPORTED_PYTHONS}
+expected_classifiers = {
+    f"Programming Language :: Python :: {version}" for version in SUPPORTED_PYTHONS
+}
 missing = sorted(expected_classifiers - classifiers)
 if missing:
     fail(f"pyproject.toml is missing supported-interpreter classifiers: {missing}")
@@ -75,7 +77,7 @@ quality = job_block(workflow, "quality", "openai-adapter")
 matrix_match = re.search(r"python-version:\s*\[([^\]]+)\]", quality)
 if matrix_match is None:
     fail("quality job must declare an explicit python-version matrix")
-qualified = tuple(re.findall(r"\"(3\.\d+)\"", matrix_match.group(1)))
+qualified = tuple(re.findall(r'"(3\.\d+)"', matrix_match.group(1)))
 if qualified != SUPPORTED_PYTHONS:
     fail(f"quality matrix must qualify {SUPPORTED_PYTHONS}; found {qualified}")
 
