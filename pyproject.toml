@@ -7,7 +7,7 @@ name = "qa-automation-ai-agent-evals"
 version = "0.1.0"
 description = "Evidence-bound evaluation, verification, validation, and release assurance for agentic systems"
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.11,<3.15"
 authors = [{name = "Ƴunior Ƥortal"}]
 license = {file = "LICENSE"}
 keywords = ["ai-agents", "agent-evals", "quality-engineering", "tevv", "mcp", "pytest"]
@@ -16,6 +16,8 @@ classifiers = [
   "Programming Language :: Python :: 3",
   "Programming Language :: Python :: 3 :: Only",
   "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
   "Programming Language :: Python :: 3.14",
   "Topic :: Software Development :: Quality Assurance",
   "Topic :: Software Development :: Testing",
