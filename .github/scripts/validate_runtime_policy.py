@@ -37,6 +37,10 @@ def job_block(workflow: str, name: str, next_name: str | None) -> str:
     return workflow[start:end]
 
 
+def needs_result_reference(job: str) -> tuple[str, str]:
+    return (f"needs.{job}.result", f"needs['{job}'].result")
+
+
 pyproject = tomllib.loads(Path("pyproject.toml").read_text(encoding="utf-8"))
 workflow = Path(".github/workflows/ci.yml").read_text(encoding="utf-8")
 project = pyproject["project"]
@@ -97,7 +101,7 @@ if not re.search(r"^\s+if:\s*always\(\)\s*$", ci_gate, flags=re.MULTILINE):
 for job in REQUIRED_JOBS:
     if f"      - {job}\n" not in ci_gate:
         fail(f"ci-gate needs list must include {job}")
-    if f"needs.{job}.result" not in ci_gate:
+    if not any(reference in ci_gate for reference in needs_result_reference(job)):
         fail(f"ci-gate must evaluate {job} result")
 
 setup_python_uses = re.findall(r"uses:\s*actions/setup-python@([^\s#]+)", workflow)
