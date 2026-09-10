@@ -15,6 +15,7 @@ from agent_evals.contracts.models import (
     SubjectFingerprint,
 )
 from agent_evals.evidence.models import EvidenceEvent, EvidenceKind, TrialVerdict
+from agent_evals.evidence.store import evidence_record_key
 from agent_evals.runtime.session import EvaluationSession
 from agent_evals.security.taxonomy import ThreatClass
 
@@ -62,19 +63,44 @@ async def test_session_runs_repeatable_trial_identity_and_reliability() -> None:
         scenario=scenario(),
         trials=3,
         k=2,
+        campaign_id="candidate-2026-09-10",
     )
 
     assert observed_trial_ids == [
-        "session.repeat:7:0000",
-        "session.repeat:7:0001",
-        "session.repeat:7:0002",
+        "campaign:candidate-2026-09-10:attempt:0000",
+        "campaign:candidate-2026-09-10:attempt:0001",
+        "campaign:candidate-2026-09-10:attempt:0002",
     ]
+    assert evaluated.campaign_id == "candidate-2026-09-10"
     assert evaluated.subject_identity == subject().identity
     assert evaluated.scenario_identity == scenario().identity
     assert tuple(trial.verdict for trial in evaluated.trials) == (TrialVerdict.PASS,) * 3
     assert evaluated.reliability.passes == 3
     assert evaluated.reliability.resolved_trials == 3
     assert evaluated.critical_violations == 0
+
+
+@pytest.mark.asyncio
+async def test_session_auto_campaigns_prevent_cross_run_evidence_key_collisions() -> None:
+    def script(
+        _subject: SubjectFingerprint,
+        _scenario: EvaluationScenario,
+        _trial_id: str,
+    ) -> AdapterResult:
+        return AdapterResult(final_state={"status": "ok"})
+
+    session = EvaluationSession()
+    adapter = ScriptedAdapter(script)
+    first = await session.run(adapter, subject=subject(), scenario=scenario(), trials=1)
+    second = await session.run(adapter, subject=subject(), scenario=scenario(), trials=1)
+
+    assert first.campaign_id is not None
+    assert second.campaign_id is not None
+    assert first.campaign_id != second.campaign_id
+    assert first.trials[0].evidence.trial_id != second.trials[0].evidence.trial_id
+    assert evidence_record_key(first.trials[0].evidence) != evidence_record_key(
+        second.trials[0].evidence
+    )
 
 
 @pytest.mark.asyncio
@@ -148,6 +174,39 @@ async def test_session_rejects_invalid_k_before_adapter_execution() -> None:
                 scenario=scenario(),
                 trials=1,
                 k=invalid,  # type: ignore[arg-type]
+            )
+    assert calls == 0
+
+
+@pytest.mark.asyncio
+async def test_session_rejects_invalid_campaign_id_before_adapter_execution() -> None:
+    calls = 0
+
+    def script(*_args: object) -> AdapterResult:
+        nonlocal calls
+        calls += 1
+        return AdapterResult()
+
+    session = EvaluationSession()
+    adapter = ScriptedAdapter(script)
+    invalid_campaign_ids: tuple[object, ...] = (
+        "",
+        ".starts-with-dot",
+        "has:colon",
+        "has/slash",
+        "contains space",
+        "a" * 129,
+        True,
+        7,
+    )
+    for invalid in invalid_campaign_ids:
+        with pytest.raises(ValueError, match="campaign_id must be"):
+            await session.run(
+                adapter,
+                subject=subject(),
+                scenario=scenario(),
+                trials=1,
+                campaign_id=invalid,  # type: ignore[arg-type]
             )
     assert calls == 0
 

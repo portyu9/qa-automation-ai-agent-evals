@@ -6,9 +6,11 @@ Agent outputs vary across attempts. One successful run establishes that success 
 
 The framework therefore treats each attempt as a trial, preserves unresolved execution separately, and aggregates resolved behavioral verdicts explicitly.
 
+Every `EvaluationSession.run(...)` invocation has an explicit campaign identity. If the caller does not provide one, the runtime creates a collision-resistant identifier; the campaign plus attempt index is bound into each generated trial ID. This prevents separate evaluation campaigns over the same subject/scenario pair from accidentally reusing the same immutable trial/evidence-record namespace. Campaign IDs are opaque provenance identifiers, not authenticated principals, signatures, reset receipts, or evidence of statistical independence. Callers may provide a stable campaign ID when an external evaluation campaign already owns that namespace, and intentionally reusing the same campaign ID intentionally reuses that trial namespace.
+
 Repeated execution does **not** by itself prove environmental independence. `EvaluationSession` snapshots the evaluator-owned subject/scenario contract but intentionally reuses the supplied adapter object; it does not reset provider state, application state, memory, external targets, or automatically apply `EvaluationScenario.initial_state`. The adapter/operator integration must establish whatever same-starting-condition or reset discipline the intended reliability claim requires.
 
-That distinction matters statistically. Success/failure counts and Wilson intervals remain exact summaries of the recorded resolved verdicts, but an independent-attempt interpretation of repeated outcomes—and especially the `pass@k` / `pass^k` extrapolations—requires the underlying attempts to be sufficiently independent and stationary for that approximation to be meaningful. A session API call is not evidence that this precondition was satisfied.
+That distinction matters statistically. Success/failure counts and Wilson intervals remain exact summaries of the recorded resolved verdicts, but an independent-attempt interpretation of repeated outcomes—and especially the `pass@k` / `pass^k` extrapolations—requires the underlying attempts to be sufficiently independent and stationary for that approximation to be meaningful. A unique campaign identity prevents identity collisions; it is not evidence that this statistical precondition was satisfied.
 
 ## Resolved versus unresolved attempts
 
@@ -84,6 +86,8 @@ A raw positive percentage delta is not enough to claim an established improvemen
 ## Assurance-report reproducibility
 
 The current Assurance Report schema persists exact `k` and `confidence_z` inside its reliability snapshot and rederives reliability from the bound terminal trial verdicts with those parameters before report-level release claims are accepted. The current schema also retains the predecessor schema's scenario grading-profile binding and preserves explicit `POLICY_VIOLATION` facts from terminal `BLOCKED` evidence as bounded blocked-policy snapshots that affect non-compensatory release criticality without turning the blocked trial into completed deterministic grading.
+
+Campaign identity is indirectly bound into reports produced from campaign-bound sessions because each assurance trial record preserves the exact generated trial ID and the report root binds those records. The current report schema does not expose campaign identity as a separate authenticated or typed principal field, and this documentation does not claim that it does.
 
 The schema history is explicit rather than silently reinterpreted: the legacy schema did not persist `confidence_z`; an earlier schema added it; the predecessor schema added `ScenarioGradingProfile`; the current schema added blocked explicit-policy preservation and a new domain-separated report root. Older report schemas are rejected by the current report model rather than read under the current schema's semantics. See [Session Assurance Reports](ASSURANCE_REPORTS.md).
 
