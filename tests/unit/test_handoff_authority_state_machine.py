@@ -181,7 +181,9 @@ class HandoffAuthorityStateMachine(RuleBasedStateMachine):
         )
 
         assert updated == previous
-        assert any("requires non-empty source_agent and target_agent" in reason for reason in reasons)
+        assert any(
+            "requires non-empty source_agent and target_agent" in reason for reason in reasons
+        )
 
     @rule()
     def reject_non_handoff_event(self) -> None:
