@@ -17,6 +17,7 @@ REQUIRED_JOBS = (
     "mcp-oauth-flow",
     "package",
 )
+_WORKFLOW_USES_RE = re.compile(r"^\s*(?:-\s*)?uses:\s*([^\s#]+)", flags=re.MULTILINE)
 
 
 def fail(message: str) -> None:
@@ -41,8 +42,41 @@ def needs_result_reference(job: str) -> tuple[str, str]:
     return (f"needs.{job}.result", f"needs['{job}'].result")
 
 
+def workflow_sources() -> dict[Path, str]:
+    workflow_dir = Path(".github/workflows")
+    paths = sorted({*workflow_dir.glob("*.yml"), *workflow_dir.glob("*.yaml")})
+    if not paths:
+        fail("repository must contain at least one GitHub Actions workflow")
+    sources: dict[Path, str] = {}
+    for path in paths:
+        try:
+            sources[path] = path.read_text(encoding="utf-8")
+        except (OSError, UnicodeError) as exc:
+            fail(f"cannot read workflow {path.as_posix()!r}: {type(exc).__name__}")
+    return sources
+
+
+def validate_action_pins(sources: dict[Path, str]) -> None:
+    found_action = False
+    for path, source in sources.items():
+        for action in _WORKFLOW_USES_RE.findall(source):
+            found_action = True
+            if re.fullmatch(r"[^@\s]+@[0-9a-f]{40}", action) is None:
+                fail(
+                    "every workflow action use must be pinned to a full commit SHA: "
+                    f"{path.as_posix()}: {action!r}"
+                )
+    if not found_action:
+        fail("GitHub Actions workflows contain no action uses declarations")
+
+
 pyproject = tomllib.loads(Path("pyproject.toml").read_text(encoding="utf-8"))
-workflow = Path(".github/workflows/ci.yml").read_text(encoding="utf-8")
+workflows = workflow_sources()
+ci_path = Path(".github/workflows/ci.yml")
+workflow = workflows.get(ci_path)
+if workflow is None:
+    fail("repository must contain .github/workflows/ci.yml")
+validate_action_pins(workflows)
 project = pyproject["project"]
 
 if project.get("requires-python") != REQUIRES_PYTHON:
@@ -113,22 +147,15 @@ for job in REQUIRED_JOBS:
     if not any(reference in ci_gate for reference in needs_result_reference(job)):
         fail(f"ci-gate must evaluate {job} result")
 
-action_uses = re.findall(r"^\s*uses:\s*([^\s#]+)", workflow, flags=re.MULTILINE)
-if not action_uses:
-    fail("ci.yml contains no action uses declarations")
-for action in action_uses:
-    match = re.fullmatch(r"[^@\s]+@([0-9a-f]{40})", action)
-    if match is None:
-        fail(f"every action use must be pinned to a full commit SHA: {action!r}")
-
-if not any(action.startswith("actions/setup-python@") for action in action_uses):
+ci_action_uses = _WORKFLOW_USES_RE.findall(workflow)
+if not any(action.startswith("actions/setup-python@") for action in ci_action_uses):
     fail("ci.yml must use actions/setup-python")
-if not any(action.startswith("actions/checkout@") for action in action_uses):
+if not any(action.startswith("actions/checkout@") for action in ci_action_uses):
     fail("ci.yml must use actions/checkout")
 
 print(
     "runtime policy validated: "
     f"python={','.join(SUPPORTED_PYTHONS)}; requires-python={REQUIRES_PYTHON}; "
-    f"runner={RUNNER}; gate=ci-gate"
+    f"runner={RUNNER}; workflows={len(workflows)}; gate=ci-gate"
 )
 sys.exit(0)
