@@ -334,7 +334,9 @@ def _release_lock(path: Path, fd: int) -> None:
     try:
         current = path.lstat()
     except FileNotFoundError as exc:
-        raise EvidenceIntegrityError(f"record lock disappeared before release: {path.name}") from exc
+        raise EvidenceIntegrityError(
+            f"record lock disappeared before release: {path.name}"
+        ) from exc
     except OSError as exc:
         raise EvidenceIntegrityError(
             f"cannot inspect record lock before release: {path.name}"
@@ -343,7 +345,9 @@ def _release_lock(path: Path, fd: int) -> None:
     try:
         path.unlink()
     except FileNotFoundError as exc:
-        raise EvidenceIntegrityError(f"record lock disappeared during release: {path.name}") from exc
+        raise EvidenceIntegrityError(
+            f"record lock disappeared during release: {path.name}"
+        ) from exc
     except OSError as exc:
         raise EvidenceIntegrityError(f"cannot release record lock: {path.name}") from exc
 
