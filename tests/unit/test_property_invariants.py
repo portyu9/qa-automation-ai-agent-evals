@@ -22,8 +22,9 @@ _JSON_SCALAR = (
 )
 _JSON_VALUE = st.recursive(
     _JSON_SCALAR,
-    lambda children: st.lists(children, max_size=4)
-    | st.dictionaries(st.text(max_size=12), children, max_size=4),
+    lambda children: (
+        st.lists(children, max_size=4) | st.dictionaries(st.text(max_size=12), children, max_size=4)
+    ),
     max_leaves=20,
 )
 _JSON_MAPPING = st.dictionaries(st.text(max_size=12), _JSON_VALUE, max_size=8)
@@ -31,10 +32,7 @@ _JSON_MAPPING = st.dictionaries(st.text(max_size=12), _JSON_VALUE, max_size=8)
 
 def _reverse_mapping_order(value: Any) -> Any:
     if isinstance(value, dict):
-        return {
-            key: _reverse_mapping_order(child)
-            for key, child in reversed(list(value.items()))
-        }
+        return {key: _reverse_mapping_order(child) for key, child in reversed(list(value.items()))}
     if isinstance(value, list):
         return [_reverse_mapping_order(child) for child in value]
     return value
