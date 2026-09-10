@@ -41,7 +41,12 @@ class TrialVerdict(StrEnum):
 
 
 class EvidenceEvent(BaseModel):
-    """One normalized event detached from adapter-owned JSON containers."""
+    """One normalized event detached from adapter-owned JSON containers.
+
+    ``sequence`` is causal authority. ``observed_at`` is durable diagnostic time: callers must
+    provide an aware datetime, and all accepted values are normalized to UTC so equal instants
+    have one persisted representation.
+    """
 
     model_config = ConfigDict(frozen=True, extra="forbid", revalidate_instances="always")
 
@@ -56,6 +61,13 @@ class EvidenceEvent(BaseModel):
     @classmethod
     def detach_json_payload(cls, value: Any) -> Any:
         return _detached_json(value, error="evidence payload must be finite JSON-compatible data")
+
+    @field_validator("observed_at")
+    @classmethod
+    def require_aware_utc_timestamp(cls, value: datetime) -> datetime:
+        if value.tzinfo is None or value.utcoffset() is None:
+            raise ValueError("evidence observed_at must be timezone-aware")
+        return value.astimezone(UTC)
 
     @property
     def digest(self) -> str:
