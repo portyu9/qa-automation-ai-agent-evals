@@ -99,6 +99,49 @@ def test_directory_creation_oserror_is_normalized_to_integrity_error(
         LocalEvidenceStore(root)
 
 
+@pytest.mark.skipif(os.name != "posix", reason="POSIX mode contract")
+def test_new_store_owned_directories_are_private_on_posix(tmp_path: Path) -> None:
+    root = tmp_path / "evidence"
+    store = LocalEvidenceStore(root)
+
+    assert stat.S_IMODE(root.stat().st_mode) == 0o700
+    assert stat.S_IMODE((root / "records").stat().st_mode) == 0o700
+
+    store.write(_evidence())
+    bucket = next(path for path in (root / "records").iterdir() if path.is_dir())
+    assert stat.S_IMODE(bucket.stat().st_mode) == 0o700
+
+
+@pytest.mark.skipif(os.name != "posix", reason="POSIX mode contract")
+def test_preexisting_directory_permissions_are_not_silently_changed(tmp_path: Path) -> None:
+    root = tmp_path / "evidence"
+    root.mkdir(mode=0o755)
+    root.chmod(0o755)
+
+    LocalEvidenceStore(root)
+
+    assert stat.S_IMODE(root.stat().st_mode) == 0o755
+    assert stat.S_IMODE((root / "records").stat().st_mode) == 0o700
+
+
+@pytest.mark.skipif(os.name != "posix", reason="POSIX open-file replacement semantics")
+def test_lock_release_refuses_to_unlink_replacement_file(tmp_path: Path) -> None:
+    store = LocalEvidenceStore(tmp_path / "evidence")
+    lock_path = store.root / "records" / "replacement.lock"
+    lock_fd = store._acquire_lock(lock_path)
+    acquired = os.fstat(lock_fd)
+
+    lock_path.unlink()
+    lock_path.write_text("replacement", encoding="utf-8")
+    replacement = lock_path.stat()
+    assert (replacement.st_dev, replacement.st_ino) != (acquired.st_dev, acquired.st_ino)
+
+    with pytest.raises(EvidenceIntegrityError, match="lock ownership changed"):
+        store_module._release_lock(lock_path, lock_fd)
+
+    assert lock_path.read_text(encoding="utf-8") == "replacement"
+
+
 @pytest.mark.parametrize("ceiling", [True, 1.5])
 def test_non_integer_resource_ceilings_fail_closed(tmp_path: Path, ceiling: object) -> None:
     with pytest.raises(ValueError, match="byte ceilings must be positive integers"):
