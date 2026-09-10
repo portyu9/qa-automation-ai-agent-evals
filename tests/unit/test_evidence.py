@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime, timedelta, timezone
+
 import pytest
 from pydantic import ValidationError
 
@@ -155,3 +157,52 @@ def test_evidence_snapshot_preserves_root_and_detaches_nested_containers() -> No
     assert snapshot.events[0].payload == {"nested": {"items": ["event"]}}
     assert snapshot.final_state == {"nested": {"items": ["state"]}}
     assert snapshot.evidence_root == root
+
+
+def test_event_rejects_naive_observed_at() -> None:
+    with pytest.raises(ValidationError, match="timezone-aware"):
+        EvidenceEvent(
+            sequence=0,
+            kind=EvidenceKind.OUTPUT,
+            source="sut",
+            observed_at=datetime(2026, 9, 10, 22, 30),
+        )
+
+
+@pytest.mark.parametrize(
+    "offset",
+    [timezone(timedelta(hours=-4)), timezone(timedelta(hours=5, minutes=30))],
+)
+def test_event_canonicalizes_aware_observed_at_to_utc(offset: timezone) -> None:
+    local = datetime(2026, 9, 10, 18, 30, tzinfo=offset)
+    event = EvidenceEvent(
+        sequence=0,
+        kind=EvidenceKind.OUTPUT,
+        source="sut",
+        observed_at=local,
+    )
+
+    assert event.observed_at.tzinfo is UTC
+    assert event.observed_at == local.astimezone(UTC)
+    assert event.snapshot().observed_at == event.observed_at
+
+
+def test_equal_timestamp_instants_have_equal_event_digests() -> None:
+    utc = datetime(2026, 9, 10, 22, 30, tzinfo=UTC)
+    eastern = datetime(2026, 9, 10, 18, 30, tzinfo=timezone(timedelta(hours=-4)))
+
+    first = EvidenceEvent(
+        sequence=0,
+        kind=EvidenceKind.OUTPUT,
+        source="sut",
+        observed_at=utc,
+    )
+    second = EvidenceEvent(
+        sequence=0,
+        kind=EvidenceKind.OUTPUT,
+        source="sut",
+        observed_at=eastern,
+    )
+
+    assert first.observed_at == second.observed_at == utc
+    assert first.digest == second.digest
