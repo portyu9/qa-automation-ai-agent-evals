@@ -65,6 +65,13 @@ unexpected_minor_classifiers = sorted(
 if unexpected_minor_classifiers:
     fail(f"pyproject.toml advertises unqualified Python minors: {unexpected_minor_classifiers}")
 
+pep561_marker = Path("src/agent_evals/py.typed")
+advertises_inline_types = "Typing :: Typed" in classifiers
+if advertises_inline_types and not pep561_marker.is_file():
+    fail("Typing :: Typed requires the packaged src/agent_evals/py.typed marker")
+if pep561_marker.exists() and not advertises_inline_types:
+    fail("src/agent_evals/py.typed exists but pyproject.toml does not advertise Typing :: Typed")
+
 if "ubuntu-latest" in workflow:
     fail("ci.yml must not use floating ubuntu-latest runners")
 runner_values = re.findall(r"^\s+runs-on:\s*([^\s#]+)\s*$", workflow, flags=re.MULTILINE)
