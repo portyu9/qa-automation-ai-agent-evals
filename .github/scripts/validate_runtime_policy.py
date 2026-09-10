@@ -113,17 +113,18 @@ for job in REQUIRED_JOBS:
     if not any(reference in ci_gate for reference in needs_result_reference(job)):
         fail(f"ci-gate must evaluate {job} result")
 
-setup_python_uses = re.findall(r"uses:\s*actions/setup-python@([^\s#]+)", workflow)
-if not setup_python_uses:
-    fail("ci.yml must use actions/setup-python")
-if any(re.fullmatch(r"[0-9a-f]{40}", ref) is None for ref in setup_python_uses):
-    fail("every actions/setup-python use must be pinned to a full commit SHA")
+action_uses = re.findall(r"^\s*uses:\s*([^\s#]+)", workflow, flags=re.MULTILINE)
+if not action_uses:
+    fail("ci.yml contains no action uses declarations")
+for action in action_uses:
+    match = re.fullmatch(r"[^@\s]+@([0-9a-f]{40})", action)
+    if match is None:
+        fail(f"every action use must be pinned to a full commit SHA: {action!r}")
 
-checkout_uses = re.findall(r"uses:\s*actions/checkout@([^\s#]+)", workflow)
-if not checkout_uses:
+if not any(action.startswith("actions/setup-python@") for action in action_uses):
+    fail("ci.yml must use actions/setup-python")
+if not any(action.startswith("actions/checkout@") for action in action_uses):
     fail("ci.yml must use actions/checkout")
-if any(re.fullmatch(r"[0-9a-f]{40}", ref) is None for ref in checkout_uses):
-    fail("every actions/checkout use must be pinned to a full commit SHA")
 
 print(
     "runtime policy validated: "
