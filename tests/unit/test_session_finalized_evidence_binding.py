@@ -51,6 +51,7 @@ def _session(
     reliability: ReliabilityReport | None = None,
     subject_identity: str = SUBJECT,
     scenario_identity: str = SCENARIO,
+    campaign_id: str | None = None,
 ) -> EvaluationSessionResult:
     if reliability is None:
         reliability = ReliabilityReport.from_verdicts(tuple(trial.verdict for trial in trials))
@@ -59,6 +60,7 @@ def _session(
         scenario_identity=scenario_identity,
         trials=trials,
         reliability=reliability,
+        campaign_id=campaign_id,
     )
 
 
@@ -89,6 +91,43 @@ def test_unchanged_session_remains_release_gradeable() -> None:
 
     assert session.critical_violations == 0
     assert _direct_release(session) is GateDecision.ACCEPT
+
+
+def test_campaign_bound_session_remains_release_gradeable() -> None:
+    session = _session(
+        _trial(trial_id="campaign:release-candidate:attempt:0000"),
+        campaign_id="release-candidate",
+    )
+
+    assert session.critical_violations == 0
+    assert _direct_release(session) is GateDecision.ACCEPT
+
+
+def test_campaign_bound_session_rejects_foreign_trial_namespace() -> None:
+    session = _session(
+        _trial(trial_id="campaign:other-campaign:attempt:0000"),
+        campaign_id="release-candidate",
+    )
+
+    with pytest.raises(ValueError, match="trial ID does not match session campaign"):
+        _ = session.critical_violations
+
+
+def test_campaign_bound_session_rejects_wrong_attempt_index() -> None:
+    session = _session(
+        _trial(trial_id="campaign:release-candidate:attempt:0001"),
+        campaign_id="release-candidate",
+    )
+
+    with pytest.raises(ValueError, match="trial ID does not match session campaign"):
+        _ = session.critical_violations
+
+
+def test_campaign_bound_session_rejects_invalid_campaign_id() -> None:
+    session = _session(_trial(), campaign_id="contains:delimiter")
+
+    with pytest.raises(ValueError, match="campaign_id must be"):
+        _ = session.critical_violations
 
 
 def test_direct_release_rejects_final_state_mutation_after_trial_finalization() -> None:
