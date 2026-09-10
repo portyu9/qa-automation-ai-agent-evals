@@ -1,8 +1,14 @@
 """Integrity-checked local persistence for immutable trial evidence.
 
 The local store provides deterministic identity binding, bounded reads, exclusive same-record
-writers, atomic no-clobber publication, and a manifest-last commit marker. It is an integrity
-mechanism, not a writer-authentication, signature, WORM, or remote-attestation mechanism.
+writers, atomic no-clobber publication, and a manifest-last commit marker. Newly created store
+owned directories are private on POSIX; pre-existing operator directories are validated but never
+silently chmodded. Lock cleanup verifies that the path still names the acquired file before it is
+removed.
+
+These controls reduce accidental and local multi-user exposure, but they are not a hostile
+filesystem TOCTOU boundary. Directory-handle/openat-style hardening, writer authentication,
+signatures, WORM storage, remote attestation, and platform ACL policy remain separate concerns.
 """
 
 from __future__ import annotations
@@ -25,6 +31,7 @@ from agent_evals.evidence.models import TrialEvidence
 _MANIFEST_SCHEMA: Literal["agent-evals-evidence-manifest/v1"] = "agent-evals-evidence-manifest/v1"
 _EVIDENCE_SCHEMA: Literal["agent-evals/trial-evidence/v2"] = "agent-evals/trial-evidence/v2"
 _RECORD_KEY_RE = re.compile(r"^[0-9a-f]{64}$")
+_PRIVATE_DIRECTORY_MODE = 0o700
 
 
 class EvidenceStoreError(RuntimeError):
@@ -88,6 +95,10 @@ class LocalEvidenceStore:
     A record is committed only when both payload and manifest exist and the manifest verifies the
     payload. The manifest is materialized last. Crashed writers leave either no record, an explicit
     incomplete record, or a stale lock; none are silently promoted to valid evidence.
+
+    On POSIX, directories created by the store are explicitly set to mode ``0700``. Pre-existing
+    directories are not chmodded because their ownership and sharing policy belong to the operator.
+    Non-POSIX ACL semantics are not modeled by this local store.
     """
 
     def __init__(
@@ -162,9 +173,7 @@ class LocalEvidenceStore:
             _atomic_materialize(paths.manifest, manifest_bytes)
             return manifest
         finally:
-            os.close(lock_fd)
-            with suppress(FileNotFoundError):
-                paths.lock.unlink()
+            _release_lock(paths.lock, lock_fd)
 
     def read(self, record_key: str) -> StoredEvidence:
         _validate_record_key(record_key)
@@ -280,11 +289,13 @@ def _validate_record_key(record_key: str) -> None:
 def _ensure_store_directory(path: Path) -> None:
     if path.is_symlink():
         raise EvidenceIntegrityError(f"evidence-store directory cannot be a symlink: {path}")
+    created = False
     try:
-        path.mkdir(parents=True, exist_ok=True)
+        path.mkdir(mode=_PRIVATE_DIRECTORY_MODE, parents=True, exist_ok=False)
+        created = True
     except FileExistsError:
-        # A non-directory may already occupy the path. Inspect it below so callers receive the
-        # store's integrity error rather than a raw filesystem exception.
+        # A directory or another filesystem object may already occupy the path. Inspect it below so
+        # callers receive the store's integrity error rather than a raw filesystem exception.
         pass
     except OSError as exc:
         raise EvidenceIntegrityError(f"cannot create evidence-store directory: {path}") from exc
@@ -294,6 +305,62 @@ def _ensure_store_directory(path: Path) -> None:
         raise EvidenceIntegrityError(f"cannot inspect evidence-store directory: {path}") from exc
     if not stat.S_ISDIR(mode):
         raise EvidenceIntegrityError(f"evidence-store path is not a directory: {path}")
+    if created and os.name == "posix":
+        try:
+            path.chmod(_PRIVATE_DIRECTORY_MODE)
+        except OSError as exc:
+            raise EvidenceIntegrityError(
+                f"cannot set private permissions on evidence-store directory: {path}"
+            ) from exc
+
+
+def _release_lock(path: Path, fd: int) -> None:
+    try:
+        acquired = os.fstat(fd)
+        try:
+            current = path.lstat()
+        except FileNotFoundError as exc:
+            raise EvidenceIntegrityError(
+                f"record lock disappeared before release: {path.name}"
+            ) from exc
+        except OSError as exc:
+            raise EvidenceIntegrityError(
+                f"cannot inspect record lock before release: {path.name}"
+            ) from exc
+        _verify_lock_identity(path, acquired, current)
+    finally:
+        os.close(fd)
+
+    try:
+        current = path.lstat()
+    except FileNotFoundError as exc:
+        raise EvidenceIntegrityError(
+            f"record lock disappeared before release: {path.name}"
+        ) from exc
+    except OSError as exc:
+        raise EvidenceIntegrityError(
+            f"cannot inspect record lock before release: {path.name}"
+        ) from exc
+    _verify_lock_identity(path, acquired, current)
+    try:
+        path.unlink()
+    except FileNotFoundError as exc:
+        raise EvidenceIntegrityError(
+            f"record lock disappeared during release: {path.name}"
+        ) from exc
+    except OSError as exc:
+        raise EvidenceIntegrityError(f"cannot release record lock: {path.name}") from exc
+
+
+def _verify_lock_identity(path: Path, acquired: os.stat_result, current: os.stat_result) -> None:
+    if not stat.S_ISREG(current.st_mode):
+        raise EvidenceIntegrityError(
+            f"record lock ownership changed before release: {path.name}; refusing cleanup"
+        )
+    if (current.st_dev, current.st_ino) != (acquired.st_dev, acquired.st_ino):
+        raise EvidenceIntegrityError(
+            f"record lock ownership changed before release: {path.name}; refusing cleanup"
+        )
 
 
 def _safe_read_regular_file(path: Path, max_bytes: int) -> bytes:
