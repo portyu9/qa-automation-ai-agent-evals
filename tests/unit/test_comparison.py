@@ -29,3 +29,13 @@ def test_paired_comparison_does_not_invent_significance() -> None:
 def test_paired_comparison_rejects_unresolved_evidence() -> None:
     with pytest.raises(ValueError, match="resolved PASS/FAIL"):
         PairedComparison.compare([P, TrialVerdict.BLOCKED], [P, F])
+
+
+def test_paired_comparison_handles_discordant_count_above_float_exponent_range() -> None:
+    pairs = 1_100
+    result = PairedComparison.compare([F] * pairs, [P] * pairs)
+
+    assert result.candidate_only_pass == pairs
+    assert result.baseline_only_pass == 0
+    assert result.exact_p_value == 0.0
+    assert result.decision is ComparisonDecision.IMPROVED
