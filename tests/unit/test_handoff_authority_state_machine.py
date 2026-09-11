@@ -227,9 +227,7 @@ class HandoffAuthorityStateMachine(RuleBasedStateMachine):
             )
             assert self.state.authority.allowed_tools == frozenset({"read"})
             assert self.state.authority.approval_required_tools == frozenset({"read"})
-            assert self.state.authority.allowed_resource_scopes == (
-                scope("7", "orders", "open"),
-            )
+            assert self.state.authority.allowed_resource_scopes == (scope("7", "orders", "open"),)
             assert self.state.authority.max_tool_calls == 2
             assert self.state.authority.max_handoffs == 1
         else:
