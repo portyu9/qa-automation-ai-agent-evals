@@ -10,8 +10,8 @@ The security model keeps distinct evidence domains rather than allowing a green 
 
 1. **OpenAI local/SDK adversarial delivery** — one exact `AttackDeliveryReceipt` must verify before grading an adversarial `AttackFixture` scenario.
 2. **Deterministic retrieval delivery** — one exact `RetrievalDeliveryReceipt` binds the scenario-owned corpus/query/ranker/optional-poison relation and stable target call identity to the exact canonical model-visible result.
-3. **Native handoff authority** — scenario-owned directed grants plus public SDK generating-agent provenance constrain path-local authority; provider identity labels do not become authorization authority.
-4. **Native HITL approval intent** — `ApprovalIntentReceipt` binds one exact SDK approval interruption to one exact scenario decision and same-`RunState` continuation; it is not human authentication.
+3. **Native handoff authority** — scenario-owned directed grants plus public SDK generating-agent provenance constrain path-local authority; typed `ResourceScope` attenuation is structural and provider identity labels do not become authorization authority.
+4. **Native HITL approval intent** — `ApprovalIntentReceipt` v2 binds one exact SDK approval interruption to one exact scenario decision, typed resource identity, and same-`RunState` continuation; it is not human authentication.
 5. **Run-local side-effect idempotency** — `SideEffectIdempotencyReceipt` binds two exact subject attempts to evaluator-owned before/after effect observations without suppressing either callback.
 6. **MCP protocol faults** — one exact `MCPFaultReceipt` proves only the official client's bound protocol observation or relation.
 7. **MCP→OpenAI bridges** — six typed bridge receipts close narrow metadata/result/error/stale-cache/schema/identity relations before deterministic grading.
@@ -25,12 +25,14 @@ These families do not inherit authority from one another. In particular, a raw p
 
 Implemented controls include:
 
-- fail-closed tool/resource/approval/budget authority and non-compensatory critical policy failure;
+- fail-closed tool/typed-resource/approval/budget authority and non-compensatory critical policy failure;
 - separate `EVALUATION_ERROR / BLOCKED`, `RUNTIME_ERROR / BLOCKED`, deterministic `FAIL`, and deterministic `PASS` semantics;
 - immutable ordered evidence plus domain-separated roots;
 - content-addressed scenario, attack, retrieval, approval, MCP, authorization, OAuth, semantic-profile, and report identities;
 - exact delivery/observation receipts with known-source dispatch rather than opaque trusted JSON;
 - strict duplicate-key-rejecting finite JSON parsing where arguments or evaluator contracts require canonical identity;
+- versioned `ResourceIdentifier` / `ResourceScope` contracts with structural component containment and exact domain separation rather than lexical prefix matching;
+- exact canonical typed resource evidence at `TOOL_REQUEST` / `APPROVAL_REQUEST` boundaries, with malformed or missing required identity blocked before deterministic grading;
 - scenario-owned native handoff grants whose effective authority may preserve or narrow across accepted paths, never expand;
 - accepted authority epoch/path binding for native approval intent so malformed handoffs or same-depth sibling paths cannot replay approval evidence;
 - two real side-effect callbacks preserved under observation, with continuous evaluator-owned effect chronology and fail-closed receipt verification;
@@ -45,6 +47,32 @@ Implemented controls include:
 - integrity-verified local evidence persistence with no-clobber publication and exact-identity replay;
 - optional calibrated semantic judging that can narrow deterministic success but never rescue deterministic failure;
 - pinned GitHub Actions and read-only workflow permissions.
+
+## Typed resource authority security boundary
+
+`agent-evals/resource/v1` defines the evaluator-owned resource identity used by root policy, delegated handoff policy, policy evidence, metamorphic authority checks, and approval-intent v2 receipts.
+
+A `ResourceIdentifier` requires an exact schema version, supported kind, lowercase ASCII domain, and ordered canonical components. A `ResourceScope` uses the same version/kind/domain structure and may use an empty component tuple to mean the whole named evaluator domain. Containment is structural:
+
+```text
+scope tenant:("1",) contains tenant:("1", "orders")
+scope tenant:("1",) does not contain tenant:("10", "orders")
+scope tenant:("1",) does not contain project:("1", "orders")
+```
+
+Version 1 rejects empty/dot segments, slash and backslash separators, percent-encoded forms, surrounding whitespace, non-NFC material, and Unicode control/format/bidi/surrogate/private-use/unassigned categories. Unknown resource kinds and schema versions fail closed. There is no `startswith` authorization fallback and no converter from legacy `allowed_resource_prefixes` configuration; legacy-only and mixed lexical/typed authority material are rejected.
+
+Resource-bearing evidence is stricter than ordinary model coercion. The evaluator accepts only the exact canonical JSON material of a `ResourceIdentifier`, including the explicit schema and kind fields and a JSON string array of components. Raw strings, tuple-valued components, omitted/extra fields, model instances, unsupported versions/kinds, or merely coercible aliases do not acquire authority.
+
+The verdict boundary is intentionally epistemic:
+
+- malformed/non-canonical resource evidence, or missing resource identity while the active effective authority is resource-scoped, is `EVALUATION_ERROR / BLOCKED` because the evaluator cannot establish what resource was requested;
+- canonical typed evidence that establishes a resource outside the active scope is a resolved authorization fact and may produce critical deterministic `FAIL`;
+- canonical resource-bearing evidence when no resource authority exists is likewise a resolved policy violation.
+
+Provider adapters must map provider-observed invocation material to a typed identifier explicitly. They do not infer evaluator authority from URLs, filesystem/Windows paths, cloud object keys, database identifiers, MCP URIs, host aliases, percent-encoded names, or arbitrary tool arguments. Such external syntaxes require an explicit resource kind or an explicit adapter mapping with evaluator-owned semantics before they can be authorization-bearing.
+
+Typed resource identity is not authentication, a capability token, production IAM, target-side enforcement, or proof that an external service shares the evaluator's namespace, aliasing, normalization, or authorization semantics. A canonical hash or receipt binding over that identity remains integrity evidence, not a signature or attestation.
 
 ## Seven scoped OpenAI local/SDK attack surfaces
 
@@ -234,9 +262,9 @@ This does not claim filesystem, browser, container, network, DNS, clock, secret-
 
 ## Integrity is not attestation
 
-`injector:<identity>`, scenario identities, MCP fault identities, bridge identities, remote-auth policy identities, OAuth-flow policy identities, semantic profile identities, and report identities are control-plane/content identities, not authenticated signer identities. Receipt/evidence roots are domain-separated integrity hashes, not signatures, MACs, trusted timestamps, or hardware attestation.
+`injector:<identity>`, scenario identities, typed resource identities/scopes, MCP fault identities, bridge identities, remote-auth policy identities, OAuth-flow policy identities, semantic profile identities, and report identities are control-plane/content identities, not authenticated signer identities. Receipt/evidence roots are domain-separated integrity hashes, not signatures, MACs, trusted timestamps, or hardware attestation.
 
-In particular, original/replacement tool-name digests in `MCPAgentToolIdentityDriftReceipt` make the controlled relation compact and tamper-evident relative to evaluator-owned evidence; they do **not** make tool names globally authenticated principals.
+In particular, original/replacement tool-name digests in `MCPAgentToolIdentityDriftReceipt` make the controlled relation compact and tamper-evident relative to evaluator-owned evidence; they do **not** make tool names globally authenticated principals. The same rule applies to typed resource material: canonical identity does not authenticate a tenant, user, object, target system, or external namespace.
 
 The public `MCPRemoteAuthProbeResult` and `MCPOAuthFlowProbeResult` models are diagnostic envelopes. Their embedded receipt identities are validated, but outer diagnostic fields are not independently cryptographically re-bound to those receipts.
 
@@ -250,7 +278,7 @@ Identity-drift bridge receipts retain identities and digests but do not duplicat
 
 ## Deployment boundary
 
-Application-level evaluation and deterministic loopback/stdio testing cannot by themselves prove process isolation, Internet transport security, secret-manager policy, production IAM, tenant isolation, sandbox containment, hosted MCP fidelity, production memory/retrieval integrity, distributed handoff correctness, third-party authorization-server security, production service-registry correctness, or infrastructure fault behavior.
+Application-level evaluation and deterministic loopback/stdio testing cannot by themselves prove process isolation, Internet transport security, secret-manager policy, production IAM, tenant isolation, sandbox containment, hosted MCP fidelity, production memory/retrieval integrity, distributed handoff correctness, third-party authorization-server security, production service-registry correctness, external-resource canonicalization, or infrastructure fault behavior.
 
 ## Verified implementation checkpoint
 
@@ -266,6 +294,6 @@ Implementation source checkpoint `d98f9ca1feb1179504cd2181295a73936fd0ae6c`, pro
 - Python **3.11 minimum / 3.14 latest**, Ruff, formatter, Bandit, dependency audit, package integrity, and all **7/7 CI jobs**: green;
 - dependency audit: **no known vulnerabilities found**; the project package itself is skipped because it is not published on PyPI.
 
-Capabilities added afterward—including ToolError recovery, host-refreshed schema drift, host-refreshed identity drift, native handoff authority, native HITL approval intent, retrieval assurance, semantic judging, and side-effect idempotency—require their own exact-head CI, merge, and post-merge `main` verification; the historical checkpoint is not retroactively relabeled.
+Capabilities added afterward—including ToolError recovery, host-refreshed schema drift, host-refreshed identity drift, native handoff authority, native HITL approval intent, retrieval assurance, semantic judging, side-effect idempotency, and typed resource authority—require their own exact-head CI, merge, and post-merge `main` verification; the historical checkpoint is not retroactively relabeled.
 
 [← Documentation hub](README.md)
