@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import Any, Literal, Protocol, Self
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
 
 _SAMPLING_SCHEMA: Literal["agent-evals/session-sampling/v1"] = "agent-evals/session-sampling/v1"
 _RANDOMNESS_RECEIPT_SCHEMA: Literal["agent-evals/randomness-control-receipt/v1"] = (
@@ -241,7 +241,10 @@ class SessionSamplingMetadata(BaseModel):
         else:
             raise ValueError("unsupported stopping rule")
 
-        strategy_present = self.randomness_strategy_name is not None or self.randomness_strategy_version is not None
+        strategy_present = (
+            self.randomness_strategy_name is not None
+            or self.randomness_strategy_version is not None
+        )
         if strategy_present and (
             self.randomness_strategy_name is None or self.randomness_strategy_version is None
         ):
@@ -343,13 +346,18 @@ def verify_session_sampling_metadata(
         raise SamplingProvenanceError(
             "sampling metadata must be an exact SessionSamplingMetadata instance"
         )
-    metadata = SessionSamplingMetadata.model_validate(metadata.model_dump(mode="python"))
+    try:
+        metadata = SessionSamplingMetadata.model_validate(metadata.model_dump(mode="python"))
+    except ValidationError as exc:
+        raise SamplingProvenanceError("session sampling metadata is malformed") from exc
 
-    if metadata.stopping_rule is StoppingRule.FIXED_HORIZON:
-        if metadata.planned_trials != len(trial_ids):
-            raise SamplingProvenanceError(
-                "fixed-horizon session trial count does not match the predeclared horizon"
-            )
+    if (
+        metadata.stopping_rule is StoppingRule.FIXED_HORIZON
+        and metadata.planned_trials != len(trial_ids)
+    ):
+        raise SamplingProvenanceError(
+            "fixed-horizon session trial count does not match the predeclared horizon"
+        )
 
     if metadata.randomness_status is RandomnessStatus.EVALUATOR_CONTROLLED:
         if (
