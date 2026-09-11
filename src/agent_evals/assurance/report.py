@@ -5,7 +5,6 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
-import math
 from typing import Any, Literal, Self
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -524,7 +523,9 @@ def _validate_oracle_snapshot_shape(
         raise ValueError("resolved assurance trial contains duplicate oracle names")
     missing = _CORE_ORACLE_NAMES.difference(names)
     if missing:
-        raise ValueError(f"resolved assurance trial missing core oracle results: {', '.join(sorted(missing))}")
+        raise ValueError(
+            f"resolved assurance trial missing core oracle results: {', '.join(sorted(missing))}"
+        )
     policy = next(result for result in oracle_results if result.name == "policy")
     if policy.verdict is TrialVerdict.FAIL and not policy.critical:
         raise ValueError("policy oracle failure criticality does not match deterministic runtime")
