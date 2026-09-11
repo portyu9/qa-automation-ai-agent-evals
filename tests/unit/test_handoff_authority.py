@@ -141,24 +141,20 @@ def test_handoff_policy_rejects_grants_broader_than_root_authority() -> None:
 
 
 def test_handoff_policy_rejects_component_prefix_collision_as_reexpansion() -> None:
-    authority = AuthorityPolicy(
-        allowed_tools=frozenset({"read"}),
-        allowed_resource_scopes=(scope("1"),),
-        root_agent=_ROOT,
-    )
     with pytest.raises(ValidationError, match="resource scope"):
-        authority.model_copy(
-            update={
-                "handoff_grants": (
-                    grant(
-                        _ROOT,
-                        _SPECIALIST,
-                        tools=frozenset({"read"}),
-                        resources=(scope("10"),),
-                    ),
-                )
-            }
-        ).model_dump()
+        AuthorityPolicy(
+            allowed_tools=frozenset({"read"}),
+            allowed_resource_scopes=(scope("1"),),
+            root_agent=_ROOT,
+            handoff_grants=(
+                grant(
+                    _ROOT,
+                    _SPECIALIST,
+                    tools=frozenset({"read"}),
+                    resources=(scope("10"),),
+                ),
+            ),
+        )
 
 
 def test_policy_oracle_accepts_multi_hop_monotonic_authority_attenuation() -> None:
