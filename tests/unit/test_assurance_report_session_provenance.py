@@ -211,7 +211,17 @@ async def test_report_rejects_cross_subject_provenance_replay() -> None:
     payload = report.model_dump(mode="json")
     payload["subject_identity"] = "f" * 64
 
-    with pytest.raises(ValidationError, match="reset/isolation provenance is invalid"):
+    with pytest.raises(ValidationError, match="sampling provenance is invalid"):
+        AssuranceReport.model_validate(payload)
+
+
+@pytest.mark.asyncio
+async def test_report_rejects_cross_scenario_provenance_replay() -> None:
+    report = await _verified_report()
+    payload = report.model_dump(mode="json")
+    payload["scenario_identity"] = "e" * 64
+
+    with pytest.raises(ValidationError, match="sampling provenance is invalid"):
         AssuranceReport.model_validate(payload)
 
 
