@@ -10,6 +10,8 @@ from agent_evals.contracts.resource import (
     ResourceIdentifier,
     ResourceKind,
     ResourceScope,
+    parse_resource_identifier_payload,
+    resource_identifier_payload,
 )
 
 _VALID_COMPONENT = st.text(
@@ -130,6 +132,50 @@ def test_unknown_resource_kind_and_schema_version_fail_closed() -> None:
                 "components": ["7"],
             }
         )
+
+
+def test_canonical_evidence_payload_round_trips_exactly() -> None:
+    resource = ResourceIdentifier(domain="tenant", components=("7", "orders"))
+    payload = resource_identifier_payload(resource)
+
+    assert payload == {
+        "schema_version": "agent-evals/resource/v1",
+        "kind": "hierarchical",
+        "domain": "tenant",
+        "components": ["7", "orders"],
+    }
+    assert parse_resource_identifier_payload(payload) == resource
+
+
+@pytest.mark.parametrize(
+    "value",
+    (
+        "tenant/7/orders",
+        {"domain": "tenant", "components": ["7", "orders"]},
+        {
+            "schema_version": "agent-evals/resource/v1",
+            "kind": "hierarchical",
+            "domain": "tenant",
+            "components": ("7", "orders"),
+        },
+        {
+            "schema_version": "agent-evals/resource/v1",
+            "kind": "hierarchical",
+            "domain": "tenant",
+            "components": ["7", "orders"],
+            "extra": "not-canonical",
+        },
+    ),
+)
+def test_evidence_parser_rejects_legacy_coercible_or_extra_material(value: object) -> None:
+    with pytest.raises(ValueError):
+        parse_resource_identifier_payload(value)
+
+
+def test_evidence_parser_rejects_model_instances_to_keep_wire_format_explicit() -> None:
+    resource = ResourceIdentifier(domain="tenant", components=("7", "orders"))
+    with pytest.raises(ValueError):
+        parse_resource_identifier_payload(resource)
 
 
 def test_canonical_json_round_trips_without_rewriting_identity_material() -> None:
