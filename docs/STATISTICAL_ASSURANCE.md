@@ -8,7 +8,7 @@ The framework therefore treats each attempt as a trial, preserves unresolved exe
 
 Every `EvaluationSession.run(...)` invocation has an explicit campaign identity. If the caller does not provide one, the runtime creates a collision-resistant identifier; the campaign plus attempt index is bound into each generated trial ID. This prevents separate evaluation campaigns over the same subject/scenario pair from accidentally reusing the same immutable trial/evidence-record namespace. Campaign IDs are opaque provenance identifiers, not authenticated principals, signatures, reset receipts, or evidence of statistical independence. Callers may provide a stable campaign ID when an external evaluation campaign already owns that namespace, and intentionally reusing the same campaign ID intentionally reuses that trial namespace.
 
-Repeated execution does **not** by itself prove environmental independence. `EvaluationSession` snapshots the evaluator-owned subject/scenario contract but intentionally reuses the supplied adapter object; it does not reset provider state, application state, memory, external targets, or automatically apply `EvaluationScenario.initial_state`. The adapter/operator integration must establish whatever same-starting-condition or reset discipline the intended reliability claim requires.
+Repeated execution does **not** by itself prove environmental independence. `EvaluationSession` snapshots the evaluator-owned subject/scenario contract but intentionally reuses the supplied subject adapter object; it does not reset provider state, application state, memory, external targets, or automatically apply `EvaluationScenario.initial_state`.
 
 That distinction matters statistically. Success/failure counts and Wilson intervals remain exact summaries of the recorded resolved verdicts, but an independent-attempt interpretation of repeated outcomes—and especially the `pass@k` / `pass^k` extrapolations—requires the underlying attempts to be sufficiently independent and stationary for that approximation to be meaningful. A unique campaign identity prevents identity collisions; it is not evidence that this statistical precondition was satisfied.
 
@@ -18,13 +18,27 @@ That distinction matters statistically. Success/failure counts and Wilson interv
 
 - `unverified` is the default. No reset/isolation assertion is present, and session-level independent-attempt `pass@k` / `pass^k` interpretation is refused;
 - `operator_asserted` is a weaker, explicit caller-owned assumption and requires a non-empty textual basis. The framework records that basis but does not verify it;
-- `verified` is reserved for evaluator-owned reset/isolation receipt verification. The current session runner rejects this status because that receipt/verifier path is not implemented yet.
+- `verified` requires an evaluator-owned reset/isolation receipt for every post-first attempt.
 
-`EvaluationSessionResult.independence_qualified_metrics()` therefore refuses `unverified` sessions. For an `operator_asserted` session it returns the same arithmetic transforms already present in `ReliabilityReport`, but keeps the assertion status and basis attached to those values. An operator assertion is not upgraded to evaluator-verified evidence merely because the arithmetic is available.
+A verified campaign must have at least two trials and must supply a `ResetIsolationControl` separately from the subject adapter. Before each post-first attempt, `EvaluationSession` invokes that control with bounded context identifying the exact campaign transition, finalized predecessor evidence root, subject/scenario identities, runtime adapter name, and subject adapter/version. The control returns only a typed `ResetIsolationObservation` containing a SHA-256 identity for its bounded control evidence. The evaluator then constructs the versioned `agent-evals/reset-isolation-receipt/v1` receipt itself.
 
-The raw `ReliabilityReport.pass_at_k` and `pass_power_k` fields remain deterministic algebraic transforms for backward-compatible report/replay arithmetic. `ReliabilityReport` itself contains no reset receipt or independence provenance and must not be treated as proof that the independent-attempt assumption was satisfied.
+Each receipt is domain-separated and binds:
 
-A later hardening slice will define evaluator-owned reset/isolation receipts and the controlled verifier that can legitimately produce `verified`. Even then, a valid reset receipt will establish only the declared reset/isolation control relation; it will not by itself prove full IID behavior, stationarity, or absence of every hidden correlation.
+- campaign identity and exact attempt index;
+- exact predecessor and next trial IDs;
+- exact predecessor finalized evidence root;
+- subject and scenario identities;
+- runtime adapter name plus subject adapter/version;
+- reset strategy name/version;
+- bounded control-evidence identity.
+
+A completed verified session must contain exactly `trials - 1` receipts in transition order. `EvaluationSessionResult.validate()` rederives every receipt from the finalized trial chain and stored control provenance; missing, duplicate, replayed, cross-campaign, rebound, or post-finalization-mutated transitions fail validation. A failed reset control stops the session before the affected next subject attempt executes.
+
+`EvaluationSessionResult.independence_qualified_metrics()` refuses `unverified` sessions. For `operator_asserted`, it returns the algebraic transforms together with the assertion basis. For `verified`, it returns the reset strategy/version and exact receipt roots together with those transforms. The raw `ReliabilityReport.pass_at_k` and `pass_power_k` fields remain deterministic algebraic transforms for backward-compatible report/replay arithmetic.
+
+The term `verified` is intentionally narrow. It means the framework verified the declared, evaluator-controlled reset/isolation **receipt relation** and its binding to the campaign transition. The receipt does not authenticate an external target, prove that an arbitrary provider or distributed system actually returned to a desired hidden state, establish stationarity, prove absence of shared latent state, or establish formal IID behavior. A dishonest or defective operator-supplied reset implementation is not made trustworthy merely because its invocation was receipt-bound.
+
+The subject adapter cannot also be the exact reset-control object, and ordinary `AdapterResult` evidence cannot self-declare verified independence. This separation is an evaluator API boundary, not cryptographic proof of organizational separation of duties.
 
 ## Resolved versus unresolved attempts
 
@@ -74,7 +88,7 @@ pass^k = p^k
 
 `pass@k` estimates at least one success in `k` attempts. `pass^k` estimates all `k` attempts succeeding. They answer different operational questions and intentionally diverge as `k` grows.
 
-The formulas themselves do not create or verify independence. If an adapter carries state across attempts, an external target is not restored to the intended baseline, provider/session memory leaks between trials, or the evaluated process is otherwise correlated or non-stationary, the values remain arithmetic over the observed `p` but their independent-attempt interpretation is not established by the framework. Session-level interpretation therefore requires explicit independence qualification as described above.
+The formulas themselves do not create or verify independence. If an adapter carries state across attempts, an external target is not restored to the intended baseline, provider/session memory leaks between trials, or the evaluated process is otherwise correlated or non-stationary, the values remain arithmetic over the observed `p`. A verified reset/isolation receipt narrows one control uncertainty; it does not turn those arithmetic transforms into a formal proof of the independent-attempt model.
 
 ## Paired candidate-versus-baseline comparison
 
@@ -103,7 +117,7 @@ The current Assurance Report schema persists exact `k` and `confidence_z` inside
 
 Campaign identity is indirectly bound into reports produced from campaign-bound sessions because each assurance trial record preserves the exact generated trial ID and the report root binds those records. The current report schema does not expose campaign identity as a separate authenticated or typed principal field, and this documentation does not claim that it does.
 
-The current assurance-report schema also does not persist `EvaluationSessionResult.independence_status` or any future reset/isolation receipt roots. Consequently, a persisted assurance report must not be treated as independently carrying an `operator_asserted` or `verified` repeated-attempt claim merely because its reliability snapshot contains algebraic `pass@k` / `pass^k`. Binding independence provenance into assurance reports remains a separate schema-versioned hardening step.
+The current assurance-report schema also does not persist `EvaluationSessionResult.independence_status` or reset/isolation receipts. Consequently, a persisted assurance report must not be treated as independently carrying an `operator_asserted` or `verified` repeated-attempt claim merely because its reliability snapshot contains algebraic `pass@k` / `pass^k`. Binding independence provenance into assurance reports remains a separate schema-versioned hardening step.
 
 The schema history is explicit rather than silently reinterpreted: the legacy schema did not persist `confidence_z`; an earlier schema added it; the predecessor schema added `ScenarioGradingProfile`; the current schema added blocked explicit-policy preservation and a new domain-separated report root. Older report schemas are rejected by the current report model rather than read under the current schema's semantics. See [Session Assurance Reports](ASSURANCE_REPORTS.md).
 
@@ -121,8 +135,8 @@ The gate distinguishes bad evidence from missing evidence:
 
 This is fail-closed for promotion without falsely describing infrastructure uncertainty as agent regression.
 
-The current release gate does not use `pass@k` / `pass^k` as acceptance thresholds, so introducing explicit session independence qualification does not silently change existing release decisions.
+The current release gate does not use `pass@k` / `pass^k` as acceptance thresholds, so explicit session independence qualification does not silently change existing release decisions.
 
 ## Current non-claims
 
-The implementation does not yet expose evaluator-verified reset/isolation receipts, formal IID proof, formal non-inferiority testing, sequential-testing correction, multiple-hypothesis correction, hierarchical scenario modeling, or a Bayesian posterior. Those require explicit statistical contracts and should not be implied by a score table.
+The implementation does not expose formal IID proof, authenticated reset-operator identity, external-target reset attestation, formal non-inferiority testing, sequential-testing correction, multiple-hypothesis correction, hierarchical scenario modeling, or a Bayesian posterior. Those require explicit statistical contracts and should not be implied by a score table.
