@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
+from dataclasses import replace
 
 import pytest
 from pydantic import ValidationError
@@ -12,10 +13,20 @@ from agent_evals.gates.release import GateDecision, ReleasePolicy
 from agent_evals.oracles.deterministic import OracleResult
 from agent_evals.runtime.evaluator import EvaluatedTrial
 from agent_evals.runtime.grading import grade_deterministic_evidence
+from agent_evals.runtime.sampling import (
+    RandomnessStatus,
+    SamplingPolicy,
+    SessionSamplingMetadata,
+    StoppingRule,
+)
 from agent_evals.runtime.session import EvaluationSessionResult
 from agent_evals.statistics.reliability import ReliabilityReport
 
 SUBJECT = "a" * 64
+CAMPAIGN = "assurance-report-campaign"
+RUNTIME_ADAPTER = "assurance-test-runtime"
+SUBJECT_ADAPTER = "assurance-test-subject"
+SUBJECT_ADAPTER_VERSION = "1"
 SCENARIO_CONTRACT = EvaluationScenario(
     scenario_id="assurance.report",
     revision="1",
@@ -24,6 +35,10 @@ SCENARIO_CONTRACT = EvaluationScenario(
     required_outcomes={"status": "ok"},
 )
 SCENARIO = SCENARIO_CONTRACT.identity
+
+
+def _trial_id(index: int) -> str:
+    return f"campaign:{CAMPAIGN}:attempt:{index:04d}"
 
 
 def evaluated_trial(
@@ -88,21 +103,41 @@ def evaluated_trial(
     )
 
 
-def session_result() -> EvaluationSessionResult:
-    trials = (
-        evaluated_trial("trial-0", TrialVerdict.PASS),
-        evaluated_trial("trial-1", TrialVerdict.FAIL, critical=True),
-        evaluated_trial("trial-2", TrialVerdict.BLOCKED),
+def _sampling_metadata(trials: int) -> SessionSamplingMetadata:
+    return SessionSamplingMetadata(
+        sampling_policy=SamplingPolicy.PREDECLARED_ALL_ATTEMPTS,
+        randomness_status=RandomnessStatus.UNKNOWN,
+        stopping_rule=StoppingRule.FIXED_HORIZON,
+        planned_trials=trials,
     )
+
+
+def _modern_session(
+    trials: tuple[EvaluatedTrial, ...],
+    *,
+    reliability: ReliabilityReport | None = None,
+) -> EvaluationSessionResult:
     return EvaluationSessionResult(
         subject_identity=SUBJECT,
         scenario_identity=SCENARIO,
         trials=trials,
-        reliability=ReliabilityReport.from_verdicts(
-            tuple(trial.verdict for trial in trials),
-            k=2,
-        ),
+        reliability=reliability
+        or ReliabilityReport.from_verdicts(tuple(trial.verdict for trial in trials), k=2),
+        campaign_id=CAMPAIGN,
+        runtime_adapter_name=RUNTIME_ADAPTER,
+        subject_adapter=SUBJECT_ADAPTER,
+        subject_adapter_version=SUBJECT_ADAPTER_VERSION,
+        sampling_metadata=_sampling_metadata(len(trials)),
     )
+
+
+def session_result() -> EvaluationSessionResult:
+    trials = (
+        evaluated_trial(_trial_id(0), TrialVerdict.PASS),
+        evaluated_trial(_trial_id(1), TrialVerdict.FAIL, critical=True),
+        evaluated_trial(_trial_id(2), TrialVerdict.BLOCKED),
+    )
+    return _modern_session(trials)
 
 
 def release_policy() -> ReleasePolicy:
@@ -133,16 +168,18 @@ def test_report_binds_trial_roots_oracles_schema_profile_and_release_decision() 
     session = session_result()
     report = _report(session)
 
-    assert report.schema_version == "agent-evals/assurance-report/v5"
+    assert report.schema_version == "agent-evals/assurance-report/v6"
     assert report.evidence_schema == "agent-evals/trial-evidence/v2"
     assert report.subject_identity == SUBJECT
     assert report.scenario_identity == SCENARIO
+    assert report.session_provenance.campaign_id == CAMPAIGN
+    assert report.session_provenance.sampling_metadata == session.sampling_metadata
     assert report.grading_profile.semantic_rubric_identity is None
     assert report.grading_profile.side_effect_idempotency_identity is None
     assert tuple(record.trial_id for record in report.trials) == (
-        "trial-0",
-        "trial-1",
-        "trial-2",
+        _trial_id(0),
+        _trial_id(1),
+        _trial_id(2),
     )
     assert tuple(record.evidence_root for record in report.trials) == tuple(
         trial.evidence.evidence_root for trial in session.trials
@@ -164,13 +201,26 @@ def test_report_json_round_trip_revalidates_all_derived_claims() -> None:
     assert loaded == report
 
 
-def test_v4_assurance_schema_is_rejected_under_v5() -> None:
+def test_v5_assurance_schema_is_rejected_under_v6() -> None:
     report = _report()
     payload = report.model_dump(mode="json")
-    payload["schema_version"] = "agent-evals/assurance-report/v4"
+    payload["schema_version"] = "agent-evals/assurance-report/v5"
 
     with pytest.raises(ValidationError, match="schema_version"):
         AssuranceReport.model_validate(payload)
+
+
+def test_v6_report_refuses_legacy_session_without_campaign_sampling_provenance() -> None:
+    modern = session_result()
+    legacy = EvaluationSessionResult(
+        subject_identity=modern.subject_identity,
+        scenario_identity=modern.scenario_identity,
+        trials=modern.trials,
+        reliability=modern.reliability,
+    )
+
+    with pytest.raises(ValueError, match="campaign identity"):
+        _report(legacy)
 
 
 def test_evidence_schema_is_strictly_version_bound() -> None:
@@ -279,7 +329,7 @@ def test_release_policy_drift_requires_gate_recomputation() -> None:
         AssuranceReport.model_validate(payload)
 
 
-def test_evidence_root_drift_is_caught_by_report_root() -> None:
+def test_evidence_root_drift_is_caught_by_provenance_or_report_root() -> None:
     report = _report()
     payload = report.model_dump(mode="json")
     payload["trials"][0]["evidence_root"] = "c" * 64
@@ -333,10 +383,8 @@ def test_from_session_rejects_empty_session() -> None:
 
 def test_from_session_rejects_stale_reliability() -> None:
     session = session_result()
-    stale = EvaluationSessionResult(
-        subject_identity=session.subject_identity,
-        scenario_identity=session.scenario_identity,
-        trials=session.trials,
+    stale = replace(
+        session,
         reliability=ReliabilityReport.from_verdicts(
             (TrialVerdict.PASS, TrialVerdict.PASS, TrialVerdict.BLOCKED),
             k=2,
@@ -350,16 +398,11 @@ def test_from_session_rejects_stale_reliability() -> None:
 def test_from_session_rejects_trial_subject_identity_mismatch() -> None:
     session = session_result()
     mismatched_trial = evaluated_trial(
-        "trial-0",
+        _trial_id(0),
         TrialVerdict.PASS,
         subject_identity="c" * 64,
     )
-    mismatched = EvaluationSessionResult(
-        subject_identity=session.subject_identity,
-        scenario_identity=session.scenario_identity,
-        trials=(mismatched_trial, *session.trials[1:]),
-        reliability=session.reliability,
-    )
+    mismatched = replace(session, trials=(mismatched_trial, *session.trials[1:]))
 
     with pytest.raises(ValueError, match="subject identity does not match"):
         _report(mismatched)
@@ -368,35 +411,22 @@ def test_from_session_rejects_trial_subject_identity_mismatch() -> None:
 def test_from_session_rejects_trial_scenario_identity_mismatch() -> None:
     session = session_result()
     mismatched_trial = evaluated_trial(
-        "trial-0",
+        _trial_id(0),
         TrialVerdict.PASS,
         scenario_identity="d" * 64,
     )
-    mismatched = EvaluationSessionResult(
-        subject_identity=session.subject_identity,
-        scenario_identity=session.scenario_identity,
-        trials=(mismatched_trial, *session.trials[1:]),
-        reliability=session.reliability,
-    )
+    mismatched = replace(session, trials=(mismatched_trial, *session.trials[1:]))
 
     with pytest.raises(ValueError, match="scenario identity does not match"):
         _report(mismatched)
 
 
 def test_from_session_rejects_duplicate_trial_ids() -> None:
-    first = evaluated_trial("trial-0", TrialVerdict.PASS)
-    duplicate = evaluated_trial("trial-0", TrialVerdict.FAIL, critical=True)
-    blocked = evaluated_trial("trial-2", TrialVerdict.BLOCKED)
+    first = evaluated_trial(_trial_id(0), TrialVerdict.PASS)
+    duplicate = evaluated_trial(_trial_id(0), TrialVerdict.FAIL, critical=True)
+    blocked = evaluated_trial(_trial_id(2), TrialVerdict.BLOCKED)
     trials = (first, duplicate, blocked)
-    duplicated = EvaluationSessionResult(
-        subject_identity=SUBJECT,
-        scenario_identity=SCENARIO,
-        trials=trials,
-        reliability=ReliabilityReport.from_verdicts(
-            tuple(trial.verdict for trial in trials),
-            k=2,
-        ),
-    )
+    duplicated = _modern_session(trials)
 
     with pytest.raises(ValueError, match="duplicate trial IDs"):
         _report(duplicated)
