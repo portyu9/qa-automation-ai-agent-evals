@@ -12,6 +12,20 @@ Repeated execution does **not** by itself prove environmental independence. `Eva
 
 That distinction matters statistically. Success/failure counts and Wilson intervals remain exact summaries of the recorded resolved verdicts, but an independent-attempt interpretation of repeated outcomes—and especially the `pass@k` / `pass^k` extrapolations—requires the underlying attempts to be sufficiently independent and stationary for that approximation to be meaningful. A unique campaign identity prevents identity collisions; it is not evidence that this statistical precondition was satisfied.
 
+### Independence qualification
+
+`EvaluationSessionResult` records an explicit `IndependenceStatus` rather than allowing campaign identity or repeated execution to imply an independence claim:
+
+- `unverified` is the default. No reset/isolation assertion is present, and session-level independent-attempt `pass@k` / `pass^k` interpretation is refused;
+- `operator_asserted` is a weaker, explicit caller-owned assumption and requires a non-empty textual basis. The framework records that basis but does not verify it;
+- `verified` is reserved for evaluator-owned reset/isolation receipt verification. The current session runner rejects this status because that receipt/verifier path is not implemented yet.
+
+`EvaluationSessionResult.independence_qualified_metrics()` therefore refuses `unverified` sessions. For an `operator_asserted` session it returns the same arithmetic transforms already present in `ReliabilityReport`, but keeps the assertion status and basis attached to those values. An operator assertion is not upgraded to evaluator-verified evidence merely because the arithmetic is available.
+
+The raw `ReliabilityReport.pass_at_k` and `pass_power_k` fields remain deterministic algebraic transforms for backward-compatible report/replay arithmetic. `ReliabilityReport` itself contains no reset receipt or independence provenance and must not be treated as proof that the independent-attempt assumption was satisfied.
+
+A later hardening slice will define evaluator-owned reset/isolation receipts and the controlled verifier that can legitimately produce `verified`. Even then, a valid reset receipt will establish only the declared reset/isolation control relation; it will not by itself prove full IID behavior, stationarity, or absence of every hidden correlation.
+
 ## Resolved versus unresolved attempts
 
 `PASS` and `FAIL` are **resolved behavioral trials**: enough evidence existed for deterministic oracles to decide the scenario. `BLOCKED` and `INCONCLUSIVE` are not relabelled as behavioral failure merely to make arithmetic convenient.
@@ -32,8 +46,8 @@ Runtime statistical entry points require exact `TrialVerdict` members. Strings, 
 - INCONCLUSIVE count;
 - empirical success rate over resolved trials;
 - Wilson score interval over resolved trials;
-- `pass@k`;
-- `pass^k`;
+- algebraic `pass@k`;
+- algebraic `pass^k`;
 - exact `k`;
 - exact positive finite Wilson `confidence_z` used to derive the interval.
 
@@ -51,7 +65,7 @@ The release gate can require both a minimum number of **resolved** trials and a 
 
 ### pass@k and pass^k
 
-Under the empirical independent-attempt approximation over resolved behavioral trials:
+Under an explicit empirical independent-attempt assumption over resolved behavioral trials:
 
 ```text
 pass@k = 1 - (1 - p)^k
@@ -60,7 +74,7 @@ pass^k = p^k
 
 `pass@k` estimates at least one success in `k` attempts. `pass^k` estimates all `k` attempts succeeding. They answer different operational questions and intentionally diverge as `k` grows.
 
-These formulas do not create independence. If an adapter carries state across attempts, an external target is not restored to the intended baseline, provider/session memory leaks between trials, or the evaluated process is otherwise correlated or non-stationary, the formulas remain arithmetic over the observed `p` but their independent-attempt interpretation is not established by the framework.
+The formulas themselves do not create or verify independence. If an adapter carries state across attempts, an external target is not restored to the intended baseline, provider/session memory leaks between trials, or the evaluated process is otherwise correlated or non-stationary, the values remain arithmetic over the observed `p` but their independent-attempt interpretation is not established by the framework. Session-level interpretation therefore requires explicit independence qualification as described above.
 
 ## Paired candidate-versus-baseline comparison
 
@@ -89,6 +103,8 @@ The current Assurance Report schema persists exact `k` and `confidence_z` inside
 
 Campaign identity is indirectly bound into reports produced from campaign-bound sessions because each assurance trial record preserves the exact generated trial ID and the report root binds those records. The current report schema does not expose campaign identity as a separate authenticated or typed principal field, and this documentation does not claim that it does.
 
+The current assurance-report schema also does not persist `EvaluationSessionResult.independence_status` or any future reset/isolation receipt roots. Consequently, a persisted assurance report must not be treated as independently carrying an `operator_asserted` or `verified` repeated-attempt claim merely because its reliability snapshot contains algebraic `pass@k` / `pass^k`. Binding independence provenance into assurance reports remains a separate schema-versioned hardening step.
+
 The schema history is explicit rather than silently reinterpreted: the legacy schema did not persist `confidence_z`; an earlier schema added it; the predecessor schema added `ScenarioGradingProfile`; the current schema added blocked explicit-policy preservation and a new domain-separated report root. Older report schemas are rejected by the current report model rather than read under the current schema's semantics. See [Session Assurance Reports](ASSURANCE_REPORTS.md).
 
 ## Release-gate semantics
@@ -105,6 +121,8 @@ The gate distinguishes bad evidence from missing evidence:
 
 This is fail-closed for promotion without falsely describing infrastructure uncertainty as agent regression.
 
+The current release gate does not use `pass@k` / `pass^k` as acceptance thresholds, so introducing explicit session independence qualification does not silently change existing release decisions.
+
 ## Current non-claims
 
-The implementation does not yet expose formal non-inferiority testing, sequential-testing correction, multiple-hypothesis correction, hierarchical scenario modeling, or a Bayesian posterior. Those require explicit statistical contracts and should not be implied by a score table.
+The implementation does not yet expose evaluator-verified reset/isolation receipts, formal IID proof, formal non-inferiority testing, sequential-testing correction, multiple-hypothesis correction, hierarchical scenario modeling, or a Bayesian posterior. Those require explicit statistical contracts and should not be implied by a score table.
