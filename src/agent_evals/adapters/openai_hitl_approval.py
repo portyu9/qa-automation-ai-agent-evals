@@ -11,6 +11,7 @@ from agent_evals.adapters.openai_agents import _PreparedExecution, _stringify_ou
 from agent_evals.adapters.openai_handoff_authority import OpenAIAgentsHandoffAuthorityAdapter
 from agent_evals.authority import validated_handoff_state_before
 from agent_evals.contracts.models import ApprovalDecision, EvaluationScenario, SubjectFingerprint
+from agent_evals.contracts.resource import ResourceIdentifier, resource_identifier_payload
 from agent_evals.evidence.approval_intent import (
     ApprovalIntentError,
     ApprovalIntentReceipt,
@@ -245,7 +246,7 @@ class OpenAIAgentsHITLApprovalAdapter(OpenAIAgentsHandoffAuthorityAdapter):
         capture: _MaxTurnsCapture,
         call_id: str,
         arguments: str,
-        resource: str | None,
+        resource: ResourceIdentifier | None,
         started: float,
     ) -> AdapterResult:
         complete_items = _merge_run_items(first.new_items, capture.items)
@@ -301,15 +302,15 @@ class OpenAIAgentsHITLApprovalAdapter(OpenAIAgentsHandoffAuthorityAdapter):
         scenario: EvaluationScenario,
         tool: str,
         arguments: str,
-    ) -> str | None:
-        resource_scope_exists = bool(scenario.authority.allowed_resource_prefixes) or any(
-            grant.allowed_resource_prefixes for grant in scenario.authority.handoff_grants
+    ) -> ResourceIdentifier | None:
+        resource_scope_exists = bool(scenario.authority.allowed_resource_scopes) or any(
+            grant.allowed_resource_scopes for grant in scenario.authority.handoff_grants
         )
         if self._resource_resolver is None:
             if resource_scope_exists:
                 raise AdapterPreconditionError(
                     code="approval_resource_unverifiable",
-                    reason="resource-scoped approval intent requires a resource resolver",
+                    reason="resource-scoped approval intent requires a typed resource resolver",
                 )
             return None
         resource = self._resource_resolver(tool, arguments)
@@ -318,12 +319,10 @@ class OpenAIAgentsHITLApprovalAdapter(OpenAIAgentsHandoffAuthorityAdapter):
                 code="approval_resource_unverifiable",
                 reason="resource-scoped approval intent did not resolve an exact resource identity",
             )
-        if resource is not None and (
-            not isinstance(resource, str) or not resource or resource != resource.strip()
-        ):
+        if resource is not None and type(resource) is not ResourceIdentifier:
             raise AdapterPreconditionError(
                 code="approval_resource_unverifiable",
-                reason="approval resource resolver returned an unstable resource identity",
+                reason="approval resource resolver must return an exact ResourceIdentifier",
             )
         return resource
 
@@ -334,7 +333,7 @@ class OpenAIAgentsHITLApprovalAdapter(OpenAIAgentsHandoffAuthorityAdapter):
         normalized: list[EvidenceEvent],
         call_id: str,
         arguments: str,
-        resource: str | None,
+        resource: ResourceIdentifier | None,
     ) -> list[EvidenceEvent]:
         spec = scenario.approval_intent
         if spec is None:  # pragma: no cover - guarded at execute entry
@@ -398,10 +397,11 @@ class OpenAIAgentsHITLApprovalAdapter(OpenAIAgentsHandoffAuthorityAdapter):
                 reason="native SDK tool request and approval interruption arguments disagree",
             )
 
+        resource_payload = resource_identifier_payload(resource) if resource is not None else None
         enriched_approval_payload = dict(approval_request.payload)
         enriched_approval_payload["arguments"] = arguments
-        if resource is not None:
-            enriched_approval_payload["resource"] = resource
+        if resource_payload is not None:
+            enriched_approval_payload["resource"] = resource_payload
         else:
             enriched_approval_payload.pop("resource", None)
 
@@ -466,8 +466,8 @@ class OpenAIAgentsHITLApprovalAdapter(OpenAIAgentsHandoffAuthorityAdapter):
 
         if spec.decision is ApprovalDecision.APPROVE:
             execution_payload = dict(model_request.payload)
-            if resource is not None:
-                execution_payload["resource"] = resource
+            if resource_payload is not None:
+                execution_payload["resource"] = resource_payload
             else:
                 execution_payload.pop("resource", None)
             stitched.append(
