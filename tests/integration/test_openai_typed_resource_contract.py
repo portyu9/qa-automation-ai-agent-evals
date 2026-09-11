@@ -57,9 +57,7 @@ async def test_openai_adapter_blocks_resolver_that_returns_legacy_string_resourc
         objective="Read order 42 without inventing resource semantics.",
         authority=AuthorityPolicy(
             allowed_tools=frozenset({"lookup"}),
-            allowed_resource_scopes=(
-                ResourceScope(domain="tenant", components=("7", "orders")),
-            ),
+            allowed_resource_scopes=(ResourceScope(domain="tenant", components=("7", "orders")),),
         ),
     )
 
