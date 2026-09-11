@@ -12,7 +12,6 @@ from agent_evals.contracts.resource import (
     ResourceScope,
 )
 
-
 _VALID_COMPONENT = st.text(
     alphabet=st.sampled_from(tuple("abcdefghijklmnopqrstuvwxyz0123456789_-")),
     min_size=1,
