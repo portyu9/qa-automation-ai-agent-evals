@@ -11,10 +11,15 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_valida
 
 from agent_evals.authority import HandoffPathState, validated_handoff_state_before
 from agent_evals.contracts.models import ApprovalDecision, EvaluationScenario
+from agent_evals.contracts.resource import (
+    ResourceIdentifier,
+    parse_resource_identifier_payload,
+    resource_identifier_payload,
+)
 from agent_evals.evidence.models import EvidenceEvent, EvidenceKind, TrialEvidence
 
-_APPROVAL_INTENT_DOMAIN = b"agent-evals/approval-intent/v1\0"
-_APPROVAL_INTENT_SCHEMA = "agent-evals/approval-intent/v1"
+_APPROVAL_INTENT_DOMAIN = b"agent-evals/approval-intent/v2\0"
+_APPROVAL_INTENT_SCHEMA = "agent-evals/approval-intent/v2"
 APPROVAL_DECISION_SOURCE = "evaluator:openai-hitl-approval-intent"
 APPROVAL_REQUEST_SOURCE = "openai-agents:new_items"
 APPROVED_TOOL_REQUEST_SOURCE = "openai-agents:approved-execution"
@@ -30,14 +35,15 @@ class ApprovalIntentReceipt(BaseModel):
     """Bind one evaluator decision to one exact observed approval interruption.
 
     Raw arguments are deliberately excluded. The receipt stores a digest of canonical finite JSON
-    arguments, the normalized resource identity, and the exact accepted delegated-authority path.
+    arguments, the exact typed resource identity, and the exact accepted delegated-authority path.
+    The v2 domain separates these structured resource semantics from historical v1 string roots.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     receipt_schema: str = Field(
         default=_APPROVAL_INTENT_SCHEMA,
-        pattern=r"^agent-evals/approval-intent/v1$",
+        pattern=r"^agent-evals/approval-intent/v2$",
     )
     scenario_identity: str = Field(pattern=r"^[0-9a-f]{64}$")
     decision: ApprovalDecision
@@ -45,7 +51,7 @@ class ApprovalIntentReceipt(BaseModel):
     tool: str = Field(min_length=1, max_length=256)
     call_id: str = Field(min_length=1, max_length=512)
     arguments_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
-    resource: str | None = None
+    resource: ResourceIdentifier | None = None
     authority_epoch: int = Field(ge=0, strict=True)
     authority_path_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     approval_request_sequence: int = Field(ge=0, strict=True)
@@ -58,10 +64,6 @@ class ApprovalIntentReceipt(BaseModel):
                 raise ValueError(
                     "approval receipt identities must not contain surrounding whitespace"
                 )
-        if self.resource is not None and (
-            not self.resource or self.resource != self.resource.strip()
-        ):
-            raise ValueError("approval receipt resource must be a stable non-empty identity")
         if self.root_sha256 != self.expected_root:
             raise ValueError("approval intent receipt root mismatch")
         return self
@@ -75,7 +77,7 @@ class ApprovalIntentReceipt(BaseModel):
         tool: str,
         call_id: str,
         arguments: str,
-        resource: str | None,
+        resource: ResourceIdentifier | None,
         authority_epoch: int,
         authority_path_sha256: str,
         approval_request_sequence: int,
@@ -92,7 +94,7 @@ class ApprovalIntentReceipt(BaseModel):
             "tool": tool,
             "call_id": call_id,
             "arguments_sha256": arguments_sha256,
-            "resource": resource,
+            "resource": resource_identifier_payload(resource) if resource is not None else None,
             "authority_epoch": authority_epoch,
             "authority_path_sha256": authority_path_sha256,
             "approval_request_sequence": approval_request_sequence,
@@ -407,9 +409,13 @@ def _verify_event_intent(
     if canonical_arguments_sha256(arguments) != receipt.arguments_sha256:
         raise ApprovalIntentError(f"{phase} arguments do not match approved intent")
 
-    resource = event.payload.get("resource")
-    if resource is not None and not isinstance(resource, str):
-        raise ApprovalIntentError(f"{phase} resource identity is malformed")
+    if "resource" in event.payload:
+        try:
+            resource = parse_resource_identifier_payload(event.payload["resource"])
+        except (TypeError, ValueError) as exc:
+            raise ApprovalIntentError(f"{phase} resource identity is malformed") from exc
+    else:
+        resource = None
     if resource != receipt.resource:
         raise ApprovalIntentError(f"{phase} resource does not match approved intent")
     if expected_state.epoch != receipt.authority_epoch:
