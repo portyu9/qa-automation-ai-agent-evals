@@ -105,9 +105,6 @@ line-length = 100
 select = ["E", "F", "I", "UP", "B", "SIM", "PTH", "RUF"]
 ignore = ["E501"]
 
-[tool.ruff.lint.isort]
-known-first-party = ["agent_evals"]
-
 [tool.mypy]
 python_version = "3.11"
 strict = true
