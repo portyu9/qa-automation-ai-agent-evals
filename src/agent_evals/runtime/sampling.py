@@ -237,7 +237,9 @@ class SessionSamplingMetadata(BaseModel):
                 raise ValueError("adaptive/sequential stopping requires an explicit rule basis")
         elif self.stopping_rule is StoppingRule.UNKNOWN:
             if self.planned_trials is not None or self.stopping_basis is not None:
-                raise ValueError("unknown stopping provenance must not claim a horizon or rule basis")
+                raise ValueError(
+                    "unknown stopping provenance must not claim a horizon or rule basis"
+                )
         else:
             raise ValueError("unsupported stopping rule")
 
@@ -351,9 +353,8 @@ def verify_session_sampling_metadata(
     except ValidationError as exc:
         raise SamplingProvenanceError("session sampling metadata is malformed") from exc
 
-    if (
-        metadata.stopping_rule is StoppingRule.FIXED_HORIZON
-        and metadata.planned_trials != len(trial_ids)
+    if metadata.stopping_rule is StoppingRule.FIXED_HORIZON and metadata.planned_trials != len(
+        trial_ids
     ):
         raise SamplingProvenanceError(
             "fixed-horizon session trial count does not match the predeclared horizon"
@@ -466,9 +467,7 @@ def verify_randomness_control_sequence(
 
 def _validate_basis(value: object, *, label: str) -> str:
     if not isinstance(value, str) or not value or value != value.strip():
-        raise SamplingProvenanceError(
-            f"{label} requires a non-empty, whitespace-trimmed basis"
-        )
+        raise SamplingProvenanceError(f"{label} requires a non-empty, whitespace-trimmed basis")
     if len(value) > _MAX_BASIS_LENGTH:
         raise SamplingProvenanceError(
             f"{label} basis must be at most {_MAX_BASIS_LENGTH} characters"
