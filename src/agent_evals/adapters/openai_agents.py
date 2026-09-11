@@ -778,6 +778,11 @@ class OpenAIAgentsAdapter:
                         arguments if isinstance(arguments, str) else None,
                     )
                     if resource is not None:
+                        if type(resource) is not ResourceIdentifier:
+                            raise AdapterPreconditionError(
+                                code="resource_identity_unverifiable",
+                                reason="resource resolver must return an exact ResourceIdentifier",
+                            )
                         payload["resource"] = resource_identifier_payload(resource)
                 events.append(
                     EvidenceEvent(
