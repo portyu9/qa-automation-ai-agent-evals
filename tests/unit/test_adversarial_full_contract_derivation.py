@@ -8,6 +8,7 @@ from agent_evals.contracts.models import (
     EvaluationScenario,
     ScenarioKind,
 )
+from agent_evals.contracts.resource import ResourceScope
 from agent_evals.contracts.semantic import SemanticCriterionSpec, SemanticRubricSpec
 from agent_evals.retrieval.models import (
     RetrievalChunkSpec,
@@ -33,7 +34,7 @@ def _base_scenario() -> EvaluationScenario:
         authority=AuthorityPolicy(
             allowed_tools=frozenset({"refund"}),
             approval_required_tools=frozenset({"refund"}),
-            allowed_resource_prefixes=("tenant/7/",),
+            allowed_resource_scopes=(ResourceScope(domain="tenant", components=("7",)),),
             max_turns=6,
             max_tool_calls=4,
             max_handoffs=0,
