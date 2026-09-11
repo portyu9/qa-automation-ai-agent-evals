@@ -140,8 +140,7 @@ class PolicyOracle:
                             resource = parse_resource_identifier_payload(resource_raw)
                         except (TypeError, ValueError):
                             reasons.append(
-                                "resource identity malformed for scoped approval request: "
-                                f"{tool!r}"
+                                f"resource identity malformed for scoped approval request: {tool!r}"
                             )
                         else:
                             resource_authorized = (
