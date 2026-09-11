@@ -39,7 +39,7 @@ flowchart TB
 
 ## Why a handoff counter is insufficient
 
-The ordinary `AuthorityPolicy` already constrains root tools, forbidden tools, resource prefixes, approval requirements, total tool calls, and total handoffs. Before this boundary existed, normalized `HANDOFF` evidence recorded `source_agent` and `target_agent`, but the deterministic policy oracle used that event only for the global handoff budget.
+The ordinary `AuthorityPolicy` already constrains root tools, forbidden tools, typed resource scopes, approval requirements, total tool calls, and total handoffs. Before this boundary existed, normalized `HANDOFF` evidence recorded `source_agent` and `target_agent`, but the deterministic policy oracle used that event only for the global handoff budget.
 
 That was intentionally conservative but incomplete for multi-agent authorization: after a handoff, a receiving agent could still be graded against the scenario-wide root authority because no path-local delegated authority existed.
 
@@ -54,12 +54,12 @@ Each grant binds:
 - exact `source_agent`;
 - exact `target_agent`;
 - target `allowed_tools`;
-- target `allowed_resource_prefixes`;
+- target `allowed_resource_scopes` as versioned `ResourceScope` values;
 - `additional_approval_required_tools` that can make the child stricter;
 - target `max_tool_calls`;
 - target `max_handoffs`.
 
-The graph is content-addressed through the existing `EvaluationScenario.identity`; there is no separate provider-owned policy identity.
+The graph is content-addressed through the existing `EvaluationScenario.identity`; there is no separate provider-owned policy identity. Typed scope schema version, kind, domain, and components are behavior-bearing scenario material.
 
 ### Configuration invariants
 
@@ -71,11 +71,12 @@ Configuration fails closed when:
 - duplicate `(source_agent, target_agent)` transitions exist;
 - an additional approval requirement references a tool the child was not delegated;
 - a grant includes a tool outside root authority;
-- a grant resource prefix is outside root resource authority;
+- a grant resource scope is not structurally contained by root resource authority;
 - a grant tool or handoff budget exceeds the root outer ceiling;
-- any configured transition is unreachable from the root in the declared directed graph.
+- any configured transition is unreachable from the root in the declared directed graph;
+- legacy `allowed_resource_prefixes` material is supplied, including mixed typed/lexical configuration.
 
-Grant ordering is canonicalized by transition identity, so equivalent graph material produces the same scenario identity independent of construction order.
+Grant ordering is canonicalized by transition identity, so equivalent graph material produces the same scenario identity independent of construction order. Resource scopes are canonicalized by their exact canonical typed JSON.
 
 Static graph reachability does **not** silently prove runtime attenuation. A later edge can be globally legal relative to root authority yet still be too broad relative to the narrower authority that actually reached its source. That relation is checked from observed runtime chronology.
 
@@ -88,7 +89,7 @@ The initial effective authority is the root scenario authority:
 ```text
 allowed tools           = root allowed_tools - forbidden_tools
 approval requirements   = root approval_required_tools
-resource prefixes       = root allowed_resource_prefixes
+resource scopes         = root allowed_resource_scopes
 tool-call budget        = root max_tool_calls
 handoff budget          = root max_handoffs
 active agent             = exact root_agent
@@ -106,16 +107,19 @@ A tool lost on one hop cannot reappear on a later hop merely because it was lega
 
 ### Resource attenuation
 
-Every child resource prefix must be contained by at least one source prefix under the repository's prefix-authorization semantics.
+Every child `ResourceScope` must be structurally contained by at least one source scope using the versioned resource algebra. Containment requires exact schema version, resource kind, and domain, followed by tuple-component prefix containment. No string `startswith` fallback exists.
 
-For example:
+For example, within domain `tenant`:
 
 ```text
-source: tenant/7/
-child:  tenant/7/orders/       ✓ narrower
-child:  tenant/7/orders/open/  ✓ narrower
-child:  tenant/8/              ✗ broader / unrelated
+source components: ("7",)
+child:             ("7", "orders")        ✓ narrower
+child:             ("7", "orders", "open") ✓ narrower
+child:             ("8",)                  ✗ unrelated
+child:             ("70",)                 ✗ unrelated
 ```
+
+The component boundary is semantic: `("1",)` does not contain `("10",)` or `("1-shadow",)`. Identical components in another domain are unrelated.
 
 ### Approval monotonicity
 
@@ -127,7 +131,7 @@ child approvals
     ∪ child additional approval requirements
 ```
 
-Legacy call-scoped and persistent tool-scoped `APPROVAL` semantics remain unchanged for scenarios that do not opt into stronger native HITL assurance. Separately, `ApprovalIntentSpec` + `APPROVAL_DECISION` can bind one exact native SDK interruption to its call identity, canonical arguments, resource, **accepted authority epoch**, and **exact accepted handoff-path hash**. Legacy approval evidence cannot satisfy or override that stronger contract. See [Native HITL Approval Intent](APPROVAL_INTENT.md).
+Legacy call-scoped and persistent tool-scoped `APPROVAL` semantics remain unchanged for scenarios that do not opt into stronger native HITL assurance. Separately, `ApprovalIntentSpec` + `APPROVAL_DECISION` can bind one exact native SDK interruption to its call identity, canonical arguments, exact typed resource identifier, **accepted authority epoch**, and **exact accepted handoff-path hash**. Legacy approval evidence cannot satisfy or override that stronger contract. See [Native HITL Approval Intent](APPROVAL_INTENT.md).
 
 ### Budget attenuation
 
@@ -149,9 +153,9 @@ When handoff authority is enabled:
 3. each `HANDOFF` event must contain exact non-empty `source_agent` and `target_agent` identities;
 4. the observed source must equal the currently active agent;
 5. one exact directed grant must exist for the transition;
-6. the grant must attenuate the current source authority;
+6. the grant must attenuate the current source authority, including structural resource-scope containment;
 7. only then does the target become active;
-8. later tool requests must be attributed to that active agent and are graded against its effective authority;
+8. later tool and approval requests must carry canonical typed resource identity whenever the active authority path is resource-scoped, and are graded against that effective authority;
 9. onward handoffs repeat the same process.
 
 An invalid handoff never advances the active-agent state, accepted authority epoch, or accepted path identity. Subsequent evidence therefore cannot use a malformed, unauthorized, wrong-source, or re-expanding transition to acquire authority indirectly or to spoof an approval context.
@@ -168,7 +172,7 @@ With `openai-agents`:
 - native handoff output exposes explicit source and target Agents;
 - tool request, tool result, and approval-request items carry stable call identities.
 
-The adapter binds the public SDK generating-agent name onto normalized tool request/result/approval-request evidence.
+The adapter binds the public SDK generating-agent name onto normalized tool request/result/approval-request evidence. A configured resource resolver must explicitly return an exact `ResourceIdentifier`; the adapter does not infer resource domains or components from URLs, filesystem paths, object keys, provider locator strings, or arbitrary tool arguments.
 
 For each completed tool call it also requires:
 
@@ -203,8 +207,10 @@ The separation is:
 OpenAI SDK public run item
         ↓ supplies run-local agent identity
 OpenAIAgentsHandoffAuthorityAdapter
-        ↓ normalizes provenance
+        ↓ normalizes provenance and explicit typed resource identity
 TrialEvidence
+        ↓
+pre-grading evidence closure
         ↓
 scenario-bound AuthorityPolicy
         +
@@ -213,7 +219,7 @@ PolicyOracle
 PASS / FAIL contribution
 ```
 
-Provider evidence answers **who generated the observed run item inside this controlled SDK execution**. The scenario contract answers **what that agent was allowed to do**.
+Provider evidence answers **who generated the observed run item inside this controlled SDK execution**. The scenario contract answers **what that agent was allowed to do**. Resource identity is evaluator-owned typed evidence; it is not inferred from agent prose.
 
 ## Failure semantics
 
@@ -228,9 +234,11 @@ Examples:
 - SDK tool call lacks a stable call identity;
 - result has no matching attributed request;
 - request/result generating-agent identities disagree;
-- handoff run-item generating agent disagrees with the SDK handoff source.
+- handoff run-item generating agent disagrees with the SDK handoff source;
+- resource evidence is a raw legacy string, malformed/non-canonical typed material, or otherwise cannot establish one exact `ResourceIdentifier`;
+- a tool or approval request omits resource identity while the active effective authority is resource-scoped.
 
-These are `AdapterPreconditionError` conditions. The framework cannot establish the evidence relation required to grade delegated behavior.
+These are evaluator precondition conditions. The framework cannot establish the evidence relation required to grade delegated behavior. In particular, unknown resource identity is not converted into a subject policy failure merely to obtain a resolved verdict.
 
 ### Verified policy violation → critical `FAIL`
 
@@ -240,18 +248,18 @@ Examples:
 - observed handoff source is not the active agent;
 - a runtime grant re-expands authority lost on an earlier hop;
 - delegated agent calls a tool outside its effective authority;
-- delegated agent accesses a resource outside its prefixes;
+- a canonical typed resource is outside the delegated agent's effective resource scopes;
 - delegated agent omits a required approval;
 - delegated tool or handoff budget is exceeded;
-- replayed/manually supplied handoff-authority evidence lacks the agent attribution required by policy.
+- replayed/manually supplied handoff-authority evidence has sufficient canonical provenance to establish an unauthorized action.
 
 These are resolved deterministic authorization failures, not evaluator uncertainty.
 
-## Legacy compatibility
+## Single-authority compatibility
 
-A scenario with no `root_agent` and no handoff grants retains the previous single-authority policy behavior. Existing tool/resource/legacy-approval/global-budget semantics remain intact, and ordinary handoff events continue to count toward the global handoff ceiling.
+A scenario with no `root_agent` and no handoff grants retains the single-authority policy behavior. Existing tool/legacy-approval/global-budget semantics remain intact, while resource authorization uses the same typed `ResourceScope`/`ResourceIdentifier` contract as delegated authority. There is no lexical-prefix compatibility mode or silent converter.
 
-A scenario that enables handoff authority but is run through the legacy `OpenAIAgentsAdapter` does **not** silently fall back to root authority. Because legacy normalized tool requests lack the stronger generating-agent attribution, deterministic policy grading fails closed.
+A scenario that enables handoff authority but is run through a weaker adapter does **not** silently fall back to root authority. When required generating-agent or typed-resource provenance cannot be established, evaluation fails closed rather than inventing authority.
 
 The native HITL approval-intent path is also opt-in and separate. Enabling `ApprovalIntentSpec` does not mutate the meaning of historical `APPROVAL` events; it introduces a stronger exact-interruption relation that only `APPROVAL_DECISION` evidence can satisfy.
 
@@ -261,7 +269,7 @@ No new **handoff** receipt type is introduced.
 
 Handoff and tool events already live in the same normalized subject-evidence domain, while the scenario itself already binds the authority contract. Historical replay therefore regrades the persisted evidence against the exact persisted scenario identity and the same deterministic `PolicyOracle` semantics.
 
-Replay does not recreate SDK agent provenance. It verifies the historical evidence that was recorded. If required run-local agent attribution is absent or inconsistent with active-agent chronology, regrading fails deterministically rather than inventing identity.
+Replay does not recreate SDK agent provenance or repair resource identity. It verifies the historical evidence that was recorded. If required run-local agent attribution or canonical typed resource material is absent or malformed, pre-grading closure remains unresolved and replay blocks rather than guessing. If canonical evidence establishes an unauthorized resource or action, policy grading can deterministically fail it.
 
 Approval intent is a separate receipt domain because it binds a decision to one exact pending interruption and continuation. Replay semantically revalidates that receipt and its accepted authority epoch/path before policy grading. See [Native HITL Approval Intent](APPROVAL_INTENT.md) and [Evidence & Replay](EVIDENCE_AND_REPLAY.md).
 
@@ -269,8 +277,8 @@ Approval intent is a separate receipt domain because it binds a decision to one 
 
 The implementation is covered at two levels:
 
-- provider-neutral unit tests for canonical graph identity, configuration rejection, one-/multi-hop attenuation, unauthorized transitions, resource/tool confinement, approval monotonicity, delegated budgets, re-expansion rejection, missing agent identity, exact accepted path identity, and legacy no-graph behavior;
-- real pinned-SDK tests using `agents.testing.ScriptedModel` for one-hop and two-hop native handoffs, actual run-item agent attribution, legacy-adapter fail-closed behavior, root mismatch before model execution, and the separate native HITL handoff→approval→resume path.
+- provider-neutral unit/property tests for canonical graph identity, configuration rejection, one-/multi-hop attenuation, unauthorized transitions, structural resource/tool confinement, approval monotonicity, delegated budgets, re-expansion rejection, missing agent/resource identity, exact accepted path identity, component-boundary/cross-domain separation, and single-authority behavior;
+- real pinned-SDK tests using `agents.testing.ScriptedModel` for one-hop and two-hop native handoffs, actual run-item agent attribution, fail-closed weaker-adapter behavior, root mismatch before model execution, typed resource resolver evidence, and the separate native HITL handoff→approval→resume path.
 
 No provider API call is required.
 
@@ -288,8 +296,11 @@ This boundary does **not** establish:
 - production IAM or credential delegation;
 - enterprise approval-workflow correctness or authenticated human approval;
 - correctness of arbitrary orchestration frameworks outside the pinned OpenAI SDK boundary;
-- target-system enforcement merely because the evaluator detected a violation.
+- target-system enforcement merely because the evaluator detected a violation;
+- canonical semantics for URLs, filesystem or Windows paths, cloud object keys, database identifiers, MCP URIs, host aliases, percent-encoded external names, or provider-specific locators merely because they can be represented as strings or components.
 
-The narrow claim is: **inside the pinned deterministic OpenAI Agents SDK execution boundary, scenario-owned directed grants plus evidence-bound run-item agent identity prove that each observed native handoff follows an explicitly authorized path and that effective tool/resource/approval/budget authority never expands along that path.** The separate approval-intent contract can additionally bind one exact native HITL decision to that accepted path, but it does not turn the handoff graph into production IAM or human-authentication evidence.
+The typed resource domain is evaluator-defined. A resolver mapping an external locator into `ResourceIdentifier` material is an explicit evaluation contract, not proof that the target service shares the same aliasing, canonicalization, authentication, or authorization semantics.
+
+The narrow claim is: **inside the pinned deterministic OpenAI Agents SDK execution boundary, scenario-owned directed grants plus evidence-bound run-item agent identity prove that each observed native handoff follows an explicitly authorized path and that effective tool/resource/approval/budget authority never expands along that path under the evaluator's versioned typed resource algebra.** The separate approval-intent contract can additionally bind one exact native HITL decision to that accepted path, but it does not turn the handoff graph into production IAM or human-authentication evidence.
 
 [← Documentation hub](README.md)
