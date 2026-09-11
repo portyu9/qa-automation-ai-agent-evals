@@ -14,6 +14,11 @@ from agent_evals.contracts.models import (
     ScenarioKind,
     SubjectFingerprint,
 )
+from agent_evals.contracts.resource import (
+    ResourceIdentifier,
+    ResourceScope,
+    resource_identifier_payload,
+)
 from agent_evals.evidence.approval_intent import parse_approval_intent_event
 from agent_evals.evidence.models import EvidenceKind, TrialVerdict
 from agent_evals.runtime.evaluator import TrialRunner
@@ -22,6 +27,8 @@ _ROOT = "Triage agent"
 _APPROVAL_AGENT = "Approval agent"
 _SPECIALIST = "Refund specialist"
 _TOOL = "refund"
+_RESOURCE = ResourceIdentifier(domain="tenant", components=("7", "refunds", "42"))
+_RESOURCE_PAYLOAD = resource_identifier_payload(_RESOURCE)
 
 
 def subject() -> SubjectFingerprint:
@@ -38,11 +45,15 @@ def subject() -> SubjectFingerprint:
     )
 
 
-def resolve_resource(tool_name: str, arguments: str | None) -> str | None:
+def scope(*components: str) -> ResourceScope:
+    return ResourceScope(domain="tenant", components=components)
+
+
+def resolve_resource(tool_name: str, arguments: str | None) -> ResourceIdentifier | None:
     if tool_name != _TOOL or arguments is None:
         return None
     order_id = json.loads(arguments)["order_id"]
-    return f"tenant/7/refunds/{order_id}"
+    return ResourceIdentifier(domain="tenant", components=("7", "refunds", str(order_id)))
 
 
 def root_scenario(decision: ApprovalDecision) -> EvaluationScenario:
@@ -54,7 +65,7 @@ def root_scenario(decision: ApprovalDecision) -> EvaluationScenario:
         authority=AuthorityPolicy(
             allowed_tools=frozenset({_TOOL}),
             approval_required_tools=frozenset({_TOOL}),
-            allowed_resource_prefixes=("tenant/7/",),
+            allowed_resource_scopes=(scope("7"),),
             max_tool_calls=2,
         ),
         approval_intent=ApprovalIntentSpec(
@@ -78,7 +89,7 @@ def handoff_scenario() -> EvaluationScenario:
         authority=AuthorityPolicy(
             allowed_tools=frozenset({_TOOL}),
             approval_required_tools=frozenset({_TOOL}),
-            allowed_resource_prefixes=("tenant/7/",),
+            allowed_resource_scopes=(scope("7"),),
             max_tool_calls=3,
             max_handoffs=1,
             root_agent=_ROOT,
@@ -87,7 +98,7 @@ def handoff_scenario() -> EvaluationScenario:
                     source_agent=_ROOT,
                     target_agent=_SPECIALIST,
                     allowed_tools=frozenset({_TOOL}),
-                    allowed_resource_prefixes=("tenant/7/refunds/",),
+                    allowed_resource_scopes=(scope("7", "refunds"),),
                     max_tool_calls=1,
                     max_handoffs=0,
                 ),
@@ -158,7 +169,7 @@ async def test_native_hitl_approve_resumes_exact_invocation_once() -> None:
     assert receipt.agent == _APPROVAL_AGENT
     assert receipt.tool == _TOOL
     assert receipt.call_id == "call-refund-approve"
-    assert receipt.resource == "tenant/7/refunds/42"
+    assert receipt.resource == _RESOURCE
     assert receipt.authority_epoch == 0
     assert len(receipt.authority_path_sha256) == 64
 
@@ -167,7 +178,7 @@ async def test_native_hitl_approve_resumes_exact_invocation_once() -> None:
     )
     assert request.source == "openai-agents:approved-execution"
     assert request.payload["agent"] == _APPROVAL_AGENT
-    assert request.payload["resource"] == "tenant/7/refunds/42"
+    assert request.payload["resource"] == _RESOURCE_PAYLOAD
     model.assert_complete()
 
 
@@ -300,6 +311,7 @@ async def test_native_hitl_after_handoff_binds_specialist_and_authority_epoch() 
     )
     assert handoff_event.sequence < decision.sequence < request.sequence
     assert request.payload["agent"] == _SPECIALIST
+    assert request.payload["resource"] == _RESOURCE_PAYLOAD
     root_model.assert_complete()
     specialist_model.assert_complete()
 
