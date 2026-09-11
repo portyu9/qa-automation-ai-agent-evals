@@ -67,9 +67,7 @@ async def test_runtime_pass_requires_policy_and_state_closure() -> None:
                         "tool": "refund",
                         "call_id": "refund-1",
                         "resource": resource_identifier_payload(
-                            ResourceIdentifier(
-                                domain="tenant", components=("7", "refunds")
-                            )
+                            ResourceIdentifier(domain="tenant", components=("7", "refunds"))
                         ),
                     },
                 ),
