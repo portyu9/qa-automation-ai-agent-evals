@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import json
 
+import hypothesis.strategies as st
 import pytest
 from hypothesis import given, settings
-from hypothesis import strategies as st
 from pydantic import ValidationError
 
 from agent_evals.contracts.resource import ResourceIdentifier, ResourceKind, ResourceScope
