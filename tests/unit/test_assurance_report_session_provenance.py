@@ -219,9 +219,7 @@ async def test_report_rejects_cross_subject_provenance_replay() -> None:
 async def test_report_rejects_reordered_randomness_receipts() -> None:
     report = await _verified_report()
     payload = report.model_dump(mode="json")
-    receipts = payload["session_provenance"]["sampling_metadata"][
-        "randomness_control_receipts"
-    ]
+    receipts = payload["session_provenance"]["sampling_metadata"]["randomness_control_receipts"]
     receipts[0], receipts[1] = receipts[1], receipts[0]
 
     with pytest.raises(ValidationError, match="sampling provenance is invalid"):
@@ -232,9 +230,9 @@ async def test_report_rejects_reordered_randomness_receipts() -> None:
 async def test_report_rejects_mutated_reset_receipt_even_with_cached_gate_present() -> None:
     report = await _verified_report()
     payload = report.model_dump(mode="json")
-    payload["session_provenance"]["reset_isolation_receipts"][0][
-        "control_evidence_identity"
-    ] = "0" * 64
+    payload["session_provenance"]["reset_isolation_receipts"][0]["control_evidence_identity"] = (
+        "0" * 64
+    )
 
     with pytest.raises(ValidationError, match="receipt root mismatch"):
         AssuranceReport.model_validate(payload)
