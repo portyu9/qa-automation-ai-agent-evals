@@ -208,9 +208,7 @@ def _grant_expansion_reasons(
         transformed.allowed_resource_scopes,
     )
     if broadened_scopes:
-        reasons.append(
-            f"delegated resource scope broadened for {transition}: {broadened_scopes!r}"
-        )
+        reasons.append(f"delegated resource scope broadened for {transition}: {broadened_scopes!r}")
 
     if transformed.max_tool_calls > baseline.max_tool_calls:
         reasons.append(
