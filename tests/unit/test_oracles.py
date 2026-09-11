@@ -319,9 +319,8 @@ def test_scoped_policy_rejects_legacy_string_resource_evidence() -> None:
 
 
 def test_scoped_policy_rejects_noncanonical_typed_resource_material() -> None:
-    canonical = resource("7", "orders")
-    malformed = dict(canonical)
-    malformed["components"] = ("7", "orders")
+    malformed = resource("7", "orders")
+    malformed["extra"] = "not-canonical"
     result = PolicyOracle().grade(
         scenario(),
         evidence(
