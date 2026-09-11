@@ -406,11 +406,15 @@ def _validate_reset_control_request(
             raise ValueError("verified independence requires at least two trials")
         if reset_control is None:
             raise ValueError("verified independence requires a reset/isolation control")
-        if reset_control is adapter:
+        if _same_object(reset_control, adapter):
             raise ValueError("reset/isolation control must be separate from the subject adapter")
         return
     if reset_control is not None:
         raise ValueError("reset/isolation control may be supplied only for verified independence")
+
+
+def _same_object(left: object, right: object) -> bool:
+    return left is right
 
 
 def _validate_runtime_adapter_name(value: object) -> str:
