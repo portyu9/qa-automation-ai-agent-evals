@@ -4,7 +4,7 @@
 
 `EvaluationSession` records a versioned `agent-evals/session-sampling/v1` contract for repeated-trial sampling, runtime/provider randomness provenance, and stopping semantics. This metadata qualifies how repeated outcomes may be interpreted; it does not change deterministic trial verdicts or the raw arithmetic stored in `ReliabilityReport`.
 
-The current Assurance Report schema does **not** persist this session sampling metadata. Durable report binding is intentionally deferred to #234 so the report schema, root domain, compatibility rules, independence provenance, and statistical assumptions can transition together rather than piecemeal.
+`agent-evals/assurance-report/v6` persists the complete session sampling object together with campaign, adapter, independence, and reset/isolation provenance. Report loading revalidates sampling/randomness/stopping relations against the ordered report trial vector; historical v5 and earlier assurance reports are not silently reinterpreted as carrying this provenance.
 
 ## Sampling policy
 
@@ -85,6 +85,8 @@ A reset receipt does not establish randomness provenance. A randomness receipt d
 The returned qualification also exposes the explicit randomness status and any evaluator-owned randomness receipt roots or external limitation basis. `unknown` randomness remains visible as an unresolved assumption; the framework does not fabricate a seed claim merely to make the transform available.
 
 External selection, adaptive/sequential stopping, unknown stopping provenance, or legacy session results without sampling metadata do not acquire independent-attempt interpretation through `pass@k` / `pass^k`. They may still retain raw reliability counts and arithmetic without being relabelled as behavioral failure.
+
+Persisting these fields in assurance-report v6 does not make the algebraic transforms independently authoritative. V6 stores and revalidates the provenance needed to interpret them; it does not claim that the report hash proves the assumptions are true in the external world.
 
 ## Verdict semantics
 
