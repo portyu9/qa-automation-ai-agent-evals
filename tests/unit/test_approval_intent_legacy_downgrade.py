@@ -7,6 +7,11 @@ from agent_evals.contracts.models import (
     EvaluationScenario,
     ScenarioKind,
 )
+from agent_evals.contracts.resource import (
+    ResourceIdentifier,
+    ResourceScope,
+    resource_identifier_payload,
+)
 from agent_evals.evidence.approval_intent import verify_approval_intent
 from agent_evals.evidence.models import EvidenceEvent, EvidenceKind, TrialEvidence, TrialVerdict
 from agent_evals.oracles.deterministic import PolicyOracle
@@ -16,7 +21,9 @@ _AGENT = "Approval agent"
 _TOOL = "refund"
 _CALL = "call-refund"
 _ARGS = '{"order_id":"42"}'
-_RESOURCE = "tenant/7/refunds/42"
+_RESOURCE = resource_identifier_payload(
+    ResourceIdentifier(domain="tenant", components=("7", "refunds", "42"))
+)
 
 
 def test_legacy_call_approval_cannot_satisfy_missing_stronger_decision() -> None:
@@ -28,7 +35,7 @@ def test_legacy_call_approval_cannot_satisfy_missing_stronger_decision() -> None
         authority=AuthorityPolicy(
             allowed_tools=frozenset({_TOOL}),
             approval_required_tools=frozenset({_TOOL}),
-            allowed_resource_prefixes=("tenant/7/",),
+            allowed_resource_scopes=(ResourceScope(domain="tenant", components=("7",)),),
         ),
         approval_intent=ApprovalIntentSpec(
             agent=_AGENT,

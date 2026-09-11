@@ -28,10 +28,11 @@ from agent_evals.adversarial.channels import (
 )
 from agent_evals.adversarial.delivery import AttackDeliveryReceipt
 from agent_evals.contracts.models import EvaluationScenario, SubjectFingerprint
+from agent_evals.contracts.resource import ResourceIdentifier, resource_identifier_payload
 from agent_evals.evidence.models import EvidenceEvent, EvidenceKind
 
 StateReader = Callable[[], Mapping[str, object] | Awaitable[Mapping[str, object]]]
-ResourceResolver = Callable[[str, str | None], str | None]
+ResourceResolver = Callable[[str, str | None], ResourceIdentifier | None]
 RunnerInput = str | list[dict[str, Any]]
 
 
@@ -777,7 +778,12 @@ class OpenAIAgentsAdapter:
                         arguments if isinstance(arguments, str) else None,
                     )
                     if resource is not None:
-                        payload["resource"] = resource
+                        if type(resource) is not ResourceIdentifier:
+                            raise AdapterPreconditionError(
+                                code="resource_identity_unverifiable",
+                                reason="resource resolver must return an exact ResourceIdentifier",
+                            )
+                        payload["resource"] = resource_identifier_payload(resource)
                 events.append(
                     EvidenceEvent(
                         sequence=start_sequence + len(events),

@@ -74,7 +74,7 @@ The resource mode places exact canonical fixture JSON in one structured SDK `inp
 
 It does not claim OpenAI hosted File Search, vector stores, embeddings, RAG retrieval/ranking/chunking/filtering/citations, `file_id`, `file_url`, browser pages, databases, object stores, production document repositories, MCP resource servers, or provider-side file parsing/retention attestation.
 
-The repository has a **separate** deterministic retrieval-assurance domain. That feature does not retroactively widen this generic `RESOURCE` injector.
+The repository has a **separate** typed resource-authority algebra and a separate deterministic retrieval-assurance domain. Neither feature retroactively widens this generic `RESOURCE` injector.
 
 ### Deterministic retrieval assurance is not production RAG assurance
 
@@ -92,7 +92,9 @@ It does not choose a new destination, rewrite handoff routing metadata, poison e
 
 `OpenAIAgentsHandoffAuthorityAdapter` is a separate assurance adapter; it does not change the meaning of the generic `HANDOFF` adversarial channel above. When a scenario configures `root_agent` and directed `handoff_grants`, the adapter binds that configured root to the supplied SDK `Agent.name` before model execution and records public SDK run-item generating-agent names for normalized tool request/result/approval evidence. Native handoff evidence is accepted only when the run-item generating agent agrees with the SDK handoff source identity.
 
-`PolicyOracle`—not the SDK agent name, model output, or adapter—owns authorization. It advances active authority only after an observed source→target transition matches one explicit grant and that grant does not broaden the authority that actually reached its source agent. Delegated tools, resource prefixes, inherited-plus-stricter approval requirements, tool-call budgets, and handoff budgets are then graded against that path-local authority. A later grant that is independently inside root authority can still fail if it re-expands authority lost on an earlier hop.
+`PolicyOracle`—not the SDK agent name, model output, or adapter—owns authorization. It advances active authority only after an observed source→target transition matches one explicit grant and that grant does not broaden the authority that actually reached its source agent. Delegated tools, versioned typed resource scopes, inherited-plus-stricter approval requirements, tool-call budgets, and handoff budgets are then graded against that path-local authority. A later grant that is independently inside root authority can still fail if it re-expands authority lost on an earlier hop.
+
+Resource attenuation is structural, not lexical: schema version, resource kind, and domain must match, and scope containment is a tuple-component prefix relation. `tenant:("1",)` does not contain `tenant:("10",)` or an otherwise identical path in another domain. The runtime has no `startswith` authorization fallback and no silent converter from `allowed_resource_prefixes`; legacy-only and mixed lexical/typed authority configuration are rejected.
 
 The executable boundary is intentionally narrower than production identity and access management:
 
@@ -101,16 +103,18 @@ The executable boundary is intentionally narrower than production identity and a
 - there is no cross-process or cross-host delegation token, capability credential, signed grant, distributed-agent-fabric attestation, or provider-side authorization proof;
 - the framework does not establish organization/user identity, tenant membership, workforce identity, cloud IAM, hosted routing assurance, or production policy synchronization;
 - the authority graph is evaluator-owned scenario configuration, not evidence that an independently administered production authorization system issued the same grant;
-- resource-prefix authority remains lexical after adapter normalization, so deployment-grade canonicalization of aliases, traversal, URLs, case, and alternate identifiers remains external;
+- evaluator resource domains/components do not prove external URL/path/object-key/database/MCP-URI canonicalization, alias equivalence, tenant identity, or target-side authorization semantics;
 - the deterministic SDK tests use `agents.testing.ScriptedModel`; they do not establish live-model routing quality or provider availability.
 
-Missing or contradictory SDK provenance—such as a configured root that does not match the supplied agent, missing call attribution, or request/result ownership disagreement—blocks evaluation as `EVALUATION_ERROR / BLOCKED`. Once the required provenance exists, an observed unauthorized transition or delegated action is deterministic subject evidence and remains a critical policy `FAIL`; evaluator uncertainty is not rewritten as a product defect, and a product defect is not downgraded to uncertainty merely because the run involved multiple agents.
+Missing or contradictory SDK/resource provenance—such as a configured root that does not match the supplied agent, missing call attribution, request/result ownership disagreement, malformed legacy-string resource evidence, or a missing required resource identity—blocks evaluation as `EVALUATION_ERROR / BLOCKED`. Once exact provenance exists, an observed unauthorized transition or canonical typed resource outside the active scope is deterministic subject evidence and remains a critical policy `FAIL`; evaluator uncertainty is not rewritten as a product defect, and a product defect is not downgraded to uncertainty merely because the run involved multiple agents.
 
 ### Native HITL approval intent is exact evaluator evidence, not human authentication
 
 `OpenAIAgentsHITLApprovalAdapter` is a separate stronger approval-assurance boundary. It does not change the meaning of legacy call-scoped or persistent tool-scoped `APPROVAL` evidence for scenarios that do not configure `ApprovalIntentSpec`.
 
-For the stronger path, the repository-governed SDK must expose one real `ToolApprovalItem` interruption before protected implementation execution. The framework normalizes that interruption as `APPROVAL_REQUEST`, binds the scenario-owned approve/reject intent to the exact run-local generating agent, tool, stable call ID, canonical finite JSON argument digest, normalized resource when scoped, accepted handoff-authority epoch, exact accepted handoff-path hash, and approval-request sequence, and emits one integrity-bound `APPROVAL_DECISION` receipt. The same SDK `RunState` is then resumed through `state.approve(...)` or `state.reject(...)`.
+For the stronger path, the repository-governed SDK must expose one real `ToolApprovalItem` interruption before protected implementation execution. The framework normalizes that interruption as `APPROVAL_REQUEST`, binds the scenario-owned approve/reject intent to the exact run-local generating agent, tool, stable call ID, canonical finite JSON argument digest, exact typed `ResourceIdentifier` when present, accepted handoff-authority epoch, exact accepted handoff-path hash, and approval-request sequence, and emits one integrity-bound `agent-evals/approval-intent/v2` `APPROVAL_DECISION` receipt. The same SDK `RunState` is then resumed through `state.approve(...)` or `state.reject(...)`.
+
+Historical v1 string-resource approval receipts are not silently reinterpreted as v2 typed-resource receipts. A configured resource resolver must return an exact `ResourceIdentifier`; raw strings, guessed provider locators, or merely coercible resource material do not acquire approval authority.
 
 On approval, the verifier requires exactly one matching executable `TOOL_REQUEST` and exactly one matching non-rejection `TOOL_RESULT` after resume. On clean rejection, it requires explicit matching post-decision rejection-result evidence and no protected executable request. If the exact rejected invocation nevertheless reaches `TOOL_REQUEST`, that resolved chronology is preserved so deterministic policy grading can record execution-after-rejection as critical `FAIL` rather than evaluator uncertainty.
 
@@ -129,6 +133,7 @@ This executable boundary still does **not** establish:
 - exactly-once distributed side effects merely because the controlled local SDK invocation executed once;
 - live-model quality, provider availability, or arbitrary orchestration-framework HITL behavior;
 - arbitrary hosted-tool or MCP approval behavior;
+- external resource canonicalization/alias equivalence merely because the evaluator binds a typed resource identity;
 - proof that an external target enforced the evaluator's approval decision.
 
 `ApprovalIntentReceipt.root_sha256` is an integrity value over evaluator-owned evidence, not an authenticated approver signature. The narrow claim remains historical and local to the controlled pinned-SDK relation: the exact interruption observed by the evaluator is the exact invocation whose approve/reject continuation is then verified.
@@ -397,11 +402,11 @@ The framework now has an optional calibrated semantic judge, but deterministic s
 
 This does not establish deterministic semantic truth, human-equivalent review, universal prompt-injection resistance, or provider-side model-revision attestation. See [Calibrated Semantic Judging](SEMANTIC_JUDGING.md).
 
-### Delivery, approval, and protocol receipts are not target-side attestation
+### Delivery, approval, resource, and protocol receipts are not target-side attestation
 
-A valid OpenAI attack receipt proves consistency relative to the trusted evaluator's controlled observation. `ApprovalIntentReceipt` proves consistency between one scenario-owned decision and one exact recorded native approval interruption/continuation relation. `MCPFaultReceipt` proves consistency relative to a trusted protocol observation. `MCPAgentToolResultReceipt` proves consistency between one verified MCP result and one exact normalized OpenAI agent call/result boundary. `MCPAgentToolErrorRecoveryReceipt` proves consistency across one verified ToolError observation and one exact normalized causal retry/recovery relation. `MCPAgentToolSchemaDriftReceipt` proves consistency across one verified schema-drift protocol relation and one exact normalized host-refreshed agent adaptation relation. `MCPAgentToolIdentityDriftReceipt` proves consistency across one verified identity-drift protocol relation, exact model-visible old→replacement identity transition, and one normalized host-refreshed replacement-call relation. `MCPAgentToolMetadataReceipt` proves consistency between one exact verified MCP target-description observation and one exact model-visible target definition with the same parameter-schema digest. `MCPRemoteAuthReceipt` and `MCPOAuthFlowReceipt` prove their respective deterministic loopback observations.
+A valid OpenAI attack receipt proves consistency relative to the trusted evaluator's controlled observation. `ApprovalIntentReceipt` proves consistency between one scenario-owned decision and one exact recorded native approval interruption/continuation relation. Typed resource identity proves only the evaluator-owned namespace relation encoded by `ResourceIdentifier`/`ResourceScope`; it is not an authenticated external object or tenant identity. `MCPFaultReceipt` proves consistency relative to a trusted protocol observation. `MCPAgentToolResultReceipt` proves consistency between one verified MCP result and one exact normalized OpenAI agent call/result boundary. `MCPAgentToolErrorRecoveryReceipt` proves consistency across one verified ToolError observation and one exact normalized causal retry/recovery relation. `MCPAgentToolSchemaDriftReceipt` proves consistency across one verified schema-drift protocol relation and one exact normalized host-refreshed agent adaptation relation. `MCPAgentToolIdentityDriftReceipt` proves consistency across one verified identity-drift protocol relation, exact model-visible old→replacement identity transition, and one normalized host-refreshed replacement-call relation. `MCPAgentToolMetadataReceipt` proves consistency between one exact verified MCP target-description observation and one exact model-visible target definition with the same parameter-schema digest. `MCPRemoteAuthReceipt` and `MCPOAuthFlowReceipt` prove their respective deterministic loopback observations.
 
-None is independent cryptographic proof that a real human approved an invocation, an arbitrary remote target consumed content, a production issuer minted a token correctly, a provider attested tool identity, or a deployed agent respected policy.
+None is independent cryptographic proof that a real human approved an invocation, an arbitrary remote target consumed content, a production issuer minted a token correctly, a provider attested tool/resource identity, or a deployed agent respected policy.
 
 Control-plane identities are labels/content identities, not authenticated signer identities. Receipt roots are SHA-256 integrity values, not signatures, MACs, trusted timestamps, or hardware attestation.
 
@@ -417,7 +422,7 @@ The repository does not claim signatures/MACs, key management, trusted timestamp
 
 `EvidenceReplayAdapter` requires exact trial/subject/scenario identity and can reapply deterministic grading to recorded evidence. It does not rerun providers, tools, sessions, resources, handoffs, approval interruptions/human review, environment injectors, any of the MCP stdio bridges, protocol probes, authorization probes, OAuth flows, or external state readers and cannot establish fresh delivery or fresh authorization.
 
-Persisted `APPROVAL_DECISION` evidence is semantically revalidated against its exact request, decision, continuation, scenario identity, canonical argument/resource identity, and accepted authority epoch/path. Persisted `PROTOCOL_DELIVERY` receipts—including `MCPAgentToolIdentityDriftReceipt`—are likewise semantically revalidated. Replay does not recreate the SDK/protocol relation, rename, cache invalidation, or model-visible transition that originally produced those receipts.
+Persisted `APPROVAL_DECISION` evidence is semantically revalidated against its exact request, decision, continuation, scenario identity, canonical argument/typed-resource identity, and accepted authority epoch/path. Persisted `PROTOCOL_DELIVERY` receipts—including `MCPAgentToolIdentityDriftReceipt`—are likewise semantically revalidated. Replay does not recreate the SDK/protocol relation, external resource mapping, rename, cache invalidation, or model-visible transition that originally produced those receipts.
 
 ### Assurance-report validation is not signed attestation
 
@@ -431,9 +436,17 @@ Paired comparison uses an exact McNemar/binomial test for directional improvemen
 
 Current formulas use observed resolved success proportion and an independent-attempt interpretation. Correlated, adaptive, or non-stationary trials can violate that approximation. `BLOCKED` and `INCONCLUSIVE` remain separate uncertainty.
 
-### Resource-prefix policy is lexical
+### Typed resource authority is evaluator-local, not external locator or IAM semantics
 
-Resource scope uses string-prefix matching after adapter normalization. Real deployments must canonicalize aliases, traversal, case, URL forms, and alternate identifiers before lexical prefix comparison can represent the intended security boundary.
+`agent-evals/resource/v1` currently supports one evaluator-defined hierarchical resource kind. It requires an exact lowercase ASCII domain and canonical ordered components. Scope containment is structural and component-aware; it is not string-prefix matching.
+
+Version 1 deliberately rejects ambiguous component forms including dot/dotdot segments, slash/backslash separators, percent-encoded forms, surrounding whitespace, non-NFC material, and Unicode control/format/bidi/surrogate/private-use/unassigned categories. Unknown schema versions and resource kinds fail closed.
+
+The canonical evidence boundary is stricter than general Pydantic coercion: raw legacy resource strings, omitted or extra fields, tuple-valued components, model instances, and merely coercible representations do not become gradeable resource identity. Missing or malformed required resource identity is evaluator uncertainty and therefore `EVALUATION_ERROR / BLOCKED`; a canonical typed identifier that is outside the active scope is a resolved subject authorization violation and remains critical deterministic `FAIL`.
+
+This still does **not** define deployment-grade canonical semantics for URLs, POSIX or Windows filesystem paths, cloud object keys, database identifiers, MCP URIs, host aliases, percent-encoded external names, provider-specific resource locators, or target-system aliases. Splitting one of those external strings into hierarchical components does not prove semantic equivalence. A future kind or explicit adapter mapping must define and test its own semantics before becoming authorization-bearing.
+
+Typed resource identities/scopes are evaluator contracts, not authentication, production IAM/RBAC/ABAC, capability credentials, tenant membership proof, target-side authorization enforcement, or remote attestation. Their canonical JSON and any receipt/hash that binds them provide integrity relations only, not signatures.
 
 ### No sandbox-isolation claim
 
@@ -453,12 +466,12 @@ Audited merged implementation source checkpoint `d98f9ca1feb1179504cd2181295a739
 - Python **3.11 minimum / 3.14 latest** quality jobs, Ruff, formatter, Bandit, dependency audit, package integrity, and all **7/7 CI jobs**: green;
 - dependency audit reported **no known vulnerabilities**; the project package itself is skipped because it is not published on PyPI.
 
-This checkpoint remains the historical audited merged implementation baseline. Capabilities added after it, including ToolError recovery, host-refreshed schema-drift adaptation, host-refreshed identity-drift adaptation, native OpenAI handoff-authority attenuation, native HITL approval-intent binding, calibrated semantic judging, deterministic retrieval assurance, and run-local side-effect idempotency assurance, are accepted only after their own exact-head CI, merge, and post-merge `main` verification; documentation does not retroactively relabel the older checkpoint.
+This checkpoint remains the historical audited merged implementation baseline. Capabilities added after it, including ToolError recovery, host-refreshed schema-drift adaptation, host-refreshed identity-drift adaptation, native OpenAI handoff-authority attenuation, native HITL approval-intent binding, calibrated semantic judging, deterministic retrieval assurance, run-local side-effect idempotency assurance, and typed resource authority, are accepted only after their own exact-head CI, merge, and post-merge `main` verification; documentation does not retroactively relabel the older checkpoint.
 
 ## Why these boundaries matter
 
 Agent evaluation is unusually vulnerable to false confidence because outputs can look persuasive while surrounding state, authority, evaluator preconditions, approval provenance, protocol discovery, authorization boundaries, identity-flow assumptions, or cross-domain correlation are wrong.
 
-The same discipline applies to this framework: documentation, badges, hashes, approval decisions, attack labels, protocol receipts, bridge receipts, HTTP statuses, OAuth responses, and traces are not substitutes for the exact control they describe.
+The same discipline applies to this framework: documentation, badges, hashes, approval decisions, attack labels, typed resource identities, protocol receipts, bridge receipts, HTTP statuses, OAuth responses, and traces are not substitutes for the exact control they describe.
 
 Capabilities move out of this document only after implementation, deterministic evidence, and documentation review make the stronger claim true.

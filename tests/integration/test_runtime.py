@@ -10,6 +10,11 @@ from agent_evals.contracts.models import (
     ScenarioKind,
     SubjectFingerprint,
 )
+from agent_evals.contracts.resource import (
+    ResourceIdentifier,
+    ResourceScope,
+    resource_identifier_payload,
+)
 from agent_evals.evidence.models import EvidenceEvent, EvidenceKind, TrialVerdict
 from agent_evals.runtime.evaluator import TrialRunner
 
@@ -37,7 +42,7 @@ def scenario() -> EvaluationScenario:
         authority=AuthorityPolicy(
             allowed_tools=frozenset({"refund"}),
             approval_required_tools=frozenset({"refund"}),
-            allowed_resource_prefixes=("tenant/7/",),
+            allowed_resource_scopes=(ResourceScope(domain="tenant", components=("7",)),),
         ),
         required_outcomes={"refund.status": "created"},
     )
@@ -61,7 +66,9 @@ async def test_runtime_pass_requires_policy_and_state_closure() -> None:
                     payload={
                         "tool": "refund",
                         "call_id": "refund-1",
-                        "resource": "tenant/7/refunds",
+                        "resource": resource_identifier_payload(
+                            ResourceIdentifier(domain="tenant", components=("7", "refunds"))
+                        ),
                     },
                 ),
             ),

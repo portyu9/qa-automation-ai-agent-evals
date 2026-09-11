@@ -6,6 +6,7 @@ from hypothesis.stateful import RuleBasedStateMachine, invariant, precondition, 
 
 from agent_evals.authority import HandoffPathState, advance_handoff
 from agent_evals.contracts.models import AuthorityPolicy, HandoffAuthorityGrant
+from agent_evals.contracts.resource import ResourceScope
 from agent_evals.evidence.models import EvidenceEvent, EvidenceKind
 
 _ROOT = "root-agent"
@@ -15,12 +16,16 @@ _REEXPANDED = "reexpanded-agent"
 _UNKNOWN = "unknown-agent"
 
 
+def scope(*components: str) -> ResourceScope:
+    return ResourceScope(domain="tenant", components=components)
+
+
 def _grant(
     source: str,
     target: str,
     *,
     tools: frozenset[str],
-    resources: tuple[str, ...],
+    resources: tuple[ResourceScope, ...],
     approvals: frozenset[str] = frozenset(),
     max_tool_calls: int,
     max_handoffs: int,
@@ -29,7 +34,7 @@ def _grant(
         source_agent=source,
         target_agent=target,
         allowed_tools=tools,
-        allowed_resource_prefixes=resources,
+        allowed_resource_scopes=resources,
         additional_approval_required_tools=approvals,
         max_tool_calls=max_tool_calls,
         max_handoffs=max_handoffs,
@@ -40,7 +45,7 @@ def _policy() -> AuthorityPolicy:
     return AuthorityPolicy(
         allowed_tools=frozenset({"read", "write", "refund"}),
         approval_required_tools=frozenset({"refund"}),
-        allowed_resource_prefixes=("tenant/7/",),
+        allowed_resource_scopes=(scope("7"),),
         max_tool_calls=8,
         max_handoffs=3,
         root_agent=_ROOT,
@@ -49,7 +54,7 @@ def _policy() -> AuthorityPolicy:
                 _ROOT,
                 _SPECIALIST,
                 tools=frozenset({"read", "write"}),
-                resources=("tenant/7/orders/",),
+                resources=(scope("7", "orders"),),
                 approvals=frozenset({"write"}),
                 max_tool_calls=4,
                 max_handoffs=2,
@@ -58,7 +63,7 @@ def _policy() -> AuthorityPolicy:
                 _SPECIALIST,
                 _WORKER,
                 tools=frozenset({"read"}),
-                resources=("tenant/7/orders/open/",),
+                resources=(scope("7", "orders", "open"),),
                 approvals=frozenset({"read"}),
                 max_tool_calls=2,
                 max_handoffs=1,
@@ -69,7 +74,7 @@ def _policy() -> AuthorityPolicy:
                 _SPECIALIST,
                 _REEXPANDED,
                 tools=frozenset({"read", "write", "refund"}),
-                resources=("tenant/7/",),
+                resources=(scope("7"),),
                 max_tool_calls=6,
                 max_handoffs=3,
             ),
@@ -212,7 +217,7 @@ class HandoffAuthorityStateMachine(RuleBasedStateMachine):
             assert self.state.transitions == ((_ROOT, _SPECIALIST),)
             assert self.state.authority.allowed_tools == frozenset({"read", "write"})
             assert self.state.authority.approval_required_tools == frozenset({"write"})
-            assert self.state.authority.allowed_resource_prefixes == ("tenant/7/orders/",)
+            assert self.state.authority.allowed_resource_scopes == (scope("7", "orders"),)
             assert self.state.authority.max_tool_calls == 4
             assert self.state.authority.max_handoffs == 2
         elif self.state.active_agent == _WORKER:
@@ -222,7 +227,7 @@ class HandoffAuthorityStateMachine(RuleBasedStateMachine):
             )
             assert self.state.authority.allowed_tools == frozenset({"read"})
             assert self.state.authority.approval_required_tools == frozenset({"read"})
-            assert self.state.authority.allowed_resource_prefixes == ("tenant/7/orders/open/",)
+            assert self.state.authority.allowed_resource_scopes == (scope("7", "orders", "open"),)
             assert self.state.authority.max_tool_calls == 2
             assert self.state.authority.max_handoffs == 1
         else:

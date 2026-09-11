@@ -4,24 +4,25 @@
 
 This page is the detailed inventory behind the root README's compact overview. It describes **what is executable, which component owns each assurance claim, and where evidence crosses trust boundaries**.
 
-The framework intentionally separates provider-neutral grading, OpenAI execution, MCP protocol behavior, authorization, adversarial delivery, semantic evaluation, persistence, replay, statistics, and release policy. A successful observation in one domain never silently upgrades another domain.
+The framework intentionally separates provider-neutral grading, typed resource authority, OpenAI execution, MCP protocol behavior, authorization, adversarial delivery, semantic evaluation, persistence, replay, statistics, and release policy. A successful observation in one domain never silently upgrades another domain.
 
 ## Executable lanes
 
 ```mermaid
 flowchart LR
     accTitle: Executable framework lanes and authority boundaries
-    accDescr: The provider-neutral core owns contracts, evidence, deterministic grading, replay, statistics, and release policy. OpenAI and MCP integrations supply bounded execution and protocol observations. Specialized bridges establish delivery relations before evidence is accepted by the core.
+    accDescr: The provider-neutral core owns contracts, typed resource authority, evidence, deterministic grading, replay, statistics, and release policy. OpenAI and MCP integrations supply bounded execution and protocol observations. Specialized bridges establish delivery relations before evidence is accepted by the core.
 
     subgraph CORE[Provider-neutral assurance core]
       direction TB
       C[Subject + scenario contracts]
+      RI[Typed resource algebra]
       E[Evidence + receipts]
       O[Deterministic oracles]
       P[Persistence + replay]
       S[Statistics + reports]
       G[Release gate]
-      C --> E --> O --> P --> S --> G
+      C --> RI --> E --> O --> P --> S --> G
     end
 
     subgraph OPENAI[OpenAI execution boundary]
@@ -58,7 +59,7 @@ flowchart LR
     classDef boundary fill:#ffebe9,stroke:#cf222e,color:#24292f,stroke-width:2px,stroke-dasharray:5 3
     classDef terminal fill:#dafbe1,stroke:#1a7f37,color:#24292f,stroke-width:3px
 
-    class C,O,P,S authority
+    class C,RI,O,P,S authority
     class E evidence
     class G terminal
     class OA,H,A,I,R,J advisory
@@ -79,10 +80,11 @@ The deterministic core requires no model credentials. It owns the contracts and 
 | Surface | Implemented behavior |
 |---|---|
 | **Subject identity** | content-addressed identity over provider/model configuration, instructions, tools, policy, memory policy, adapter identity, and application revision |
-| **Scenario identity** | objective, initial state, authority, required/forbidden outcomes, classification, tags, and optional specialized assurance contracts participate in scenario identity |
+| **Scenario identity** | objective, initial state, typed resource authority, required/forbidden outcomes, classification, tags, and optional specialized assurance contracts participate in scenario identity |
+| **Typed resource authority** | versioned `ResourceIdentifier` / `ResourceScope` contracts, exact domain separation, structural tuple containment, canonical evidence parsing, no lexical `startswith` fallback, and no legacy-prefix compatibility converter |
 | **Evidence** | immutable ordered events plus a domain-separated evidence root |
-| **Delivery preconditions** | attack, retrieval, approval, side-effect, and protocol bridge relations are reverified before grading when the scenario requires them |
-| **Policy oracle** | fail-closed tool/resource authority, approval semantics, handoff authority, budgets, chronology, and explicit policy violations |
+| **Delivery preconditions** | attack, typed-resource identity, retrieval, approval, side-effect, and protocol bridge relations are reverified before grading when required |
+| **Policy oracle** | fail-closed tool/typed-resource authority, approval semantics, handoff authority, budgets, chronology, and explicit policy violations |
 | **Side-effect oracle** | optional critical verification that repeated logical attempts did not create impermissible duplicate physical effects |
 | **Outcome oracle** | independently validates required and forbidden terminal state |
 | **Semantic precedence** | semantic judging is invoked only after deterministic success and can only preserve or narrow that result |
@@ -90,8 +92,20 @@ The deterministic core requires no model credentials. It owns the contracts and 
 | **Replay** | historical regrading of recorded evidence without pretending to rerun subject side effects or approval interruptions |
 | **Reliability** | repeated-trial statistics and differential comparison over resolved outcomes while unresolved trials remain explicit |
 | **Release gate** | non-compensatory critical-safety policy plus explicit acceptance, rejection, and inconclusive semantics |
-| **Metamorphic assurance** | state-projection invariance and authority-monotonicity relations without brittle golden prose |
+| **Metamorphic assurance** | state-projection invariance and structural authority-monotonicity relations without brittle golden prose |
 | **Failure minimization** | bounded deterministic counterexample reduction requiring failure reproduction |
+
+### Typed resource authority
+
+The v1 resource surface is deliberately narrow. Root policy, delegated grants, effective handoff authority, policy evidence, metamorphic authority checks, and approval-intent v2 all use the same evaluator-owned typed algebra.
+
+A resource identifier has exact `schema_version`, `kind`, `domain`, and ordered `components`. A scope is contained only when schema/kind/domain match and its component tuple is a structural prefix of the candidate tuple. This makes `tenant:("1",)` distinct from `tenant:("10",)` and from `project:("1",)`.
+
+Resource-bearing `TOOL_REQUEST` and `APPROVAL_REQUEST` evidence must carry exact canonical typed JSON. Missing identity under an active resource scope, a raw legacy string, or malformed/non-canonical typed material is evaluator uncertainty and becomes `EVALUATION_ERROR / BLOCKED` before deterministic grading. A canonical typed resource outside the active scope is instead a resolved authorization fact and can produce critical deterministic `FAIL`.
+
+The framework does not infer resource authority from external locator text. URLs, filesystem/Windows paths, cloud object keys, database identifiers, MCP URIs, host aliases, percent-encoded names, and provider-specific locators require an explicitly defined resource kind or an explicit adapter mapping whose semantics are owned by the evaluator. Typed resource identity is not authentication, IAM, a capability token, or target-side enforcement attestation.
+
+See the repository-level [Typed Resource Authority](../RESOURCE_AUTHORITY.md), plus [Security](SECURITY.md) and [Limitations](LIMITATIONS.md).
 
 ## OpenAI Agents SDK tier
 
@@ -101,9 +115,11 @@ The OpenAI tier uses the real Agents SDK surface while keeping CI provider-indep
 
 `OpenAIAgentsAdapter` covers scoped local/SDK adversarial boundaries such as user input, local tool output, local tool metadata, session history, inline resources, native handoff context, and targeted runtime context. These are deliberately local assurance boundaries rather than claims about arbitrary hosted interception.
 
+When a tool invocation needs evaluator resource identity, a configured resolver must explicitly return an exact `ResourceIdentifier`; a raw string or guessed external locator cannot acquire authority.
+
 ### Native handoff authority
 
-Handoff evidence records **what happened**; scenario-owned grants determine **what was authorized**. The deterministic policy oracle verifies that authority never expands across an accepted path.
+Handoff evidence records **what happened**; scenario-owned grants determine **what was authorized**. The deterministic policy oracle verifies that authority never expands across an accepted path, including structural `ResourceScope` containment.
 
 ```mermaid
 flowchart LR
@@ -115,7 +131,7 @@ flowchart LR
     G[Scenario-owned directed grant]
     P[Accepted authority path]
     T[Target agent]
-    A[Effective tools + resources + approvals + budgets]
+    A[Effective tools + typed resources + approvals + budgets]
     V[Policy oracle]
 
     S --> O
@@ -136,7 +152,7 @@ See [Handoff Authority](HANDOFF_AUTHORITY.md).
 
 ### Native HITL approval intent
 
-The approval adapter binds one evaluator-owned approve/reject decision to one exact pending invocation, canonical arguments, resource, accepted authority context, and continuation. The resulting receipt is evidence about that relation; it is not proof of human identity, enterprise workflow attestation, or production IAM.
+The approval adapter binds one evaluator-owned approve/reject decision to one exact pending invocation, canonical arguments, exact typed resource identity, accepted authority context, and continuation. `ApprovalIntentReceipt` v2 uses a separate domain from historical v1 string-resource receipt material. The receipt is evidence about that relation; it is not proof of human identity, enterprise workflow attestation, or production IAM.
 
 See [Approval Intent](APPROVAL_INTENT.md).
 
@@ -230,7 +246,7 @@ flowchart TB
 
     E[Persisted or fresh trial evidence]
     I[Identity + hash + chronology verification]
-    P[Required receipt / delivery verification]
+    P[Required typed-resource / receipt / delivery verification]
     D[Deterministic oracles]
     J[Optional semantic judgment]
     T[Terminal trial verdict]
@@ -287,6 +303,7 @@ The executable surface does not itself establish:
 - hosted or arbitrary remote MCP correctness;
 - production IAM, human identity, or enterprise approval attestation;
 - target-side attestation or cryptographic publisher identity;
+- external resource canonicalization/alias equivalence or target-side authorization merely because a typed evaluator identifier exists;
 - distributed exactly-once execution or crash/concurrency safety;
 - production retrieval correctness;
 - generic cache coherence, arbitrary schema migration, or universal identity migration;

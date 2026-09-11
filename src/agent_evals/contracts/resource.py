@@ -14,6 +14,7 @@ _RESOURCE_SCHEMA: Literal["agent-evals/resource/v1"] = "agent-evals/resource/v1"
 _DOMAIN_RE = re.compile(r"^[a-z][a-z0-9_-]{0,63}$")
 _MAX_COMPONENTS = 64
 _MAX_COMPONENT_LENGTH = 256
+_RESOURCE_FIELDS = {"schema_version", "kind", "domain", "components"}
 
 
 class ResourceKind(StrEnum):
@@ -123,6 +124,41 @@ class ResourceScope(BaseModel):
     @property
     def canonical_json(self) -> str:
         return _canonical_json(self.model_dump(mode="python"))
+
+
+def resource_identifier_payload(resource: ResourceIdentifier) -> dict[str, Any]:
+    """Return the exact JSON-compatible material permitted in evidence payloads."""
+    if type(resource) is not ResourceIdentifier:
+        raise TypeError("resource evidence requires an exact ResourceIdentifier")
+    return resource.model_dump(mode="json")
+
+
+def parse_resource_identifier_payload(value: object) -> ResourceIdentifier:
+    """Parse only canonical v1 JSON material; never guess external locator semantics.
+
+    Evidence is intentionally stricter than normal Pydantic input coercion. A model instance,
+    tuple-valued component list, omitted default field, legacy string, or other merely equivalent
+    Python representation is not canonical evidence and therefore fails closed.
+    """
+    if type(value) is not dict:
+        raise ValueError("resource evidence must be a canonical typed JSON object")
+    material = value
+    if set(material) != _RESOURCE_FIELDS:
+        raise ValueError("resource evidence must contain the exact typed resource fields")
+    if type(material.get("schema_version")) is not str:
+        raise ValueError("resource evidence schema_version must be a string")
+    if type(material.get("kind")) is not str:
+        raise ValueError("resource evidence kind must be a string")
+    if type(material.get("domain")) is not str:
+        raise ValueError("resource evidence domain must be a string")
+    components = material.get("components")
+    if type(components) is not list or any(type(component) is not str for component in components):
+        raise ValueError("resource evidence components must be a JSON string array")
+
+    resource = ResourceIdentifier.model_validate(material)
+    if material != resource_identifier_payload(resource):
+        raise ValueError("resource evidence is not canonical typed resource material")
+    return resource
 
 
 def _validate_components(value: tuple[str, ...]) -> tuple[str, ...]:

@@ -1,17 +1,26 @@
 from __future__ import annotations
 
 from agent_evals.contracts.models import AuthorityPolicy, HandoffAuthorityGrant
+from agent_evals.contracts.resource import ResourceScope
 from agent_evals.metamorphic.relations import MetamorphicDecision, authority_does_not_expand
+
+
+def scope(*components: str, domain: str = "tenant") -> ResourceScope:
+    return ResourceScope(domain=domain, components=components)
+
+
+_DEFAULT_GRANT_SCOPES = (scope("7", "orders"),)
 
 
 def _root_policy(
     *grants: HandoffAuthorityGrant,
     root_agent: str | None = "router",
+    root_scopes: tuple[ResourceScope, ...] = (ResourceScope(domain="tenant", components=("7",)),),
 ) -> AuthorityPolicy:
     return AuthorityPolicy(
         allowed_tools=frozenset({"read", "write"}),
         approval_required_tools=frozenset({"write"}),
-        allowed_resource_prefixes=("tenant/7/",),
+        allowed_resource_scopes=root_scopes,
         max_turns=20,
         max_tool_calls=20,
         max_handoffs=5,
@@ -25,7 +34,7 @@ def _grant(
     source: str = "router",
     target: str = "specialist",
     tools: frozenset[str] = frozenset({"read"}),
-    resources: tuple[str, ...] = ("tenant/7/orders/",),
+    resources: tuple[ResourceScope, ...] = _DEFAULT_GRANT_SCOPES,
     approvals: frozenset[str] = frozenset(),
     max_tool_calls: int = 8,
     max_handoffs: int = 2,
@@ -34,7 +43,7 @@ def _grant(
         source_agent=source,
         target_agent=target,
         allowed_tools=tools,
-        allowed_resource_prefixes=resources,
+        allowed_resource_scopes=resources,
         additional_approval_required_tools=approvals,
         max_tool_calls=max_tool_calls,
         max_handoffs=max_handoffs,
@@ -87,14 +96,14 @@ def test_authority_monotonicity_rejects_delegated_approval_weakening() -> None:
 def test_authority_monotonicity_rejects_delegated_resource_and_budget_expansion() -> None:
     baseline = _root_policy(
         _grant(
-            resources=("tenant/7/orders/",),
+            resources=(scope("7", "orders"),),
             max_tool_calls=4,
             max_handoffs=1,
         )
     )
     transformed = _root_policy(
         _grant(
-            resources=("tenant/7/",),
+            resources=(scope("7"),),
             max_tool_calls=8,
             max_handoffs=2,
         )
@@ -108,11 +117,22 @@ def test_authority_monotonicity_rejects_delegated_resource_and_budget_expansion(
     assert any("delegated handoff budget expanded" in reason for reason in result.reasons)
 
 
+def test_authority_monotonicity_rejects_delegated_component_prefix_collision() -> None:
+    whole_tenant = (scope(),)
+    baseline = _root_policy(_grant(resources=(scope("1"),)), root_scopes=whole_tenant)
+    transformed = _root_policy(_grant(resources=(scope("10"),)), root_scopes=whole_tenant)
+
+    result = authority_does_not_expand(baseline, transformed)
+
+    assert result.decision is MetamorphicDecision.VIOLATED
+    assert any("delegated resource scope broadened" in reason for reason in result.reasons)
+
+
 def test_authority_monotonicity_accepts_path_local_delegation_narrowing() -> None:
     baseline = _root_policy(
         _grant(
             tools=frozenset({"read", "write"}),
-            resources=("tenant/7/",),
+            resources=(scope("7"),),
             approvals=frozenset({"write"}),
             max_tool_calls=12,
             max_handoffs=3,
@@ -121,7 +141,7 @@ def test_authority_monotonicity_accepts_path_local_delegation_narrowing() -> Non
     transformed = _root_policy(
         _grant(
             tools=frozenset({"read"}),
-            resources=("tenant/7/orders/",),
+            resources=(scope("7", "orders"),),
             max_tool_calls=4,
             max_handoffs=1,
         )
@@ -133,7 +153,9 @@ def test_authority_monotonicity_accepts_path_local_delegation_narrowing() -> Non
     assert result.reasons == ()
 
 
-def test_authority_monotonicity_accepts_graph_added_to_legacy_root_as_attenuation() -> None:
+def test_authority_monotonicity_accepts_graph_added_to_single_authority_root_as_attenuation() -> (
+    None
+):
     baseline = _root_policy(root_agent=None)
     transformed = _root_policy(_grant())
 

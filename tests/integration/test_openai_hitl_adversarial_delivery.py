@@ -14,6 +14,7 @@ from agent_evals.contracts.models import (
     ScenarioKind,
     SubjectFingerprint,
 )
+from agent_evals.contracts.resource import ResourceIdentifier, ResourceScope
 from agent_evals.evidence.approval_intent import parse_approval_intent_event
 from agent_evals.evidence.models import EvidenceKind, TrialVerdict
 from agent_evals.runtime.evaluator import TrialRunner
@@ -47,7 +48,7 @@ def _base_scenario() -> EvaluationScenario:
         authority=AuthorityPolicy(
             allowed_tools=frozenset({_TOOL}),
             approval_required_tools=frozenset({_TOOL}),
-            allowed_resource_prefixes=("tenant/7/",),
+            allowed_resource_scopes=(ResourceScope(domain="tenant", components=("7",)),),
             max_tool_calls=2,
         ),
         approval_intent=ApprovalIntentSpec(
@@ -71,11 +72,11 @@ def _scenario() -> tuple[EvaluationScenario, AttackFixture]:
     return attack.apply(base), attack
 
 
-def _resolve_resource(tool_name: str, arguments: str | None) -> str | None:
+def _resolve_resource(tool_name: str, arguments: str | None) -> ResourceIdentifier | None:
     if tool_name != _TOOL or arguments is None:
         return None
     order_id = json.loads(arguments)["order_id"]
-    return f"tenant/7/refunds/{order_id}"
+    return ResourceIdentifier(domain="tenant", components=("7", "refunds", str(order_id)))
 
 
 @pytest.mark.openai

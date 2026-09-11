@@ -9,6 +9,7 @@ from agent_evals.contracts.models import (
     ScenarioKind,
     SubjectFingerprint,
 )
+from agent_evals.contracts.resource import ResourceIdentifier, ResourceScope
 from agent_evals.contracts.semantic import SemanticCriterionSpec, SemanticRubricSpec
 
 
@@ -76,7 +77,9 @@ def test_subject_identity_rejects_non_string_mapping_keys_in_behavior_material()
         )
 
 
-def test_scenario_identity_is_independent_of_set_and_prefix_input_order() -> None:
+def test_scenario_identity_is_independent_of_set_and_scope_input_order() -> None:
+    scope_7 = ResourceScope(domain="tenant", components=("7",))
+    scope_8 = ResourceScope(domain="tenant", components=("8",))
     first = EvaluationScenario(
         scenario_id="identity.case",
         revision="1",
@@ -84,7 +87,7 @@ def test_scenario_identity_is_independent_of_set_and_prefix_input_order() -> Non
         objective="Check identity",
         authority=AuthorityPolicy(
             allowed_tools=frozenset({"b", "a"}),
-            allowed_resource_prefixes=("tenant/8/", "tenant/7/"),
+            allowed_resource_scopes=(scope_8, scope_7),
         ),
         tags=frozenset({"z", "a"}),
     )
@@ -95,7 +98,7 @@ def test_scenario_identity_is_independent_of_set_and_prefix_input_order() -> Non
         objective="Check identity",
         authority=AuthorityPolicy(
             allowed_tools=frozenset({"a", "b"}),
-            allowed_resource_prefixes=("tenant/7/", "tenant/8/"),
+            allowed_resource_scopes=(scope_7, scope_8),
         ),
         tags=frozenset({"a", "z"}),
     )
@@ -132,17 +135,21 @@ def test_scenario_identity_binds_optional_semantic_rubric_material() -> None:
 def test_authority_policy_is_fail_closed() -> None:
     policy = AuthorityPolicy(
         allowed_tools=frozenset({"lookup"}),
-        allowed_resource_prefixes=("tenant/7/",),
+        allowed_resource_scopes=(ResourceScope(domain="tenant", components=("7",)),),
     )
     assert policy.authorizes_tool("lookup")
     assert not policy.authorizes_tool("delete")
-    assert policy.authorizes_resource("tenant/7/orders")
-    assert not policy.authorizes_resource("tenant/8/orders")
+    assert policy.authorizes_resource(
+        ResourceIdentifier(domain="tenant", components=("7", "orders"))
+    )
+    assert not policy.authorizes_resource(
+        ResourceIdentifier(domain="tenant", components=("8", "orders"))
+    )
 
 
-def test_empty_resource_prefix_is_rejected_instead_of_authorizing_everything() -> None:
-    with pytest.raises(ValidationError):
-        AuthorityPolicy(allowed_resource_prefixes=("",))
+def test_legacy_resource_prefix_configuration_is_rejected() -> None:
+    with pytest.raises(ValidationError, match="allowed_resource_prefixes"):
+        AuthorityPolicy.model_validate({"allowed_resource_prefixes": ("tenant/7/",)})
 
 
 def test_approval_required_tool_must_be_allowed() -> None:

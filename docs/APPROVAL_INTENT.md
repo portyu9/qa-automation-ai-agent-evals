@@ -9,7 +9,7 @@ This repository therefore keeps two approval contracts deliberately distinct:
 - legacy `APPROVAL` evidence preserves the existing call-scoped and persistent tool-scoped policy semantics;
 - `ApprovalIntentSpec` + `APPROVAL_DECISION` is a stronger scenario-bound contract for one exact native OpenAI Agents SDK approval interruption.
 
-The stronger contract is opt-in. It does not silently change legacy scenarios.
+The stronger contract is opt-in. It does not silently change legacy approval semantics.
 
 ## Assurance relation
 
@@ -18,7 +18,7 @@ For an approval decision, the executable relation is:
 ```mermaid
 flowchart TB
     accTitle: Native HITL approval intent lifecycle
-    accDescr: A scenario-owned approval intent targets one exact pending native invocation. The evaluator records the approval request with call, argument, resource, and accepted authority-path identity, binds an approve or reject decision in a typed receipt, resumes the same run state, verifies the exact continuation, then permits deterministic grading.
+    accDescr: A scenario-owned approval intent targets one exact pending native invocation. The evaluator records the approval request with call, argument, typed resource, and accepted authority-path identity, binds an approve or reject decision in a typed receipt, resumes the same run state, verifies the exact continuation, then permits deterministic grading.
 
     S[Scenario-bound ApprovalIntentSpec]
     I[Native ToolApprovalItem interruption]
@@ -60,7 +60,7 @@ tool     = exact protected tool identity
 decision = approve | reject
 ```
 
-The decision is scenario material, so changing `APPROVE` to `REJECT` changes `EvaluationScenario.identity`.
+The decision is scenario material, so changing `APPROVE` to `REJECT` changes `EvaluationScenario.identity`. Resource authority is also behavior-bearing scenario material: versioned `ResourceScope` schema/kind/domain/components participate in the scenario identity.
 
 Configuration fails closed unless:
 
@@ -87,26 +87,28 @@ A pending approval must never be counted as a completed execution merely because
 
 ## Integrity-bound receipt
 
-`ApprovalIntentReceipt` binds:
+`ApprovalIntentReceipt` v2 binds:
 
-- `receipt_schema` — exact receipt contract identity;
+- `receipt_schema` — exact `agent-evals/approval-intent/v2` receipt contract identity;
 - `scenario_identity` — the complete scenario identity;
 - `decision` — `approve` or `reject`;
 - `agent` — exact run-local generating-agent identity;
 - `tool` — exact tool identity;
 - `call_id` — exact stable SDK call identity;
 - `arguments_sha256` — SHA-256 of canonical finite JSON object arguments;
-- `resource` — exact normalized resource identity, or `null` when no resource scope exists;
+- `resource` — exact typed `ResourceIdentifier`, or `null` when no resource identity applies;
 - `authority_epoch` — number of **accepted** authority transitions preceding the request;
 - `authority_path_sha256` — domain-separated hash of the exact accepted handoff path;
 - `approval_request_sequence` — exact evidence sequence of the bound request;
 - `root_sha256` — domain-separated semantic root over the receipt material.
 
+The v2 receipt uses a distinct `agent-evals/approval-intent/v2` domain-separated root. Historical v1 string-resource receipt material is not silently reinterpreted as v2 typed-resource material.
+
 Raw arguments are deliberately absent from the receipt. The argument digest binds semantic content without duplicating possibly sensitive request material.
 
 The canonical persisted evidence role for a stronger decision is `evaluator:openai-hitl-approval-intent`. That source remains required when the decision relation is verified, but the source string is **not** a live capability token. During fresh execution, `TrialRunner` accepts incoming `APPROVAL_DECISION` evidence only from the exact built-in `OpenAIAgentsHITLApprovalAdapter`, which is the framework path that observes the native `ToolApprovalItem`, applies the scenario-owned decision, and resumes the same SDK `RunState`. An ordinary live adapter—or a subclass that merely inherits the HITL class—cannot create framework-owned approval authority by copying the canonical source label and constructing a self-valid receipt.
 
-Historical replay is deliberately different. The exact built-in `EvidenceReplayAdapter` may re-emit an already-finalized `APPROVAL_DECISION`, after which the approval verifier rechecks the canonical decision source, receipt root, request binding, authority path, lifecycle source roles, cardinality, and continuation chronology. Replay therefore preserves a recorded historical authorization relation without pretending to create a new live decision.
+Historical replay is deliberately different. The exact built-in `EvidenceReplayAdapter` may re-emit an already-finalized `APPROVAL_DECISION`, after which the approval verifier rechecks the canonical decision source, receipt root, request binding, typed resource identity, authority path, lifecycle source roles, cardinality, and continuation chronology. Replay therefore preserves a recorded historical authorization relation without pretending to create a new live decision.
 
 The source string is an evidence-role/provenance label, not cryptographic authentication. The receipt root is likewise an integrity relation, not a signature, MAC, authenticated human identity, or non-repudiation proof. Exact live-adapter separation is framework execution-path ownership, not hostile same-process Python isolation or remote attestation.
 
@@ -139,6 +141,25 @@ The parser fails closed on:
 
 This prevents approval identity from depending on parser-specific duplicate-key behavior or non-standard numeric representations.
 
+## Typed resource identity
+
+Resource identity is not a normalized free-form string. Resource-bearing `APPROVAL_REQUEST` and resumed `TOOL_REQUEST` evidence use the exact canonical JSON form of `agent-evals/resource/v1` `ResourceIdentifier` material:
+
+```json
+{
+  "schema_version": "agent-evals/resource/v1",
+  "kind": "hierarchical",
+  "domain": "tenant",
+  "components": ["7", "refunds", "42"]
+}
+```
+
+The evidence boundary requires the exact four fields, exact supported schema/kind, a canonical domain, and a JSON string array of already-canonical components. Raw legacy strings, omitted default fields, extra fields, tuple-valued components, model instances, unsupported versions/kinds, or otherwise merely coercible Python representations do not become approval authority.
+
+When the active authority path is resource-scoped, the OpenAI adapter must be configured with a resource resolver that explicitly maps the observed provider invocation to an exact `ResourceIdentifier`. The framework does not infer resource semantics from URLs, filesystem paths, object keys, database identifiers, MCP URIs, host aliases, percent-encoded names, or arbitrary tool arguments.
+
+If exact resource identity is missing or malformed, pre-grading closure is unresolved and the trial is `BLOCKED`. If canonical typed evidence establishes a resource that is outside the active scope, that is a resolved authorization fact and `PolicyOracle` can produce a critical deterministic `FAIL`.
+
 ## Delegated-authority binding
 
 Approval epoch is **not** a raw count of handoff-shaped events.
@@ -148,7 +169,7 @@ Approval epoch is **not** a raw count of handoff-shaped events.
 1. contains stable source and target identities;
 2. originates from the currently active agent;
 3. matches one exact scenario-owned directed grant; and
-4. does not re-expand authority that was already lost on the active path.
+4. does not re-expand authority that was already lost on the active path, including typed resource scope.
 
 Malformed, unauthorized, wrong-source, or re-expanding handoffs do not advance the active agent, epoch, or path hash.
 
@@ -159,7 +180,7 @@ authority_epoch
 + authority_path_sha256
 ```
 
-Epoch alone is insufficient because two different valid paths can reach the same agent at the same depth. Binding the path hash prevents an approval observed on one branch from being replayed onto a sibling branch that happens to have the same agent, tool, call ID, arguments, resource, and epoch.
+Epoch alone is insufficient because two different valid paths can reach the same agent at the same depth. Binding the path hash prevents an approval observed on one branch from being replayed onto a sibling branch that happens to have the same agent, tool, call ID, arguments, typed resource, and epoch.
 
 ## Approval continuation
 
@@ -180,7 +201,7 @@ The resumed request must match the receipt's:
 - tool;
 - call ID;
 - canonical argument digest;
-- resource;
+- exact typed resource identity;
 - accepted authority epoch;
 - accepted authority path.
 
@@ -226,7 +247,7 @@ explicit stronger rejections
 
 This prevents a broad or previously issued legacy approval from silently overriding an exact HITL rejection or satisfying a missing native approval decision.
 
-Outside stronger HITL scenarios, legacy call-scoped and persistent approval behavior remains unchanged.
+Outside stronger HITL scenarios, legacy call-scoped and persistent approval behavior remains unchanged. That compatibility does not create a legacy lexical resource-authority mode: typed resource scopes and canonical typed resource evidence apply consistently.
 
 ## Approval request is policy evidence
 
@@ -237,7 +258,7 @@ Under the stronger contract, the pending approval request itself must be compati
 - comes from the active agent when handoff authority is enabled;
 - targets an authorized tool;
 - targets a tool that is approval-required on the active path;
-- carries an authorized resource when resource scope exists;
+- carries a canonical typed resource authorized by an active `ResourceScope` when resource scope exists;
 - does not invent a resource when no resource scope is configured.
 
 An approval workflow cannot turn an unauthorized pending action into an authorized one merely by attaching an approval decision.
@@ -254,7 +275,8 @@ The deterministic integration tests exercise real SDK mechanics with `agents.tes
 - approved execution occurs exactly once;
 - rejected execution does not invoke the protected implementation;
 - a native handoff can reach a specialist approval interruption and resume the same specialist call under delegated authority;
-- resource-scoped approval blocks when exact resource provenance cannot be resolved.
+- resource-scoped approval blocks when exact typed resource provenance cannot be resolved;
+- a resolver must return an exact `ResourceIdentifier`, not a legacy string.
 
 The adapter inherits the native handoff provenance contract: SDK agent names and event source labels are run-local evidence roles, not cryptographic principals or provider attestations.
 
@@ -275,6 +297,7 @@ Examples include:
 - decision without its referenced prior approval request;
 - duplicate approval requests sharing the receipt-bound call ID;
 - unrelated pre-decision tool request reusing the receipt-bound call ID;
+- missing, legacy-string, malformed, or non-canonical typed resource identity when resource identity is required;
 - changed approved arguments or resource;
 - authority epoch/path mismatch;
 - duplicate resumed requests;
@@ -282,7 +305,7 @@ Examples include:
 - result-owner disagreement;
 - rejection continuation without an explicit rejection marker.
 
-These mean the evaluator cannot establish the evidence relation required for a verdict.
+These mean the evaluator cannot establish the evidence relation required for a verdict. Resource-identity uncertainty is deliberately not flattened into a subject `FAIL`.
 
 ### Critical deterministic `FAIL`
 
@@ -291,7 +314,7 @@ Examples include:
 - the exact protected invocation executes before its stronger approval decision;
 - a verified rejected invocation reaches executable `TOOL_REQUEST` evidence;
 - the stronger target executes with no matching stronger decision;
-- an approval request itself is unauthorized under active authority;
+- an approval request itself is unauthorized under active authority, including a canonical typed resource outside the active scope;
 - legacy approval attempts to substitute for the stronger requirement;
 - an unauthorized handoff or delegated action occurs with sufficient provenance to grade it.
 
@@ -308,7 +331,7 @@ request → decision → continuation
 + scenario identity
 + unique receipt-bound approval-request relation
 + unambiguous receipt-bound tool-request identity
-+ call/argument/resource identity
++ call/argument/typed-resource identity
 + accepted authority epoch/path
 + recognized evaluator decision source
 + recognized native PASS-capable lifecycle source roles
@@ -317,14 +340,14 @@ request → decision → continuation
 
 For successful native lifecycles, the recognized source roles are part of that relation: `openai-agents:new_items` for the bound pending request, `openai-agents:approved-execution` plus `openai-agents:new_items` for approved execution/result, and `openai-agents:approval-rejection-result` for the clean rejection result.
 
-A structurally valid persisted receipt under an unrecognized source, a PASS-capable lifecycle event under a foreign source, a duplicated approval request sharing the receipt-bound call ID, an unrelated pre-decision tool request colliding with that call ID, or a receipt that no longer satisfies the remaining relations blocks evaluation before deterministic grading. Exact protected execution before approval remains a resolved policy failure instead of being reclassified as replay ambiguity.
+A structurally valid persisted receipt under an unrecognized source, a PASS-capable lifecycle event under a foreign source, malformed/non-canonical typed resource evidence, a duplicated approval request sharing the receipt-bound call ID, an unrelated pre-decision tool request colliding with that call ID, or a receipt that no longer satisfies the remaining relations blocks evaluation before deterministic grading. Exact protected execution before approval remains a resolved policy failure instead of being reclassified as replay ambiguity.
 
 ## What this proves
 
 Inside the controlled pinned-SDK harness, the implemented path can prove that:
 
 1. the SDK surfaced one exact native approval interruption;
-2. the evaluator bound a scenario-owned approve/reject decision to the observed generating agent, tool, call ID, canonical arguments, resource, and accepted delegated-authority path;
+2. the evaluator bound a scenario-owned approve/reject decision to the observed generating agent, tool, call ID, canonical arguments, exact typed resource identity, and accepted delegated-authority path;
 3. the same SDK `RunState` was resumed with that decision;
 4. on approval, the same bound invocation reached executable request/result evidence exactly once;
 5. on rejection, continuation completed without protected execution, unless executable evidence instead proves a rejection bypass;
@@ -344,8 +367,11 @@ This path does **not** establish:
 - organization/user identity or tenant membership;
 - arbitrary hosted-tool or MCP approval behavior;
 - authorization of an external target merely because evaluator-owned evidence says an invocation was approved;
+- canonical semantics for URLs, filesystem paths, Windows paths, cloud object keys, database identifiers, MCP URIs, host aliases, percent-encoded names, or provider-specific resource locators;
 - general human-in-the-loop safety for systems outside the exact repository-governed SDK boundary.
 
-The claim is intentionally narrower: **one evaluator-owned decision is integrity-bound to one exact native SDK approval interruption and its exact observed continuation inside the controlled deterministic harness.**
+The typed resource mapping is an evaluator contract. It does not prove that the target service shares the evaluator's namespace, aliasing, canonicalization, authentication, or authorization semantics.
+
+The claim is intentionally narrower: **one evaluator-owned decision is integrity-bound to one exact native SDK approval interruption, exact typed resource identity, and its exact observed continuation inside the controlled deterministic harness.**
 
 [← Documentation hub](README.md)

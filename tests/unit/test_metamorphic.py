@@ -3,6 +3,7 @@ from __future__ import annotations
 import pytest
 
 from agent_evals.contracts.models import AuthorityPolicy
+from agent_evals.contracts.resource import ResourceScope
 from agent_evals.evidence.models import TrialEvidence, TrialVerdict
 from agent_evals.metamorphic.relations import (
     MetamorphicDecision,
@@ -13,6 +14,10 @@ from agent_evals.runtime.evaluator import EvaluatedTrial
 
 IDENTITY = "c" * 64
 SCENARIO = "d" * 64
+
+
+def scope(*components: str, domain: str = "tenant") -> ResourceScope:
+    return ResourceScope(domain=domain, components=components)
 
 
 def trial(
@@ -76,7 +81,7 @@ def test_authority_monotonicity_accepts_narrower_policy() -> None:
     baseline = AuthorityPolicy(
         allowed_tools=frozenset({"read", "write"}),
         approval_required_tools=frozenset({"write"}),
-        allowed_resource_prefixes=("tenant/7/",),
+        allowed_resource_scopes=(scope("7"),),
         max_turns=20,
         max_tool_calls=20,
         max_handoffs=5,
@@ -84,7 +89,7 @@ def test_authority_monotonicity_accepts_narrower_policy() -> None:
     restricted = AuthorityPolicy(
         allowed_tools=frozenset({"read", "write"}),
         approval_required_tools=frozenset({"write"}),
-        allowed_resource_prefixes=("tenant/7/orders/",),
+        allowed_resource_scopes=(scope("7", "orders"),),
         max_turns=10,
         max_tool_calls=10,
         max_handoffs=2,
@@ -96,12 +101,12 @@ def test_authority_monotonicity_detects_permission_laundering() -> None:
     baseline = AuthorityPolicy(
         allowed_tools=frozenset({"read", "write"}),
         approval_required_tools=frozenset({"write"}),
-        allowed_resource_prefixes=("tenant/7/",),
+        allowed_resource_scopes=(scope("7"),),
         max_turns=10,
     )
     transformed = AuthorityPolicy(
         allowed_tools=frozenset({"read", "write", "export"}),
-        allowed_resource_prefixes=("tenant/",),
+        allowed_resource_scopes=(scope(),),
         max_turns=20,
     )
     result = authority_does_not_expand(baseline, transformed)
@@ -110,3 +115,23 @@ def test_authority_monotonicity_detects_permission_laundering() -> None:
     assert any("approval requirement removed" in reason for reason in result.reasons)
     assert any("resource scope broadened" in reason for reason in result.reasons)
     assert any("turn budget expanded" in reason for reason in result.reasons)
+
+
+def test_authority_monotonicity_rejects_component_prefix_collision() -> None:
+    baseline = AuthorityPolicy(allowed_resource_scopes=(scope("1"),))
+    transformed = AuthorityPolicy(allowed_resource_scopes=(scope("10"),))
+
+    result = authority_does_not_expand(baseline, transformed)
+
+    assert result.decision is MetamorphicDecision.VIOLATED
+    assert any("resource scope broadened" in reason for reason in result.reasons)
+
+
+def test_authority_monotonicity_rejects_cross_domain_scope() -> None:
+    baseline = AuthorityPolicy(allowed_resource_scopes=(scope("7"),))
+    transformed = AuthorityPolicy(allowed_resource_scopes=(scope("7", domain="project"),))
+
+    result = authority_does_not_expand(baseline, transformed)
+
+    assert result.decision is MetamorphicDecision.VIOLATED
+    assert any("resource scope broadened" in reason for reason in result.reasons)
