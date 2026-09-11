@@ -6,7 +6,11 @@ import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from agent_evals.contracts.resource import ResourceIdentifier, ResourceKind, ResourceScope
+from agent_evals.contracts.resource import (
+    ResourceIdentifier,
+    ResourceKind,
+    ResourceScope,
+)
 
 
 _VALID_COMPONENT = st.text(
