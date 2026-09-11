@@ -2,9 +2,11 @@
 
 ## Status
 
-The repository now contains a **typed resource-algebra foundation** for a future authority-policy migration. This document describes that foundation only.
+The repository uses a **typed, versioned resource algebra** for root authority, delegated handoff authority, resource-bearing policy evidence, and stronger approval-intent binding.
 
-`AuthorityPolicy.allowed_resource_prefixes`, `HandoffAuthorityGrant.allowed_resource_prefixes`, `EffectiveAuthority`, and current policy grading still use their existing lexical string-prefix semantics until #197's migration slice lands. The presence of `ResourceIdentifier` / `ResourceScope` therefore does **not** widen current authorization claims or silently reinterpret existing scenarios.
+`AuthorityPolicy.allowed_resource_scopes`, `HandoffAuthorityGrant.allowed_resource_scopes`, and `EffectiveAuthority.allowed_resource_scopes` all use `ResourceScope`. Runtime resource authorization and handoff attenuation use the same structural containment relation. There is no `startswith` authorization fallback and no compatibility converter from legacy `allowed_resource_prefixes` strings.
+
+Legacy lexical resource configuration is rejected by the typed contracts rather than silently translated. Resource-bearing `TOOL_REQUEST` and stronger `APPROVAL_REQUEST` evidence must carry the exact canonical JSON material of a `ResourceIdentifier`; raw resource strings and merely coercible Python representations fail closed.
 
 ## Version 1 resource grammar
 
@@ -35,7 +37,30 @@ Version 1 deliberately rejects ambiguous representations instead of guessing how
 
 Component comparison is exact and case-sensitive. The resource-domain grammar is deliberately narrower: lowercase ASCII letter first, followed by lowercase ASCII letters, digits, `_`, or `-`.
 
-The model exposes deterministic canonical JSON suitable for later inclusion as behavior-bearing scenario identity material.
+The model exposes deterministic canonical JSON and typed resource authority is behavior-bearing scenario identity material.
+
+## Evidence and adapter boundary
+
+Canonical evidence uses all four explicit fields:
+
+```json
+{
+  "schema_version": "agent-evals/resource/v1",
+  "kind": "hierarchical",
+  "domain": "tenant",
+  "components": ["7", "orders", "42"]
+}
+```
+
+The evidence parser requires that exact JSON shape. It rejects omitted default fields, extra fields, tuple-valued components, model instances, raw strings, and unsupported kind/version material. This keeps the wire representation explicit rather than relying on permissive model coercion.
+
+Provider adapters do not infer resource semantics from URLs, paths, object keys, or arbitrary tool arguments. A configured resource resolver is responsible for explicitly mapping provider-observed invocation material to a `ResourceIdentifier`. Returning no identity for resource-scoped approval intent blocks that evaluation precondition; authorization is never manufactured from the external locator text.
+
+## Approval binding and versioning
+
+Stronger approval-intent receipts bind the exact typed `ResourceIdentifier` and use `agent-evals/approval-intent/v2` with a distinct domain-separated root. Historical v1 string-resource receipt material is not reinterpreted as v2 typed-resource material.
+
+The receipt hash is an integrity binding over evaluator-defined material. It is **not** a signature, human-identity authentication, provider attestation, or proof that a human independently approved the action.
 
 ## Deliberate non-claims
 
@@ -43,8 +68,10 @@ Version 1 does **not** define canonical semantics for URLs, filesystem paths, Wi
 
 A future resource kind must define its own canonicalization and containment rules explicitly before it can become authorization-bearing. Unknown resource kinds and unknown schema versions are rejected.
 
-These types are evaluator contracts, not authentication, IAM credentials, capability tokens, or target-side enforcement attestations.
+These types are evaluator contracts, not authentication, IAM credentials, capability tokens, target-side enforcement attestations, or proof that an external service uses the same namespace semantics.
 
 ## Migration boundary
 
-The next #197 slice must migrate root and delegated authority together. It must not leave root authorization typed while handoff attenuation remains lexical, or vice versa. That migration must also update resource-bearing evidence/adapters, tests, scenario identity semantics, and the existing lexical-resource nonclaims only after the runtime authorization path is structurally complete.
+The typed runtime migration intentionally changes behavior-bearing scenario identity: typed authority material, its schema version, domain, and components participate in canonical scenario identity. Existing lexical scenarios must be migrated deliberately; there is no mixed lexical/typed mode.
+
+Adding a new external resource syntax still requires an explicit resource kind or explicit adapter-side mapping whose semantics are owned and tested by the evaluator. Extensibility must not become self-declared trust: an adapter cannot gain authority by inventing a resource kind, silently normalizing aliases, or falling back to string-prefix matching.
