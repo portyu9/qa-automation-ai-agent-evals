@@ -38,9 +38,7 @@ def test_scope_containment_is_structural_and_domain_bound() -> None:
     parent = ResourceScope(domain="tenant", components=("7", "orders"))
 
     assert parent.contains_scope(ResourceScope(domain="tenant", components=("7", "orders")))
-    assert parent.contains_scope(
-        ResourceScope(domain="tenant", components=("7", "orders", "open"))
-    )
+    assert parent.contains_scope(ResourceScope(domain="tenant", components=("7", "orders", "open")))
     assert not parent.contains_scope(ResourceScope(domain="tenant", components=("7",)))
     assert not parent.contains_scope(
         ResourceScope(domain="workspace", components=("7", "orders", "open"))
@@ -52,9 +50,7 @@ def test_empty_scope_components_explicitly_mean_whole_domain() -> None:
 
     assert scope.contains_identifier(ResourceIdentifier(domain="tenant", components=("7",)))
     assert scope.contains_scope(ResourceScope(domain="tenant", components=("anything",)))
-    assert not scope.contains_identifier(
-        ResourceIdentifier(domain="workspace", components=("7",))
-    )
+    assert not scope.contains_identifier(ResourceIdentifier(domain="workspace", components=("7",)))
 
 
 @pytest.mark.parametrize(
