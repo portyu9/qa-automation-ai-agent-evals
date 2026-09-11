@@ -8,10 +8,20 @@ from agent_evals.evidence.models import EvidenceEvent, EvidenceKind, TrialEviden
 from agent_evals.gates.release import ReleasePolicy
 from agent_evals.oracles.deterministic import OracleResult
 from agent_evals.runtime.evaluator import EvaluatedTrial
+from agent_evals.runtime.sampling import (
+    RandomnessStatus,
+    SamplingPolicy,
+    SessionSamplingMetadata,
+    StoppingRule,
+)
 from agent_evals.runtime.session import EvaluationSessionResult
 from agent_evals.statistics.reliability import ReliabilityReport
 
 SUBJECT = "a" * 64
+_CAMPAIGN_ID = "assurance-completion-root"
+_RUNTIME_ADAPTER = "fixture-runtime"
+_SUBJECT_ADAPTER = "fixture-subject"
+_SUBJECT_ADAPTER_VERSION = "1"
 SCENARIO_CONTRACT = EvaluationScenario(
     scenario_id="assurance.completion-root",
     revision="1",
@@ -38,6 +48,16 @@ def _session(trial: EvaluatedTrial) -> EvaluationSessionResult:
         scenario_identity=SCENARIO,
         trials=(trial,),
         reliability=ReliabilityReport.from_verdicts((trial.verdict,)),
+        campaign_id=_CAMPAIGN_ID,
+        runtime_adapter_name=_RUNTIME_ADAPTER,
+        subject_adapter=_SUBJECT_ADAPTER,
+        subject_adapter_version=_SUBJECT_ADAPTER_VERSION,
+        sampling_metadata=SessionSamplingMetadata(
+            sampling_policy=SamplingPolicy.PREDECLARED_ALL_ATTEMPTS,
+            randomness_status=RandomnessStatus.UNKNOWN,
+            stopping_rule=StoppingRule.FIXED_HORIZON,
+            planned_trials=1,
+        ),
     )
 
 
@@ -62,7 +82,7 @@ def _resolved_trial(*, with_event: bool = False) -> EvaluatedTrial:
         )
     return EvaluatedTrial(
         evidence=TrialEvidence(
-            trial_id="trial-0",
+            trial_id=f"campaign:{_CAMPAIGN_ID}:attempt:0000",
             subject_identity=SUBJECT,
             scenario_identity=SCENARIO,
             events=events,
@@ -116,7 +136,7 @@ def test_report_rejects_event_payload_mutation_after_trial_finalization() -> Non
         _report(_session(trial))
 
 
-def test_unchanged_trial_preserves_assurance_v4_shape_and_root_determinism() -> None:
+def test_unchanged_trial_preserves_assurance_shape_and_root_determinism() -> None:
     trial = _resolved_trial()
     session = _session(trial)
 
