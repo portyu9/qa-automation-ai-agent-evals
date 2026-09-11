@@ -385,9 +385,7 @@ def test_attenuation_reports_tool_resource_and_budget_reexpansion() -> None:
     source = EffectiveAuthority(
         allowed_tools=frozenset({"read"}),
         approval_required_tools=frozenset({"read"}),
-        allowed_resource_scopes=(
-            ResourceScope(domain="tenant", components=("7", "orders")),
-        ),
+        allowed_resource_scopes=(ResourceScope(domain="tenant", components=("7", "orders")),),
         max_tool_calls=1,
         max_handoffs=1,
     )
