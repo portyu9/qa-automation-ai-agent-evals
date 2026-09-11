@@ -85,6 +85,9 @@ async def test_operator_assertion_qualifies_metrics_without_becoming_verified() 
     assert evaluated.independence_status is IndependenceStatus.OPERATOR_ASSERTED
     assert metrics.status is IndependenceStatus.OPERATOR_ASSERTED
     assert metrics.basis == basis
+    assert metrics.reset_strategy_name is None
+    assert metrics.reset_strategy_version is None
+    assert metrics.reset_receipt_roots == ()
     assert metrics.k == evaluated.reliability.k
     assert metrics.pass_at_k == evaluated.reliability.pass_at_k
     assert metrics.pass_power_k == evaluated.reliability.pass_power_k
@@ -112,7 +115,7 @@ async def test_operator_assertion_qualifies_metrics_without_becoming_verified() 
         (
             IndependenceStatus.VERIFIED,
             "claimed reset receipt",
-            "verified independence requires evaluator-owned reset/isolation receipt verification",
+            "verified independence must not carry an operator assertion basis",
         ),
         (
             "operator_asserted",
@@ -152,12 +155,12 @@ async def test_direct_result_cannot_self_elevate_to_verified_independence() -> N
     forged = replace(
         evaluated,
         independence_status=IndependenceStatus.VERIFIED,
-        independence_basis="caller-created receipt claim",
+        independence_basis=None,
     )
 
     with pytest.raises(
         ValueError,
-        match="verified independence requires evaluator-owned reset/isolation receipt verification",
+        match="verified independence requires runtime, subject-adapter, and reset provenance",
     ):
         forged.validate()
 
