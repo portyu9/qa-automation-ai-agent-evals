@@ -156,9 +156,11 @@ class EvidenceStoreStateMachine(RuleBasedStateMachine):
         self.artifact_state = "corrupt_manifest"
 
     @precondition(
-        lambda self: self.artifact_state
-        in {"payload_only", "manifest_only", "corrupt_payload", "corrupt_manifest"}
-        and not self.lock_present
+        lambda self: (
+            self.artifact_state
+            in {"payload_only", "manifest_only", "corrupt_payload", "corrupt_manifest"}
+            and not self.lock_present
+        )
     )
     @rule()
     def explicit_operator_discards_invalid_artifacts(self) -> None:
