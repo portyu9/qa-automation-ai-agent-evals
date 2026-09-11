@@ -5,7 +5,6 @@ import json
 import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
-from pydantic import ValidationError
 
 from agent_evals.contracts.resource import ResourceIdentifier, ResourceKind, ResourceScope
 
@@ -75,7 +74,7 @@ def test_empty_scope_components_explicitly_mean_whole_domain() -> None:
     ),
 )
 def test_identifier_rejects_ambiguous_or_noncanonical_components(component: str) -> None:
-    with pytest.raises(ValidationError):
+    with pytest.raises(ValueError):
         ResourceIdentifier(domain="tenant", components=(component,))
 
 
@@ -93,7 +92,7 @@ def test_identifier_rejects_ambiguous_or_noncanonical_components(component: str)
     ),
 )
 def test_resource_domain_requires_explicit_lowercase_ascii_grammar(domain: str) -> None:
-    with pytest.raises(ValidationError):
+    with pytest.raises(ValueError):
         ResourceScope(domain=domain)
 
 
@@ -109,12 +108,12 @@ def test_resource_domain_requires_explicit_lowercase_ascii_grammar(domain: str) 
 def test_v1_does_not_silently_treat_urls_paths_or_object_keys_as_hierarchy(
     raw_component: str,
 ) -> None:
-    with pytest.raises(ValidationError):
+    with pytest.raises(ValueError):
         ResourceIdentifier(domain="external", components=(raw_component,))
 
 
 def test_unknown_resource_kind_and_schema_version_fail_closed() -> None:
-    with pytest.raises(ValidationError):
+    with pytest.raises(ValueError):
         ResourceIdentifier.model_validate(
             {
                 "schema_version": "agent-evals/resource/v2",
@@ -123,7 +122,7 @@ def test_unknown_resource_kind_and_schema_version_fail_closed() -> None:
                 "components": ["7"],
             }
         )
-    with pytest.raises(ValidationError):
+    with pytest.raises(ValueError):
         ResourceIdentifier.model_validate(
             {
                 "schema_version": "agent-evals/resource/v1",
