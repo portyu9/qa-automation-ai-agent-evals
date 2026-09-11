@@ -12,6 +12,12 @@ from agent_evals.contracts.semantic import SemanticCriterionSpec, SemanticRubric
 from agent_evals.evidence.models import TrialEvidence, TrialVerdict
 from agent_evals.gates.release import ReleasePolicy
 from agent_evals.runtime.evaluator import EvaluatedTrial, TrialRunner
+from agent_evals.runtime.sampling import (
+    RandomnessStatus,
+    SamplingPolicy,
+    SessionSamplingMetadata,
+    StoppingRule,
+)
 from agent_evals.runtime.session import EvaluationSessionResult
 from agent_evals.semantic.calibration import (
     SemanticCalibrationCase,
@@ -29,6 +35,15 @@ from agent_evals.semantic.models import (
 from agent_evals.semantic.receipt import SemanticJudgmentReceipt
 from agent_evals.semantic.verification import append_semantic_judgment
 from agent_evals.statistics.reliability import ReliabilityReport
+
+_CAMPAIGN_ID = "semantic-report-replay"
+_RUNTIME_ADAPTER = "fixture-replay-runtime"
+_SUBJECT_ADAPTER = "semantic-replay-static"
+_SUBJECT_ADAPTER_VERSION = "1"
+
+
+def _report_trial_id() -> str:
+    return f"campaign:{_CAMPAIGN_ID}:attempt:0000"
 
 
 def _subject() -> SubjectFingerprint:
@@ -149,6 +164,16 @@ def _report_session(trial: EvaluatedTrial) -> EvaluationSessionResult:
         scenario_identity=trial.evidence.scenario_identity,
         trials=(trial,),
         reliability=ReliabilityReport.from_verdicts((trial.verdict,)),
+        campaign_id=_CAMPAIGN_ID,
+        runtime_adapter_name=_RUNTIME_ADAPTER,
+        subject_adapter=_SUBJECT_ADAPTER,
+        subject_adapter_version=_SUBJECT_ADAPTER_VERSION,
+        sampling_metadata=SessionSamplingMetadata(
+            sampling_policy=SamplingPolicy.PREDECLARED_ALL_ATTEMPTS,
+            randomness_status=RandomnessStatus.UNKNOWN,
+            stopping_rule=StoppingRule.FIXED_HORIZON,
+            planned_trials=1,
+        ),
     )
 
 
@@ -214,11 +239,12 @@ async def test_assurance_reports_runtime_blocked_rejected_semantic_history() -> 
     subject = _subject()
     scenario = _scenario()
     judge = _Judge()
+    trial_id = _report_trial_id()
     live = await TrialRunner(semantic_judge=judge).run(
         _StaticAdapter(),
         subject=subject,
         scenario=scenario,
-        trial_id="semantic-rejected-history",
+        trial_id=trial_id,
     )
     semantic_event = live.evidence.events[-1]
     malformed_payload = dict(semantic_event.payload)
@@ -232,7 +258,7 @@ async def test_assurance_reports_runtime_blocked_rejected_semantic_history() -> 
         EvidenceReplayAdapter(malformed_evidence),
         subject=subject,
         scenario=scenario,
-        trial_id="semantic-rejected-history",
+        trial_id=trial_id,
     )
 
     assert blocked.verdict is TrialVerdict.BLOCKED
@@ -276,8 +302,9 @@ async def test_assurance_reports_runtime_blocked_semantic_after_deterministic_fa
         semantic_rubric=base.semantic_rubric,
         required_outcomes={"required": "value"},
     )
+    trial_id = _report_trial_id()
     pre_semantic = TrialEvidence(
-        trial_id="semantic-invalid-precedence",
+        trial_id=trial_id,
         subject_identity=subject.identity,
         scenario_identity=failing_scenario.identity,
         final_state={"unexpected": "state"},
@@ -304,7 +331,7 @@ async def test_assurance_reports_runtime_blocked_semantic_after_deterministic_fa
         EvidenceReplayAdapter(recorded),
         subject=subject,
         scenario=failing_scenario,
-        trial_id="semantic-invalid-precedence",
+        trial_id=trial_id,
     )
 
     assert blocked.verdict is TrialVerdict.BLOCKED

@@ -11,6 +11,12 @@ from agent_evals.evidence.models import EvidenceEvent, EvidenceKind, TrialEviden
 from agent_evals.gates.release import GateDecision, ReleasePolicy
 from agent_evals.oracles.deterministic import OracleResult, OutcomeOracle, PolicyOracle
 from agent_evals.runtime.evaluator import EvaluatedTrial
+from agent_evals.runtime.sampling import (
+    RandomnessStatus,
+    SamplingPolicy,
+    SessionSamplingMetadata,
+    StoppingRule,
+)
 from agent_evals.runtime.session import EvaluationSessionResult
 from agent_evals.side_effect.models import SideEffectIdempotencySpec, canonical_json_sha256
 from agent_evals.side_effect.oracle import SideEffectIdempotencyOracle
@@ -18,6 +24,14 @@ from agent_evals.side_effect.receipt import SideEffectAttemptDigest, SideEffectI
 from agent_evals.statistics.reliability import ReliabilityReport
 
 SUBJECT = "1" * 64
+_CAMPAIGN_ID = "assurance-side-effect-binding"
+_RUNTIME_ADAPTER = "fixture-runtime"
+_SUBJECT_ADAPTER = "fixture-subject"
+_SUBJECT_ADAPTER_VERSION = "1"
+
+
+def _trial_id() -> str:
+    return f"campaign:{_CAMPAIGN_ID}:attempt:0000"
 
 
 def _spec() -> SideEffectIdempotencySpec:
@@ -85,7 +99,7 @@ def _side_effect_evidence(*, second_mutates: bool) -> TrialEvidence:
     arguments = json.dumps(_spec().expected_arguments, separators=(",", ":"))
     receipt = _receipt(second_mutates=second_mutates)
     return TrialEvidence(
-        trial_id="side-effect-trial",
+        trial_id=_trial_id(),
         subject_identity=SUBJECT,
         scenario_identity=_scenario().identity,
         events=(
@@ -142,6 +156,16 @@ def _session(trial: EvaluatedTrial) -> EvaluationSessionResult:
         scenario_identity=trial.evidence.scenario_identity,
         trials=(trial,),
         reliability=ReliabilityReport.from_verdicts((trial.verdict,), k=1),
+        campaign_id=_CAMPAIGN_ID,
+        runtime_adapter_name=_RUNTIME_ADAPTER,
+        subject_adapter=_SUBJECT_ADAPTER,
+        subject_adapter_version=_SUBJECT_ADAPTER_VERSION,
+        sampling_metadata=SessionSamplingMetadata(
+            sampling_policy=SamplingPolicy.PREDECLARED_ALL_ATTEMPTS,
+            randomness_status=RandomnessStatus.UNKNOWN,
+            stopping_rule=StoppingRule.FIXED_HORIZON,
+            planned_trials=1,
+        ),
     )
 
 
@@ -184,7 +208,7 @@ def test_report_rejects_dropped_side_effect_oracle_for_duplicate_mutation_eviden
 def test_report_rejects_side_effect_contract_when_observation_and_oracle_are_both_omitted() -> None:
     scenario = _scenario()
     evidence = TrialEvidence(
-        trial_id="side-effect-omitted",
+        trial_id=_trial_id(),
         subject_identity=SUBJECT,
         scenario_identity=scenario.identity,
     )
@@ -205,7 +229,7 @@ def test_report_rejects_side_effect_contract_when_observation_and_oracle_are_bot
 def test_report_rejects_side_effect_oracle_without_observation_evidence() -> None:
     scenario = _scenario()
     evidence = TrialEvidence(
-        trial_id="side-effect-without-observation",
+        trial_id=_trial_id(),
         subject_identity=SUBJECT,
         scenario_identity=scenario.identity,
     )
@@ -278,7 +302,7 @@ def test_report_accepts_valid_side_effect_critical_fail_triplet() -> None:
 def test_report_preserves_core_only_trial_without_side_effect_observation() -> None:
     scenario = _plain_scenario()
     evidence = TrialEvidence(
-        trial_id="core-only",
+        trial_id=_trial_id(),
         subject_identity=SUBJECT,
         scenario_identity=scenario.identity,
     )
