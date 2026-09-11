@@ -19,6 +19,7 @@ from agent_evals.contracts.models import (
     HandoffAuthorityGrant,
     ScenarioKind,
 )
+from agent_evals.contracts.resource import ResourceScope
 from agent_evals.evidence.approval_intent import (
     APPROVAL_DECISION_SOURCE,
     APPROVAL_REQUEST_SOURCE,
@@ -201,7 +202,7 @@ def test_receipt_creation_and_shape_fail_closed() -> None:
 
     unstable_resource = valid.model_dump(mode="json")
     unstable_resource["resource"] = " tenant/7/refunds/42"
-    with pytest.raises(ValidationError, match="stable non-empty"):
+    with pytest.raises(ValidationError, match="ResourceIdentifier"):
         ApprovalIntentReceipt.model_validate(unstable_resource)
 
     with pytest.raises(ApprovalIntentError, match="not approval-decision"):
@@ -325,7 +326,7 @@ def test_handoff_helpers_reject_invalid_transitions_without_advancing() -> None:
     policy = AuthorityPolicy(
         allowed_tools=frozenset({"read"}),
         approval_required_tools=frozenset({"read"}),
-        allowed_resource_prefixes=("tenant/7/",),
+        allowed_resource_scopes=(ResourceScope(domain="tenant", components=("7",)),),
         root_agent="Root",
         max_handoffs=1,
         handoff_grants=(
@@ -333,7 +334,9 @@ def test_handoff_helpers_reject_invalid_transitions_without_advancing() -> None:
                 source_agent="Root",
                 target_agent="Child",
                 allowed_tools=frozenset({"read"}),
-                allowed_resource_prefixes=("tenant/7/orders/",),
+                allowed_resource_scopes=(
+                    ResourceScope(domain="tenant", components=("7", "orders")),
+                ),
                 max_handoffs=0,
             ),
         ),
@@ -382,7 +385,9 @@ def test_attenuation_reports_tool_resource_and_budget_reexpansion() -> None:
     source = EffectiveAuthority(
         allowed_tools=frozenset({"read"}),
         approval_required_tools=frozenset({"read"}),
-        allowed_resource_prefixes=("tenant/7/orders/",),
+        allowed_resource_scopes=(
+            ResourceScope(domain="tenant", components=("7", "orders")),
+        ),
         max_tool_calls=1,
         max_handoffs=1,
     )
@@ -390,7 +395,7 @@ def test_attenuation_reports_tool_resource_and_budget_reexpansion() -> None:
         source_agent="Child",
         target_agent="Worker",
         allowed_tools=frozenset({"read", "write"}),
-        allowed_resource_prefixes=("tenant/8/",),
+        allowed_resource_scopes=(ResourceScope(domain="tenant", components=("8",)),),
         max_tool_calls=2,
         max_handoffs=2,
     )
