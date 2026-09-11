@@ -9,6 +9,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from agent_evals.contracts.resource import ResourceIdentifier, ResourceScope
 from agent_evals.contracts.semantic import SemanticRubricSpec
 from agent_evals.retrieval.models import RetrievalContractSpec
 from agent_evals.side_effect.models import SideEffectIdempotencySpec
@@ -112,7 +113,7 @@ class HandoffAuthorityGrant(BaseModel):
     source_agent: str = Field(min_length=1, max_length=256)
     target_agent: str = Field(min_length=1, max_length=256)
     allowed_tools: frozenset[str] = frozenset()
-    allowed_resource_prefixes: tuple[str, ...] = ()
+    allowed_resource_scopes: tuple[ResourceScope, ...] = ()
     additional_approval_required_tools: frozenset[str] = frozenset()
     max_tool_calls: int = Field(default=32, ge=0, le=10_000, strict=True)
     max_handoffs: int = Field(default=8, ge=0, le=1_000, strict=True)
@@ -131,10 +132,13 @@ class HandoffAuthorityGrant(BaseModel):
             raise ValueError("tool identities must be non-empty strings")
         return value
 
-    @field_validator("allowed_resource_prefixes")
+    @field_validator("allowed_resource_scopes")
     @classmethod
-    def canonicalize_resource_prefixes(cls, value: tuple[str, ...]) -> tuple[str, ...]:
-        return _canonical_resource_prefixes(value)
+    def canonicalize_resource_scopes(
+        cls,
+        value: tuple[ResourceScope, ...],
+    ) -> tuple[ResourceScope, ...]:
+        return _canonical_resource_scopes(value)
 
     @model_validator(mode="after")
     def validate_grant(self) -> HandoffAuthorityGrant:
@@ -154,8 +158,8 @@ class HandoffAuthorityGrant(BaseModel):
     def authorizes_tool(self, tool_name: str) -> bool:
         return tool_name in self.allowed_tools
 
-    def authorizes_resource(self, resource: str) -> bool:
-        return any(resource.startswith(prefix) for prefix in self.allowed_resource_prefixes)
+    def authorizes_resource(self, resource: ResourceIdentifier) -> bool:
+        return any(scope.contains_identifier(resource) for scope in self.allowed_resource_scopes)
 
 
 class AuthorityPolicy(BaseModel):
@@ -166,7 +170,7 @@ class AuthorityPolicy(BaseModel):
     allowed_tools: frozenset[str] = frozenset()
     forbidden_tools: frozenset[str] = frozenset()
     approval_required_tools: frozenset[str] = frozenset()
-    allowed_resource_prefixes: tuple[str, ...] = ()
+    allowed_resource_scopes: tuple[ResourceScope, ...] = ()
     max_turns: int = Field(default=16, ge=1, le=10_000, strict=True)
     max_tool_calls: int = Field(default=32, ge=0, le=10_000, strict=True)
     max_handoffs: int = Field(default=8, ge=0, le=1_000, strict=True)
@@ -180,10 +184,13 @@ class AuthorityPolicy(BaseModel):
             raise ValueError("tool identities must be non-empty strings")
         return value
 
-    @field_validator("allowed_resource_prefixes")
+    @field_validator("allowed_resource_scopes")
     @classmethod
-    def canonicalize_resource_prefixes(cls, value: tuple[str, ...]) -> tuple[str, ...]:
-        return _canonical_resource_prefixes(value)
+    def canonicalize_resource_scopes(
+        cls,
+        value: tuple[ResourceScope, ...],
+    ) -> tuple[ResourceScope, ...]:
+        return _canonical_resource_scopes(value)
 
     @field_validator("root_agent")
     @classmethod
@@ -226,11 +233,11 @@ class AuthorityPolicy(BaseModel):
                 raise ValueError("handoff grant tool budget cannot exceed root tool budget")
             if grant.max_handoffs > self.max_handoffs:
                 raise ValueError("handoff grant handoff budget cannot exceed root handoff budget")
-            for prefix in grant.allowed_resource_prefixes:
-                if not self.authorizes_resource(prefix):
+            for scope in grant.allowed_resource_scopes:
+                if not any(parent.contains_scope(scope) for parent in self.allowed_resource_scopes):
                     raise ValueError(
                         "handoff grant resource scope must remain within root resource authority: "
-                        f"{prefix!r}"
+                        f"{scope.canonical_json}"
                     )
 
         if self.root_agent is not None and self.handoff_grants:
@@ -273,8 +280,8 @@ class AuthorityPolicy(BaseModel):
     def authorizes_tool(self, tool_name: str) -> bool:
         return tool_name in self.allowed_tools and tool_name not in self.forbidden_tools
 
-    def authorizes_resource(self, resource: str) -> bool:
-        return any(resource.startswith(prefix) for prefix in self.allowed_resource_prefixes)
+    def authorizes_resource(self, resource: ResourceIdentifier) -> bool:
+        return any(scope.contains_identifier(resource) for scope in self.allowed_resource_scopes)
 
 
 class EvaluationScenario(BaseModel):
@@ -373,10 +380,9 @@ def _agent_path_requires_approval(policy: AuthorityPolicy, *, agent: str, tool: 
     return False
 
 
-def _canonical_resource_prefixes(value: tuple[str, ...]) -> tuple[str, ...]:
-    if any(not prefix.strip() for prefix in value):
-        raise ValueError("resource prefixes must be non-empty strings")
-    return tuple(sorted(set(value)))
+def _canonical_resource_scopes(value: tuple[ResourceScope, ...]) -> tuple[ResourceScope, ...]:
+    canonical = {scope.canonical_json: scope for scope in value}
+    return tuple(canonical[key] for key in sorted(canonical))
 
 
 def _sha256_text(value: str) -> str:
