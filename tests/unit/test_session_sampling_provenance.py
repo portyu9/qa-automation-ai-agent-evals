@@ -250,7 +250,9 @@ async def test_external_selection_cherry_pick_is_not_qualifiable_sampling() -> N
 
 
 @pytest.mark.asyncio
-async def test_legacy_missing_sampling_metadata_cannot_qualify_independent_attempt_metrics() -> None:
+async def test_legacy_missing_sampling_metadata_cannot_qualify_independent_attempt_metrics() -> (
+    None
+):
     evaluated = await EvaluationSession().run(
         _adapter(),
         subject=_subject(),
@@ -293,7 +295,7 @@ async def test_randomness_receipt_seed_mutation_is_rejected() -> None:
     )
     forged = replace(evaluated, sampling_metadata=mutated_metadata)
 
-    with pytest.raises(SamplingProvenanceError, match="does not match"):
+    with pytest.raises(SamplingProvenanceError, match="malformed"):
         forged.validate()
 
 
