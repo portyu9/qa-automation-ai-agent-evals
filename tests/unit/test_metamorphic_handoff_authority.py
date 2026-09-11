@@ -153,7 +153,9 @@ def test_authority_monotonicity_accepts_path_local_delegation_narrowing() -> Non
     assert result.reasons == ()
 
 
-def test_authority_monotonicity_accepts_graph_added_to_single_authority_root_as_attenuation() -> None:
+def test_authority_monotonicity_accepts_graph_added_to_single_authority_root_as_attenuation() -> (
+    None
+):
     baseline = _root_policy(root_agent=None)
     transformed = _root_policy(_grant())
 
