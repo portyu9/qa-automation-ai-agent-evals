@@ -19,6 +19,21 @@ from agent_evals.runtime.reset_isolation import (
     validate_reset_strategy_identity,
     verify_reset_isolation_sequence,
 )
+from agent_evals.runtime.sampling import (
+    RandomnessControl,
+    RandomnessControlContext,
+    RandomnessControlObservation,
+    RandomnessControlReceipt,
+    RandomnessStatus,
+    SamplingPolicy,
+    SamplingProvenanceError,
+    SessionSamplingMetadata,
+    StoppingRule,
+    require_independence_qualifiable_sampling,
+    validate_randomness_request,
+    validate_randomness_strategy_identity,
+    verify_session_sampling_metadata,
+)
 from agent_evals.statistics.reliability import ReliabilityReport
 
 _CAMPAIGN_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
@@ -35,13 +50,22 @@ class IndependenceStatus(StrEnum):
 
 @dataclass(frozen=True, slots=True)
 class IndependenceQualifiedMetrics:
-    """Repeated-attempt transforms together with their explicit independence qualification."""
+    """Repeated-attempt transforms together with their explicit statistical qualification."""
 
     status: IndependenceStatus
     basis: str | None
     reset_strategy_name: str | None
     reset_strategy_version: str | None
     reset_receipt_roots: tuple[str, ...]
+    sampling_schema_version: str
+    sampling_policy: SamplingPolicy
+    randomness_status: RandomnessStatus
+    randomness_basis: str | None
+    randomness_strategy_name: str | None
+    randomness_strategy_version: str | None
+    randomness_receipt_roots: tuple[str, ...]
+    stopping_rule: StoppingRule
+    planned_trials: int
     k: int
     pass_at_k: float
     pass_power_k: float
@@ -62,16 +86,19 @@ class EvaluationSessionResult:
     reset_strategy_name: str | None = None
     reset_strategy_version: str | None = None
     reset_isolation_receipts: tuple[ResetIsolationReceipt, ...] = ()
+    sampling_metadata: SessionSamplingMetadata | None = None
 
     def validate(self) -> None:
-        """Revalidate session identity, finalized evidence, reliability, and independence metadata.
+        """Revalidate finalized evidence, reliability, and repeated-trial provenance.
 
-        ``campaign_id=None`` and absent runtime provenance are retained for explicitly constructed
-        legacy/session-result objects. Results produced by :class:`EvaluationSession` carry a
-        validated campaign identity plus runtime/subject adapter provenance.
+        ``campaign_id=None`` and absent runtime/sampling provenance are retained for explicitly
+        constructed legacy session-result objects. Results produced by :class:`EvaluationSession`
+        carry a validated campaign identity, adapter provenance, and versioned sampling metadata.
 
         ``operator_asserted`` remains caller-owned. ``verified`` is valid only when the complete
         evaluator-owned reset/isolation receipt sequence revalidates against finalized trials.
+        Sampling metadata separately records attempt inclusion, runtime/provider randomness
+        provenance, and stopping semantics; none of those fields turns reset receipts into IID proof.
         """
         if not self.trials:
             raise ValueError("evaluation session requires at least one trial")
@@ -114,6 +141,18 @@ class EvaluationSessionResult:
         )
         if self.reliability != expected_reliability:
             raise ValueError("session reliability does not recompute from trial verdicts")
+
+        if self.sampling_metadata is not None:
+            verify_session_sampling_metadata(
+                self.sampling_metadata,
+                campaign_id=self.campaign_id,
+                subject_identity=self.subject_identity,
+                scenario_identity=self.scenario_identity,
+                runtime_adapter_name=self.runtime_adapter_name,
+                subject_adapter=self.subject_adapter,
+                subject_adapter_version=self.subject_adapter_version,
+                trial_ids=tuple(trial_ids),
+            )
 
         if self.independence_status is IndependenceStatus.VERIFIED:
             if self.campaign_id is None:
@@ -161,13 +200,20 @@ class EvaluationSessionResult:
         return sum(trial.critical_violations for trial in self.trials)
 
     def independence_qualified_metrics(self) -> IndependenceQualifiedMetrics:
-        """Return ``pass@k`` / ``pass^k`` with explicit independence qualification."""
+        """Return ``pass@k`` / ``pass^k`` only with explicit statistical qualification."""
         self.validate()
         if self.independence_status is IndependenceStatus.UNVERIFIED:
             raise ValueError(
                 "independent-attempt pass@k/pass^k interpretation is unavailable because session "
                 "independence is unverified"
             )
+
+        sampling = require_independence_qualifiable_sampling(self.sampling_metadata)
+        if sampling.planned_trials is None:
+            raise SamplingProvenanceError("qualified fixed-horizon sampling lost planned_trials")
+        randomness_receipt_roots = tuple(
+            receipt.receipt_root for receipt in sampling.randomness_control_receipts
+        )
 
         if self.independence_status is IndependenceStatus.OPERATOR_ASSERTED:
             if self.independence_basis is None:
@@ -178,6 +224,15 @@ class EvaluationSessionResult:
                 reset_strategy_name=None,
                 reset_strategy_version=None,
                 reset_receipt_roots=(),
+                sampling_schema_version=sampling.schema_version,
+                sampling_policy=sampling.sampling_policy,
+                randomness_status=sampling.randomness_status,
+                randomness_basis=sampling.randomness_basis,
+                randomness_strategy_name=sampling.randomness_strategy_name,
+                randomness_strategy_version=sampling.randomness_strategy_version,
+                randomness_receipt_roots=randomness_receipt_roots,
+                stopping_rule=sampling.stopping_rule,
+                planned_trials=sampling.planned_trials,
                 k=self.reliability.k,
                 pass_at_k=self.reliability.pass_at_k,
                 pass_power_k=self.reliability.pass_power_k,
@@ -197,6 +252,15 @@ class EvaluationSessionResult:
             reset_receipt_roots=tuple(
                 receipt.receipt_root for receipt in self.reset_isolation_receipts
             ),
+            sampling_schema_version=sampling.schema_version,
+            sampling_policy=sampling.sampling_policy,
+            randomness_status=sampling.randomness_status,
+            randomness_basis=sampling.randomness_basis,
+            randomness_strategy_name=sampling.randomness_strategy_name,
+            randomness_strategy_version=sampling.randomness_strategy_version,
+            randomness_receipt_roots=randomness_receipt_roots,
+            stopping_rule=sampling.stopping_rule,
+            planned_trials=sampling.planned_trials,
             k=self.reliability.k,
             pass_at_k=self.reliability.pass_at_k,
             pass_power_k=self.reliability.pass_power_k,
@@ -209,16 +273,27 @@ class EvaluationSession:
     Every invocation gets a collision-resistant campaign identity by default. Campaign identity is
     namespace/provenance only; it is not reset evidence or a statistical-independence claim.
 
-    The same subject adapter object is intentionally reused across attempts. Sessions default to
-    ``UNVERIFIED``. A caller may use ``OPERATOR_ASSERTED`` with an explicit textual basis. A
-    ``VERIFIED`` campaign additionally requires a separately supplied ``ResetIsolationControl``.
-    Before every post-first attempt, the evaluator invokes that control, accepts only a bounded
-    digest observation, constructs a domain-separated receipt itself, and later revalidates the
-    complete receipt chain against finalized predecessor evidence.
+    Sessions execute a predeclared fixed horizon: every requested attempt is included unless the
+    session aborts without producing a result. The resulting ``SessionSamplingMetadata`` records
+    that sampling/stopping relation explicitly. The same subject adapter object is intentionally
+    reused across attempts.
 
-    This verifies the declared control relation relative to the supplied evaluator/operator control
-    boundary. It does not prove full IID behavior, stationarity, absence of hidden shared state, or
-    that an arbitrary external target was actually reset correctly.
+    Sessions default to ``UNVERIFIED`` independence and ``UNKNOWN`` runtime/provider randomness. A
+    caller may use ``OPERATOR_ASSERTED`` with an explicit textual basis. A ``VERIFIED`` campaign
+    additionally requires a separately supplied ``ResetIsolationControl``. Before every post-first
+    attempt, the evaluator invokes that control, accepts only a bounded digest observation,
+    constructs a domain-separated receipt itself, and later revalidates the complete receipt chain
+    against finalized predecessor evidence.
+
+    ``EVALUATOR_CONTROLLED`` randomness similarly requires a separately supplied
+    ``RandomnessControl``. The evaluator invokes it before every subject attempt and binds the
+    returned digest-only seed/control observation into a campaign-specific receipt. Duplicate seed
+    identities are rejected before the affected subject attempt executes. External/unavailable/
+    unknown randomness cannot carry evaluator seed receipts.
+
+    These controls establish only their declared evaluator-owned relations. They do not prove full
+    IID behavior, stationarity, exchangeability, unbiased sampling, absence of hidden shared state,
+    or that an arbitrary external target/provider implements the claimed hidden semantics.
     """
 
     def __init__(self, *, runner: TrialRunner | None = None) -> None:
@@ -236,6 +311,9 @@ class EvaluationSession:
         independence_status: IndependenceStatus = IndependenceStatus.UNVERIFIED,
         independence_basis: str | None = None,
         reset_control: ResetIsolationControl | None = None,
+        randomness_status: RandomnessStatus = RandomnessStatus.UNKNOWN,
+        randomness_basis: str | None = None,
+        randomness_control: RandomnessControl | None = None,
     ) -> EvaluationSessionResult:
         if isinstance(trials, bool) or not isinstance(trials, int) or trials < 1:
             raise ValueError("trials must be a positive integer")
@@ -249,6 +327,11 @@ class EvaluationSession:
             adapter=adapter,
             reset_control=reset_control,
         )
+        validate_randomness_request(randomness_status, randomness_basis, randomness_control)
+        if randomness_control is not None and _same_object(randomness_control, adapter):
+            raise SamplingProvenanceError(
+                "randomness control must be separate from the subject adapter"
+            )
 
         runtime_adapter_name = _validate_runtime_adapter_name(adapter.name)
         subject = subject.snapshot()
@@ -276,8 +359,31 @@ class EvaluationSession:
                     "reset/isolation control strategy metadata could not be read"
                 ) from None
 
+        randomness_strategy_name: str | None = None
+        randomness_strategy_version: str | None = None
+        if randomness_status is RandomnessStatus.EVALUATOR_CONTROLLED:
+            if randomness_control is None:
+                raise SamplingProvenanceError(
+                    "evaluator-controlled randomness requires a randomness control"
+                )
+            try:
+                randomness_strategy_name, randomness_strategy_version = (
+                    validate_randomness_strategy_identity(
+                        randomness_control.strategy_name,
+                        randomness_control.strategy_version,
+                    )
+                )
+            except Exception as exc:
+                if isinstance(exc, SamplingProvenanceError):
+                    raise
+                raise SamplingProvenanceError(
+                    "randomness control strategy metadata could not be read"
+                ) from None
+
         evaluated: list[EvaluatedTrial] = []
         reset_receipts: list[ResetIsolationReceipt] = []
+        randomness_receipts: list[RandomnessControlReceipt] = []
+        seed_identities: set[str] = set()
         for index in range(trials):
             trial_id = _campaign_trial_id(campaign_id, index)
             if index > 0 and independence_status is IndependenceStatus.VERIFIED:
@@ -320,6 +426,52 @@ class EvaluationSession:
                 )
                 reset_receipts.append(receipt)
 
+            if randomness_status is RandomnessStatus.EVALUATOR_CONTROLLED:
+                if (
+                    randomness_control is None
+                    or randomness_strategy_name is None
+                    or randomness_strategy_version is None
+                ):
+                    raise SamplingProvenanceError(
+                        "evaluator randomness control disappeared during session execution"
+                    )
+                randomness_context = RandomnessControlContext(
+                    campaign_id=campaign_id,
+                    attempt_index=index,
+                    trial_id=trial_id,
+                    subject_identity=subject.identity,
+                    scenario_identity=scenario.identity,
+                    runtime_adapter_name=runtime_adapter_name,
+                    subject_adapter=subject.adapter,
+                    subject_adapter_version=subject.adapter_version,
+                )
+                try:
+                    randomness_observation = await randomness_control.prepare(
+                        context=randomness_context
+                    )
+                except Exception:
+                    raise SamplingProvenanceError(
+                        f"randomness control failed before attempt {index}"
+                    ) from None
+                if type(randomness_observation) is not RandomnessControlObservation:
+                    raise SamplingProvenanceError(
+                        "randomness control must return an exact RandomnessControlObservation"
+                    )
+                if randomness_observation.seed_identity in seed_identities:
+                    raise SamplingProvenanceError(
+                        "evaluator-controlled attempt seed identity was reused across attempts"
+                    )
+                seed_identities.add(randomness_observation.seed_identity)
+                randomness_receipts.append(
+                    RandomnessControlReceipt.create(
+                        context=randomness_context,
+                        randomness_strategy_name=randomness_strategy_name,
+                        randomness_strategy_version=randomness_strategy_version,
+                        seed_identity=randomness_observation.seed_identity,
+                        control_evidence_identity=randomness_observation.control_evidence_identity,
+                    )
+                )
+
             evaluated.append(
                 await self._runner.run(
                     adapter,
@@ -332,6 +484,16 @@ class EvaluationSession:
         reliability = ReliabilityReport.from_verdicts(
             tuple(trial.verdict for trial in evaluated),
             k=k,
+        )
+        sampling_metadata = SessionSamplingMetadata(
+            sampling_policy=SamplingPolicy.PREDECLARED_ALL_ATTEMPTS,
+            randomness_status=randomness_status,
+            stopping_rule=StoppingRule.FIXED_HORIZON,
+            planned_trials=trials,
+            randomness_basis=randomness_basis,
+            randomness_strategy_name=randomness_strategy_name,
+            randomness_strategy_version=randomness_strategy_version,
+            randomness_control_receipts=tuple(randomness_receipts),
         )
         result = EvaluationSessionResult(
             subject_identity=subject.identity,
@@ -347,6 +509,7 @@ class EvaluationSession:
             reset_strategy_name=reset_strategy_name,
             reset_strategy_version=reset_strategy_version,
             reset_isolation_receipts=tuple(reset_receipts),
+            sampling_metadata=sampling_metadata,
         )
         result.validate()
         return result
