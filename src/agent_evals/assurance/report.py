@@ -491,7 +491,9 @@ class AssuranceReport(BaseModel):
                 if record.semantic_judgment is None:
                     raise ValueError("missing semantic judgment required by grading profile")
                 if len(semantic_results) != 1:
-                    raise ValueError("semantic grading profile requires exactly one semantic oracle")
+                    raise ValueError(
+                        "semantic grading profile requires exactly one semantic oracle"
+                    )
                 expected_semantic = OracleSnapshot(
                     name=_SEMANTIC_ORACLE_NAME,
                     verdict=_semantic_verdict(record.semantic_judgment.decision),
