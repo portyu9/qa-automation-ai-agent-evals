@@ -2,20 +2,19 @@ from __future__ import annotations
 
 import json
 
-import hypothesis.strategies as st
 import pytest
-from hypothesis import given, settings
+from hypothesis import given, settings, strategies
 from pydantic import ValidationError
 
 from agent_evals.contracts.resource import ResourceIdentifier, ResourceKind, ResourceScope
 
 
-_VALID_COMPONENT = st.text(
-    alphabet=st.sampled_from(tuple("abcdefghijklmnopqrstuvwxyz0123456789_-")),
+_VALID_COMPONENT = strategies.text(
+    alphabet=strategies.sampled_from(tuple("abcdefghijklmnopqrstuvwxyz0123456789_-")),
     min_size=1,
     max_size=24,
 )
-_VALID_DOMAIN = st.from_regex(r"[a-z][a-z0-9_-]{0,15}", fullmatch=True)
+_VALID_DOMAIN = strategies.from_regex(r"[a-z][a-z0-9_-]{0,15}", fullmatch=True)
 
 
 def test_scope_uses_component_boundaries_not_lexical_prefixes() -> None:
@@ -159,8 +158,8 @@ def test_canonical_json_round_trips_without_rewriting_identity_material() -> Non
 
 @given(
     domain=_VALID_DOMAIN,
-    parent_components=st.lists(_VALID_COMPONENT, min_size=0, max_size=4),
-    suffix=st.lists(_VALID_COMPONENT, min_size=1, max_size=4),
+    parent_components=strategies.lists(_VALID_COMPONENT, min_size=0, max_size=4),
+    suffix=strategies.lists(_VALID_COMPONENT, min_size=1, max_size=4),
 )
 @settings(max_examples=100, deadline=None)
 def test_structural_scope_contains_only_exact_component_prefixes(
@@ -187,7 +186,7 @@ def test_structural_scope_contains_only_exact_component_prefixes(
 
 @given(
     domain=_VALID_DOMAIN,
-    components=st.lists(_VALID_COMPONENT, min_size=1, max_size=6),
+    components=strategies.lists(_VALID_COMPONENT, min_size=1, max_size=6),
 )
 @settings(max_examples=100, deadline=None)
 def test_identifier_canonical_serialization_is_stable(
