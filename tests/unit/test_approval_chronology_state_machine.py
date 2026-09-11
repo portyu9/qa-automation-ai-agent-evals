@@ -275,9 +275,7 @@ class ApprovalChronologyStateMachine(RuleBasedStateMachine):
         self.events.append(_approved_result(3))
         self.phase = "completed"
 
-    @precondition(
-        lambda self: self.phase == "decided" and self.decision is ApprovalDecision.REJECT
-    )
+    @precondition(lambda self: self.phase == "decided" and self.decision is ApprovalDecision.REJECT)
     @rule()
     def observe_rejection_result(self) -> None:
         self.events.append(_rejection_result(2))
@@ -350,7 +348,9 @@ class ApprovalChronologyStateMachine(RuleBasedStateMachine):
             _execution(3),
         )
 
-        with pytest.raises(ApprovalIntentError, match="result must follow the resumed tool request"):
+        with pytest.raises(
+            ApprovalIntentError, match="result must follow the resumed tool request"
+        ):
             verify_approval_intent(self.scenario, candidate)
 
     @precondition(
