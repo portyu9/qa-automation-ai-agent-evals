@@ -8,6 +8,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 
 from agent_evals.contracts.models import AuthorityPolicy, HandoffAuthorityGrant
+from agent_evals.contracts.resource import ResourceIdentifier, ResourceScope
 from agent_evals.evidence.models import EvidenceEvent, EvidenceKind
 
 _HANDOFF_PATH_DOMAIN = b"agent-evals/handoff-authority-path/v1\0"
@@ -19,7 +20,7 @@ class EffectiveAuthority:
 
     allowed_tools: frozenset[str]
     approval_required_tools: frozenset[str]
-    allowed_resource_prefixes: tuple[str, ...]
+    allowed_resource_scopes: tuple[ResourceScope, ...]
     max_tool_calls: int
     max_handoffs: int
 
@@ -28,7 +29,7 @@ class EffectiveAuthority:
         return cls(
             allowed_tools=policy.allowed_tools - policy.forbidden_tools,
             approval_required_tools=policy.approval_required_tools,
-            allowed_resource_prefixes=policy.allowed_resource_prefixes,
+            allowed_resource_scopes=policy.allowed_resource_scopes,
             max_tool_calls=policy.max_tool_calls,
             max_handoffs=policy.max_handoffs,
         )
@@ -36,8 +37,8 @@ class EffectiveAuthority:
     def authorizes_tool(self, tool_name: str) -> bool:
         return tool_name in self.allowed_tools
 
-    def authorizes_resource(self, resource: str) -> bool:
-        return any(resource.startswith(prefix) for prefix in self.allowed_resource_prefixes)
+    def authorizes_resource(self, resource: ResourceIdentifier) -> bool:
+        return any(scope.contains_identifier(resource) for scope in self.allowed_resource_scopes)
 
 
 @dataclass(frozen=True, slots=True)
@@ -186,15 +187,16 @@ def attenuate_authority(
             f"{grant.source_agent!r} -> {grant.target_agent!r}: {sorted(widened_tools)!r}"
         )
 
-    widened_prefixes = tuple(
-        prefix
-        for prefix in grant.allowed_resource_prefixes
-        if not any(prefix.startswith(parent) for parent in source.allowed_resource_prefixes)
+    widened_scopes = tuple(
+        scope
+        for scope in grant.allowed_resource_scopes
+        if not any(parent.contains_scope(scope) for parent in source.allowed_resource_scopes)
     )
-    if widened_prefixes:
+    if widened_scopes:
         reasons.append(
             "handoff authority broadens source resource authority for transition "
-            f"{grant.source_agent!r} -> {grant.target_agent!r}: {list(widened_prefixes)!r}"
+            f"{grant.source_agent!r} -> {grant.target_agent!r}: "
+            f"{[scope.canonical_json for scope in widened_scopes]!r}"
         )
 
     if grant.max_tool_calls > source.max_tool_calls:
@@ -217,7 +219,7 @@ def attenuate_authority(
         EffectiveAuthority(
             allowed_tools=grant.allowed_tools,
             approval_required_tools=approval_required_tools,
-            allowed_resource_prefixes=grant.allowed_resource_prefixes,
+            allowed_resource_scopes=grant.allowed_resource_scopes,
             max_tool_calls=grant.max_tool_calls,
             max_handoffs=grant.max_handoffs,
         ),
