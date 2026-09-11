@@ -1,90 +1,160 @@
-"""Portable assurance report schema for CI and offline review."""
+"""Self-validating session assurance reports bound to trial evidence and grading facts."""
 
 from __future__ import annotations
 
 import hashlib
 import hmac
 import json
-from typing import Any, Literal, Self
+from typing import Literal, Self
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from agent_evals.assurance.session_provenance import SessionProvenanceSnapshot
 from agent_evals.contracts.models import EvaluationScenario
 from agent_evals.evidence.models import EvidenceEvent, EvidenceKind, TrialVerdict
 from agent_evals.gates.release import GateDecision, GateResult, ReleaseGate, ReleasePolicy
-from agent_evals.oracles.deterministic import grade_deterministic_evidence
+from agent_evals.oracles.deterministic import OracleResult
+from agent_evals.runtime.grading import grade_deterministic_evidence
 from agent_evals.runtime.preconditions import (
     EvaluationPreconditionError,
     has_blocking_evidence,
     verify_pregrading_closure,
 )
 from agent_evals.runtime.session import EvaluationSessionResult
-from agent_evals.semantic.models import SemanticJudgmentReceipt
+from agent_evals.semantic.models import SemanticDecision
+from agent_evals.semantic.receipt import SemanticJudgmentReceipt
 from agent_evals.semantic.verification import SemanticJudgmentError, verify_semantic_judgment
 from agent_evals.statistics.reliability import ReliabilityReport
 
-_REPORT_SCHEMA = "agent-evals/assurance-report/v6"
+_REPORT_SCHEMA: Literal["agent-evals/assurance-report/v6"] = "agent-evals/assurance-report/v6"
+_EVIDENCE_SCHEMA: Literal["agent-evals/trial-evidence/v2"] = "agent-evals/trial-evidence/v2"
 _REPORT_DOMAIN = b"agent-evals/assurance-report/v6\0"
-_EVIDENCE_SCHEMA = "agent-evals/trial-evidence/v2"
+_RESOLVED_VERDICTS = frozenset({TrialVerdict.PASS, TrialVerdict.FAIL})
 _CORE_ORACLE_NAMES = frozenset({"policy", "outcome"})
 _SIDE_EFFECT_ORACLE_NAME = "side-effect-idempotency"
-_SEMANTIC_ORACLE_NAME = "semantic"
+_CRITICAL_ON_FAIL_ORACLE_NAMES = frozenset({"policy", _SIDE_EFFECT_ORACLE_NAME})
+_NEVER_CRITICAL_ORACLE_NAMES = frozenset({"outcome"})
 
 
 class OracleSnapshot(BaseModel):
-    """Portable deterministic-oracle result."""
+    """Serialized deterministic oracle result used to rederive one trial verdict."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    name: str = Field(min_length=1, max_length=256)
+    name: str = Field(min_length=1)
     verdict: TrialVerdict
     reasons: tuple[str, ...] = ()
-    critical: bool = False
+    critical: bool = Field(default=False, strict=True)
+
+    @model_validator(mode="after")
+    def validate_runtime_criticality(self) -> Self:
+        if self.name in _CRITICAL_ON_FAIL_ORACLE_NAMES:
+            expected = self.verdict is TrialVerdict.FAIL
+            if self.critical is not expected:
+                raise ValueError(
+                    f"{self.name} oracle criticality does not match deterministic runtime contract"
+                )
+        elif self.name in _NEVER_CRITICAL_ORACLE_NAMES and self.critical:
+            raise ValueError("outcome oracle cannot claim critical authority")
+        return self
 
     @classmethod
-    def from_oracle(cls, result: Any) -> OracleSnapshot:
+    def from_oracle(cls, result: OracleResult) -> Self:
         return cls(
             name=result.name,
             verdict=result.verdict,
-            reasons=tuple(result.reasons),
+            reasons=result.reasons,
             critical=result.critical,
         )
 
 
 class BlockedPolicyViolationSnapshot(BaseModel):
-    """Durable policy fact retained when a trial is BLOCKED before grading.
+    """Explicit policy fact retained when another relation keeps a trial BLOCKED.
 
-    This snapshot never regrades the blocked trial. It preserves an explicit policy-violation event
-    so the release gate cannot treat known non-compensatory policy failure as mere evaluator
-    uncertainty. ``event_identity`` binds the exact source event into the report root.
+    This is not a substitute for a completed policy oracle. It records only an explicit
+    ``POLICY_VIOLATION`` event that already exists in the exact blocked evidence envelope. The
+    event digest binds its complete event payload, source, chronology, critical flag, timestamp,
+    and kind; the duplicated source/reason fields are review material, not independent authority.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    event_identity: str = Field(pattern=r"^[0-9a-f]{64}$")
-    source: str = Field(min_length=1, max_length=256)
-    payload: dict[str, Any]
-    source_critical: bool
+    sequence: int = Field(ge=0, strict=True)
+    event_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
+    source: str = Field(min_length=1)
+    reason: str
 
     @classmethod
-    def from_event(cls, event: EvidenceEvent) -> BlockedPolicyViolationSnapshot:
+    def from_event(cls, event: EvidenceEvent) -> Self:
         if event.kind is not EvidenceKind.POLICY_VIOLATION:
-            raise ValueError("blocked policy snapshot requires a policy-violation event")
+            raise ValueError("blocked policy snapshot requires explicit policy-violation evidence")
         return cls(
-            event_identity=event.identity,
+            sequence=event.sequence,
+            event_digest=event.digest,
             source=event.source,
-            payload=dict(event.payload),
-            source_critical=event.critical,
+            reason=str(event.payload.get("reason", "explicit policy violation")),
         )
 
 
-class TrialAssuranceRecord(BaseModel):
-    """Evidence-bound outcome for one evaluated trial."""
+class ScenarioGradingProfile(BaseModel):
+    """Minimal scenario-derived commitments that determine the report-level grading shape.
+
+    The profile intentionally does not serialize objective, state, authority, retrieval material,
+    approval intent, or other scenario content. Those remain bound by ``scenario_identity`` and
+    require the exact scenario/evidence replay path for historical re-establishment.
+    """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    trial_id: str = Field(min_length=1, max_length=256)
+    semantic_rubric_identity: str | None = Field(
+        default=None,
+        pattern=r"^[0-9a-f]{64}$",
+    )
+    side_effect_idempotency_identity: str | None = Field(
+        default=None,
+        pattern=r"^[0-9a-f]{64}$",
+    )
+
+    @classmethod
+    def from_scenario(cls, scenario: EvaluationScenario) -> Self:
+        rubric = scenario.semantic_rubric
+        side_effect = scenario.side_effect_idempotency
+        return cls(
+            semantic_rubric_identity=rubric.identity if rubric is not None else None,
+            side_effect_idempotency_identity=(
+                side_effect.identity if side_effect is not None else None
+            ),
+        )
+
+    @property
+    def requires_semantic_grading(self) -> bool:
+        return self.semantic_rubric_identity is not None
+
+    @property
+    def requires_side_effect_grading(self) -> bool:
+        return self.side_effect_idempotency_identity is not None
+
+
+class TrialAssuranceRecord(BaseModel):
+    """Bound trial facts sufficient to rederive report-level assurance conclusions.
+
+    Deterministic oracle snapshots and semantic judgment are deliberately separate authority
+    classes. A semantic result may only exist after all deterministic oracles pass, may never be
+    critical, and can only narrow a deterministic PASS into FAIL or INCONCLUSIVE. It cannot rescue
+    a deterministic failure.
+
+    BLOCKED trials do not acquire completed oracle authority. V6 retains any explicit
+    policy-violation facts already present in blocked evidence so release gating does not erase a
+    known safety fact merely because a different evaluation relation remains unresolved.
+
+    The evidence root identifies the exact final trial evidence. A semantic receipt separately
+    binds the exact pre-semantic evidence root; reconstructing and verifying those event-level
+    relations requires the evidence/replay path because the report does not duplicate the stream.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    trial_id: str = Field(min_length=1)
     evidence_root: str = Field(pattern=r"^[0-9a-f]{64}$")
     verdict: TrialVerdict
     oracle_results: tuple[OracleSnapshot, ...] = ()
@@ -93,110 +163,111 @@ class TrialAssuranceRecord(BaseModel):
 
     @property
     def critical_violations(self) -> int:
-        deterministic_critical = sum(
-            1
+        """Count resolved critical oracle failure plus blocked explicit policy authority.
+
+        Multiple explicit policy events in one blocked trial preserve multiple review facts but
+        count as one policy-oracle-equivalent critical failure, matching ``PolicyOracle`` semantics.
+        Semantic FAIL is never critical here.
+        """
+        resolved = sum(
+            result.critical and result.verdict is TrialVerdict.FAIL
             for result in self.oracle_results
-            if result.verdict is TrialVerdict.FAIL and result.critical
         )
-        blocked_policy_critical = int(bool(self.blocked_policy_violations))
-        return deterministic_critical + blocked_policy_critical
-
-
-class ScenarioGradingProfile(BaseModel):
-    """Report-bound grading shape needed to validate serialized trial records."""
-
-    model_config = ConfigDict(frozen=True, extra="forbid")
-
-    requires_side_effect_grading: bool
-    requires_semantic_grading: bool
-    semantic_rubric_identity: str | None = Field(
-        default=None,
-        pattern=r"^[0-9a-f]{64}$",
-    )
-
-    @classmethod
-    def from_scenario(cls, scenario: EvaluationScenario) -> ScenarioGradingProfile:
-        semantic = scenario.semantic_rubric
-        return cls(
-            requires_side_effect_grading=scenario.side_effect_contract is not None,
-            requires_semantic_grading=semantic is not None,
-            semantic_rubric_identity=semantic.identity if semantic is not None else None,
-        )
+        blocked_policy = int(bool(self.blocked_policy_violations))
+        return resolved + blocked_policy
 
     @model_validator(mode="after")
-    def validate_semantic_shape(self) -> Self:
-        if self.requires_semantic_grading:
-            if self.semantic_rubric_identity is None:
-                raise ValueError("semantic grading profile requires a rubric identity")
-        elif self.semantic_rubric_identity is not None:
-            raise ValueError("non-semantic grading profile cannot carry a rubric identity")
+    def validate_trial_derivation(self) -> Self:
+        _validate_oracle_snapshot_shape(self.oracle_results, verdict=self.verdict)
+
+        if self.verdict is TrialVerdict.BLOCKED:
+            if self.semantic_judgment is not None:
+                raise ValueError(
+                    "blocked assurance trial cannot contain semantic judgment evidence"
+                )
+            sequences = [snapshot.sequence for snapshot in self.blocked_policy_violations]
+            digests = [snapshot.event_digest for snapshot in self.blocked_policy_violations]
+            if sequences != sorted(set(sequences)):
+                raise ValueError(
+                    "blocked policy-violation snapshots must have unique increasing sequences"
+                )
+            if len(set(digests)) != len(digests):
+                raise ValueError("blocked policy-violation event digests must be unique")
+            return self
+
+        if self.blocked_policy_violations:
+            raise ValueError(
+                "non-blocked assurance trial cannot contain blocked policy-violation snapshots"
+            )
+
+        deterministic_failed = any(
+            result.verdict is TrialVerdict.FAIL for result in self.oracle_results
+        )
+        semantic = self.semantic_judgment
+        if semantic is not None and deterministic_failed:
+            raise ValueError("semantic judgment cannot coexist with deterministic oracle failure")
+
+        if semantic is None:
+            if self.verdict is TrialVerdict.INCONCLUSIVE:
+                raise ValueError(
+                    "inconclusive assurance trial requires an abstaining semantic judgment"
+                )
+            expected = TrialVerdict.FAIL if deterministic_failed else TrialVerdict.PASS
+        else:
+            if semantic.decision is SemanticDecision.ABSTAIN:
+                expected = TrialVerdict.INCONCLUSIVE
+            elif semantic.decision is SemanticDecision.FAIL:
+                expected = TrialVerdict.FAIL
+            else:
+                expected = TrialVerdict.PASS
+
+        if self.verdict is not expected:
+            raise ValueError(
+                "assurance trial verdict does not recompute from oracle results and semantic grading"
+            )
         return self
 
 
 class ReliabilitySnapshot(BaseModel):
-    """JSON-safe reliability arithmetic copied from a validated runtime report."""
+    """Serialized reliability output that must recompute from trial verdicts."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    total: int = Field(ge=0)
-    passed: int = Field(ge=0)
-    failed: int = Field(ge=0)
-    blocked: int = Field(ge=0)
-    inconclusive: int = Field(ge=0)
-    resolved: int = Field(ge=0)
-    success_rate: float = Field(ge=0.0, le=1.0, allow_inf_nan=False)
-    wilson_low: float = Field(ge=0.0, le=1.0, allow_inf_nan=False)
-    wilson_high: float = Field(ge=0.0, le=1.0, allow_inf_nan=False)
-    k: int = Field(ge=1)
-    confidence_z: float = Field(gt=0.0, allow_inf_nan=False)
-    pass_at_k: float = Field(ge=0.0, le=1.0, allow_inf_nan=False)
-    pass_power_k: float = Field(ge=0.0, le=1.0, allow_inf_nan=False)
+    trials: int = Field(ge=1, strict=True)
+    resolved_trials: int = Field(ge=0, strict=True)
+    passes: int = Field(ge=0, strict=True)
+    failures: int = Field(ge=0, strict=True)
+    blocked: int = Field(ge=0, strict=True)
+    inconclusive: int = Field(ge=0, strict=True)
+    success_rate: float = Field(ge=0.0, le=1.0, allow_inf_nan=False, strict=True)
+    wilson_low: float = Field(ge=0.0, le=1.0, allow_inf_nan=False, strict=True)
+    wilson_high: float = Field(ge=0.0, le=1.0, allow_inf_nan=False, strict=True)
+    pass_at_k: float = Field(ge=0.0, le=1.0, allow_inf_nan=False, strict=True)
+    pass_power_k: float = Field(ge=0.0, le=1.0, allow_inf_nan=False, strict=True)
+    k: int = Field(ge=1, strict=True)
+    confidence_z: float = Field(gt=0.0, allow_inf_nan=False, strict=True)
 
     @classmethod
-    def from_reliability(cls, report: ReliabilityReport) -> ReliabilitySnapshot:
-        report.validate()
+    def from_reliability(cls, report: ReliabilityReport) -> Self:
         return cls(
-            total=report.total,
-            passed=report.passed,
-            failed=report.failed,
+            trials=report.trials,
+            resolved_trials=report.resolved_trials,
+            passes=report.passes,
+            failures=report.failures,
             blocked=report.blocked,
             inconclusive=report.inconclusive,
-            resolved=report.resolved,
             success_rate=report.success_rate,
             wilson_low=report.wilson_low,
             wilson_high=report.wilson_high,
-            k=report.k,
-            confidence_z=report.confidence_z,
             pass_at_k=report.pass_at_k,
             pass_power_k=report.pass_power_k,
+            k=report.k,
+            confidence_z=report.confidence_z,
         )
-
-    @field_validator(
-        "success_rate",
-        "wilson_low",
-        "wilson_high",
-        "confidence_z",
-        "pass_at_k",
-        "pass_power_k",
-        mode="before",
-    )
-    @classmethod
-    def require_json_number(cls, value: object) -> object:
-        if isinstance(value, bool) or not isinstance(value, (int, float)):
-            raise TypeError("reliability floating-point fields require JSON numbers")
-        return value
-
-    @model_validator(mode="after")
-    def validate_counts(self) -> Self:
-        if self.passed + self.failed + self.blocked + self.inconclusive != self.total:
-            raise ValueError("reliability counts must sum to total")
-        if self.passed + self.failed != self.resolved:
-            raise ValueError("resolved must equal passed plus failed")
-        return self
 
 
 class GateSnapshot(BaseModel):
-    """Portable release decision."""
+    """Serialized release-gate output that must recompute from bound report inputs."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -204,18 +275,24 @@ class GateSnapshot(BaseModel):
     reasons: tuple[str, ...] = ()
 
     @classmethod
-    def from_gate(cls, result: GateResult) -> GateSnapshot:
+    def from_gate(cls, result: GateResult) -> Self:
         return cls(decision=result.decision, reasons=result.reasons)
 
 
 class AssuranceReport(BaseModel):
-    """Replayable evidence-bound release report.
+    """Reproducible session report whose derived claims are verified on every load.
 
-    ``report_root`` is a SHA-256 integrity commitment over the canonical JSON of every report field
-    except ``report_root`` itself. It is not a signature, MAC, authenticated identity, trusted
-    timestamp, attestation, or proof of statistical independence. V6 additionally binds and
-    revalidates repeated-trial campaign, reset/isolation, sampling, randomness, and stopping
-    provenance without upgrading those relations beyond their explicit evaluator-owned semantics.
+    Evidence roots, deterministic oracle snapshots, blocked explicit-policy facts, optional
+    semantic judgment receipts, the scenario-derived grading profile, terminal trial verdicts, and
+    repeated-trial session provenance are bound report facts. Reliability and release-gate fields
+    are recomputed from the validated trial facts and frozen release policy. Session provenance is
+    independently rederived against the ordered report trial IDs/evidence roots before the report
+    root is accepted.
+
+    The report root detects unacknowledged content changes. It is not a signature, MAC, trusted
+    timestamp, publisher identity, authentication proof, provider attestation, or formal proof of
+    IID sampling. Re-running deterministic oracles and reconstructing event-level scenario
+    relations requires the exact scenario/evidence replay path.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -247,6 +324,7 @@ class AssuranceReport(BaseModel):
         if not session.trials:
             raise ValueError("assurance report requires at least one evaluated trial")
 
+        session_provenance = SessionProvenanceSnapshot.from_session(session)
         scenario = scenario.snapshot()
         if not hmac.compare_digest(scenario.identity, session.scenario_identity):
             raise ValueError("assurance report scenario contract does not match session identity")
@@ -365,7 +443,6 @@ class AssuranceReport(BaseModel):
             records.append(record)
             verdicts.append(record.verdict)
 
-        session_provenance = SessionProvenanceSnapshot.from_session(session)
         ordered_trial_ids = tuple(record.trial_id for record in records)
         ordered_evidence_roots = tuple(record.evidence_root for record in records)
         session_provenance.validate_against_report(
@@ -473,44 +550,29 @@ class AssuranceReport(BaseModel):
                 "assurance trial side-effect oracle presence does not match grading profile"
             )
 
-        semantic_results = tuple(
-            result for result in record.oracle_results if result.name == _SEMANTIC_ORACLE_NAME
+        deterministic_failed = any(
+            result.verdict is TrialVerdict.FAIL for result in record.oracle_results
         )
-        if self.grading_profile.requires_semantic_grading:
-            deterministic_failed = any(
-                result.verdict is TrialVerdict.FAIL
-                for result in record.oracle_results
-                if result.name != _SEMANTIC_ORACLE_NAME
+        semantic = record.semantic_judgment
+        semantic_required = (
+            self.grading_profile.requires_semantic_grading and not deterministic_failed
+        )
+        if semantic_required and semantic is None:
+            raise ValueError(
+                "assurance trial is missing semantic judgment required by grading profile"
             )
-            if deterministic_failed:
-                if record.semantic_judgment is not None or semantic_results:
-                    raise ValueError(
-                        "semantic judgment cannot coexist with deterministic oracle failure"
-                    )
-            else:
-                if record.semantic_judgment is None:
-                    raise ValueError("missing semantic judgment required by grading profile")
-                if len(semantic_results) != 1:
-                    raise ValueError(
-                        "semantic grading profile requires exactly one semantic oracle"
-                    )
-                expected_semantic = OracleSnapshot(
-                    name=_SEMANTIC_ORACLE_NAME,
-                    verdict=_semantic_verdict(record.semantic_judgment.decision),
-                    reasons=(record.semantic_judgment.reason,),
-                    critical=False,
-                )
-                if semantic_results[0] != expected_semantic:
-                    raise ValueError(
-                        "semantic oracle does not match the bound semantic judgment receipt"
-                    )
-        elif record.semantic_judgment is not None or semantic_results:
-            raise ValueError("non-semantic grading profile cannot carry semantic judgment material")
+        if semantic is None:
+            return
 
-        deterministic = tuple(
-            result for result in record.oracle_results if result.name != _SEMANTIC_ORACLE_NAME
-        )
-        _validate_oracle_snapshot_shape(deterministic, verdict=record.verdict)
+        rubric_identity = self.grading_profile.semantic_rubric_identity
+        if rubric_identity is None:
+            raise ValueError(
+                "assurance trial contains semantic judgment without a configured rubric"
+            )
+        if semantic.rubric_identity != rubric_identity:
+            raise ValueError(
+                "semantic judgment rubric identity does not match assurance grading profile"
+            )
 
 
 def _validate_oracle_snapshot_shape(
@@ -518,38 +580,33 @@ def _validate_oracle_snapshot_shape(
     *,
     verdict: TrialVerdict,
 ) -> None:
-    if verdict in {TrialVerdict.BLOCKED, TrialVerdict.INCONCLUSIVE}:
+    oracle_names = [result.name for result in oracle_results]
+    if len(set(oracle_names)) != len(oracle_names):
+        raise ValueError("assurance trial oracle names must be unique")
+
+    if verdict is TrialVerdict.BLOCKED:
+        if oracle_results:
+            raise ValueError("blocked assurance trial cannot contain completed oracle results")
         return
-    names = tuple(result.name for result in oracle_results)
-    if len(set(names)) != len(names):
-        raise ValueError("resolved assurance trial contains duplicate oracle names")
-    missing = _CORE_ORACLE_NAMES.difference(names)
-    if missing:
-        raise ValueError(
-            f"resolved assurance trial missing core oracle results: {', '.join(sorted(missing))}"
-        )
-    policy = next(result for result in oracle_results if result.name == "policy")
-    if policy.verdict is TrialVerdict.FAIL and not policy.critical:
-        raise ValueError("policy oracle failure criticality does not match deterministic runtime")
+
+    if not oracle_results:
+        raise ValueError("non-blocked assurance trial requires deterministic oracle results")
+    missing_core = _CORE_ORACLE_NAMES.difference(oracle_names)
+    if missing_core:
+        missing = ", ".join(sorted(missing_core))
+        raise ValueError(f"non-blocked assurance trial is missing core oracle results: {missing}")
+    if any(result.verdict not in _RESOLVED_VERDICTS for result in oracle_results):
+        raise ValueError("non-blocked assurance trial has a non-resolved oracle verdict")
 
 
-def _semantic_verdict(decision: Any) -> TrialVerdict:
-    value = getattr(decision, "value", decision)
-    if value == "pass":
-        return TrialVerdict.PASS
-    if value == "fail":
-        return TrialVerdict.FAIL
-    if value == "abstain":
-        return TrialVerdict.INCONCLUSIVE
-    raise ValueError("unsupported semantic decision")
+def _report_root(value: object) -> str:
+    return hashlib.sha256(_REPORT_DOMAIN + _canonical_json_bytes(value)).hexdigest()
 
 
-def _report_root(unsigned: dict[str, Any]) -> str:
-    payload = json.dumps(
-        unsigned,
+def _canonical_json_bytes(value: object) -> bytes:
+    return json.dumps(
+        value,
         sort_keys=True,
         separators=(",", ":"),
-        ensure_ascii=False,
         allow_nan=False,
     ).encode("utf-8")
-    return hashlib.sha256(_REPORT_DOMAIN + payload).hexdigest()
