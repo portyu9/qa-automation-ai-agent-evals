@@ -110,8 +110,11 @@ class EvaluationSessionResult:
                 "independent-attempt pass@k/pass^k interpretation is unavailable because session "
                 "independence is unverified"
             )
-        assert self.independence_status is IndependenceStatus.OPERATOR_ASSERTED
-        assert self.independence_basis is not None
+        if (
+            self.independence_status is not IndependenceStatus.OPERATOR_ASSERTED
+            or self.independence_basis is None
+        ):
+            raise ValueError("session independence metadata is invalid after validation")
         return IndependenceQualifiedMetrics(
             status=self.independence_status,
             basis=self.independence_basis,
@@ -221,8 +224,9 @@ def _validate_independence_metadata(
         if basis is not None:
             raise ValueError("unverified independence must not carry an operator assertion basis")
         return
+    if status is not IndependenceStatus.OPERATOR_ASSERTED:
+        raise ValueError("unsupported independence status")
 
-    assert status is IndependenceStatus.OPERATOR_ASSERTED
     if not isinstance(basis, str) or not basis or basis != basis.strip():
         raise ValueError(
             "operator_asserted independence requires a non-empty, whitespace-trimmed basis"
