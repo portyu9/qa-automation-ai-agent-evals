@@ -70,7 +70,9 @@ class SessionProvenanceSnapshot(BaseModel):
 
     @model_validator(mode="after")
     def validate_independence_shape(self) -> Self:
-        strategy_present = self.reset_strategy_name is not None or self.reset_strategy_version is not None
+        strategy_present = (
+            self.reset_strategy_name is not None or self.reset_strategy_version is not None
+        )
         if strategy_present and (
             self.reset_strategy_name is None or self.reset_strategy_version is None
         ):
@@ -84,7 +86,9 @@ class SessionProvenanceSnapshot(BaseModel):
         elif self.independence_status is IndependenceStatus.OPERATOR_ASSERTED:
             basis = self.independence_basis
             if basis is None or not basis or basis != basis.strip():
-                raise ValueError("operator-asserted independence requires a bounded assertion basis")
+                raise ValueError(
+                    "operator-asserted independence requires a bounded assertion basis"
+                )
             if strategy_present or self.reset_isolation_receipts:
                 raise ValueError(
                     "operator-asserted independence cannot carry evaluator-verified reset provenance"
@@ -142,8 +146,7 @@ class SessionProvenanceSnapshot(BaseModel):
     @property
     def randomness_receipt_roots(self) -> tuple[str, ...]:
         return tuple(
-            receipt.receipt_root
-            for receipt in self.sampling_metadata.randomness_control_receipts
+            receipt.receipt_root for receipt in self.sampling_metadata.randomness_control_receipts
         )
 
     def validate_against_report(
