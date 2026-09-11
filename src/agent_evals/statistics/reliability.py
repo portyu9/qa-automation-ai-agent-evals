@@ -12,7 +12,13 @@ DEFAULT_CONFIDENCE_Z = 1.959963984540054
 
 @dataclass(frozen=True, slots=True)
 class ReliabilityReport:
-    """Self-validating reliability statistics derived from one exact verdict vector."""
+    """Self-validating reliability statistics derived from one exact verdict vector.
+
+    ``pass_at_k`` and ``pass_power_k`` are deterministic algebraic transforms of the observed
+    resolved success proportion. This report does not establish reset/isolation or statistical
+    independence. Session callers that need an independent-attempt interpretation must use the
+    explicit independence qualification exposed by ``EvaluationSessionResult``.
+    """
 
     trials: int
     resolved_trials: int
