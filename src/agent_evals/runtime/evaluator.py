@@ -50,9 +50,7 @@ class EvaluatedTrial:
             if isinstance(evaluator_elapsed_ms, bool) or not isinstance(
                 evaluator_elapsed_ms, (int, float)
             ):
-                raise TypeError(
-                    "evaluator_elapsed_ms must be a finite non-negative number or None"
-                )
+                raise TypeError("evaluator_elapsed_ms must be a finite non-negative number or None")
             normalized_elapsed_ms = float(evaluator_elapsed_ms)
             if not math.isfinite(normalized_elapsed_ms) or normalized_elapsed_ms < 0.0:
                 raise ValueError("evaluator_elapsed_ms must be a finite non-negative number")
