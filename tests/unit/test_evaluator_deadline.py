@@ -7,6 +7,7 @@ from dataclasses import dataclass
 import pytest
 
 from agent_evals.adapters.base import AdapterResult
+from agent_evals.adapters.replay import EvidenceReplayAdapter
 from agent_evals.contracts.models import (
     AuthorityPolicy,
     EvaluationScenario,
@@ -14,7 +15,7 @@ from agent_evals.contracts.models import (
     SubjectFingerprint,
 )
 from agent_evals.contracts.semantic import SemanticCriterionSpec, SemanticRubricSpec
-from agent_evals.evidence.models import EvidenceKind, TrialVerdict
+from agent_evals.evidence.models import EvidenceKind, TrialEvidence, TrialVerdict
 from agent_evals.runtime.evaluator import EvaluatedTrial, TrialRunner
 from agent_evals.semantic.calibration import (
     SemanticCalibrationCase,
@@ -279,6 +280,32 @@ async def test_no_deadline_preserves_existing_behavior_and_adapter_elapsed_telem
         subject=_subject(),
         scenario=_scenario(),
         trial_id="no-deadline",
+    )
+
+    assert result.verdict is TrialVerdict.PASS
+    assert result.evidence.elapsed_ms == 60_000.0
+    assert all(event.source != "evaluator:deadline" for event in result.evidence.events)
+
+
+@pytest.mark.asyncio
+async def test_replay_deadline_uses_live_clock_not_recorded_elapsed_telemetry() -> None:
+    subject = _subject()
+    scenario = _scenario()
+    trial_id = "replay-historical-latency"
+    recorded = TrialEvidence(
+        trial_id=trial_id,
+        subject_identity=subject.identity,
+        scenario_identity=scenario.identity,
+        final_state={"status": "ok"},
+        final_output="recorded",
+        elapsed_ms=60_000.0,
+    )
+
+    result = await TrialRunner(deadline_seconds=1.0).run(
+        EvidenceReplayAdapter(recorded),
+        subject=subject,
+        scenario=scenario,
+        trial_id=trial_id,
     )
 
     assert result.verdict is TrialVerdict.PASS
