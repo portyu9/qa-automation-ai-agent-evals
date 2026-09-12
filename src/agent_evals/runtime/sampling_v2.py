@@ -18,9 +18,7 @@ from agent_evals.runtime.population import (
 from agent_evals.runtime.sampling import SessionSamplingMetadata
 from agent_evals.runtime.session import EvaluationSessionResult
 
-_SAMPLING_V2_SCHEMA: Literal["agent-evals/session-sampling/v2"] = (
-    "agent-evals/session-sampling/v2"
-)
+_SAMPLING_V2_SCHEMA: Literal["agent-evals/session-sampling/v2"] = "agent-evals/session-sampling/v2"
 _SAMPLING_V2_DOMAIN = b"agent-evals/session-sampling/v2\0"
 _CAMPAIGN_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
 
@@ -63,9 +61,7 @@ class SessionSamplingMetadataV2(BaseModel):
         """Bind explicit population provenance to one fully validated modern session."""
         session.validate()
         if session.campaign_id is None:
-            raise PopulationProvenanceError(
-                "session-sampling v2 requires a campaign identity"
-            )
+            raise PopulationProvenanceError("session-sampling v2 requires a campaign identity")
         if session.sampling_metadata is None:
             raise PopulationProvenanceError(
                 "session-sampling v2 requires historical v1 attempt provenance"
