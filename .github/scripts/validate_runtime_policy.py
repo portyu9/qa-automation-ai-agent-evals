@@ -16,6 +16,7 @@ REQUIRED_JOBS = (
     "mcp-remote-auth",
     "mcp-oauth-flow",
     "package",
+    "package-reverify",
 )
 _WORKFLOW_USES_RE = re.compile(r"^\s*(?:-\s*)?uses:\s*([^\s#]+)", flags=re.MULTILINE)
 
@@ -132,11 +133,45 @@ for job, next_job in (
     ("mcp-lab", "mcp-remote-auth"),
     ("mcp-remote-auth", "mcp-oauth-flow"),
     ("mcp-oauth-flow", "package"),
-    ("package", "ci-gate"),
+    ("package", "package-reverify"),
 ):
     block = job_block(workflow, job, next_job)
     if not re.search(r"^\s+needs:\s*policy\s*$", block, flags=re.MULTILINE):
         fail(f"{job} must depend on the repository policy job")
+
+package = job_block(workflow, "package", "package-reverify")
+if "package_artifact_manifest.py create" not in package:
+    fail("package job must create the retained package artifact manifest")
+if not any(
+    action.startswith("actions/upload-artifact@") for action in _WORKFLOW_USES_RE.findall(package)
+):
+    fail("package job must upload the exact tested package artifact set")
+if "package-artifacts-${{ github.run_id }}" not in package:
+    fail("package artifact name must bind the workflow run ID")
+if "overwrite: true" not in package:
+    fail("package upload must explicitly replace a prior artifact on a rerun")
+if "dist/artifact-manifest.json" not in package:
+    fail("package upload must include artifact-manifest.json")
+
+package_reverify = job_block(workflow, "package-reverify", "ci-gate")
+if not re.search(r"^\s+needs:\s*package\s*$", package_reverify, flags=re.MULTILINE):
+    fail("package-reverify must depend on the package job")
+if not any(
+    action.startswith("actions/download-artifact@")
+    for action in _WORKFLOW_USES_RE.findall(package_reverify)
+):
+    fail("package-reverify must download the retained package artifact set")
+if "package_artifact_manifest.py verify" not in package_reverify:
+    fail("package-reverify must validate the retained artifact manifest")
+if "package-artifacts-${{ github.run_id }}" not in package_reverify:
+    fail("package-reverify must download the run-bound artifact")
+if "python -m build" in package_reverify:
+    fail("package-reverify must not rebuild package distributions")
+if (
+    "retained-dist/*.whl" not in package_reverify
+    or "retained-dist/*.tar.gz" not in package_reverify
+):
+    fail("package-reverify must exercise the downloaded wheel and sdist")
 
 ci_gate = job_block(workflow, "ci-gate", None)
 if not re.search(r"^\s+if:\s*always\(\)\s*$", ci_gate, flags=re.MULTILINE):
@@ -152,10 +187,15 @@ if not any(action.startswith("actions/setup-python@") for action in ci_action_us
     fail("ci.yml must use actions/setup-python")
 if not any(action.startswith("actions/checkout@") for action in ci_action_uses):
     fail("ci.yml must use actions/checkout")
+if not any(action.startswith("actions/upload-artifact@") for action in ci_action_uses):
+    fail("ci.yml must use actions/upload-artifact for retained package bytes")
+if not any(action.startswith("actions/download-artifact@") for action in ci_action_uses):
+    fail("ci.yml must use actions/download-artifact for package reverification")
 
 print(
     "runtime policy validated: "
     f"python={','.join(SUPPORTED_PYTHONS)}; requires-python={REQUIRES_PYTHON}; "
-    f"runner={RUNNER}; workflows={len(workflows)}; gate=ci-gate"
+    f"runner={RUNNER}; workflows={len(workflows)}; gate=ci-gate; "
+    "package-artifacts=retained-and-reverified"
 )
 sys.exit(0)
