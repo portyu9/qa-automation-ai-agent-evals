@@ -585,8 +585,10 @@ class TrialRunner:
         return seconds
 
     def _remaining_deadline_seconds(self, started: float) -> float:
-        assert self._deadline_seconds is not None
-        return self._deadline_seconds - (perf_counter() - started)
+        deadline_seconds = self._deadline_seconds
+        if deadline_seconds is None:
+            raise RuntimeError("deadline remaining requested without configured deadline")
+        return deadline_seconds - (perf_counter() - started)
 
     def _deadline_expired(self, started: float) -> bool:
         return (
@@ -600,12 +602,9 @@ class TrialRunner:
 
     @staticmethod
     def _consume_late_task_result(task: asyncio.Future[Any]) -> None:
-        try:
-            task.result()
-        except asyncio.CancelledError:
-            pass
-        except Exception:
-            pass
+        if task.cancelled():
+            return
+        task.exception()
 
     def _deadline_blocked(
         self,
