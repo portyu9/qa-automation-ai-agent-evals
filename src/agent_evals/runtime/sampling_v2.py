@@ -30,8 +30,8 @@ class SessionSamplingMetadataV2(BaseModel):
 
     V1 remains the exact sampling/randomness/stopping record emitted by the existing session runner.
     V2 adds explicit population provenance and binds both layers to the campaign, subject and
-    scenario. The root is an integrity value only; it is not authentication or proof that the
-    referenced population was sampled representatively.
+    scenario. The root is an integrity value only; it is not authentication, a chronology proof,
+    or proof that the referenced population was sampled representatively.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -60,7 +60,7 @@ class SessionSamplingMetadataV2(BaseModel):
         *,
         population_provenance: PopulationProvenance,
     ) -> SessionSamplingMetadataV2:
-        """Bind predeclared population provenance to one fully validated modern session."""
+        """Bind explicit population provenance to one fully validated modern session."""
         session.validate()
         if session.campaign_id is None:
             raise PopulationProvenanceError(
