@@ -330,6 +330,87 @@ jobs:
           if doctor['version'] != expected:
               raise SystemExit(f'doctor version mismatch: {doctor["version"]!r} != {expected!r}')
           PY
+      - name: Create retained package artifact manifest
+        run: |
+          python .github/scripts/package_artifact_manifest.py create \
+            --dist-dir dist \
+            --repository "$GITHUB_REPOSITORY" \
+            --commit-sha "$GITHUB_SHA" \
+            --workflow "$GITHUB_WORKFLOW" \
+            --run-id "$GITHUB_RUN_ID" \
+            --run-attempt "$GITHUB_RUN_ATTEMPT"
+      - name: Upload exact tested package artifacts
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: package-artifacts-${{ github.run_id }}
+          path: |
+            dist/*.whl
+            dist/*.tar.gz
+            dist/artifact-manifest.json
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
+          overwrite: true
+
+  package-reverify:
+    name: Reverify retained package artifacts
+    needs: package
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: "3.11"
+      - name: Download exact tested package artifacts
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: package-artifacts-${{ github.run_id }}
+          path: retained-dist
+      - name: Verify retained package manifest and digests
+        run: |
+          python .github/scripts/package_artifact_manifest.py verify \
+            --dist-dir retained-dist \
+            --repository "$GITHUB_REPOSITORY" \
+            --commit-sha "$GITHUB_SHA" \
+            --workflow "$GITHUB_WORKFLOW" \
+            --run-id "$GITHUB_RUN_ID" \
+            --run-attempt "$GITHUB_RUN_ATTEMPT"
+      - name: Install retained wheel
+        run: |
+          python -m pip install --disable-pip-version-check retained-dist/*.whl
+          python -c "import agent_evals; print(agent_evals.__name__)"
+          agent-evals --help >/dev/null
+          python - <<'PY'
+          import json
+          import subprocess
+          from importlib.metadata import version
+
+          expected = version('qa-automation-ai-agent-evals')
+          doctor = json.loads(subprocess.check_output(['agent-evals', 'doctor'], text=True))
+          if doctor['version'] != expected:
+              raise SystemExit(f'doctor version mismatch: {doctor["version"]!r} != {expected!r}')
+          PY
+      - name: Install retained source distribution
+        run: |
+          python -m pip uninstall -y qa-automation-ai-agent-evals
+          python -m pip install --disable-pip-version-check --no-deps retained-dist/*.tar.gz
+          python -c "import agent_evals; print(agent_evals.__name__)"
+          agent-evals --help >/dev/null
+          python - <<'PY'
+          import json
+          import subprocess
+          from importlib.metadata import version
+
+          expected = version('qa-automation-ai-agent-evals')
+          doctor = json.loads(subprocess.check_output(['agent-evals', 'doctor'], text=True))
+          if doctor['version'] != expected:
+              raise SystemExit(f'doctor version mismatch: {doctor["version"]!r} != {expected!r}')
+          PY
 
   ci-gate:
     name: ci-gate
@@ -342,6 +423,7 @@ jobs:
       - mcp-remote-auth
       - mcp-oauth-flow
       - package
+      - package-reverify
     runs-on: ubuntu-24.04
     timeout-minutes: 2
     steps:
@@ -354,8 +436,9 @@ jobs:
           MCP_REMOTE_AUTH: ${{ needs['mcp-remote-auth'].result }}
           MCP_OAUTH_FLOW: ${{ needs['mcp-oauth-flow'].result }}
           PACKAGE: ${{ needs.package.result }}
+          PACKAGE_REVERIFY: ${{ needs['package-reverify'].result }}
         run: |
           set -euo pipefail
-          for result in "$POLICY" "$QUALITY" "$OPENAI_ADAPTER" "$MCP_LAB" "$MCP_REMOTE_AUTH" "$MCP_OAUTH_FLOW" "$PACKAGE"; do
+          for result in "$POLICY" "$QUALITY" "$OPENAI_ADAPTER" "$MCP_LAB" "$MCP_REMOTE_AUTH" "$MCP_OAUTH_FLOW" "$PACKAGE" "$PACKAGE_REVERIFY"; do
             [[ "$result" == "success" ]] || { echo "required job result=$result"; exit 1; }
           done
