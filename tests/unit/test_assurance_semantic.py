@@ -17,6 +17,12 @@ from agent_evals.evidence.models import (
 from agent_evals.gates.release import ReleasePolicy
 from agent_evals.runtime.evaluator import EvaluatedTrial
 from agent_evals.runtime.grading import grade_deterministic_evidence
+from agent_evals.runtime.sampling import (
+    RandomnessStatus,
+    SamplingPolicy,
+    SessionSamplingMetadata,
+    StoppingRule,
+)
 from agent_evals.runtime.session import EvaluationSessionResult
 from agent_evals.semantic.calibration import (
     SemanticCalibrationCase,
@@ -39,6 +45,14 @@ from agent_evals.semantic.verification import (
 from agent_evals.statistics.reliability import ReliabilityReport
 
 _SUBJECT = "a" * 64
+_CAMPAIGN_ID = "assurance-semantic"
+_RUNTIME_ADAPTER = "fixture-runtime"
+_SUBJECT_ADAPTER = "fixture-subject"
+_SUBJECT_ADAPTER_VERSION = "1"
+
+
+def _trial_id() -> str:
+    return f"campaign:{_CAMPAIGN_ID}:attempt:0000"
 
 
 def _rubric() -> SemanticRubricSpec:
@@ -170,7 +184,7 @@ def _trial(
 ) -> EvaluatedTrial:
     pre_events = (_deterministic_failure_event(),) if deterministic_fail else ()
     pre_semantic = TrialEvidence(
-        trial_id=f"semantic-{decision.value}",
+        trial_id=_trial_id(),
         subject_identity=_SUBJECT,
         scenario_identity=_SCENARIO,
         events=pre_events,
@@ -214,7 +228,7 @@ def _deterministic_only_trial(*, failed: bool) -> EvaluatedTrial:
     verdict = TrialVerdict.FAIL if failed else TrialVerdict.PASS
     events = (_deterministic_failure_event(),) if failed else ()
     evidence = TrialEvidence(
-        trial_id=f"semantic-required-{'fail' if failed else 'pass'}",
+        trial_id=_trial_id(),
         subject_identity=_SUBJECT,
         scenario_identity=_SCENARIO,
         events=events,
@@ -233,6 +247,16 @@ def _session(trial: EvaluatedTrial) -> EvaluationSessionResult:
         scenario_identity=_SCENARIO,
         trials=(trial,),
         reliability=ReliabilityReport.from_verdicts((trial.verdict,), k=1),
+        campaign_id=_CAMPAIGN_ID,
+        runtime_adapter_name=_RUNTIME_ADAPTER,
+        subject_adapter=_SUBJECT_ADAPTER,
+        subject_adapter_version=_SUBJECT_ADAPTER_VERSION,
+        sampling_metadata=SessionSamplingMetadata(
+            sampling_policy=SamplingPolicy.PREDECLARED_ALL_ATTEMPTS,
+            randomness_status=RandomnessStatus.UNKNOWN,
+            stopping_rule=StoppingRule.FIXED_HORIZON,
+            planned_trials=1,
+        ),
     )
 
 
@@ -255,10 +279,10 @@ def _report(session: EvaluationSessionResult) -> AssuranceReport:
     )
 
 
-def test_assurance_report_v5_keeps_semantic_failure_noncritical() -> None:
+def test_assurance_report_v6_keeps_semantic_failure_noncritical() -> None:
     report = _report(_session(_trial(SemanticDecision.FAIL)))
 
-    assert report.schema_version == "agent-evals/assurance-report/v5"
+    assert report.schema_version == "agent-evals/assurance-report/v6"
     assert report.grading_profile.semantic_rubric_identity == _rubric().identity
     assert report.trials[0].verdict is TrialVerdict.FAIL
     assert report.trials[0].semantic_judgment is not None
@@ -502,7 +526,7 @@ def test_assurance_report_json_reload_rejects_semantic_profile_rubric_drift() ->
         AssuranceReport.model_validate(payload)
 
 
-def test_assurance_semantic_binding_preserves_v5_report_shape() -> None:
+def test_assurance_semantic_binding_preserves_v6_report_shape() -> None:
     report = _report(_session(_trial(SemanticDecision.PASS)))
 
     assert set(report.model_dump(mode="json")) == {
@@ -510,6 +534,7 @@ def test_assurance_semantic_binding_preserves_v5_report_shape() -> None:
         "evidence_schema",
         "subject_identity",
         "scenario_identity",
+        "session_provenance",
         "grading_profile",
         "trials",
         "release_policy",
@@ -517,4 +542,4 @@ def test_assurance_semantic_binding_preserves_v5_report_shape() -> None:
         "gate",
         "report_root",
     }
-    assert report.schema_version == "agent-evals/assurance-report/v5"
+    assert report.schema_version == "agent-evals/assurance-report/v6"
