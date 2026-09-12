@@ -106,9 +106,7 @@ def _validate_cross_layer_binding(
     if not hmac.compare_digest(sampling.scenario_identity, predecessor.scenario_identity):
         raise ValueError("assurance-report v7 sampling scenario does not match predecessor")
     if sampling.attempt_provenance != provenance.sampling_metadata:
-        raise ValueError(
-            "assurance-report v7 attempt provenance does not match predecessor report"
-        )
+        raise ValueError("assurance-report v7 attempt provenance does not match predecessor report")
 
 
 def _report_root(value: dict[str, Any]) -> str:
