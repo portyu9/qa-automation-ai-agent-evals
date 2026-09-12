@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+import math
 from dataclasses import dataclass, field
 from time import perf_counter
 
@@ -62,10 +64,21 @@ class TrialRunner:
     Provider/runtime exceptions and failed evaluation preconditions become BLOCKED evidence. Agent
     output cannot convert missing execution evidence into PASS. Deterministic oracle failures
     always dominate semantic judgment and short-circuit semantic judge invocation entirely.
+
+    An optional evaluator-owned wall-clock deadline covers adapter execution, evaluator processing,
+    and semantic judge invocation. Expiration is evaluator uncertainty and therefore becomes
+    BLOCKED rather than subject FAIL. Cooperative cancellation cannot prove that provider work or
+    external side effects stopped; late child-task results are discarded and never graded.
     """
 
-    def __init__(self, *, semantic_judge: SemanticJudge | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        semantic_judge: SemanticJudge | None = None,
+        deadline_seconds: float | None = None,
+    ) -> None:
         self._semantic_judge = semantic_judge
+        self._deadline_seconds = self._validate_deadline_seconds(deadline_seconds)
 
     async def run(
         self,
@@ -81,12 +94,46 @@ class TrialRunner:
         execution_scenario = scenario.snapshot()
         scenario_identity = scenario.identity
         try:
-            result = await adapter.execute(
-                subject=subject,
-                scenario=execution_scenario,
-                trial_id=trial_id,
-            )
+            if self._deadline_seconds is None:
+                result = await adapter.execute(
+                    subject=subject,
+                    scenario=execution_scenario,
+                    trial_id=trial_id,
+                )
+            else:
+                remaining = self._remaining_deadline_seconds(started)
+                if remaining <= 0.0:
+                    return self._deadline_blocked(
+                        subject=subject,
+                        scenario=scenario,
+                        trial_id=trial_id,
+                        started=started,
+                    )
+                task = asyncio.ensure_future(
+                    adapter.execute(
+                        subject=subject,
+                        scenario=execution_scenario,
+                        trial_id=trial_id,
+                    )
+                )
+                done, _ = await asyncio.wait((task,), timeout=remaining)
+                if task not in done:
+                    self._cancel_late_task(task)
+                    return self._deadline_blocked(
+                        subject=subject,
+                        scenario=scenario,
+                        trial_id=trial_id,
+                        started=started,
+                    )
+                result = task.result()
         except AdapterPreconditionError as exc:
+            if self._deadline_expired(started):
+                return self._deadline_blocked(
+                    subject=subject,
+                    scenario=scenario,
+                    trial_id=trial_id,
+                    started=started,
+                )
             if self._scenario_contract_drifted(execution_scenario, scenario_identity):
                 return self._scenario_contract_mutated(
                     adapter=adapter,
@@ -116,6 +163,13 @@ class TrialRunner:
                 verdict=TrialVerdict.BLOCKED,
             )
         except Exception as exc:  # adapter boundary: provider failure becomes structured evidence
+            if self._deadline_expired(started):
+                return self._deadline_blocked(
+                    subject=subject,
+                    scenario=scenario,
+                    trial_id=trial_id,
+                    started=started,
+                )
             if self._scenario_contract_drifted(execution_scenario, scenario_identity):
                 return self._scenario_contract_mutated(
                     adapter=adapter,
@@ -148,6 +202,14 @@ class TrialRunner:
                 verdict=TrialVerdict.BLOCKED,
             )
 
+        if self._deadline_expired(started):
+            return self._deadline_blocked(
+                subject=subject,
+                scenario=scenario,
+                trial_id=trial_id,
+                started=started,
+            )
+
         if self._scenario_contract_drifted(execution_scenario, scenario_identity):
             return self._scenario_contract_mutated(
                 adapter=adapter,
@@ -174,6 +236,13 @@ class TrialRunner:
                 trial_id=trial_id,
             )
         except ValidationError:
+            if self._deadline_expired(started):
+                return self._deadline_blocked(
+                    subject=subject,
+                    scenario=scenario,
+                    trial_id=trial_id,
+                    started=started,
+                )
             return self._invalid_adapter_result(
                 adapter=adapter,
                 subject=subject,
@@ -182,7 +251,25 @@ class TrialRunner:
                 elapsed_ms=(perf_counter() - started) * 1000.0,
             )
 
-        if has_blocking_evidence(evidence):
+        if self._deadline_expired(started):
+            return self._deadline_blocked(
+                subject=subject,
+                scenario=scenario,
+                trial_id=trial_id,
+                started=started,
+                evidence=evidence,
+            )
+
+        blocking_evidence = has_blocking_evidence(evidence)
+        if self._deadline_expired(started):
+            return self._deadline_blocked(
+                subject=subject,
+                scenario=scenario,
+                trial_id=trial_id,
+                started=started,
+                evidence=evidence,
+            )
+        if blocking_evidence:
             return EvaluatedTrial(
                 evidence=evidence,
                 oracle_results=(),
@@ -190,6 +277,14 @@ class TrialRunner:
             )
 
         authority_violation = self._live_evaluator_owned_evidence_violation(adapter, evidence)
+        if self._deadline_expired(started):
+            return self._deadline_blocked(
+                subject=subject,
+                scenario=scenario,
+                trial_id=trial_id,
+                started=started,
+                evidence=evidence,
+            )
         if authority_violation is not None:
             source, code, reason = authority_violation
             return EvaluatedTrial(
@@ -206,6 +301,14 @@ class TrialRunner:
         try:
             verify_pregrading_closure(scenario, evidence)
         except EvaluationPreconditionError as exc:
+            if self._deadline_expired(started):
+                return self._deadline_blocked(
+                    subject=subject,
+                    scenario=scenario,
+                    trial_id=trial_id,
+                    started=started,
+                    evidence=evidence,
+                )
             return EvaluatedTrial(
                 evidence=self._append_evaluation_error(
                     evidence,
@@ -217,12 +320,37 @@ class TrialRunner:
                 verdict=TrialVerdict.BLOCKED,
             )
 
+        if self._deadline_expired(started):
+            return self._deadline_blocked(
+                subject=subject,
+                scenario=scenario,
+                trial_id=trial_id,
+                started=started,
+                evidence=evidence,
+            )
+
         oracle_results = grade_deterministic_evidence(scenario, evidence)
+        if self._deadline_expired(started):
+            return self._deadline_blocked(
+                subject=subject,
+                scenario=scenario,
+                trial_id=trial_id,
+                started=started,
+                evidence=evidence,
+            )
         deterministic_failed = any(result.verdict is TrialVerdict.FAIL for result in oracle_results)
 
         try:
             recorded_semantic = verify_semantic_judgment(scenario, evidence)
         except SemanticJudgmentError as exc:
+            if self._deadline_expired(started):
+                return self._deadline_blocked(
+                    subject=subject,
+                    scenario=scenario,
+                    trial_id=trial_id,
+                    started=started,
+                    evidence=evidence,
+                )
             return EvaluatedTrial(
                 evidence=self._append_evaluation_error(
                     evidence,
@@ -232,6 +360,15 @@ class TrialRunner:
                 ),
                 oracle_results=(),
                 verdict=TrialVerdict.BLOCKED,
+            )
+
+        if self._deadline_expired(started):
+            return self._deadline_blocked(
+                subject=subject,
+                scenario=scenario,
+                trial_id=trial_id,
+                started=started,
+                evidence=evidence,
             )
 
         if deterministic_failed:
@@ -297,6 +434,14 @@ class TrialRunner:
         try:
             profile, calibration = validate_semantic_judge_authority(self._semantic_judge)
         except (SemanticJudgeConfigurationError, Exception) as exc:
+            if self._deadline_expired(started):
+                return self._deadline_blocked(
+                    subject=subject,
+                    scenario=scenario,
+                    trial_id=trial_id,
+                    started=started,
+                    evidence=evidence,
+                )
             return EvaluatedTrial(
                 evidence=self._append_evaluation_error(
                     evidence,
@@ -308,14 +453,54 @@ class TrialRunner:
                 verdict=TrialVerdict.BLOCKED,
             )
 
+        if self._deadline_expired(started):
+            return self._deadline_blocked(
+                subject=subject,
+                scenario=scenario,
+                trial_id=trial_id,
+                started=started,
+                evidence=evidence,
+            )
+
         judge_input = SemanticJudgeInput(
             objective=scenario.objective,
             rubric=rubric,
             candidate_output=evidence.final_output,
         )
         try:
-            raw_response = await self._semantic_judge.judge(judge_input)
+            if self._deadline_seconds is None:
+                raw_response = await self._semantic_judge.judge(judge_input)
+            else:
+                remaining = self._remaining_deadline_seconds(started)
+                if remaining <= 0.0:
+                    return self._deadline_blocked(
+                        subject=subject,
+                        scenario=scenario,
+                        trial_id=trial_id,
+                        started=started,
+                        evidence=evidence,
+                    )
+                task = asyncio.ensure_future(self._semantic_judge.judge(judge_input))
+                done, _ = await asyncio.wait((task,), timeout=remaining)
+                if task not in done:
+                    self._cancel_late_task(task)
+                    return self._deadline_blocked(
+                        subject=subject,
+                        scenario=scenario,
+                        trial_id=trial_id,
+                        started=started,
+                        evidence=evidence,
+                    )
+                raw_response = task.result()
         except Exception as exc:
+            if self._deadline_expired(started):
+                return self._deadline_blocked(
+                    subject=subject,
+                    scenario=scenario,
+                    trial_id=trial_id,
+                    started=started,
+                    evidence=evidence,
+                )
             return EvaluatedTrial(
                 evidence=self._append_evaluation_error(
                     evidence,
@@ -325,6 +510,15 @@ class TrialRunner:
                 ),
                 oracle_results=(),
                 verdict=TrialVerdict.BLOCKED,
+            )
+
+        if self._deadline_expired(started):
+            return self._deadline_blocked(
+                subject=subject,
+                scenario=scenario,
+                trial_id=trial_id,
+                started=started,
+                evidence=evidence,
             )
 
         try:
@@ -343,6 +537,14 @@ class TrialRunner:
             )
             evidence = append_semantic_judgment(evidence, receipt)
         except (ValueError, ValidationError, SemanticJudgmentError) as exc:
+            if self._deadline_expired(started):
+                return self._deadline_blocked(
+                    subject=subject,
+                    scenario=scenario,
+                    trial_id=trial_id,
+                    started=started,
+                    evidence=evidence,
+                )
             return EvaluatedTrial(
                 evidence=self._append_evaluation_error(
                     evidence,
@@ -354,11 +556,100 @@ class TrialRunner:
                 verdict=TrialVerdict.BLOCKED,
             )
 
+        if self._deadline_expired(started):
+            return self._deadline_blocked(
+                subject=subject,
+                scenario=scenario,
+                trial_id=trial_id,
+                started=started,
+                evidence=evidence,
+            )
+
         return EvaluatedTrial(
             evidence=evidence,
             oracle_results=oracle_results,
             verdict=self._semantic_verdict(receipt.decision),
             semantic_judgment=receipt,
+        )
+
+    @staticmethod
+    def _validate_deadline_seconds(value: float | None) -> float | None:
+        if value is None:
+            return None
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise TypeError("deadline_seconds must be a finite positive number or None")
+        seconds = float(value)
+        if not math.isfinite(seconds) or seconds <= 0.0:
+            raise ValueError("deadline_seconds must be a finite positive number")
+        return seconds
+
+    def _remaining_deadline_seconds(self, started: float) -> float:
+        assert self._deadline_seconds is not None
+        return self._deadline_seconds - (perf_counter() - started)
+
+    def _deadline_expired(self, started: float) -> bool:
+        return self._deadline_seconds is not None and self._remaining_deadline_seconds(started) <= 0.0
+
+    @staticmethod
+    def _cancel_late_task(task: asyncio.Future[object]) -> None:
+        task.cancel()
+        task.add_done_callback(TrialRunner._consume_late_task_result)
+
+    @staticmethod
+    def _consume_late_task_result(task: asyncio.Future[object]) -> None:
+        try:
+            task.result()
+        except asyncio.CancelledError:
+            pass
+        except Exception:
+            pass
+
+    def _deadline_blocked(
+        self,
+        *,
+        subject: SubjectFingerprint,
+        scenario: EvaluationScenario,
+        trial_id: str,
+        started: float,
+        evidence: TrialEvidence | None = None,
+    ) -> EvaluatedTrial:
+        elapsed_ms = max(0.0, (perf_counter() - started) * 1000.0)
+        event = EvidenceEvent(
+            sequence=0 if evidence is None else len(evidence.events),
+            kind=EvidenceKind.EVALUATION_ERROR,
+            source="evaluator:deadline",
+            payload={
+                "code": "trial_deadline_exceeded",
+                "reason": "evaluator wall-clock deadline exceeded",
+                "deadline_seconds": self._deadline_seconds,
+            },
+            critical=True,
+        )
+        if evidence is None:
+            deadline_evidence = TrialEvidence(
+                trial_id=trial_id,
+                subject_identity=subject.identity,
+                scenario_identity=scenario.identity,
+                events=(event,),
+                elapsed_ms=elapsed_ms,
+            )
+        else:
+            deadline_evidence = TrialEvidence(
+                trial_id=evidence.trial_id,
+                subject_identity=evidence.subject_identity,
+                scenario_identity=evidence.scenario_identity,
+                events=(*evidence.events, event),
+                final_state=evidence.final_state,
+                final_output=evidence.final_output,
+                elapsed_ms=elapsed_ms,
+                input_tokens=evidence.input_tokens,
+                output_tokens=evidence.output_tokens,
+                estimated_cost_usd=evidence.estimated_cost_usd,
+            )
+        return EvaluatedTrial(
+            evidence=deadline_evidence,
+            oracle_results=(),
+            verdict=TrialVerdict.BLOCKED,
         )
 
     @staticmethod
@@ -397,8 +688,6 @@ class TrialRunner:
             )
 
         if EvidenceKind.RETRIEVAL_DELIVERY in event_kinds:
-            # The fixed receipt source is a durable evidence role, not a producer capability.
-            # Keep the optional OpenAI implementation lazy so core imports remain provider-neutral.
             from agent_evals.adapters.openai_retrieval import OpenAIAgentsRetrievalAdapter
 
             if type(adapter) is not OpenAIAgentsRetrievalAdapter:
@@ -413,9 +702,6 @@ class TrialRunner:
                 )
 
         if EvidenceKind.APPROVAL_DECISION in event_kinds:
-            # The canonical source string is a persisted evidence role, not a capability token.
-            # Keep the optional OpenAI implementation lazy so importing evaluator core does not
-            # eagerly load provider adapter modules.
             from agent_evals.adapters.openai_hitl_approval import OpenAIAgentsHITLApprovalAdapter
 
             if type(adapter) is not OpenAIAgentsHITLApprovalAdapter:
@@ -430,8 +716,6 @@ class TrialRunner:
                 )
 
         if EvidenceKind.SIDE_EFFECT_OBSERVATION in event_kinds:
-            # Deliberately lazy: importing the evaluator core must not load optional OpenAI
-            # adapter modules unless this live authority distinction is actually needed.
             from agent_evals.adapters.openai_side_effect_idempotency import (
                 OpenAIAgentsSideEffectIdempotencyAdapter,
             )
@@ -470,8 +754,6 @@ class TrialRunner:
     @staticmethod
     def _live_attack_delivery_adapter_types() -> frozenset[type[object]]:
         """Return exact built-in live adapters that own OpenAI adversarial injection machinery."""
-        # Deliberately lazy: evaluator core remains provider-neutral until live ATTACK_DELIVERY
-        # evidence actually needs a producer-authority decision.
         from agent_evals.adapters.openai_agents import OpenAIAgentsAdapter
         from agent_evals.adapters.openai_handoff_authority import (
             OpenAIAgentsHandoffAuthorityAdapter,
@@ -515,8 +797,6 @@ class TrialRunner:
     @staticmethod
     def _live_protocol_adapter_types() -> dict[str, type[object]]:
         """Return the fixed live producer type for every framework MCP bridge source."""
-        # Deliberately lazy: core evaluator import must not eagerly load optional OpenAI/MCP
-        # bridge modules. Direct durable receipt verification remains provider-neutral.
         from agent_evals.adapters.openai_mcp_tool_error_recovery import (
             OpenAIAgentsMCPToolErrorRecoveryAdapter,
         )
