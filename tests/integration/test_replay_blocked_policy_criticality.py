@@ -11,8 +11,16 @@ from agent_evals.evidence.models import EvidenceEvent, EvidenceKind, TrialEviden
 from agent_evals.evidence.store import LocalEvidenceStore
 from agent_evals.gates.release import GateDecision, ReleaseGate, ReleasePolicy
 from agent_evals.runtime.evaluator import TrialRunner
+from agent_evals.runtime.sampling import (
+    RandomnessStatus,
+    SamplingPolicy,
+    SessionSamplingMetadata,
+    StoppingRule,
+)
 from agent_evals.runtime.session import EvaluationSessionResult
 from agent_evals.statistics.reliability import ReliabilityReport
+
+_CAMPAIGN_ID = "replay-blocked-policy"
 
 
 def _subject() -> SubjectFingerprint:
@@ -57,7 +65,7 @@ async def test_persisted_blocked_policy_fact_survives_replay_session_and_assuran
     subject = _subject()
     scenario = _scenario()
     original = TrialEvidence(
-        trial_id="replay-blocked-policy",
+        trial_id=f"campaign:{_CAMPAIGN_ID}:attempt:0000",
         subject_identity=subject.identity,
         scenario_identity=scenario.identity,
         events=(
@@ -102,6 +110,16 @@ async def test_persisted_blocked_policy_fact_survives_replay_session_and_assuran
         scenario_identity=scenario.identity,
         trials=(replayed,),
         reliability=reliability,
+        campaign_id=_CAMPAIGN_ID,
+        runtime_adapter_name="fixture-replay-runtime",
+        subject_adapter=subject.adapter,
+        subject_adapter_version=subject.adapter_version,
+        sampling_metadata=SessionSamplingMetadata(
+            sampling_policy=SamplingPolicy.PREDECLARED_ALL_ATTEMPTS,
+            randomness_status=RandomnessStatus.UNKNOWN,
+            stopping_rule=StoppingRule.FIXED_HORIZON,
+            planned_trials=1,
+        ),
     )
     policy = _policy()
 
@@ -121,7 +139,7 @@ async def test_persisted_blocked_policy_fact_survives_replay_session_and_assuran
         scenario=scenario,
         release_policy=policy,
     )
-    assert report.schema_version == "agent-evals/assurance-report/v5"
+    assert report.schema_version == "agent-evals/assurance-report/v6"
     assert report.critical_violations == session.critical_violations == 1
     assert report.trials[0].blocked_policy_violations[0].event_digest == original.events[0].digest
     assert report.gate.decision is GateDecision.REJECT

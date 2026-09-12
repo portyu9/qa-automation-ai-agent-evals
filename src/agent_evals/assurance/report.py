@@ -9,6 +9,7 @@ from typing import Literal, Self
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from agent_evals.assurance.session_provenance import SessionProvenanceSnapshot
 from agent_evals.contracts.models import EvaluationScenario
 from agent_evals.evidence.models import EvidenceEvent, EvidenceKind, TrialVerdict
 from agent_evals.gates.release import GateDecision, GateResult, ReleaseGate, ReleasePolicy
@@ -25,9 +26,9 @@ from agent_evals.semantic.receipt import SemanticJudgmentReceipt
 from agent_evals.semantic.verification import SemanticJudgmentError, verify_semantic_judgment
 from agent_evals.statistics.reliability import ReliabilityReport
 
-_REPORT_SCHEMA: Literal["agent-evals/assurance-report/v5"] = "agent-evals/assurance-report/v5"
+_REPORT_SCHEMA: Literal["agent-evals/assurance-report/v6"] = "agent-evals/assurance-report/v6"
 _EVIDENCE_SCHEMA: Literal["agent-evals/trial-evidence/v2"] = "agent-evals/trial-evidence/v2"
-_REPORT_DOMAIN = b"agent-evals/assurance-report/v5\0"
+_REPORT_DOMAIN = b"agent-evals/assurance-report/v6\0"
 _RESOLVED_VERDICTS = frozenset({TrialVerdict.PASS, TrialVerdict.FAIL})
 _CORE_ORACLE_NAMES = frozenset({"policy", "outcome"})
 _SIDE_EFFECT_ORACLE_NAME = "side-effect-idempotency"
@@ -142,7 +143,7 @@ class TrialAssuranceRecord(BaseModel):
     critical, and can only narrow a deterministic PASS into FAIL or INCONCLUSIVE. It cannot rescue
     a deterministic failure.
 
-    BLOCKED trials do not acquire completed oracle authority. V5 instead retains any explicit
+    BLOCKED trials do not acquire completed oracle authority. V6 retains any explicit
     policy-violation facts already present in blocked evidence so release gating does not erase a
     known safety fact merely because a different evaluation relation remains unresolved.
 
@@ -282,22 +283,25 @@ class AssuranceReport(BaseModel):
     """Reproducible session report whose derived claims are verified on every load.
 
     Evidence roots, deterministic oracle snapshots, blocked explicit-policy facts, optional
-    semantic judgment receipts, the scenario-derived grading profile, and terminal trial verdicts
-    are the bound trial facts. Reliability and release-gate fields are recomputed from those
-    validated facts and the frozen release policy.
+    semantic judgment receipts, the scenario-derived grading profile, terminal trial verdicts, and
+    repeated-trial session provenance are bound report facts. Reliability and release-gate fields
+    are recomputed from the validated trial facts and frozen release policy. Session provenance is
+    independently rederived against the ordered report trial IDs/evidence roots before the report
+    root is accepted.
 
     The report root detects unacknowledged content changes. It is not a signature, MAC, trusted
-    timestamp, publisher identity, or proof that the referenced evidence was honestly produced.
-    Re-running deterministic oracles and reconstructing event-level scenario relations requires
-    the exact scenario/evidence replay path.
+    timestamp, publisher identity, authentication proof, provider attestation, or formal proof of
+    IID sampling. Re-running deterministic oracles and reconstructing event-level scenario
+    relations requires the exact scenario/evidence replay path.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    schema_version: Literal["agent-evals/assurance-report/v5"] = _REPORT_SCHEMA
+    schema_version: Literal["agent-evals/assurance-report/v6"] = _REPORT_SCHEMA
     evidence_schema: Literal["agent-evals/trial-evidence/v2"] = _EVIDENCE_SCHEMA
     subject_identity: str = Field(pattern=r"^[0-9a-f]{64}$")
     scenario_identity: str = Field(pattern=r"^[0-9a-f]{64}$")
+    session_provenance: SessionProvenanceSnapshot
     grading_profile: ScenarioGradingProfile
     trials: tuple[TrialAssuranceRecord, ...] = Field(min_length=1)
     release_policy: ReleasePolicy
@@ -320,6 +324,7 @@ class AssuranceReport(BaseModel):
         if not session.trials:
             raise ValueError("assurance report requires at least one evaluated trial")
 
+        session_provenance = SessionProvenanceSnapshot.from_session(session)
         scenario = scenario.snapshot()
         if not hmac.compare_digest(scenario.identity, session.scenario_identity):
             raise ValueError("assurance report scenario contract does not match session identity")
@@ -438,6 +443,15 @@ class AssuranceReport(BaseModel):
             records.append(record)
             verdicts.append(record.verdict)
 
+        ordered_trial_ids = tuple(record.trial_id for record in records)
+        ordered_evidence_roots = tuple(record.evidence_root for record in records)
+        session_provenance.validate_against_report(
+            subject_identity=session.subject_identity,
+            scenario_identity=session.scenario_identity,
+            trial_ids=ordered_trial_ids,
+            evidence_roots=ordered_evidence_roots,
+        )
+
         recomputed_reliability = ReliabilityReport.from_verdicts(
             verdicts,
             k=session.reliability.k,
@@ -459,6 +473,7 @@ class AssuranceReport(BaseModel):
             "evidence_schema": _EVIDENCE_SCHEMA,
             "subject_identity": session.subject_identity,
             "scenario_identity": session.scenario_identity,
+            "session_provenance": session_provenance.model_dump(mode="json"),
             "grading_profile": grading_profile.model_dump(mode="json"),
             "trials": [record.model_dump(mode="json") for record in records],
             "release_policy": release_policy.model_dump(mode="json"),
@@ -470,6 +485,7 @@ class AssuranceReport(BaseModel):
             evidence_schema=_EVIDENCE_SCHEMA,
             subject_identity=session.subject_identity,
             scenario_identity=session.scenario_identity,
+            session_provenance=session_provenance,
             grading_profile=grading_profile,
             trials=tuple(records),
             release_policy=release_policy,
@@ -480,9 +496,17 @@ class AssuranceReport(BaseModel):
 
     @model_validator(mode="after")
     def validate_derived_claims(self) -> Self:
-        trial_ids = [record.trial_id for record in self.trials]
+        trial_ids = tuple(record.trial_id for record in self.trials)
         if len(set(trial_ids)) != len(trial_ids):
             raise ValueError("assurance report trial IDs must be unique")
+        evidence_roots = tuple(record.evidence_root for record in self.trials)
+
+        self.session_provenance.validate_against_report(
+            subject_identity=self.subject_identity,
+            scenario_identity=self.scenario_identity,
+            trial_ids=trial_ids,
+            evidence_roots=evidence_roots,
+        )
 
         for record in self.trials:
             self._validate_record_grading_shape(record)

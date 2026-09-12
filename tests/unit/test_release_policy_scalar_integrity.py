@@ -9,10 +9,20 @@ from agent_evals.evidence.models import TrialEvidence, TrialVerdict
 from agent_evals.gates.release import ReleasePolicy
 from agent_evals.oracles.deterministic import OracleResult
 from agent_evals.runtime.evaluator import EvaluatedTrial
+from agent_evals.runtime.sampling import (
+    RandomnessStatus,
+    SamplingPolicy,
+    SessionSamplingMetadata,
+    StoppingRule,
+)
 from agent_evals.runtime.session import EvaluationSessionResult
 from agent_evals.statistics.reliability import ReliabilityReport
 
 SUBJECT = "a" * 64
+_CAMPAIGN_ID = "assurance-release-policy-scalars"
+_RUNTIME_ADAPTER = "fixture-runtime"
+_SUBJECT_ADAPTER = "fixture-subject"
+_SUBJECT_ADAPTER_VERSION = "1"
 SCENARIO_CONTRACT = EvaluationScenario(
     scenario_id="assurance.release-policy-scalars",
     revision="1",
@@ -35,7 +45,7 @@ def _policy() -> ReleasePolicy:
 
 def _report() -> AssuranceReport:
     evidence = TrialEvidence(
-        trial_id="trial-0",
+        trial_id=f"campaign:{_CAMPAIGN_ID}:attempt:0000",
         subject_identity=SUBJECT,
         scenario_identity=SCENARIO,
     )
@@ -53,6 +63,16 @@ def _report() -> AssuranceReport:
         scenario_identity=SCENARIO,
         trials=(trial,),
         reliability=reliability,
+        campaign_id=_CAMPAIGN_ID,
+        runtime_adapter_name=_RUNTIME_ADAPTER,
+        subject_adapter=_SUBJECT_ADAPTER,
+        subject_adapter_version=_SUBJECT_ADAPTER_VERSION,
+        sampling_metadata=SessionSamplingMetadata(
+            sampling_policy=SamplingPolicy.PREDECLARED_ALL_ATTEMPTS,
+            randomness_status=RandomnessStatus.UNKNOWN,
+            stopping_rule=StoppingRule.FIXED_HORIZON,
+            planned_trials=1,
+        ),
     )
     return AssuranceReport.from_session(
         session,

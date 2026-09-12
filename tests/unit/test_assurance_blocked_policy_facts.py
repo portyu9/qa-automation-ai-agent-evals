@@ -11,10 +11,20 @@ from agent_evals.evidence.models import EvidenceEvent, EvidenceKind, TrialEviden
 from agent_evals.gates.release import GateDecision, ReleasePolicy
 from agent_evals.runtime.evaluator import EvaluatedTrial
 from agent_evals.runtime.grading import grade_deterministic_evidence
+from agent_evals.runtime.sampling import (
+    RandomnessStatus,
+    SamplingPolicy,
+    SessionSamplingMetadata,
+    StoppingRule,
+)
 from agent_evals.runtime.session import EvaluationSessionResult
 from agent_evals.statistics.reliability import ReliabilityReport
 
 _SUBJECT = "a" * 64
+_CAMPAIGN_ID = "assurance-blocked-known-policy-fact"
+_RUNTIME_ADAPTER = "fixture-runtime"
+_SUBJECT_ADAPTER = "fixture-subject"
+_SUBJECT_ADAPTER_VERSION = "1"
 _SCENARIO = EvaluationScenario(
     scenario_id="assurance.blocked-known-policy-fact",
     revision="1",
@@ -32,9 +42,13 @@ _POLICY = ReleasePolicy(
 )
 
 
+def _trial_id(index: int) -> str:
+    return f"campaign:{_CAMPAIGN_ID}:attempt:{index:04d}"
+
+
 def _pass_trial(index: int) -> EvaluatedTrial:
     evidence = TrialEvidence(
-        trial_id=f"pass-{index}",
+        trial_id=_trial_id(index),
         subject_identity=_SUBJECT,
         scenario_identity=_SCENARIO.identity,
         final_state={"status": "ok"},
@@ -52,6 +66,7 @@ def _blocked_trial(
     *,
     policy_violation_count: int,
     policy_event_critical: bool = True,
+    attempt_index: int = 20,
 ) -> EvaluatedTrial:
     events = [
         EvidenceEvent(
@@ -79,7 +94,7 @@ def _blocked_trial(
         )
     )
     evidence = TrialEvidence(
-        trial_id=f"blocked-with-{policy_violation_count}-policy-events",
+        trial_id=_trial_id(attempt_index),
         subject_identity=_SUBJECT,
         scenario_identity=_SCENARIO.identity,
         events=tuple(events),
@@ -103,6 +118,16 @@ def _report_for_blocked(blocked: EvaluatedTrial) -> AssuranceReport:
         scenario_identity=_SCENARIO.identity,
         trials=trials,
         reliability=reliability,
+        campaign_id=_CAMPAIGN_ID,
+        runtime_adapter_name=_RUNTIME_ADAPTER,
+        subject_adapter=_SUBJECT_ADAPTER,
+        subject_adapter_version=_SUBJECT_ADAPTER_VERSION,
+        sampling_metadata=SessionSamplingMetadata(
+            sampling_policy=SamplingPolicy.PREDECLARED_ALL_ATTEMPTS,
+            randomness_status=RandomnessStatus.UNKNOWN,
+            stopping_rule=StoppingRule.FIXED_HORIZON,
+            planned_trials=len(trials),
+        ),
     )
     return AssuranceReport.from_session(
         session,
@@ -118,7 +143,7 @@ def _report(*, include_policy_violation: bool) -> AssuranceReport:
 def test_blocked_explicit_policy_violation_remains_noncompensatory_at_release_gate() -> None:
     report = _report(include_policy_violation=True)
 
-    assert report.schema_version == "agent-evals/assurance-report/v5"
+    assert report.schema_version == "agent-evals/assurance-report/v6"
     assert report.trials[-1].verdict is TrialVerdict.BLOCKED
     assert report.reliability.blocked == 1
     assert report.critical_violations == 1

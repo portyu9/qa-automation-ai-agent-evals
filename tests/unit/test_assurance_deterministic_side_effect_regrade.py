@@ -11,6 +11,12 @@ from agent_evals.gates.release import ReleasePolicy
 from agent_evals.oracles.deterministic import OracleResult, OutcomeOracle, PolicyOracle
 from agent_evals.runtime.evaluator import EvaluatedTrial
 from agent_evals.runtime.grading import grade_deterministic_evidence
+from agent_evals.runtime.sampling import (
+    RandomnessStatus,
+    SamplingPolicy,
+    SessionSamplingMetadata,
+    StoppingRule,
+)
 from agent_evals.runtime.session import EvaluationSessionResult
 from agent_evals.side_effect.models import SideEffectIdempotencySpec, canonical_json_sha256
 from agent_evals.side_effect.oracle import SideEffectIdempotencyOracle
@@ -18,6 +24,10 @@ from agent_evals.side_effect.receipt import SideEffectAttemptDigest, SideEffectI
 from agent_evals.statistics.reliability import ReliabilityReport
 
 _SUBJECT = "e" * 64
+_CAMPAIGN_ID = "assurance-deterministic-side-effect"
+_RUNTIME_ADAPTER = "fixture-runtime"
+_SUBJECT_ADAPTER = "fixture-subject"
+_SUBJECT_ADAPTER_VERSION = "1"
 
 
 def _spec() -> SideEffectIdempotencySpec:
@@ -74,7 +84,7 @@ def _duplicate_mutation_evidence() -> TrialEvidence:
     )
     arguments = json.dumps(spec.expected_arguments, separators=(",", ":"))
     return TrialEvidence(
-        trial_id="deterministic-side-effect",
+        trial_id=f"campaign:{_CAMPAIGN_ID}:attempt:0000",
         subject_identity=_SUBJECT,
         scenario_identity=scenario.identity,
         events=(
@@ -124,6 +134,16 @@ def _report(
         scenario_identity=scenario.identity,
         trials=(trial,),
         reliability=ReliabilityReport.from_verdicts((verdict,)),
+        campaign_id=_CAMPAIGN_ID,
+        runtime_adapter_name=_RUNTIME_ADAPTER,
+        subject_adapter=_SUBJECT_ADAPTER,
+        subject_adapter_version=_SUBJECT_ADAPTER_VERSION,
+        sampling_metadata=SessionSamplingMetadata(
+            sampling_policy=SamplingPolicy.PREDECLARED_ALL_ATTEMPTS,
+            randomness_status=RandomnessStatus.UNKNOWN,
+            stopping_rule=StoppingRule.FIXED_HORIZON,
+            planned_trials=1,
+        ),
     )
     return AssuranceReport.from_session(
         session,

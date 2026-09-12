@@ -9,10 +9,20 @@ from agent_evals.evidence.models import EvidenceEvent, EvidenceKind, TrialEviden
 from agent_evals.gates.release import GateDecision, ReleasePolicy
 from agent_evals.runtime.evaluator import EvaluatedTrial
 from agent_evals.runtime.grading import grade_deterministic_evidence
+from agent_evals.runtime.sampling import (
+    RandomnessStatus,
+    SamplingPolicy,
+    SessionSamplingMetadata,
+    StoppingRule,
+)
 from agent_evals.runtime.session import EvaluationSessionResult
 from agent_evals.statistics.reliability import ReliabilityReport
 
 SUBJECT = "a" * 64
+_CAMPAIGN_ID = "assurance-criticality"
+_RUNTIME_ADAPTER = "fixture-runtime"
+_SUBJECT_ADAPTER = "fixture-subject"
+_SUBJECT_ADAPTER_VERSION = "1"
 SCENARIO_CONTRACT = EvaluationScenario(
     scenario_id="assurance.criticality",
     revision="1",
@@ -30,7 +40,7 @@ def _report() -> AssuranceReport:
         payload={"tool": "forbidden-tool", "call_id": "call-1", "arguments": "{}"},
     )
     evidence = TrialEvidence(
-        trial_id="trial-0",
+        trial_id=f"campaign:{_CAMPAIGN_ID}:attempt:0000",
         subject_identity=SUBJECT,
         scenario_identity=SCENARIO,
         events=(request,),
@@ -49,6 +59,16 @@ def _report() -> AssuranceReport:
         scenario_identity=SCENARIO,
         trials=(trial,),
         reliability=reliability,
+        campaign_id=_CAMPAIGN_ID,
+        runtime_adapter_name=_RUNTIME_ADAPTER,
+        subject_adapter=_SUBJECT_ADAPTER,
+        subject_adapter_version=_SUBJECT_ADAPTER_VERSION,
+        sampling_metadata=SessionSamplingMetadata(
+            sampling_policy=SamplingPolicy.PREDECLARED_ALL_ATTEMPTS,
+            randomness_status=RandomnessStatus.UNKNOWN,
+            stopping_rule=StoppingRule.FIXED_HORIZON,
+            planned_trials=1,
+        ),
     )
     policy = ReleasePolicy(
         min_resolved_trials=1,

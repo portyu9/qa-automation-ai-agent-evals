@@ -11,11 +11,21 @@ from agent_evals.evidence.models import TrialEvidence, TrialVerdict
 from agent_evals.gates.release import GateDecision, ReleaseGate, ReleasePolicy
 from agent_evals.oracles.deterministic import OracleResult
 from agent_evals.runtime.evaluator import EvaluatedTrial
+from agent_evals.runtime.sampling import (
+    RandomnessStatus,
+    SamplingPolicy,
+    SessionSamplingMetadata,
+    StoppingRule,
+)
 from agent_evals.runtime.session import EvaluationSessionResult
 from agent_evals.statistics.comparison import PairedComparison
 from agent_evals.statistics.reliability import ReliabilityReport
 
 SUBJECT = "a" * 64
+_CAMPAIGN_ID = "assurance-statistics-integrity"
+_RUNTIME_ADAPTER = "fixture-runtime"
+_SUBJECT_ADAPTER = "fixture-subject"
+_SUBJECT_ADAPTER_VERSION = "1"
 SCENARIO_CONTRACT = EvaluationScenario(
     scenario_id="assurance.statistics-integrity",
     revision="1",
@@ -28,7 +38,7 @@ SCENARIO = SCENARIO_CONTRACT.identity
 def _pass_trial() -> EvaluatedTrial:
     return EvaluatedTrial(
         evidence=TrialEvidence(
-            trial_id="statistical-integrity-trial",
+            trial_id=f"campaign:{_CAMPAIGN_ID}:attempt:0000",
             subject_identity=SUBJECT,
             scenario_identity=SCENARIO,
             final_state={"ok": True},
@@ -51,6 +61,16 @@ def _session(*, confidence_z: float) -> EvaluationSessionResult:
             (trial.verdict,),
             k=2,
             confidence_z=confidence_z,
+        ),
+        campaign_id=_CAMPAIGN_ID,
+        runtime_adapter_name=_RUNTIME_ADAPTER,
+        subject_adapter=_SUBJECT_ADAPTER,
+        subject_adapter_version=_SUBJECT_ADAPTER_VERSION,
+        sampling_metadata=SessionSamplingMetadata(
+            sampling_policy=SamplingPolicy.PREDECLARED_ALL_ATTEMPTS,
+            randomness_status=RandomnessStatus.UNKNOWN,
+            stopping_rule=StoppingRule.FIXED_HORIZON,
+            planned_trials=1,
         ),
     )
 
@@ -162,14 +182,14 @@ def test_paired_comparison_rejects_nonfloat_alpha() -> None:
         )
 
 
-def test_custom_confidence_round_trips_through_assurance_report_v5() -> None:
+def test_custom_confidence_round_trips_through_assurance_report_v6() -> None:
     custom_z = 1.6448536269514722
     session = _session(confidence_z=custom_z)
 
     report = _report(confidence_z=custom_z)
     loaded = AssuranceReport.model_validate_json(report.model_dump_json())
 
-    assert report.schema_version == "agent-evals/assurance-report/v5"
+    assert report.schema_version == "agent-evals/assurance-report/v6"
     assert report.reliability.confidence_z == custom_z
     assert loaded == report
     assert loaded.reliability.wilson_low == session.reliability.wilson_low
@@ -191,9 +211,10 @@ def test_confidence_parameter_participates_in_assurance_report_root() -> None:
         "agent-evals/assurance-report/v2",
         "agent-evals/assurance-report/v3",
         "agent-evals/assurance-report/v4",
+        "agent-evals/assurance-report/v5",
     ],
 )
-def test_legacy_assurance_reports_are_not_silently_reinterpreted_as_v5(
+def test_legacy_assurance_reports_are_not_silently_reinterpreted_as_v6(
     legacy_schema: str,
 ) -> None:
     report = _report(confidence_z=1.959963984540054)
