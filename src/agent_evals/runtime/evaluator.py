@@ -588,7 +588,9 @@ class TrialRunner:
         return self._deadline_seconds - (perf_counter() - started)
 
     def _deadline_expired(self, started: float) -> bool:
-        return self._deadline_seconds is not None and self._remaining_deadline_seconds(started) <= 0.0
+        return (
+            self._deadline_seconds is not None and self._remaining_deadline_seconds(started) <= 0.0
+        )
 
     @staticmethod
     def _cancel_late_task(task: asyncio.Future[object]) -> None:
@@ -688,6 +690,8 @@ class TrialRunner:
             )
 
         if EvidenceKind.RETRIEVAL_DELIVERY in event_kinds:
+            # The fixed receipt source is a durable evidence role, not a producer capability.
+            # Keep the optional OpenAI implementation lazy so core imports remain provider-neutral.
             from agent_evals.adapters.openai_retrieval import OpenAIAgentsRetrievalAdapter
 
             if type(adapter) is not OpenAIAgentsRetrievalAdapter:
@@ -702,6 +706,9 @@ class TrialRunner:
                 )
 
         if EvidenceKind.APPROVAL_DECISION in event_kinds:
+            # The canonical source string is a persisted evidence role, not a capability token.
+            # Keep the optional OpenAI implementation lazy so importing evaluator core does not
+            # eagerly load provider adapter modules.
             from agent_evals.adapters.openai_hitl_approval import OpenAIAgentsHITLApprovalAdapter
 
             if type(adapter) is not OpenAIAgentsHITLApprovalAdapter:
@@ -716,6 +723,8 @@ class TrialRunner:
                 )
 
         if EvidenceKind.SIDE_EFFECT_OBSERVATION in event_kinds:
+            # Deliberately lazy: importing the evaluator core must not load optional OpenAI
+            # adapter modules unless this live authority distinction is actually needed.
             from agent_evals.adapters.openai_side_effect_idempotency import (
                 OpenAIAgentsSideEffectIdempotencyAdapter,
             )
@@ -754,6 +763,8 @@ class TrialRunner:
     @staticmethod
     def _live_attack_delivery_adapter_types() -> frozenset[type[object]]:
         """Return exact built-in live adapters that own OpenAI adversarial injection machinery."""
+        # Deliberately lazy: evaluator core remains provider-neutral until live ATTACK_DELIVERY
+        # evidence actually needs a producer-authority decision.
         from agent_evals.adapters.openai_agents import OpenAIAgentsAdapter
         from agent_evals.adapters.openai_handoff_authority import (
             OpenAIAgentsHandoffAuthorityAdapter,
@@ -797,6 +808,8 @@ class TrialRunner:
     @staticmethod
     def _live_protocol_adapter_types() -> dict[str, type[object]]:
         """Return the fixed live producer type for every framework MCP bridge source."""
+        # Deliberately lazy: core evaluator import must not eagerly load optional OpenAI/MCP
+        # bridge modules. Direct durable receipt verification remains provider-neutral.
         from agent_evals.adapters.openai_mcp_tool_error_recovery import (
             OpenAIAgentsMCPToolErrorRecoveryAdapter,
         )
