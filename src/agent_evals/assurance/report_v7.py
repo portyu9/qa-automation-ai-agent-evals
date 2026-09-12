@@ -9,9 +9,15 @@ from typing import Any, Literal, Self
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from agent_evals.assurance.report import AssuranceReport
+from agent_evals.assurance.report import (
+    AssuranceReport,
+    GateSnapshot,
+    ReliabilitySnapshot,
+    TrialAssuranceRecord,
+)
 from agent_evals.contracts.models import EvaluationScenario
 from agent_evals.gates.release import ReleasePolicy
+from agent_evals.runtime.population import PopulationProvenance
 from agent_evals.runtime.population_session import PopulationBoundSessionResult
 from agent_evals.runtime.sampling_v2 import SessionSamplingMetadataV2
 
@@ -72,19 +78,19 @@ class AssuranceReportV7(BaseModel):
         return self
 
     @property
-    def population_provenance(self):  # type: ignore[no-untyped-def]
+    def population_provenance(self) -> PopulationProvenance:
         return self.session_sampling.population_provenance
 
     @property
-    def gate(self):  # type: ignore[no-untyped-def]
+    def gate(self) -> GateSnapshot:
         return self.predecessor_report.gate
 
     @property
-    def reliability(self):  # type: ignore[no-untyped-def]
+    def reliability(self) -> ReliabilitySnapshot:
         return self.predecessor_report.reliability
 
     @property
-    def trials(self):  # type: ignore[no-untyped-def]
+    def trials(self) -> tuple[TrialAssuranceRecord, ...]:
         return self.predecessor_report.trials
 
 
