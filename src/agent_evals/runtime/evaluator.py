@@ -117,8 +117,8 @@ class TrialRunner:
                         trial_id=trial_id,
                     )
                 )
-                done, _ = await asyncio.wait((adapter_task,), timeout=remaining)
-                if adapter_task not in done:
+                adapter_done, _ = await asyncio.wait((adapter_task,), timeout=remaining)
+                if adapter_task not in adapter_done:
                     self._cancel_late_task(adapter_task)
                     return self._deadline_blocked(
                         subject=subject,
@@ -482,8 +482,8 @@ class TrialRunner:
                         evidence=evidence,
                     )
                 judge_task = asyncio.ensure_future(self._semantic_judge.judge(judge_input))
-                done, _ = await asyncio.wait((judge_task,), timeout=remaining)
-                if judge_task not in done:
+                judge_done, _ = await asyncio.wait((judge_task,), timeout=remaining)
+                if judge_task not in judge_done:
                     self._cancel_late_task(judge_task)
                     return self._deadline_blocked(
                         subject=subject,
