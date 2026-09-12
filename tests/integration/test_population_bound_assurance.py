@@ -123,7 +123,9 @@ async def test_population_bound_session_emits_v2_without_reinterpreting_v1() -> 
 
 
 @pytest.mark.asyncio
-async def test_assurance_report_v7_round_trip_binds_population_and_preserves_release_authority() -> None:
+async def test_assurance_report_v7_round_trip_binds_population_and_preserves_release_authority() -> (
+    None
+):
     result = await PopulationBoundEvaluationSession().run(
         _Adapter(),
         subject=_subject(),
