@@ -76,7 +76,10 @@ class PopulationFrame(BaseModel):
         revision: str,
         definition_identity: str,
     ) -> PopulationFrame:
-        if not isinstance(definition_identity, str) or _SHA256_RE.fullmatch(definition_identity) is None:
+        if (
+            not isinstance(definition_identity, str)
+            or _SHA256_RE.fullmatch(definition_identity) is None
+        ):
             raise PopulationProvenanceError(
                 "population definition identity must be a lowercase SHA-256 hex digest"
             )
@@ -123,10 +126,14 @@ class PopulationProvenance(BaseModel):
             if type(self.frame) is not PopulationFrame:
                 raise ValueError("identified population provenance requires a canonical frame")
             if self.basis is not None:
-                raise ValueError("identified population provenance must not carry declaration basis")
+                raise ValueError(
+                    "identified population provenance must not carry declaration basis"
+                )
         elif self.status is PopulationStatus.EXTERNALLY_DECLARED:
             if self.frame is not None:
-                raise ValueError("externally declared population must not claim an identified frame")
+                raise ValueError(
+                    "externally declared population must not claim an identified frame"
+                )
             if self.basis is None:
                 raise ValueError("externally declared population requires a bounded basis")
         elif self.status is PopulationStatus.UNKNOWN:
