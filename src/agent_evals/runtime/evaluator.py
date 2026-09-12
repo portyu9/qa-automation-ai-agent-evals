@@ -6,6 +6,7 @@ import asyncio
 import math
 from dataclasses import dataclass, field
 from time import perf_counter
+from typing import Any
 
 from pydantic import ValidationError
 
@@ -109,23 +110,23 @@ class TrialRunner:
                         trial_id=trial_id,
                         started=started,
                     )
-                task = asyncio.ensure_future(
+                adapter_task = asyncio.ensure_future(
                     adapter.execute(
                         subject=subject,
                         scenario=execution_scenario,
                         trial_id=trial_id,
                     )
                 )
-                done, _ = await asyncio.wait((task,), timeout=remaining)
-                if task not in done:
-                    self._cancel_late_task(task)
+                done, _ = await asyncio.wait((adapter_task,), timeout=remaining)
+                if adapter_task not in done:
+                    self._cancel_late_task(adapter_task)
                     return self._deadline_blocked(
                         subject=subject,
                         scenario=scenario,
                         trial_id=trial_id,
                         started=started,
                     )
-                result = task.result()
+                result = adapter_task.result()
         except AdapterPreconditionError as exc:
             if self._deadline_expired(started):
                 return self._deadline_blocked(
@@ -480,10 +481,10 @@ class TrialRunner:
                         started=started,
                         evidence=evidence,
                     )
-                task = asyncio.ensure_future(self._semantic_judge.judge(judge_input))
-                done, _ = await asyncio.wait((task,), timeout=remaining)
-                if task not in done:
-                    self._cancel_late_task(task)
+                judge_task = asyncio.ensure_future(self._semantic_judge.judge(judge_input))
+                done, _ = await asyncio.wait((judge_task,), timeout=remaining)
+                if judge_task not in done:
+                    self._cancel_late_task(judge_task)
                     return self._deadline_blocked(
                         subject=subject,
                         scenario=scenario,
@@ -491,7 +492,7 @@ class TrialRunner:
                         started=started,
                         evidence=evidence,
                     )
-                raw_response = task.result()
+                raw_response = judge_task.result()
         except Exception as exc:
             if self._deadline_expired(started):
                 return self._deadline_blocked(
@@ -593,12 +594,12 @@ class TrialRunner:
         )
 
     @staticmethod
-    def _cancel_late_task(task: asyncio.Future[object]) -> None:
+    def _cancel_late_task(task: asyncio.Future[Any]) -> None:
         task.cancel()
         task.add_done_callback(TrialRunner._consume_late_task_result)
 
     @staticmethod
-    def _consume_late_task_result(task: asyncio.Future[object]) -> None:
+    def _consume_late_task_result(task: asyncio.Future[Any]) -> None:
         try:
             task.result()
         except asyncio.CancelledError:
