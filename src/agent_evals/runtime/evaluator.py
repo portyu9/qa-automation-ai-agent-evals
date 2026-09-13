@@ -41,9 +41,20 @@ class EvaluatedTrial:
     oracle_results: tuple[OracleResult, ...]
     verdict: TrialVerdict
     semantic_judgment: SemanticJudgmentReceipt | None = None
+    evaluator_elapsed_ms: float | None = field(default=None, kw_only=True)
     completion_evidence_root: str = field(init=False)
 
     def __post_init__(self) -> None:
+        evaluator_elapsed_ms = self.evaluator_elapsed_ms
+        if evaluator_elapsed_ms is not None:
+            if isinstance(evaluator_elapsed_ms, bool) or not isinstance(
+                evaluator_elapsed_ms, (int, float)
+            ):
+                raise TypeError("evaluator_elapsed_ms must be a finite non-negative number or None")
+            normalized_elapsed_ms = float(evaluator_elapsed_ms)
+            if not math.isfinite(normalized_elapsed_ms) or normalized_elapsed_ms < 0.0:
+                raise ValueError("evaluator_elapsed_ms must be a finite non-negative number")
+            object.__setattr__(self, "evaluator_elapsed_ms", normalized_elapsed_ms)
         object.__setattr__(self, "completion_evidence_root", self.evidence.evidence_root)
 
     @property
@@ -90,6 +101,31 @@ class TrialRunner:
         trial_id: str,
     ) -> EvaluatedTrial:
         started = perf_counter()
+        evaluated = await self._run_trial(
+            adapter,
+            subject=subject,
+            scenario=scenario,
+            trial_id=trial_id,
+            started=started,
+        )
+        evaluator_elapsed_ms = max(0.0, (perf_counter() - started) * 1000.0)
+        return EvaluatedTrial(
+            evidence=evaluated.evidence,
+            oracle_results=evaluated.oracle_results,
+            verdict=evaluated.verdict,
+            semantic_judgment=evaluated.semantic_judgment,
+            evaluator_elapsed_ms=evaluator_elapsed_ms,
+        )
+
+    async def _run_trial(
+        self,
+        adapter: AgentAdapter,
+        *,
+        subject: SubjectFingerprint,
+        scenario: EvaluationScenario,
+        trial_id: str,
+        started: float,
+    ) -> EvaluatedTrial:
         subject = subject.snapshot()
         scenario = scenario.snapshot()
         execution_scenario = scenario.snapshot()
