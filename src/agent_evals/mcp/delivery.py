@@ -58,6 +58,7 @@ class ProtocolDeliveryError(ValueError):
 def verify_protocol_delivery(evidence: TrialEvidence) -> tuple[ProtocolDeliveryReceipt, ...]:
     """Revalidate every known protocol-delivery receipt and its normalized evidence relation."""
     receipts: list[ProtocolDeliveryReceipt] = []
+    seen_receipt_roots: set[str] = set()
     for event in evidence.events:
         if event.kind is not EvidenceKind.PROTOCOL_DELIVERY:
             continue
@@ -98,6 +99,9 @@ def verify_protocol_delivery(evidence: TrialEvidence) -> tuple[ProtocolDeliveryR
             raise ProtocolDeliveryError(
                 "protocol delivery receipt scenario identity does not match trial evidence"
             )
+        if receipt.receipt_root in seen_receipt_roots:
+            raise ProtocolDeliveryError("duplicate protocol delivery receipt root")
+        seen_receipt_roots.add(receipt.receipt_root)
 
         if event.source == _TOOL_METADATA_SOURCE:
             _verify_metadata_delivery_chronology(evidence, delivery_sequence=event.sequence)
