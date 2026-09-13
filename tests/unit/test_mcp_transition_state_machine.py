@@ -320,7 +320,9 @@ def _stale_cache_evidence(*, tool: str, probe_id: int) -> TrialEvidence:
 
 def _duplicate_delivery(evidence: TrialEvidence) -> TrialEvidence:
     events = list(evidence.events)
-    delivery = next(event for event in reversed(events) if event.kind is EvidenceKind.PROTOCOL_DELIVERY)
+    delivery = next(
+        event for event in reversed(events) if event.kind is EvidenceKind.PROTOCOL_DELIVERY
+    )
     events.append(delivery)
     return _replace_events(evidence, events)
 
