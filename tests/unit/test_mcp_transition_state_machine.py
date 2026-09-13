@@ -26,6 +26,21 @@ from agent_evals.mcp.models import MCPFaultKind, MCPFaultReceipt, MCPFaultSpec
 _SCENARIO = "d" * 64
 _SUBJECT = "e" * 64
 _TTL_MS = 60_000
+_INITIAL_SCHEMA = {
+    "type": "object",
+    "properties": {"query": {"type": "string"}},
+    "required": ["query"],
+}
+_REPLACEMENT_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "customer_id": {"type": "integer"},
+        "include_history": {"type": "boolean"},
+    },
+    "required": ["customer_id", "include_history"],
+}
+_SCHEMA_RECOVERY_TEXT = "replacement:7:true"
+_IDENTITY_RECOVERY_TEXT = "replacement:fresh"
 
 
 def _arguments(value: dict[str, object]) -> str:
@@ -78,23 +93,19 @@ def _replace_events(evidence: TrialEvidence, events: list[EvidenceEvent]) -> Tri
     return TrialEvidence.model_validate(material)
 
 
-def _schema(generation: int) -> dict[str, object]:
-    field = f"field_g{generation}"
-    return {
-        "type": "object",
-        "properties": {field: {"type": "string"}},
-        "required": [field],
-    }
-
-
-def _metadata_evidence(*, tool: str, generation: int, snapshot_ordinal: int) -> TrialEvidence:
-    schema = _schema(generation)
+def _metadata_evidence(
+    *,
+    tool: str,
+    schema: dict[str, object],
+    schema_phase: int,
+    snapshot_ordinal: int,
+) -> TrialEvidence:
     fault = MCPFaultSpec.from_payload(
-        fault_id=f"metadata-g{generation}-s{snapshot_ordinal}",
+        fault_id=f"metadata-p{schema_phase}-s{snapshot_ordinal}",
         revision="1",
         kind=MCPFaultKind.TOOL_METADATA_POISON,
         tool_name=tool,
-        payload={"instruction": f"controlled-metadata-g{generation}"},
+        payload={"instruction": f"controlled-metadata-phase-{schema_phase}"},
     )
     protocol = MCPFaultReceipt.create(
         fault=fault,
@@ -113,13 +124,12 @@ def _metadata_evidence(*, tool: str, generation: int, snapshot_ordinal: int) -> 
     )
     return _trial(
         (receipt.to_event(sequence=0),),
-        trial_id=f"metadata-g{generation}-s{snapshot_ordinal}",
+        trial_id=f"metadata-p{schema_phase}-s{snapshot_ordinal}",
     )
 
 
 def _identity_evidence(*, original: str, replacement: str, generation: int) -> TrialEvidence:
     stale_text = f"Error executing tool {original}: unknown tool '{original}'"
-    recovery_text = f"replacement:{replacement}"
     stale_call = f"identity-stale-g{generation}"
     recovery_call = f"identity-recovery-g{generation}"
     fault = MCPFaultSpec.from_payload(
@@ -135,7 +145,7 @@ def _identity_evidence(*, original: str, replacement: str, generation: int) -> T
         original_tool_name=original,
         replacement_tool_name=replacement,
         stale_protocol_text=stale_text,
-        protocol_recovery_text=recovery_text,
+        protocol_recovery_text=_IDENTITY_RECOVERY_TEXT,
         initial_list_ordinal=0,
         identity_swap_ordinal=1,
         cached_list_ordinal=2,
@@ -157,8 +167,8 @@ def _identity_evidence(*, original: str, replacement: str, generation: int) -> T
         recovery_arguments={"query": "fresh"},
         stale_protocol_text=stale_text,
         agent_error_output={"type": "text", "text": stale_text},
-        protocol_recovery_text=recovery_text,
-        agent_recovery_output={"type": "text", "text": recovery_text},
+        protocol_recovery_text=_IDENTITY_RECOVERY_TEXT,
+        agent_recovery_output={"type": "text", "text": _IDENTITY_RECOVERY_TEXT},
         initial_model_tool_names=(original,),
         refreshed_model_tool_names=(replacement,),
         initial_list_ordinal=0,
@@ -179,41 +189,39 @@ def _identity_evidence(*, original: str, replacement: str, generation: int) -> T
                 call_id=recovery_call,
                 arguments={"query": "fresh"},
             ),
-            _result(3, call_id=recovery_call, text=recovery_text),
+            _result(3, call_id=recovery_call, text=_IDENTITY_RECOVERY_TEXT),
             receipt.to_event(sequence=4),
         ),
         trial_id=f"identity-g{generation}",
     )
 
 
-def _schema_evidence(*, tool: str, generation: int) -> TrialEvidence:
-    initial = _schema(generation)
-    replacement = _schema(generation + 1)
-    initial_field = f"field_g{generation}"
-    replacement_field = f"field_g{generation + 1}"
-    stale_text = f"Error executing tool {tool}: stale schema g{generation}"
-    recovery_text = f"schema-recovery:g{generation + 1}"
-    stale_call = f"schema-stale-g{generation}"
-    recovery_call = f"schema-recovery-g{generation}"
+def _schema_evidence(*, tool: str, transition_id: int) -> TrialEvidence:
+    stale_text = f"Error executing tool {tool}: Input validation error for replacement schema"
+    stale_call = f"schema-stale-{transition_id}"
+    recovery_call = f"schema-recovery-{transition_id}"
     fault = MCPFaultSpec.from_payload(
-        fault_id=f"schema-g{generation}",
+        fault_id=f"schema-transition-{transition_id}",
         revision="1",
         kind=MCPFaultKind.TOOL_SCHEMA_DRIFT,
         tool_name=tool,
         payload={
             "ttl_ms": _TTL_MS,
-            "initial_required": {initial_field: "string"},
-            "replacement_required": {replacement_field: "string"},
+            "initial_required": {"query": "string"},
+            "replacement_required": {
+                "customer_id": "integer",
+                "include_history": "boolean",
+            },
         },
     )
     protocol = create_schema_drift_protocol_receipt(
         fault=fault,
         ttl_ms=_TTL_MS,
-        initial_schema=initial,
-        cached_schema=initial,
-        refreshed_schema=replacement,
+        initial_schema=_INITIAL_SCHEMA,
+        cached_schema=_INITIAL_SCHEMA,
+        refreshed_schema=_REPLACEMENT_SCHEMA,
         stale_protocol_text=stale_text,
-        protocol_recovery_text=recovery_text,
+        protocol_recovery_text=_SCHEMA_RECOVERY_TEXT,
         initial_list_ordinal=0,
         schema_swap_ordinal=1,
         cached_list_ordinal=2,
@@ -230,15 +238,15 @@ def _schema_evidence(*, tool: str, generation: int) -> TrialEvidence:
         stale_call_id=stale_call,
         recovery_call_id=recovery_call,
         mcp_cache_hint_ttl_ms=_TTL_MS,
-        initial_schema=initial,
-        cached_schema=initial,
-        refreshed_schema=replacement,
-        stale_arguments={initial_field: "stale"},
-        recovery_arguments={replacement_field: "fresh"},
+        initial_schema=_INITIAL_SCHEMA,
+        cached_schema=_INITIAL_SCHEMA,
+        refreshed_schema=_REPLACEMENT_SCHEMA,
+        stale_arguments={"query": "stale"},
+        recovery_arguments={"customer_id": 7, "include_history": True},
         stale_protocol_text=stale_text,
         agent_error_output={"type": "text", "text": stale_text},
-        protocol_recovery_text=recovery_text,
-        agent_recovery_output={"type": "text", "text": recovery_text},
+        protocol_recovery_text=_SCHEMA_RECOVERY_TEXT,
+        agent_recovery_output={"type": "text", "text": _SCHEMA_RECOVERY_TEXT},
         initial_list_ordinal=0,
         schema_swap_ordinal=1,
         cached_list_ordinal=2,
@@ -249,31 +257,26 @@ def _schema_evidence(*, tool: str, generation: int) -> TrialEvidence:
     )
     return _trial(
         (
-            _request(
-                0,
-                tool=tool,
-                call_id=stale_call,
-                arguments={initial_field: "stale"},
-            ),
+            _request(0, tool=tool, call_id=stale_call, arguments={"query": "stale"}),
             _result(1, call_id=stale_call, text=stale_text),
             _request(
                 2,
                 tool=tool,
                 call_id=recovery_call,
-                arguments={replacement_field: "fresh"},
+                arguments={"customer_id": 7, "include_history": True},
             ),
-            _result(3, call_id=recovery_call, text=recovery_text),
+            _result(3, call_id=recovery_call, text=_SCHEMA_RECOVERY_TEXT),
             receipt.to_event(sequence=4),
         ),
-        trial_id=f"schema-g{generation}",
+        trial_id=f"schema-transition-{transition_id}",
     )
 
 
-def _stale_cache_evidence(*, tool: str, generation: int) -> TrialEvidence:
+def _stale_cache_evidence(*, tool: str, probe_id: int) -> TrialEvidence:
     stale_text = f"Error executing tool {tool}: unknown tool '{tool}'"
-    stale_call = f"stale-cache-g{generation}"
+    stale_call = f"stale-cache-{probe_id}"
     fault = MCPFaultSpec.from_payload(
-        fault_id=f"stale-cache-g{generation}",
+        fault_id=f"stale-cache-{probe_id}",
         revision="1",
         kind=MCPFaultKind.TOOL_LIST_STALE_CACHE,
         tool_name=tool,
@@ -311,7 +314,7 @@ def _stale_cache_evidence(*, tool: str, generation: int) -> TrialEvidence:
             _result(1, call_id=stale_call, text=stale_text),
             receipt.to_event(sequence=2),
         ),
-        trial_id=f"stale-cache-g{generation}",
+        trial_id=f"stale-cache-{probe_id}",
     )
 
 
@@ -322,20 +325,31 @@ def _duplicate_delivery(evidence: TrialEvidence) -> TrialEvidence:
     return _replace_events(evidence, events)
 
 
+def _current_schema(schema_phase: int) -> dict[str, object]:
+    if schema_phase == 0:
+        return _INITIAL_SCHEMA
+    if schema_phase == 1:
+        return _REPLACEMENT_SCHEMA
+    raise AssertionError(f"unexpected schema phase: {schema_phase}")
+
+
 def test_protocol_delivery_rejects_duplicate_receipt_event() -> None:
-    evidence = _stale_cache_evidence(tool="lookup_customer_g0", generation=0)
+    evidence = _stale_cache_evidence(tool="lookup_customer_g0", probe_id=0)
 
     with pytest.raises(ProtocolDeliveryError, match="duplicate protocol delivery receipt root"):
         verify_protocol_delivery(_duplicate_delivery(evidence))
 
 
 class MCPTransitionStateMachine(RuleBasedStateMachine):
+    """Compose the existing bounded MCP fault-lab contracts without widening their claims."""
+
     def __init__(self) -> None:
         super().__init__()
         self.identity_generation = 0
-        self.schema_generation = 0
+        self.schema_phase = 0
         self.snapshot_ordinal = 0
         self.reconnect_epoch = 0
+        self.probe_id = 0
         self.active_tool = "lookup_customer_g0"
         self.last_behavioral: TrialEvidence | None = None
         self.last_identity: TrialEvidence | None = None
@@ -345,7 +359,8 @@ class MCPTransitionStateMachine(RuleBasedStateMachine):
     def compatible_metadata_refresh(self) -> None:
         evidence = _metadata_evidence(
             tool=self.active_tool,
-            generation=self.schema_generation,
+            schema=_current_schema(self.schema_phase),
+            schema_phase=self.schema_phase,
             snapshot_ordinal=self.snapshot_ordinal,
         )
         receipts = verify_protocol_delivery(evidence)
@@ -358,17 +373,18 @@ class MCPTransitionStateMachine(RuleBasedStateMachine):
     @rule()
     def reconnect_preserves_current_generation(self) -> None:
         previous_tool = self.active_tool
-        previous_schema_generation = self.schema_generation
+        previous_schema_phase = self.schema_phase
         self.reconnect_epoch += 1
         evidence = _metadata_evidence(
             tool=previous_tool,
-            generation=previous_schema_generation,
+            schema=_current_schema(previous_schema_phase),
+            schema_phase=previous_schema_phase,
             snapshot_ordinal=self.snapshot_ordinal,
         )
         receipts = verify_protocol_delivery(evidence)
         assert len(receipts) == 1
         assert self.active_tool == previous_tool
-        assert self.schema_generation == previous_schema_generation
+        assert self.schema_phase == previous_schema_phase
         self.snapshot_ordinal += 1
 
     @rule()
@@ -391,28 +407,27 @@ class MCPTransitionStateMachine(RuleBasedStateMachine):
         self.last_identity = evidence
         self.snapshot_ordinal += 1
 
+    @precondition(lambda self: self.schema_phase == 0)
     @rule()
-    def schema_drift_refreshes_schema_generation(self) -> None:
-        evidence = _schema_evidence(
-            tool=self.active_tool,
-            generation=self.schema_generation,
-        )
+    def schema_drift_refreshes_bounded_v1_contract(self) -> None:
+        evidence = _schema_evidence(tool=self.active_tool, transition_id=self.probe_id)
         receipts = verify_protocol_delivery(evidence)
         assert len(receipts) == 1
         assert isinstance(receipts[0], MCPAgentToolSchemaDriftReceipt)
-        self.schema_generation += 1
+        self.schema_phase = 1
+        self.probe_id += 1
         self.last_behavioral = evidence
         self.last_schema = evidence
         self.snapshot_ordinal += 1
 
     @rule()
     def stale_cache_reuse_is_bound_to_rejection(self) -> None:
-        generation = self.identity_generation + self.schema_generation + self.reconnect_epoch
-        evidence = _stale_cache_evidence(tool=self.active_tool, generation=generation)
+        evidence = _stale_cache_evidence(tool=self.active_tool, probe_id=self.probe_id)
         receipts = verify_protocol_delivery(evidence)
         assert len(receipts) == 1
         assert isinstance(receipts[0], MCPAgentToolStaleCacheReceipt)
         assert receipts[0].tool_name == self.active_tool
+        self.probe_id += 1
         self.last_behavioral = evidence
         self.snapshot_ordinal += 1
 
@@ -433,11 +448,9 @@ class MCPTransitionStateMachine(RuleBasedStateMachine):
             for index, event in enumerate(events)
             if event.kind is EvidenceKind.PROTOCOL_DELIVERY
         )
-        result_indexes = [
+        last_result_index = max(
             index for index, event in enumerate(events) if event.kind is EvidenceKind.TOOL_RESULT
-        ]
-        assert result_indexes
-        last_result_index = result_indexes[-1]
+        )
         delivery = events.pop(delivery_index)
         if delivery_index < last_result_index:
             last_result_index -= 1
@@ -450,12 +463,10 @@ class MCPTransitionStateMachine(RuleBasedStateMachine):
     def missing_result_fails_closed(self) -> None:
         assert self.last_behavioral is not None
         events = list(self.last_behavioral.events)
-        for index in range(len(events) - 1, -1, -1):
-            if events[index].kind is EvidenceKind.TOOL_RESULT:
-                del events[index]
-                break
-        else:
-            raise AssertionError("behavioral MCP fixture unexpectedly lacks TOOL_RESULT")
+        result_index = max(
+            index for index, event in enumerate(events) if event.kind is EvidenceKind.TOOL_RESULT
+        )
+        del events[result_index]
         with pytest.raises(ProtocolDeliveryError):
             verify_protocol_delivery(_replace_events(self.last_behavioral, events))
 
@@ -468,8 +479,7 @@ class MCPTransitionStateMachine(RuleBasedStateMachine):
             for event in self.last_behavioral.events
             if event.kind is not EvidenceKind.PROTOCOL_DELIVERY
         ]
-        evidence = _replace_events(self.last_behavioral, events)
-        assert verify_protocol_delivery(evidence) == ()
+        assert verify_protocol_delivery(_replace_events(self.last_behavioral, events)) == ()
 
     @precondition(lambda self: self.last_behavioral is not None)
     @rule()
@@ -499,9 +509,8 @@ class MCPTransitionStateMachine(RuleBasedStateMachine):
             if event.kind is EvidenceKind.TOOL_REQUEST
         ]
         assert len(requests) == 2
-        stale_index, stale_request = requests[0]
+        _, stale_request = requests[0]
         recovery_index, recovery_request = requests[1]
-        del stale_index
         payload = dict(recovery_request.payload)
         payload["tool"] = stale_request.payload["tool"]
         events[recovery_index] = EvidenceEvent.model_validate(
@@ -534,7 +543,7 @@ class MCPTransitionStateMachine(RuleBasedStateMachine):
     @invariant()
     def current_generation_is_monotonic_and_last_valid_relation_reverifies(self) -> None:
         assert self.identity_generation >= 0
-        assert self.schema_generation >= 0
+        assert self.schema_phase in {0, 1}
         assert self.snapshot_ordinal >= 0
         assert self.reconnect_epoch >= 0
         assert self.active_tool == f"lookup_customer_g{self.identity_generation}"
