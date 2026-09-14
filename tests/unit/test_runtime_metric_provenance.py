@@ -21,6 +21,7 @@ from agent_evals.runtime.metric_provenance import (
     RuntimeMetricProvenance,
     resolve_metric_provenance,
 )
+from agent_evals.runtime.session import EvaluationSession
 
 _SUBJECT_ID = "a" * 64
 _SCENARIO_ID = "b" * 64
@@ -143,17 +144,21 @@ async def test_generic_adapter_runtime_provenance_is_unverified_and_unknown() ->
 
 
 @pytest.mark.asyncio
-async def test_session_style_trials_retain_provenance_on_evaluated_trial() -> None:
-    result = await TrialRunner().run(
+async def test_evaluation_session_retains_metric_provenance_on_every_trial() -> None:
+    session = await EvaluationSession().run(
         ScriptedAdapter(lambda _subject, _scenario, _trial: AdapterResult(input_tokens=2)),
         subject=_subject(),
         scenario=_scenario(),
-        trial_id="session-retention",
+        trials=2,
+        campaign_id="metric-provenance-retention",
     )
 
-    assert result.metric_provenance is not None
-    assert result.metric_provenance.trial_id == result.evidence.trial_id
-    assert result.metric_provenance.evidence_root == result.completion_evidence_root
+    session.validate()
+    assert len(session.trials) == 2
+    for trial in session.trials:
+        assert trial.metric_provenance is not None
+        assert trial.metric_provenance.trial_id == trial.evidence.trial_id
+        assert trial.metric_provenance.evidence_root == trial.completion_evidence_root
 
 
 @dataclass
