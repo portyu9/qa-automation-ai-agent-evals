@@ -1,0 +1,98 @@
+name: dependabot-auto-merge
+
+on:
+  pull_request_target:
+    types: [opened, reopened, synchronize, ready_for_review]
+  schedule:
+    - cron: "17,47 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+  checks: read
+  statuses: read
+
+concurrency:
+  group: dependabot-auto-merge-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  merge:
+    name: merge-green-dependabot-pr
+    if: github.event_name != 'pull_request_target' || github.actor == 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - name: Verify checks and merge exact tested head
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        with:
+          script: |
+            const PASSING_CONCLUSIONS = new Set(['success', 'neutral', 'skipped']);
+            const POLL_MS = 30_000;
+            const SETTLE_MS = 60_000;
+            const MAX_WAIT_MS = 35 * 60_000;
+            const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+            const { owner, repo } = context.repo;
+
+            function latestStatuses(statuses) {
+              const latest = new Map();
+              const sorted = [...statuses].sort((a, b) => Date.parse(b.updated_at || b.created_at || 0) - Date.parse(a.updated_at || a.created_at || 0));
+              for (const status of sorted) if (!latest.has(status.context)) latest.set(status.context, status);
+              return [...latest.values()];
+            }
+
+            async function candidateNumbers() {
+              if (context.eventName === 'pull_request_target') return [context.payload.pull_request.number];
+              const pulls = await github.paginate(github.rest.pulls.list, { owner, repo, state: 'open', per_page: 100 });
+              return pulls.filter((pull) => pull.user?.login === 'dependabot[bot]').map((pull) => pull.number);
+            }
+
+            async function inspect(number) {
+              const { data: pull } = await github.rest.pulls.get({ owner, repo, pull_number: number });
+              if (pull.state !== 'open' || pull.draft || pull.user?.login !== 'dependabot[bot]') return { terminal: true, reason: 'not an open Dependabot PR' };
+              const sha = pull.head.sha;
+              const [checkRuns, rawStatuses] = await Promise.all([
+                github.paginate(github.rest.checks.listForRef, { owner, repo, ref: sha, filter: 'latest', per_page: 100 }),
+                github.paginate(github.rest.repos.listCommitStatusesForRef, { owner, repo, ref: sha, per_page: 100 }),
+              ]);
+              const statuses = latestStatuses(rawStatuses);
+              const failedChecks = checkRuns.filter((check) => check.status === 'completed' && !PASSING_CONCLUSIONS.has(check.conclusion));
+              const incompleteChecks = checkRuns.filter((check) => check.status !== 'completed');
+              const failedStatuses = statuses.filter((status) => ['failure', 'error'].includes(status.state));
+              const pendingStatuses = statuses.filter((status) => status.state === 'pending');
+              const statusesGreen = statuses.every((status) => status.state === 'success');
+              const checksGreen = checkRuns.length > 0 && incompleteChecks.length === 0 && failedChecks.length === 0;
+              const signalTimes = [
+                ...checkRuns.map((check) => Date.parse(check.completed_at || check.started_at || check.created_at || 0)),
+                ...statuses.map((status) => Date.parse(status.updated_at || status.created_at || 0)),
+              ].filter(Number.isFinite);
+              const settled = Date.now() - (signalTimes.length ? Math.max(...signalTimes) : Date.now()) >= SETTLE_MS;
+              if (failedChecks.length || failedStatuses.length) return { terminal: true, reason: 'non-green checks/statuses' };
+              return { terminal: false, ready: checksGreen && statusesGreen && pendingStatuses.length === 0 && settled, sha, reason: checkRuns.length === 0 ? 'no check runs registered yet' : incompleteChecks.length || pendingStatuses.length ? 'checks/statuses still pending' : !settled ? 'green checks are still settling' : 'not all checks/statuses are green' };
+            }
+
+            async function mergeWhenGreen(number, waitForCompletion) {
+              const deadline = Date.now() + (waitForCompletion ? MAX_WAIT_MS : 0);
+              while (true) {
+                const state = await inspect(number);
+                if (state.terminal) { core.notice(`PR #${number}: ${state.reason}; not auto-merging.`); return; }
+                if (state.ready) {
+                  const { data: fresh } = await github.rest.pulls.get({ owner, repo, pull_number: number });
+                  if (fresh.state !== 'open' || fresh.head.sha !== state.sha) {
+                    if (waitForCompletion && Date.now() < deadline) { await sleep(POLL_MS); continue; }
+                    return;
+                  }
+                  const { data: repository } = await github.rest.repos.get({ owner, repo });
+                  const mergeMethod = repository.allow_rebase_merge ? 'rebase' : repository.allow_squash_merge ? 'squash' : 'merge';
+                  const { data: result } = await github.rest.pulls.merge({ owner, repo, pull_number: number, sha: state.sha, merge_method: mergeMethod });
+                  if (!result.merged) { core.setFailed(`PR #${number}: GitHub declined merge: ${result.message}`); return; }
+                  core.notice(`PR #${number}: merged ${state.sha} via ${mergeMethod}.`);
+                  return;
+                }
+                if (!waitForCompletion || Date.now() >= deadline) { core.notice(`PR #${number}: ${state.reason}; leaving it open for the next event/sweep.`); return; }
+                await sleep(POLL_MS);
+              }
+            }
+
+            for (const number of await candidateNumbers()) await mergeWhenGreen(number, context.eventName === 'pull_request_target');
