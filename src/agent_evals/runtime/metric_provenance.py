@@ -23,6 +23,7 @@ from agent_evals.evidence.models import TrialEvidence
 
 _SCHEMA_VERSION = "agent-evals/runtime-metric-provenance/v1"
 _ROOT_DOMAIN = b"agent-evals/runtime-metric-provenance/v1\0"
+_OPENAI_USAGE_SOURCE = "openai-agents-sdk:context_wrapper.usage"
 _MAX_SOURCE_LENGTH = 256
 _MAX_VERSION_LENGTH = 128
 
@@ -241,7 +242,7 @@ def resolve_metric_provenance(
             runtime_adapter_name,
             MetricOrigin.ADAPTER_BOUNDARY,
             AdapterMetricProvenanceAssertion(
-                token_source="openai-agents-sdk:context_wrapper.usage",
+                token_source=_OPENAI_USAGE_SOURCE,
                 pricing_status=PricingProvenanceStatus.UNAVAILABLE,
             ),
         )
