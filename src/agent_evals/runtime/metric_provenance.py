@@ -94,7 +94,9 @@ class RuntimeMetricProvenance(BaseModel):
 
     model_config = ConfigDict(frozen=True, extra="forbid", revalidate_instances="always")
 
-    schema_version: Literal["agent-evals/runtime-metric-provenance/v1"] = _SCHEMA_VERSION
+    schema_version: Literal["agent-evals/runtime-metric-provenance/v1"] = (
+        "agent-evals/runtime-metric-provenance/v1"
+    )
     trial_id: str = Field(min_length=1)
     evidence_root: str = Field(pattern=r"^[0-9a-f]{64}$")
     runtime_adapter_name: str
