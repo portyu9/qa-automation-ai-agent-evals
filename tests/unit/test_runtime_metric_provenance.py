@@ -6,6 +6,7 @@ import pytest
 from pydantic import ValidationError
 
 from agent_evals.adapters.base import AdapterResult
+from agent_evals.adapters.openai_agents import OpenAIAgentsAdapter
 from agent_evals.adapters.replay import EvidenceReplayAdapter
 from agent_evals.adapters.scripted import ScriptedAdapter
 from agent_evals.contracts.models import EvaluationScenario, ScenarioKind, SubjectFingerprint
@@ -18,6 +19,7 @@ from agent_evals.runtime.metric_provenance import (
     MetricProvenanceError,
     PricingProvenanceStatus,
     RuntimeMetricProvenance,
+    resolve_metric_provenance,
 )
 
 _SUBJECT_ID = "a" * 64
@@ -110,19 +112,6 @@ def test_metric_provenance_rejects_mutated_bound_material(field: str, value: obj
         RuntimeMetricProvenance.model_validate(mutated)
 
 
-def test_generic_adapter_gets_explicit_unknown_source_and_pricing() -> None:
-    adapter = ScriptedAdapter(
-        lambda _subject, _scenario, _trial: AdapterResult(
-            input_tokens=7,
-            output_tokens=3,
-            estimated_cost_usd=0.2,
-        )
-    )
-
-    result = pytest.run(asyncio=False) if False else None
-    del result
-
-
 @pytest.mark.asyncio
 async def test_generic_adapter_runtime_provenance_is_unverified_and_unknown() -> None:
     adapter = ScriptedAdapter(
@@ -151,6 +140,20 @@ async def test_generic_adapter_runtime_provenance_is_unverified_and_unknown() ->
     assert provenance.pricing_source is None
     assert provenance.pricing_version is None
     provenance.validate_against_evidence(result.evidence)
+
+
+@pytest.mark.asyncio
+async def test_session_style_trials_retain_provenance_on_evaluated_trial() -> None:
+    result = await TrialRunner().run(
+        ScriptedAdapter(lambda _subject, _scenario, _trial: AdapterResult(input_tokens=2)),
+        subject=_subject(),
+        scenario=_scenario(),
+        trial_id="session-retention",
+    )
+
+    assert result.metric_provenance is not None
+    assert result.metric_provenance.trial_id == result.evidence.trial_id
+    assert result.metric_provenance.evidence_root == result.completion_evidence_root
 
 
 @dataclass
@@ -250,6 +253,29 @@ def test_historical_replay_model_rejects_invented_source_metadata() -> None:
 
     with pytest.raises(ValidationError, match="historical v2 replay"):
         RuntimeMetricProvenance.model_validate(material)
+
+
+def test_builtin_openai_adapter_gets_fixed_sdk_usage_label_without_pricing_claim() -> None:
+    adapter = OpenAIAgentsAdapter(object(), state_reader=lambda: {})
+
+    runtime_adapter_name, origin, assertion = resolve_metric_provenance(adapter)
+
+    assert runtime_adapter_name == "openai-agents"
+    assert origin is MetricOrigin.ADAPTER_BOUNDARY
+    assert assertion is not None
+    assert assertion.token_source == "openai-agents-sdk:context_wrapper.usage"
+    assert assertion.token_source_version is None
+    assert assertion.pricing_status is PricingProvenanceStatus.UNAVAILABLE
+    provenance = RuntimeMetricProvenance.create(
+        _evidence(),
+        runtime_adapter_name=runtime_adapter_name,
+        origin=origin,
+        assertion=assertion,
+    )
+    assert provenance.token_source == "openai-agents-sdk:context_wrapper.usage"
+    assert provenance.pricing_status is PricingProvenanceStatus.UNAVAILABLE
+    assert provenance.pricing_source is None
+    assert provenance.pricing_version is None
 
 
 def test_manually_constructed_evaluated_trial_remains_legacy_compatible() -> None:
