@@ -99,9 +99,7 @@ class RuntimeMetricProvenance(BaseModel):
     evidence_root: str = Field(pattern=r"^[0-9a-f]{64}$")
     runtime_adapter_name: str
     origin: MetricOrigin
-    authority: Literal[MetricAuthority.UNVERIFIED_TELEMETRY] = (
-        MetricAuthority.UNVERIFIED_TELEMETRY
-    )
+    authority: Literal[MetricAuthority.UNVERIFIED_TELEMETRY] = MetricAuthority.UNVERIFIED_TELEMETRY
     input_tokens: int = Field(ge=0, strict=True)
     output_tokens: int = Field(ge=0, strict=True)
     estimated_cost_usd: float = Field(ge=0.0, allow_inf_nan=False, strict=True)
@@ -182,9 +180,7 @@ class RuntimeMetricProvenance(BaseModel):
             "token_source": None if assertion is None else assertion.token_source,
             "token_source_version": None if assertion is None else assertion.token_source_version,
             "pricing_status": (
-                PricingProvenanceStatus.UNKNOWN
-                if assertion is None
-                else assertion.pricing_status
+                PricingProvenanceStatus.UNKNOWN if assertion is None else assertion.pricing_status
             ),
             "pricing_source": None if assertion is None else assertion.pricing_source,
             "pricing_version": None if assertion is None else assertion.pricing_version,
@@ -251,7 +247,9 @@ def resolve_metric_provenance(
     try:
         raw_assertion = getattr(adapter, "metric_provenance_assertion", None)
     except Exception as exc:  # pragma: no cover - defensive adapter boundary
-        raise MetricProvenanceError("adapter metric provenance assertion could not be read") from exc
+        raise MetricProvenanceError(
+            "adapter metric provenance assertion could not be read"
+        ) from exc
     if raw_assertion is None:
         return runtime_adapter_name, MetricOrigin.ADAPTER_BOUNDARY, None
     try:
