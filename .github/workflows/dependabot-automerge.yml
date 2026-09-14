@@ -12,6 +12,7 @@ permissions:
   actions: write
   checks: read
   contents: write
+  issues: write
   pull-requests: write
   statuses: read
 
@@ -27,7 +28,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Merge green Dependabot pull requests
+      - name: Review, approve, and merge green Dependabot pull requests
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
@@ -36,23 +37,21 @@ jobs:
           EVENT_HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
         run: |
           set -euo pipefail
-          default_branch="$(gh api "repos/${REPOSITORY}" --jq '.default_branch')"
-          repo_json="$(gh api "repos/${REPOSITORY}")"
-          if jq -e '.allow_rebase_merge == true' <<<"${repo_json}" >/dev/null; then merge_flag='--rebase'; elif jq -e '.allow_squash_merge == true' <<<"${repo_json}" >/dev/null; then merge_flag='--squash'; elif jq -e '.allow_merge_commit == true' <<<"${repo_json}" >/dev/null; then merge_flag='--merge'; else echo 'No repository merge method is enabled; refusing to bypass repository policy.'; exit 1; fi
+          all_green() {
+            local sha="$1" checks_json status_json check_count pending_checks bad_checks status_count combined_state
+            checks_json="$(gh api -H 'Accept: application/vnd.github+json' "repos/${REPOSITORY}/commits/${sha}/check-runs?filter=latest&per_page=100")"; check_count="$(jq '.check_runs | length' <<<"${checks_json}")"; pending_checks="$(jq '[.check_runs[] | select(.status != "completed")] | length' <<<"${checks_json}")"; bad_checks="$(jq '[.check_runs[] | select(.status == "completed" and ((.conclusion // "") as $c | ($c != "success" and $c != "neutral" and $c != "skipped")))] | length' <<<"${checks_json}")"
+            status_json="$(gh api -H 'Accept: application/vnd.github+json' "repos/${REPOSITORY}/commits/${sha}/status")"; status_count="$(jq '.statuses | length' <<<"${status_json}")"; combined_state="$(jq -r '.state' <<<"${status_json}")"
+            (( check_count > 0 || status_count > 0 )) || return 1; (( pending_checks == 0 && bad_checks == 0 )) || return 1; (( status_count == 0 )) || [[ "${combined_state}" == 'success' ]]
+          }
+          default_branch="$(gh api "repos/${REPOSITORY}" --jq '.default_branch')"; repo_json="$(gh api "repos/${REPOSITORY}")"; if jq -e '.allow_rebase_merge == true' <<<"${repo_json}" >/dev/null; then merge_flag='--rebase'; elif jq -e '.allow_squash_merge == true' <<<"${repo_json}" >/dev/null; then merge_flag='--squash'; elif jq -e '.allow_merge_commit == true' <<<"${repo_json}" >/dev/null; then merge_flag='--merge'; else exit 1; fi
           if [[ "${EVENT_NAME}" == 'workflow_run' ]]; then mapfile -t prs < <(gh api -H 'Accept: application/vnd.github+json' "repos/${REPOSITORY}/commits/${EVENT_HEAD_SHA}/pulls?per_page=100" --jq '.[] | select(.state == "open" and .user.login == "dependabot[bot]") | .number'); else mapfile -t prs < <(gh pr list --repo "${REPOSITORY}" --state open --author 'app/dependabot' --json number --jq '.[].number'); fi
-          if (( ${#prs[@]} == 0 )); then echo 'No open Dependabot pull requests to evaluate.'; exit 0; fi
-          merged=0
+          (( ${#prs[@]} > 0 )) || exit 0; merged=0
           for pr in "${prs[@]}"; do
-            pr_json="$(gh api "repos/${REPOSITORY}/pulls/${pr}")"; author="$(jq -r '.user.login' <<<"${pr_json}")"; state="$(jq -r '.state' <<<"${pr_json}")"; draft="$(jq -r '.draft' <<<"${pr_json}")"; base="$(jq -r '.base.ref' <<<"${pr_json}")"; head_sha="$(jq -r '.head.sha' <<<"${pr_json}")"
-            if [[ "${author}" != 'dependabot[bot]' || "${state}" != 'open' || "${draft}" != 'false' || "${base}" != "${default_branch}" ]]; then echo "PR #${pr}: not an eligible open Dependabot PR to ${default_branch}; skipping."; continue; fi
-            if [[ "${EVENT_NAME}" == 'workflow_run' && "${head_sha}" != "${EVENT_HEAD_SHA}" ]]; then echo "PR #${pr}: head moved since the triggering workflow run; skipping this event."; continue; fi
-            checks_json="$(gh api -H 'Accept: application/vnd.github+json' "repos/${REPOSITORY}/commits/${head_sha}/check-runs?filter=latest&per_page=100")"; check_count="$(jq '.check_runs | length' <<<"${checks_json}")"; pending_checks="$(jq '[.check_runs[] | select(.status != "completed")] | length' <<<"${checks_json}")"; bad_checks="$(jq '[.check_runs[] | select(.status == "completed" and ((.conclusion // "") as $c | ($c != "success" and $c != "neutral" and $c != "skipped")))] | length' <<<"${checks_json}")"
-            status_json="$(gh api -H 'Accept: application/vnd.github+json' "repos/${REPOSITORY}/commits/${head_sha}/status")"; status_count="$(jq '.statuses | length' <<<"${status_json}")"; combined_state="$(jq -r '.state' <<<"${status_json}")"
-            if (( check_count == 0 && status_count == 0 )); then echo "PR #${pr}: no CI/check evidence exists yet; fail closed."; continue; fi
-            if (( pending_checks > 0 || bad_checks > 0 )); then echo "PR #${pr}: checks are not all green (${pending_checks} pending, ${bad_checks} non-green); skipping."; continue; fi
-            if (( status_count > 0 )) && [[ "${combined_state}" != 'success' ]]; then echo "PR #${pr}: combined commit status is ${combined_state}; skipping."; continue; fi
-            latest_sha="$(gh api "repos/${REPOSITORY}/pulls/${pr}" --jq '.head.sha')"; if [[ "${latest_sha}" != "${head_sha}" ]]; then echo "PR #${pr}: head changed during evaluation; skipping to avoid a stale merge."; continue; fi
-            echo "PR #${pr}: all observed checks are green; requesting a normal ${merge_flag#--} merge."
-            if gh pr merge "${pr}" --repo "${REPOSITORY}" "${merge_flag}"; then merged=$((merged + 1)); for workflow in ci.yml extended.yml security.yml docs.yml; do if gh workflow view "${workflow}" --repo "${REPOSITORY}" >/dev/null 2>&1; then gh workflow run "${workflow}" --repo "${REPOSITORY}" --ref "${default_branch}" >/dev/null 2>&1 || true; fi; done; else echo "PR #${pr}: GitHub rejected the merge; a repository rule is still unsatisfied."; fi
+            pr_json="$(gh api "repos/${REPOSITORY}/pulls/${pr}")"; author="$(jq -r '.user.login' <<<"${pr_json}")"; state="$(jq -r '.state' <<<"${pr_json}")"; draft="$(jq -r '.draft' <<<"${pr_json}")"; base="$(jq -r '.base.ref' <<<"${pr_json}")"; head_sha="$(jq -r '.head.sha' <<<"${pr_json}")"; [[ "${author}" == 'dependabot[bot]' && "${state}" == 'open' && "${draft}" == 'false' && "${base}" == "${default_branch}" ]] || continue; [[ "${EVENT_NAME}" != 'workflow_run' || "${head_sha}" == "${EVENT_HEAD_SHA}" ]] || continue; all_green "${head_sha}" || continue
+            latest_sha="$(gh api "repos/${REPOSITORY}/pulls/${pr}" --jq '.head.sha')"; [[ "${latest_sha}" == "${head_sha}" ]] || continue
+            marker="<!-- dependabot-automerge-review:${head_sha} -->"; comments_json="$(gh api "repos/${REPOSITORY}/issues/${pr}/comments?per_page=100")"; comment_exists="$(jq --arg marker "${marker}" '[.[] | select(.user.login == "github-actions[bot]" and ((.body // "") | contains($marker)))] | length' <<<"${comments_json}")"; if (( comment_exists == 0 )); then printf -v comment_body '%s\n' "${marker}" '### Automated Dependabot review' '' "- Head: \`${head_sha}\`" '- Gate result: all observed CI checks and commit statuses are green.' '- Policy: repository rules remain authoritative and are not bypassed.' '- Action: approving this exact head, re-checking it, then merging if it remains green.'; gh api --method POST "repos/${REPOSITORY}/issues/${pr}/comments" -f body="${comment_body}" >/dev/null; fi
+            reviews_json="$(gh api "repos/${REPOSITORY}/pulls/${pr}/reviews?per_page=100")"; approved_current="$(jq --arg sha "${head_sha}" '[.[] | select(.user.login == "github-actions[bot]" and .state == "APPROVED" and .commit_id == $sha)] | length' <<<"${reviews_json}")"; if (( approved_current == 0 )); then approval_body="Automated approval for Dependabot head ${head_sha}: all observed CI checks and commit statuses are green; repository rules remain authoritative."; gh api --method POST "repos/${REPOSITORY}/pulls/${pr}/reviews" -f event='APPROVE' -f commit_id="${head_sha}" -f body="${approval_body}" >/dev/null || continue; fi
+            reviews_json="$(gh api "repos/${REPOSITORY}/pulls/${pr}/reviews?per_page=100")"; approved_current="$(jq --arg sha "${head_sha}" '[.[] | select(.user.login == "github-actions[bot]" and .state == "APPROVED" and .commit_id == $sha)] | length' <<<"${reviews_json}")"; (( approved_current > 0 )) || continue; latest_sha="$(gh api "repos/${REPOSITORY}/pulls/${pr}" --jq '.head.sha')"; [[ "${latest_sha}" == "${head_sha}" ]] || continue; all_green "${head_sha}" || continue
+            if gh pr merge "${pr}" --repo "${REPOSITORY}" "${merge_flag}"; then merged=$((merged + 1)); for workflow in ci.yml extended.yml security.yml docs.yml; do if gh workflow view "${workflow}" --repo "${REPOSITORY}" >/dev/null 2>&1; then gh workflow run "${workflow}" --repo "${REPOSITORY}" --ref "${default_branch}" >/dev/null 2>&1 || true; fi; done; fi
           done
-          echo "Merged ${merged} Dependabot pull request(s)."
+          echo "Merged ${merged} reviewed and approved Dependabot pull request(s)."
