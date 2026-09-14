@@ -270,13 +270,13 @@ class _NamedAdapter(Protocol):
 def _adapter_name(adapter: object) -> str:
     try:
         name = cast(_NamedAdapter, adapter).name
+        validated = _bounded_text(
+            name,
+            field_name="runtime adapter name",
+            maximum=_MAX_SOURCE_LENGTH,
+        )
     except Exception as exc:  # pragma: no cover - defensive adapter boundary
-        raise MetricProvenanceError("runtime adapter name could not be read") from exc
-    validated = _bounded_text(
-        name,
-        field_name="runtime adapter name",
-        maximum=_MAX_SOURCE_LENGTH,
-    )
+        raise MetricProvenanceError("runtime adapter name is invalid or could not be read") from exc
     if validated is None:
         raise MetricProvenanceError("runtime adapter name is required")
     return validated
