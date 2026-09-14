@@ -14,7 +14,7 @@ import hashlib
 import json
 import sys
 from enum import StrEnum
-from typing import Literal, Self
+from typing import Literal, Protocol, Self, cast
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -143,17 +143,16 @@ class RuntimeMetricProvenance(BaseModel):
                 raise ValueError("adapter-asserted pricing requires source and version")
         elif self.pricing_source is not None or self.pricing_version is not None:
             raise ValueError("pricing source/version require adapter_asserted pricing status")
-        if self.origin is MetricOrigin.HISTORICAL_REPLAY:
-            if (
-                self.token_source is not None
-                or self.token_source_version is not None
-                or self.pricing_status is not PricingProvenanceStatus.UNKNOWN
-                or self.pricing_source is not None
-                or self.pricing_version is not None
-            ):
-                raise ValueError(
-                    "historical v2 replay cannot invent original token or pricing provenance"
-                )
+        if self.origin is MetricOrigin.HISTORICAL_REPLAY and (
+            self.token_source is not None
+            or self.token_source_version is not None
+            or self.pricing_status is not PricingProvenanceStatus.UNKNOWN
+            or self.pricing_source is not None
+            or self.pricing_version is not None
+        ):
+            raise ValueError(
+                "historical v2 replay cannot invent original token or pricing provenance"
+            )
         expected = _provenance_root(self._unsigned_payload())
         if self.provenance_root != expected:
             raise ValueError("runtime metric provenance root does not match bound material")
@@ -262,9 +261,14 @@ def resolve_metric_provenance(
     return runtime_adapter_name, MetricOrigin.ADAPTER_BOUNDARY, assertion
 
 
+class _NamedAdapter(Protocol):
+    @property
+    def name(self) -> str: ...
+
+
 def _adapter_name(adapter: object) -> str:
     try:
-        name = getattr(adapter, "name")
+        name = cast(_NamedAdapter, adapter).name
     except Exception as exc:  # pragma: no cover - defensive adapter boundary
         raise MetricProvenanceError("runtime adapter name could not be read") from exc
     validated = _bounded_text(
