@@ -9,6 +9,7 @@ and unchanged.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from time import perf_counter
 
 from agent_evals.adapters.base import AdapterPreconditionError, AdapterResult, AgentAdapter
 from agent_evals.contracts.models import EvaluationScenario, SubjectFingerprint
@@ -68,6 +69,7 @@ class TrialRunner(_CoreTrialRunner):
         scenario: EvaluationScenario,
         trial_id: str,
     ) -> EvaluatedTrial:
+        started = perf_counter()
         try:
             runtime_adapter_name, origin, assertion = resolve_metric_provenance(adapter)
             execution_adapter: AgentAdapter = adapter
@@ -77,12 +79,14 @@ class TrialRunner(_CoreTrialRunner):
             assertion = None
             execution_adapter = _RejectedMetricProvenanceAdapter()
 
-        evaluated = await super().run(
+        evaluated = await self._run_trial(
             execution_adapter,
             subject=subject,
             scenario=scenario,
             trial_id=trial_id,
+            started=started,
         )
+        evaluator_elapsed_ms = max(0.0, (perf_counter() - started) * 1000.0)
         metric_provenance = RuntimeMetricProvenance.create(
             evaluated.evidence,
             runtime_adapter_name=runtime_adapter_name,
@@ -94,6 +98,6 @@ class TrialRunner(_CoreTrialRunner):
             oracle_results=evaluated.oracle_results,
             verdict=evaluated.verdict,
             semantic_judgment=evaluated.semantic_judgment,
-            evaluator_elapsed_ms=evaluated.evaluator_elapsed_ms,
+            evaluator_elapsed_ms=evaluator_elapsed_ms,
             metric_provenance=metric_provenance,
         )
