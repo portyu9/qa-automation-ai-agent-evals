@@ -52,8 +52,14 @@ _REQUIRED_DEEP_TESTS = {
         "tests/unit/test_deep_mutation_contract_edges.py",
     },
     "retrieval-receipt": {"tests/unit/test_deep_mutation_canonical_contracts.py"},
-    "semantic-receipt": {"tests/unit/test_deep_mutation_canonical_contracts.py"},
-    "side-effect-receipt": {"tests/unit/test_deep_mutation_canonical_contracts.py"},
+    "semantic-receipt": {
+        "tests/unit/test_deep_mutation_canonical_contracts.py",
+        "tests/unit/test_deep_mutation_receipt_contracts.py",
+    },
+    "side-effect-receipt": {
+        "tests/unit/test_deep_mutation_canonical_contracts.py",
+        "tests/unit/test_deep_mutation_receipt_contracts.py",
+    },
     "evidence-store": {"tests/unit/test_deep_mutation_canonical_contracts.py"},
     "release-gate": {"tests/unit/test_deep_mutation_contract_edges.py"},
 }
@@ -69,6 +75,7 @@ _EXPECTED_WORKFLOW_PR_PATHS = {
     "tests/unit/test_deep_mutation_oracle_contracts.py",
     "tests/unit/test_deep_mutation_policy.py",
     "tests/unit/test_deep_mutation_precondition_contracts.py",
+    "tests/unit/test_deep_mutation_receipt_contracts.py",
 }
 _INITIAL_PR_TARGETS = {
     "src/agent_evals/evidence/limits.py",
