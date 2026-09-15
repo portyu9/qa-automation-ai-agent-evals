@@ -20,6 +20,7 @@ from agent_evals.evidence.limits import (
     JsonMaterialBudget,
     ResourceLimitError,
     validate_json_material,
+    validate_utf8_text,
 )
 from agent_evals.evidence.models import EvidenceEvent, EvidenceKind, TrialEvidence, TrialVerdict
 from agent_evals.runtime.evaluator import TrialRunner
@@ -144,6 +145,16 @@ class _HostileString(str):
         raise AssertionError("hostile string encoding must not execute")
 
 
+class _HostileList(list[object]):
+    def __len__(self) -> int:
+        raise AssertionError("hostile list length must not execute")
+
+
+class _HostileTuple(tuple[object, ...]):
+    def __len__(self) -> int:
+        raise AssertionError("hostile tuple length must not execute")
+
+
 def test_json_guard_rejects_subclasses_before_overridable_methods() -> None:
     with pytest.raises(ResourceLimitError, match="unsupported JSON value type"):
         validate_json_material(
@@ -154,6 +165,18 @@ def test_json_guard_rejects_subclasses_before_overridable_methods() -> None:
     with pytest.raises(ResourceLimitError, match="unsupported JSON value type"):
         validate_json_material(
             _HostileString("value"),
+            budget=EVENT_PAYLOAD_BUDGET,
+            label="fixture",
+        )
+    with pytest.raises(ResourceLimitError, match="unsupported JSON value type"):
+        validate_json_material(
+            _HostileList([True]),
+            budget=EVENT_PAYLOAD_BUDGET,
+            label="fixture",
+        )
+    with pytest.raises(ResourceLimitError, match="unsupported JSON value type"):
+        validate_json_material(
+            _HostileTuple((True,)),
             budget=EVENT_PAYLOAD_BUDGET,
             label="fixture",
         )
@@ -328,3 +351,173 @@ async def test_trial_runner_blocks_oversized_adapter_output_before_oracle_gradin
 def test_receipt_budget_is_larger_than_event_payload_budget_but_still_finite() -> None:
     assert RECEIPT_MATERIAL_BUDGET.max_utf8_bytes > EVENT_PAYLOAD_BUDGET.max_utf8_bytes
     assert RECEIPT_MATERIAL_BUDGET.max_nodes > EVENT_PAYLOAD_BUDGET.max_nodes
+
+
+@pytest.mark.parametrize(
+    ("value", "exact_bytes"),
+    [(None, 4), (True, 4), (False, 5), (0, 1), (17, 2), (-17, 3)],
+)
+def test_scalar_material_accounting_accepts_exact_bytes_and_rejects_one_less(
+    value: object,
+    exact_bytes: int,
+) -> None:
+    accepted = JsonMaterialBudget(max_depth=0, max_nodes=1, max_utf8_bytes=exact_bytes)
+    rejected = JsonMaterialBudget(max_depth=0, max_nodes=1, max_utf8_bytes=exact_bytes - 1)
+
+    validate_json_material(value, budget=accepted, label="scalar")
+    with pytest.raises(ResourceLimitError) as exc_info:
+        validate_json_material(value, budget=rejected, label="scalar")
+
+    assert str(exc_info.value) == (
+        f"scalar exceeds maximum UTF-8 material bytes {rejected.max_utf8_bytes}"
+    )
+
+
+def test_finite_float_material_reserves_exact_fixed_budget() -> None:
+    validate_json_material(
+        1.25,
+        budget=JsonMaterialBudget(max_depth=0, max_nodes=1, max_utf8_bytes=24),
+        label="float",
+    )
+
+    with pytest.raises(ResourceLimitError) as exc_info:
+        validate_json_material(
+            1.25,
+            budget=JsonMaterialBudget(max_depth=0, max_nodes=1, max_utf8_bytes=23),
+            label="float",
+        )
+
+    assert str(exc_info.value) == "float exceeds maximum UTF-8 material bytes 23"
+
+
+@pytest.mark.parametrize("value", [float("nan"), float("inf"), float("-inf")])
+def test_nonfinite_float_rejection_is_exact(value: float) -> None:
+    with pytest.raises(ResourceLimitError) as exc_info:
+        validate_json_material(
+            value,
+            budget=JsonMaterialBudget(max_depth=0, max_nodes=1, max_utf8_bytes=24),
+            label="float",
+        )
+
+    assert str(exc_info.value) == "float contains a non-finite number"
+
+
+def test_string_material_accounting_uses_utf8_bytes_not_character_count() -> None:
+    value = "éé"
+    validate_json_material(
+        value,
+        budget=JsonMaterialBudget(max_depth=0, max_nodes=1, max_utf8_bytes=4),
+        label="text",
+    )
+
+    with pytest.raises(ResourceLimitError) as exc_info:
+        validate_json_material(
+            value,
+            budget=JsonMaterialBudget(max_depth=0, max_nodes=1, max_utf8_bytes=3),
+            label="text",
+        )
+
+    assert str(exc_info.value) == "text exceeds maximum UTF-8 material bytes 3"
+
+
+def test_mapping_key_and_value_bytes_compose_into_one_budget() -> None:
+    value = {"é": "a"}
+    validate_json_material(
+        value,
+        budget=JsonMaterialBudget(max_depth=1, max_nodes=2, max_utf8_bytes=3),
+        label="mapping",
+    )
+
+    with pytest.raises(ResourceLimitError) as exc_info:
+        validate_json_material(
+            value,
+            budget=JsonMaterialBudget(max_depth=1, max_nodes=2, max_utf8_bytes=2),
+            label="mapping",
+        )
+
+    assert str(exc_info.value) == "mapping exceeds maximum UTF-8 material bytes 2"
+
+
+def test_mapping_rejects_non_string_key_with_exact_diagnostic() -> None:
+    with pytest.raises(ResourceLimitError) as exc_info:
+        validate_json_material(
+            {1: "value"},
+            budget=JsonMaterialBudget(max_depth=1, max_nodes=2, max_utf8_bytes=32),
+            label="mapping",
+        )
+
+    assert str(exc_info.value) == "mapping object keys must be exact strings"
+
+
+def test_container_node_preflight_accepts_exact_remaining_capacity() -> None:
+    budget = JsonMaterialBudget(max_depth=1, max_nodes=3, max_utf8_bytes=16)
+
+    validate_json_material([None, None], budget=budget, label="list")
+    validate_json_material((None, None), budget=budget, label="tuple")
+    validate_json_material({"a": None, "b": None}, budget=budget, label="mapping")
+
+
+@pytest.mark.parametrize(
+    "value",
+    [[None, None, None], (None, None, None), {"a": None, "b": None, "c": None}],
+)
+def test_container_node_preflight_rejects_one_child_over_remaining_capacity(value: object) -> None:
+    with pytest.raises(ResourceLimitError) as exc_info:
+        validate_json_material(
+            value,
+            budget=JsonMaterialBudget(max_depth=1, max_nodes=3, max_utf8_bytes=32),
+            label="container",
+        )
+
+    assert str(exc_info.value) == "container exceeds maximum JSON node count 3"
+
+
+def test_repeated_container_alias_is_not_misclassified_as_cycle() -> None:
+    child = {"ok": True}
+    value = [child, child]
+
+    validate_json_material(
+        value,
+        budget=JsonMaterialBudget(max_depth=2, max_nodes=5, max_utf8_bytes=16),
+        label="alias",
+    )
+
+
+def test_unsupported_builtin_value_type_fails_closed_with_type_name() -> None:
+    with pytest.raises(ResourceLimitError) as exc_info:
+        validate_json_material(
+            b"bytes",
+            budget=JsonMaterialBudget(max_depth=0, max_nodes=1, max_utf8_bytes=16),
+            label="fixture",
+        )
+
+    assert str(exc_info.value) == "fixture contains unsupported JSON value type bytes"
+
+
+def test_validate_utf8_text_accepts_none_and_exact_ascii_limit() -> None:
+    validate_utf8_text(None, max_bytes=0, label="output")
+    validate_utf8_text("abcd", max_bytes=4, label="output")
+
+
+def test_validate_utf8_text_rejects_ascii_one_byte_over_limit() -> None:
+    with pytest.raises(ResourceLimitError) as exc_info:
+        validate_utf8_text("abcde", max_bytes=4, label="output")
+
+    assert str(exc_info.value) == "output exceeds maximum UTF-8 bytes 4"
+
+
+def test_validate_utf8_text_counts_multibyte_utf8_material() -> None:
+    validate_utf8_text("éé", max_bytes=4, label="output")
+
+    with pytest.raises(ResourceLimitError) as exc_info:
+        validate_utf8_text("éé", max_bytes=3, label="output")
+
+    assert str(exc_info.value) == "output exceeds maximum UTF-8 bytes 3"
+
+
+@pytest.mark.parametrize("value", [1, True, b"text", _HostileString("text")])
+def test_validate_utf8_text_requires_exact_string_or_null(value: object) -> None:
+    with pytest.raises(ResourceLimitError) as exc_info:
+        validate_utf8_text(value, max_bytes=16, label="output")  # type: ignore[arg-type]
+
+    assert str(exc_info.value) == "output must be an exact string or null"
