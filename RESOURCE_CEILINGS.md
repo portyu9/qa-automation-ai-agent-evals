@@ -12,6 +12,8 @@ The evaluator applies explicit resource ceilings before trust-critical JSON cano
 
 A `TrialEvidence` envelope additionally permits at most **4,096 events** and at most **1 MiB of UTF-8** in `final_output`.
 
+Guarded JSON integer values additionally permit at most **4,096 decimal digits**. The validator applies a cheap integer-magnitude check before decimal rendering, then verifies the exact rendered digit count. This keeps grossly oversized Python integers from forcing unbounded decimal conversion before the evaluator can reject them.
+
 The JSON-material byte budget counts UTF-8 bytes of string values and object keys plus a bounded representation of scalar literals. It is a pre-canonicalization safety budget, not a promise that the eventual serialized representation has exactly the same byte count. Node-count and depth ceilings bound structural overhead separately.
 
 ## Where the guard applies
@@ -20,7 +22,9 @@ The JSON-material byte budget counts UTF-8 bytes of string values and object key
 
 The common receipt-material guard is applied before canonical receipt hashing for the higher-variance nested receipt domains in the assurance kernel: attack delivery, semantic judgment, retrieval delivery, and side-effect idempotency. Those receipt domains and canonicalization algorithms remain unchanged for accepted material. Other current receipt models are already structurally bounded by their typed scalar fields and bounded tuples; future receipt domains containing variable JSON material should use the shared guard before canonical hashing.
 
-The guard is iterative rather than recursively walking Python containers. It rejects excessive depth, excessive nodes, excessive UTF-8 material, reference cycles, unsupported JSON value types, and non-finite floating-point values before sorted JSON serialization is invoked. Repeated aliases that are not cycles remain valid JSON-by-value material.
+The guard is iterative rather than recursively walking Python containers. It rejects excessive depth, excessive nodes, excessive UTF-8 material, excessive integer digits, reference cycles, unsupported JSON value types, and non-finite floating-point values before sorted JSON serialization is invoked. Repeated aliases that are not cycles remain valid JSON-by-value material.
+
+Trust-critical JSON material must use exact built-in `dict`, `list`, `tuple`, `str`, `int`, `float`, `bool`, and `None` values. Python subclasses are rejected before the guard calls potentially overridable length, iteration, mapping, encoding, or scalar-rendering behavior. This is intentionally stricter than treating arbitrary Python objects that happen to serialize like JSON as trusted canonicalization input.
 
 ## Runtime outcome semantics
 
@@ -30,12 +34,20 @@ When a live adapter returns material that cannot be normalized inside these limi
 
 ## Historical compatibility
 
-The accepted-material `TrialEvidence/v2` root algorithm is unchanged. The new limits nevertheless tighten the normal evaluator's admissible input domain. Historical evidence that was valid under an older release but exceeds the current safety policy is not silently grandfathered into ordinary live/replay evaluation. If such material must be examined, it should be handled through an explicitly isolated legacy inspection or migration tool with its own operator-controlled resource envelope rather than by disabling the normal evaluator's safety ceilings.
+The accepted-material `TrialEvidence/v2` root algorithm is unchanged. The new limits nevertheless tighten the normal evaluator's admissible input domain. Historical evidence that was valid under an older release but exceeds the current safety policy is not silently grandfathered into ordinary live/replay evaluation. The exact-built-in and integer-digit requirements are part of that current safety policy as well: logically JSON-like Python subclass objects or unusually large integers that older in-process callers may have passed are rejected before canonicalization today.
+
+If such material must be examined, it should be handled through an explicitly isolated legacy inspection or migration tool with its own operator-controlled resource envelope rather than by disabling the normal evaluator's safety ceilings.
 
 This policy is intentionally separate from schema migration: applying a resource ceiling does not reinterpret an old evidence root, and exceeding a current ceiling does not make an old hash invalid as an integrity value produced under its original environment.
 
+## Complexity boundary
+
+The structural, byte, scalar, and exact-type checks bound the amount and shape of material admitted to the existing sorted-JSON canonicalizer. Adversarial tests cover deep/cyclic/wide input, reverse-order maps, hostile Python subclasses, exact/over integer digits, and rejection before canonicalization for over-budget material. The canonical JSON algorithm and all existing evidence/receipt root domains remain unchanged for accepted material.
+
+Statistical computational ceilings and bounded paired-comparison arithmetic are documented separately in [Statistical Assurance](docs/STATISTICAL_ASSURANCE.md). Dedicated wall-clock performance regression policy remains separate from these deterministic admission bounds.
+
 ## Nonclaims
 
-These ceilings do **not** establish constant-time or constant-memory behavior, eliminate every algorithmic-complexity attack, bound memory consumed by a provider or network stack before data reaches Python, prove operating-system isolation, or complete the broader complexity/fuzz work tracked separately from this resource-ceiling slice.
+These ceilings do **not** establish constant-time or constant-memory behavior, eliminate every algorithmic-complexity attack, bound memory consumed by a provider or network stack before data reaches Python, prove operating-system isolation, or replace dedicated performance/fuzz/stress work.
 
 Evidence and receipt hashes remain integrity identities only. They are not signatures, authenticated producer identities, billing/provider attestations, non-repudiation proofs, or proof that a remote system enforced the evaluator's limits.
