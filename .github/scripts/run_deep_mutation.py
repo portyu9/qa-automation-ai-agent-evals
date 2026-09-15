@@ -77,8 +77,7 @@ def _exact_string_list(value: object, *, label: str) -> tuple[str, ...]:
 
 def load_manifest(path: Path, *, repository_root: Path | None = None) -> DeepMutationManifest:
     try:
-        raw_bytes = path.read_bytes()
-        payload = json.loads(raw_bytes.decode("utf-8"))
+        payload = json.loads(path.read_text(encoding="utf-8"))
     except FileNotFoundError as exc:
         raise DeepMutationPolicyError(f"deep mutation manifest is missing: {path}") from exc
     except (UnicodeError, json.JSONDecodeError, OSError) as exc:
@@ -155,7 +154,9 @@ def load_manifest(path: Path, *, repository_root: Path | None = None) -> DeepMut
         tests = _exact_string_list(raw_campaign["tests"], label=f"{label}.tests")
         for source in sources:
             if not source.startswith("src/agent_evals/") or not source.endswith(".py"):
-                raise DeepMutationPolicyError(f"source is outside agent_evals Python code: {source}")
+                raise DeepMutationPolicyError(
+                    f"source is outside agent_evals Python code: {source}"
+                )
             if source.startswith("src/agent_evals/adapters/openai_"):
                 raise DeepMutationPolicyError(
                     f"provider adapter is outside deterministic deep-mutation scope: {source}"
@@ -291,6 +292,16 @@ def _load_counts(path: Path) -> dict[str, int] | None:
     return counts
 
 
+def _score(counts: dict[str, int] | None) -> float | None:
+    if counts is None:
+        return None
+    killed = counts.get("killed")
+    total = counts.get("total")
+    if type(killed) is not int or type(total) is not int or total <= 0:
+        return None
+    return killed * 100.0 / total
+
+
 def _campaign_summary(
     campaign: Campaign,
     *,
@@ -302,20 +313,13 @@ def _campaign_summary(
     results_result: CommandResult,
     gate_result: CommandResult,
 ) -> dict[str, object]:
-    killed = counts.get("killed") if counts is not None else None
-    total = counts.get("total") if counts is not None else None
-    score = (
-        (killed * 100.0 / total)
-        if type(killed) is int and type(total) is int and total > 0
-        else None
-    )
     return {
         "campaign_id": campaign.campaign_id,
         "surface": campaign.surface,
         "sources": list(campaign.sources),
         "tests": list(campaign.tests),
         "minimum_score": minimum_score,
-        "score": score,
+        "score": _score(counts),
         "counts": counts,
         "passed": passed,
         "mutmut_run_exit_code": run_result.returncode,
@@ -382,11 +386,7 @@ def run_deep_mutation(
             exit_file.write_text(f"{run_result.returncode}\n", encoding="ascii")
 
             export_args = ["mutmut", "export-cicd-stats"]
-            export_result = run_command(
-                export_args,
-                cwd=repository_root,
-                timeout_seconds=60,
-            )
+            export_result = run_command(export_args, cwd=repository_root, timeout_seconds=60)
             _write_command_log(campaign_dir / "mutmut-export.log", export_args, export_result)
 
             source_stats = repository_root / "mutants" / "mutmut-cicd-stats.json"
@@ -395,11 +395,7 @@ def run_deep_mutation(
                 shutil.copyfile(source_stats, retained_stats)
 
             results_args = ["mutmut", "results"]
-            results_result = run_command(
-                results_args,
-                cwd=repository_root,
-                timeout_seconds=60,
-            )
+            results_result = run_command(results_args, cwd=repository_root, timeout_seconds=60)
             _write_command_log(campaign_dir / "mutmut-results.log", results_args, results_result)
             results_text = results_result.stdout + results_result.stderr
             (campaign_dir / "mutation-results.txt").write_text(results_text, encoding="utf-8")
@@ -428,11 +424,21 @@ def run_deep_mutation(
             _write_command_log(campaign_dir / "mutation-policy.log", gate_args, gate_result)
 
             counts = _load_counts(retained_stats)
+            score = _score(counts)
+            declared_threshold_passed = score is not None and score >= manifest.minimum_score
+            if gate_result.returncode == 0 and not declared_threshold_passed:
+                with (campaign_dir / "mutation-policy.log").open("a", encoding="utf-8") as handle:
+                    handle.write(
+                        "\ndeep mutation policy failed: declared campaign threshold "
+                        f"{manifest.minimum_score:.2f}% not satisfied; observed={score!r}\n"
+                    )
+
             passed = (
                 run_result.returncode == 0
                 and export_result.returncode == 0
                 and results_result.returncode == 0
                 and gate_result.returncode == 0
+                and declared_threshold_passed
             )
             summaries.append(
                 _campaign_summary(
