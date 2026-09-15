@@ -1,0 +1,87 @@
+{
+  "schema_version": "agent-evals/mutation-policy/v1",
+  "tool": {
+    "name": "mutmut",
+    "version": "3.8.0"
+  },
+  "python_version": "3.12",
+  "minimum_score_percent": 80.0,
+  "minimum_total_mutants": 100,
+  "score_policy": {
+    "numerator": "killed",
+    "denominator": "total - skipped - caught_by_type_check",
+    "excluded_statuses": [
+      "skipped",
+      "caught_by_type_check"
+    ],
+    "penalized_statuses": [
+      "survived",
+      "no_tests"
+    ],
+    "fatal_statuses": [
+      "not_checked",
+      "check_was_interrupted_by_user",
+      "suspicious",
+      "timeout",
+      "segfault"
+    ],
+    "require_zero_excluded_statuses": true
+  },
+  "targets": [
+    {
+      "path": "src/agent_evals/authority.py",
+      "trust_class": "authority",
+      "reason": "path-local handoff attenuation and delegated authorization"
+    },
+    {
+      "path": "src/agent_evals/runtime/preconditions.py",
+      "trust_class": "preconditions",
+      "reason": "fail-closed evaluation precondition closure"
+    },
+    {
+      "path": "src/agent_evals/runtime/evaluator.py",
+      "trust_class": "evaluator",
+      "reason": "public deterministic evaluator facade and orchestration boundary"
+    },
+    {
+      "path": "src/agent_evals/runtime/grading.py",
+      "trust_class": "evaluator",
+      "reason": "deterministic verdict precedence and grading composition"
+    },
+    {
+      "path": "src/agent_evals/oracles/deterministic.py",
+      "trust_class": "oracle",
+      "reason": "non-compensatory deterministic outcome and policy grading"
+    },
+    {
+      "path": "src/agent_evals/adversarial/delivery.py",
+      "trust_class": "receipt",
+      "reason": "attack-delivery receipt reconstruction and verification"
+    },
+    {
+      "path": "src/agent_evals/retrieval/receipt.py",
+      "trust_class": "receipt",
+      "reason": "retrieval delivery relation and receipt-root verification"
+    },
+    {
+      "path": "src/agent_evals/semantic/receipt.py",
+      "trust_class": "receipt",
+      "reason": "subordinate semantic judgment receipt verification"
+    },
+    {
+      "path": "src/agent_evals/side_effect/receipt.py",
+      "trust_class": "receipt",
+      "reason": "side-effect idempotency receipt verification"
+    },
+    {
+      "path": "src/agent_evals/evidence/store.py",
+      "trust_class": "store",
+      "reason": "immutable local publication, manifest validation, and replay loading"
+    },
+    {
+      "path": "src/agent_evals/gates/release.py",
+      "trust_class": "release_gate",
+      "reason": "release decision derivation and fail-closed revalidation"
+    }
+  ]
+}
