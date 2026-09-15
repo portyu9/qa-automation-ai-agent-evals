@@ -102,8 +102,7 @@ class ReplayIdentityStateMachine(RuleBasedStateMachine):
             mode: _recorded_evidence(mode) for mode in _MODES
         }
         self.record_keys: dict[ReplayMode, str] = {
-            mode: self.store.write(evidence).record_key
-            for mode, evidence in self.recorded.items()
+            mode: self.store.write(evidence).record_key for mode, evidence in self.recorded.items()
         }
         self.mode: ReplayMode = "clean"
         self.source: ReplaySource = "direct"
