@@ -108,6 +108,7 @@
         "tests/unit/test_assurance_deterministic_side_effect_regrade.py",
         "tests/unit/test_assurance_oracle_criticality_integrity.py",
         "tests/unit/test_assurance_side_effect_oracle_binding.py",
+        "tests/unit/test_deep_mutation_oracle_contracts.py",
         "tests/unit/test_handoff_authority.py",
         "tests/unit/test_handoff_authority_state_machine.py",
         "tests/unit/test_metamorphic.py",
