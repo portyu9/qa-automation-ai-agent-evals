@@ -8,7 +8,7 @@ from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Any, Self
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, field_validator, model_validator
 
 from agent_evals.evidence.limits import (
     EVENT_PAYLOAD_BUDGET,
@@ -21,6 +21,7 @@ from agent_evals.evidence.limits import (
 )
 
 _EVIDENCE_ROOT_DOMAIN = b"agent-evals/trial-evidence/v2\0"
+_HISTORICAL_V2_TIMESTAMP_CONTEXT = "preserve_historical_v2_timestamp_representation"
 
 
 class EvidenceKind(StrEnum):
@@ -51,7 +52,14 @@ class TrialVerdict(StrEnum):
 
 
 class EvidenceEvent(BaseModel):
-    """One normalized event detached from adapter-owned JSON containers."""
+    """One normalized event detached from adapter-owned JSON containers.
+
+    ``sequence`` is causal authority. ``observed_at`` is durable diagnostic time: current evidence
+    must use an aware datetime, and all accepted current values are normalized to UTC so equal
+    instants have one persisted representation. A private historical-v2 verification context may
+    preserve the original timestamp representation solely to rederive roots created before this
+    invariant existed; that context is not a current evidence-ingestion or grading path.
+    """
 
     model_config = ConfigDict(frozen=True, extra="forbid", revalidate_instances="always")
 
@@ -72,13 +80,25 @@ class EvidenceEvent(BaseModel):
             label="evidence payload",
         )
 
+    @field_validator("observed_at")
+    @classmethod
+    def require_aware_utc_timestamp(cls, value: datetime, info: ValidationInfo) -> datetime:
+        context = info.context
+        if isinstance(context, dict) and context.get(_HISTORICAL_V2_TIMESTAMP_CONTEXT) is True:
+            # Historical TrialEvidence/v2 roots hashed the serialized timestamp representation.
+            # Preserve that representation only inside the verification-only compatibility path.
+            return value
+        if value.tzinfo is None or value.utcoffset() is None:
+            raise ValueError("evidence observed_at must be timezone-aware")
+        return value.astimezone(UTC)
+
     @property
     def digest(self) -> str:
         canonical = _canonical_json_bytes(self.model_dump(mode="json"))
         return hashlib.sha256(canonical).hexdigest()
 
     def snapshot(self) -> Self:
-        """Return a detached, revalidated copy of the complete event."""
+        """Return a detached, revalidated copy of the complete current event."""
         return type(self).model_validate_json(self.model_dump_json())
 
 
@@ -185,8 +205,24 @@ class TrialEvidence(BaseModel):
         return hashlib.sha256(_EVIDENCE_ROOT_DOMAIN + chain + terminal).hexdigest()
 
     def snapshot(self) -> Self:
-        """Return a detached, revalidated copy of the complete evidence envelope."""
+        """Return a detached, revalidated copy of the complete current evidence envelope."""
         return type(self).model_validate_json(self.model_dump_json())
+
+
+def _validate_historical_v2_evidence_json(payload: bytes | str) -> TrialEvidence:
+    """Parse historical v2 bytes only for integrity verification of their original root.
+
+    Before UTC normalization became a current-evidence invariant, TrialEvidence/v2 accepted aware
+    non-UTC offsets and naive datetimes and hashed their serialized representation into event
+    digests. This compatibility parser preserves only that timestamp representation so an existing
+    v2 root can be rederived. It still applies all current structural/resource validation and must
+    not be used to create gradeable current evidence, replay input, or new persisted records.
+    """
+
+    return TrialEvidence.model_validate_json(
+        payload,
+        context={_HISTORICAL_V2_TIMESTAMP_CONTEXT: True},
+    )
 
 
 def _detached_json(
