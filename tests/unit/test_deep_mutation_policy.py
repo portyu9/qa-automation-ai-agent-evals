@@ -45,6 +45,7 @@ _REQUIRED_DEEP_TESTS = {
         "tests/unit/test_deep_mutation_contract_edges.py",
         "tests/unit/test_deep_mutation_precondition_contracts.py",
     },
+    "deterministic-oracles": {"tests/unit/test_deep_mutation_oracle_contracts.py"},
     "attack-delivery-receipt": {
         "tests/unit/test_adversarial_delivery.py",
         "tests/unit/test_deep_mutation_contract_edges.py",
@@ -63,6 +64,7 @@ _EXPECTED_WORKFLOW_PR_PATHS = {
     "MUTATION_ASSURANCE.md",
     "tests/unit/test_deep_mutation_canonical_contracts.py",
     "tests/unit/test_deep_mutation_contract_edges.py",
+    "tests/unit/test_deep_mutation_oracle_contracts.py",
     "tests/unit/test_deep_mutation_policy.py",
     "tests/unit/test_deep_mutation_precondition_contracts.py",
 }
