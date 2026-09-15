@@ -18,6 +18,7 @@ on:
       - "tests/unit/test_deep_mutation_oracle_contracts.py"
       - "tests/unit/test_deep_mutation_policy.py"
       - "tests/unit/test_deep_mutation_precondition_contracts.py"
+      - "tests/unit/test_deep_mutation_receipt_contracts.py"
 
 permissions:
   contents: read
