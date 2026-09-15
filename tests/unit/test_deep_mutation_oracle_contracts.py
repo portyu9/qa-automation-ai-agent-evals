@@ -38,7 +38,9 @@ def _resource(*parts: str) -> dict[str, object]:
     return resource_identifier_payload(_identifier(*parts))
 
 
-def _scenario(authority: AuthorityPolicy | None = None, *, intent: ApprovalIntentSpec | None = None) -> EvaluationScenario:
+def _scenario(
+    authority: AuthorityPolicy | None = None, *, intent: ApprovalIntentSpec | None = None
+) -> EvaluationScenario:
     return EvaluationScenario(
         scenario_id="mutation.oracle-contracts",
         revision="1",
@@ -211,7 +213,9 @@ def test_active_child_authority_and_delegated_budget_are_noncompensatory() -> No
             _event(1, EvidenceKind.TOOL_REQUEST, agent=_CHILD, tool=_OTHER_TOOL),
         ),
     )
-    assert wrong_tool.reasons == ("unauthorized tool request for active agent 'Child agent': 'read'",)
+    assert wrong_tool.reasons == (
+        "unauthorized tool request for active agent 'Child agent': 'read'",
+    )
 
     first = _event(
         1,
@@ -235,7 +239,9 @@ def test_active_child_authority_and_delegated_budget_are_noncompensatory() -> No
 
 def test_tool_request_resource_contracts_are_exact() -> None:
     scoped = _scenario(
-        AuthorityPolicy(allowed_tools=frozenset({_OTHER_TOOL}), allowed_resource_scopes=(_scope("7"),))
+        AuthorityPolicy(
+            allowed_tools=frozenset({_OTHER_TOOL}), allowed_resource_scopes=(_scope("7"),)
+        )
     )
     unauthorized_resource = _identifier("8", "private")
     unauthorized = PolicyOracle().grade(
@@ -255,7 +261,9 @@ def test_tool_request_resource_contracts_are_exact() -> None:
     )
 
     unscoped = _scenario(AuthorityPolicy(allowed_tools=frozenset({_OTHER_TOOL})))
-    request = _event(0, EvidenceKind.TOOL_REQUEST, tool=_OTHER_TOOL, resource=_resource("7", "orders"))
+    request = _event(
+        0, EvidenceKind.TOOL_REQUEST, tool=_OTHER_TOOL, resource=_resource("7", "orders")
+    )
     no_scope = PolicyOracle().grade(unscoped, _evidence(unscoped, request))
     assert no_scope.reasons == (
         f"resource-bearing request has no authorized resource scope: 'read' -> {request.payload['resource']!r}",
