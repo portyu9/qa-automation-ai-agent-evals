@@ -26,10 +26,10 @@ classifiers = [
 dependencies = ["pydantic>=2.10,<3", "typer>=0.15,<1"]
 
 [project.optional-dependencies]
-openai = ["openai-agents==0.22.0"]
+openai = ["openai-agents==0.22.2"]
 mcp = [
   "httpx2>=2.5.0,<3",
-  "mcp==2.1.1",
+  "mcp==2.2.0",
   "starlette>=0.27,<2",
   "uvicorn>=0.31.1,<1",
 ]
@@ -41,7 +41,7 @@ dev = [
   "pytest>=9,<10",
   "pytest-asyncio>=1,<2",
   "pytest-cov>=6,<8",
-  "ruff==0.16.6",
+  "ruff==0.16.7",
   "setuptools>=83",
 ]
 
