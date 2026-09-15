@@ -142,6 +142,8 @@ class _HostileString(str):
         raise AssertionError("hostile string length must not execute")
 
     def encode(self, *args: object, **kwargs: object) -> bytes:
+        if args == ("unicode_escape",) and not kwargs:
+            return str(self).encode("unicode_escape")
         raise AssertionError("hostile string encoding must not execute")
 
 
