@@ -496,9 +496,7 @@ def test_semantic_receipt_creation_and_calibration_diagnostics_are_exact() -> No
             ),
             response=_semantic_response(),
         )
-    assert str(captured.value) == (
-        "semantic judge input rubric does not match the scenario rubric"
-    )
+    assert str(captured.value) == ("semantic judge input rubric does not match the scenario rubric")
 
     calibration = _semantic_calibration()
     assert (
@@ -836,8 +834,7 @@ def test_side_effect_attempt_digest_binding_diagnostics_are_exact() -> None:
     evidence = _side_effect_evidence(events, scenario=scenario)
 
     wrong_argument_attempts = tuple(
-        attempt.model_copy(update={"arguments_sha256": "7" * 64})
-        for attempt in receipt.attempts
+        attempt.model_copy(update={"arguments_sha256": "7" * 64}) for attempt in receipt.attempts
     )
     wrong_arguments = _reroot_side_effect_receipt(
         receipt,
@@ -853,8 +850,7 @@ def test_side_effect_attempt_digest_binding_diagnostics_are_exact() -> None:
     )
 
     wrong_key_attempts = tuple(
-        attempt.model_copy(update={"key_sha256": "8" * 64})
-        for attempt in receipt.attempts
+        attempt.model_copy(update={"key_sha256": "8" * 64}) for attempt in receipt.attempts
     )
     wrong_key = _reroot_side_effect_receipt(
         receipt,
