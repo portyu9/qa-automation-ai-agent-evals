@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Final
 
 MINIMUM_MUTATION_SCORE: Final = 95.0
+_MUTATION_EXIT_STATUS: Final = Path("mutation-run-exit-code.txt")
 _COUNT_FIELDS: Final = (
     "killed",
     "survived",
@@ -98,14 +99,45 @@ def _load_json(path: Path) -> object:
         ) from exc
 
 
+def _require_successful_mutation_run(path: Path) -> None:
+    try:
+        raw = path.read_text(encoding="ascii").strip()
+    except FileNotFoundError as exc:
+        raise MutationScorePolicyError(f"mutation run exit-code file is missing: {path}") from exc
+    except (OSError, UnicodeError) as exc:
+        raise MutationScorePolicyError(f"cannot read mutation run exit code from {path}: {exc}") from exc
+
+    try:
+        exit_code = int(raw)
+    except ValueError as exc:
+        raise MutationScorePolicyError(
+            f"mutation run exit code must be one exact integer, observed {raw!r}"
+        ) from exc
+    if str(exit_code) != raw:
+        raise MutationScorePolicyError(
+            f"mutation run exit code must use canonical integer text, observed {raw!r}"
+        )
+    if exit_code != 0:
+        raise MutationScorePolicyError(
+            f"mutmut execution was incomplete or failed with exit code {exit_code}"
+        )
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(
         description="Enforce the repository mutation-score policy from Mutmut CI statistics."
     )
     parser.add_argument("stats", type=Path, help="path to mutmut-cicd-stats.json")
+    parser.add_argument(
+        "--run-exit-code-file",
+        type=Path,
+        default=_MUTATION_EXIT_STATUS,
+        help="path to the recorded mutmut run exit code",
+    )
     args = parser.parse_args()
 
     try:
+        _require_successful_mutation_run(args.run_exit_code_file)
         payload = _load_json(args.stats)
         score = evaluate_mutation_statistics(payload)
     except MutationScorePolicyError as exc:
