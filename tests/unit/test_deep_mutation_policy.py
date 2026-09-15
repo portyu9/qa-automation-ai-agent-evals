@@ -36,6 +36,36 @@ _REQUIRED_SOURCES = {
     "src/agent_evals/evidence/store.py",
     "src/agent_evals/gates/release.py",
 }
+_REQUIRED_DEEP_TESTS = {
+    "authority": {
+        "tests/unit/test_deep_mutation_contract_edges.py",
+        "tests/unit/test_deep_mutation_precondition_contracts.py",
+    },
+    "preconditions": {
+        "tests/unit/test_deep_mutation_contract_edges.py",
+        "tests/unit/test_deep_mutation_precondition_contracts.py",
+    },
+    "attack-delivery-receipt": {
+        "tests/unit/test_adversarial_delivery.py",
+        "tests/unit/test_deep_mutation_contract_edges.py",
+    },
+    "retrieval-receipt": {"tests/unit/test_deep_mutation_canonical_contracts.py"},
+    "semantic-receipt": {"tests/unit/test_deep_mutation_canonical_contracts.py"},
+    "side-effect-receipt": {"tests/unit/test_deep_mutation_canonical_contracts.py"},
+    "evidence-store": {"tests/unit/test_deep_mutation_canonical_contracts.py"},
+    "release-gate": {"tests/unit/test_deep_mutation_contract_edges.py"},
+}
+_EXPECTED_WORKFLOW_PR_PATHS = {
+    ".github/mutation/**",
+    ".github/scripts/run_deep_mutation.py",
+    ".github/scripts/check_mutation_score.py",
+    ".github/workflows/deep-mutation.yml",
+    "MUTATION_ASSURANCE.md",
+    "tests/unit/test_deep_mutation_canonical_contracts.py",
+    "tests/unit/test_deep_mutation_contract_edges.py",
+    "tests/unit/test_deep_mutation_policy.py",
+    "tests/unit/test_deep_mutation_precondition_contracts.py",
+}
 _INITIAL_PR_TARGETS = {
     "src/agent_evals/evidence/limits.py",
     "src/agent_evals/statistics/limits.py",
@@ -86,6 +116,12 @@ def test_checked_in_manifest_covers_named_item34_trust_surfaces() -> None:
     assert all(
         not source.startswith("src/agent_evals/adapters/openai_") for source in observed_sources
     )
+
+    campaign_tests = {
+        campaign.campaign_id: set(campaign.tests) for campaign in manifest.campaigns
+    }
+    for campaign_id, required_tests in _REQUIRED_DEEP_TESTS.items():
+        assert required_tests <= campaign_tests[campaign_id]
 
 
 def test_manifest_pins_same_mutmut_version_as_development_dependency() -> None:
@@ -190,10 +226,17 @@ def test_deep_workflow_is_least_privilege_exact_head_and_non_release_authority()
     assert "paths:" in workflow
     assert "permissions:\n  contents: read" in workflow
     assert "timeout-minutes: 180" in workflow
+    assert "concurrency:" in workflow
+    assert "group: deep-mutation-${{ github.workflow }}-${{ github.ref }}" in workflow
+    assert "cancel-in-progress: true" in workflow
     assert "github.event.pull_request.head.sha || github.sha" in workflow
     assert "ref: ${{ env.EXACT_COMMIT }}" in workflow
     assert "persist-credentials: false" in workflow
     assert "if: always()" in workflow
+    assert "name: deep-mutation-${{ env.EXACT_COMMIT }}" in workflow
+    assert "deep-mutation-commit.txt" in workflow
+    assert "deep-mutation-results/" in workflow
+    assert "if-no-files-found: error" in workflow
     assert "retention-days: 21" in workflow
     assert "deploy" not in workflow.lower()
     assert "release" not in workflow.lower()
@@ -208,10 +251,8 @@ def test_deep_workflow_is_least_privilege_exact_head_and_non_release_authority()
 def test_deep_workflow_pr_trigger_is_limited_to_assurance_infrastructure() -> None:
     workflow = _WORKFLOW.read_text(encoding="utf-8")
 
-    assert '      - ".github/mutation/**"' in workflow
-    assert '      - ".github/scripts/run_deep_mutation.py"' in workflow
-    assert '      - ".github/workflows/deep-mutation.yml"' in workflow
-    assert '      - "MUTATION_ASSURANCE.md"' in workflow
+    for path in _EXPECTED_WORKFLOW_PR_PATHS:
+        assert f'      - "{path}"' in workflow
     assert "src/agent_evals/**" not in workflow
 
 
