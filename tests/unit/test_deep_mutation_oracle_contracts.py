@@ -609,7 +609,9 @@ def test_side_effect_oracle_names_are_stable_on_fallback_paths() -> None:
     malformed = oracle.grade(scenario, _evidence(scenario, malformed_event))
     assert malformed.name == "side-effect-idempotency"
     assert malformed.verdict is TrialVerdict.FAIL
-    assert malformed.reasons == ("verified side-effect observation became malformed during grading",)
+    assert malformed.reasons == (
+        "verified side-effect observation became malformed during grading",
+    )
     assert malformed.critical is True
 
 
