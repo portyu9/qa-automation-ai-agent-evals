@@ -1,0 +1,3 @@
+# Mutation assurance is intentionally isolated from the ordinary dev/runtime dependency set.
+# Keep this exact pin synchronized with mutation-policy.json and [tool.mutmut].
+mutmut==3.8.0
