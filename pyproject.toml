@@ -12,7 +12,7 @@ authors = [{name = "Ƴunior Ƥortal"}]
 license = {file = "LICENSE"}
 keywords = ["ai-agents", "agent-evals", "quality-engineering", "tevv", "mcp", "pytest"]
 classifiers = [
-  "License :: OSI Approved :: MIT",
+  "License :: OSI Approved :: MIT License",
   "Programming Language :: Python :: 3",
   "Programming Language :: Python :: 3 :: Only",
   "Programming Language :: Python :: 3.11",
