@@ -1,0 +1,45 @@
+name: Mutation diagnostics (temporary)
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mutation-diagnostics-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  survivor-diffs:
+    name: Survivor mutation diffs
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install
+        run: python -m pip install --disable-pip-version-check -e '.[dev]'
+      - name: Generate survivor diagnostics
+        run: |
+          set -euo pipefail
+          rm -rf mutants
+          mutmut run --max-children 2
+          mutmut results > mutation-results.txt
+          cat mutation-results.txt
+          while read -r mutant status; do
+            mutant="${mutant%:}"
+            if [[ "$status" == "survived" ]]; then
+              echo "::group::$mutant"
+              mutmut show "$mutant"
+              echo "::endgroup::"
+            fi
+          done < mutation-results.txt
