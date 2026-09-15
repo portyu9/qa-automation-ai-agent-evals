@@ -14,6 +14,7 @@ from agent_evals.evidence.limits import (
     EVENT_PAYLOAD_BUDGET,
     FINAL_STATE_BUDGET,
     MAX_FINAL_OUTPUT_UTF8_BYTES,
+    MAX_JSON_INTEGER_DECIMAL_DIGITS,
     MAX_TRIAL_EVENTS,
     RECEIPT_MATERIAL_BUDGET,
     JsonMaterialBudget,
@@ -116,6 +117,76 @@ def test_iterative_budget_rejects_wide_container_before_scheduling_children() ->
         validate_json_material(value, budget=EVENT_PAYLOAD_BUDGET, label="fixture")
 
 
+def test_reverse_order_wide_map_accepts_exact_nodes_and_rejects_next_node() -> None:
+    budget = JsonMaterialBudget(max_depth=1, max_nodes=1025, max_utf8_bytes=32_768)
+    accepted = {f"key-{index:04d}": None for index in reversed(range(1024))}
+    rejected = {f"key-{index:04d}": None for index in reversed(range(1025))}
+
+    validate_json_material(accepted, budget=budget, label="fixture")
+
+    with pytest.raises(ResourceLimitError, match="node count"):
+        validate_json_material(rejected, budget=budget, label="fixture")
+
+
+class _HostileDict(dict[str, object]):
+    def __len__(self) -> int:
+        raise AssertionError("hostile dict length must not execute")
+
+    def items(self):  # type: ignore[no-untyped-def]
+        raise AssertionError("hostile dict items must not execute")
+
+
+class _HostileString(str):
+    def __len__(self) -> int:
+        raise AssertionError("hostile string length must not execute")
+
+    def encode(self, *args: object, **kwargs: object) -> bytes:
+        raise AssertionError("hostile string encoding must not execute")
+
+
+def test_json_guard_rejects_subclasses_before_overridable_methods() -> None:
+    with pytest.raises(ResourceLimitError, match="unsupported JSON value type"):
+        validate_json_material(
+            _HostileDict({"safe": True}),
+            budget=EVENT_PAYLOAD_BUDGET,
+            label="fixture",
+        )
+    with pytest.raises(ResourceLimitError, match="unsupported JSON value type"):
+        validate_json_material(
+            _HostileString("value"),
+            budget=EVENT_PAYLOAD_BUDGET,
+            label="fixture",
+        )
+    with pytest.raises(ResourceLimitError, match="object keys must be exact strings"):
+        validate_json_material(
+            {_HostileString("key"): True},
+            budget=EVENT_PAYLOAD_BUDGET,
+            label="fixture",
+        )
+
+
+def test_json_integer_digit_ceiling_accepts_exact_and_rejects_next_digit() -> None:
+    budget = JsonMaterialBudget(max_depth=0, max_nodes=1, max_utf8_bytes=8192)
+    accepted = 10 ** (MAX_JSON_INTEGER_DECIMAL_DIGITS - 1)
+    rejected = 10**MAX_JSON_INTEGER_DECIMAL_DIGITS
+
+    validate_json_material(accepted, budget=budget, label="fixture")
+
+    with pytest.raises(ResourceLimitError, match="maximum decimal digits"):
+        validate_json_material(rejected, budget=budget, label="fixture")
+
+
+def test_json_integer_gross_magnitude_rejects_before_decimal_rendering() -> None:
+    grossly_oversized = 1 << (MAX_JSON_INTEGER_DECIMAL_DIGITS * 4)
+
+    with pytest.raises(ResourceLimitError, match="maximum decimal digits"):
+        validate_json_material(
+            grossly_oversized,
+            budget=RECEIPT_MATERIAL_BUDGET,
+            label="fixture",
+        )
+
+
 def test_event_payload_accepts_exact_material_byte_ceiling() -> None:
     key = "x"
     payload = {key: "a" * (EVENT_PAYLOAD_BUDGET.max_utf8_bytes - len(key))}
@@ -176,6 +247,16 @@ def test_final_output_accepts_exact_utf8_ceiling_and_rejects_next_byte() -> None
             subject_identity=_SUBJECT,
             scenario_identity=_SCENARIO,
             final_output="a" * (MAX_FINAL_OUTPUT_UTF8_BYTES + 1),
+        )
+
+
+def test_final_output_rejects_string_subclass_before_overrides() -> None:
+    with pytest.raises(ValidationError, match="exact string"):
+        TrialEvidence(
+            trial_id="hostile-output-subclass",
+            subject_identity=_SUBJECT,
+            scenario_identity=_SCENARIO,
+            final_output=_HostileString("value"),
         )
 
 
