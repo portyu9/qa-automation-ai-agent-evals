@@ -4,9 +4,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import StrEnum
-from math import comb, isfinite
+from math import exp, isfinite, lgamma, log
 
 from agent_evals.evidence.models import TrialVerdict
+from agent_evals.statistics.limits import MAX_STATISTICAL_TRIALS
+
+_LOG_TWO = log(2.0)
 
 
 class ComparisonDecision(StrEnum):
@@ -40,20 +43,27 @@ class PairedComparison:
             raise ValueError("paired comparison requires equal-length trial vectors")
         if not baseline:
             raise ValueError("paired comparison requires at least one pair")
+        if len(baseline) > MAX_STATISTICAL_TRIALS:
+            raise ValueError(
+                f"paired comparison supports at most {MAX_STATISTICAL_TRIALS} trial pairs"
+            )
         if isinstance(alpha, bool) or not isinstance(alpha, float) or not isfinite(alpha):
             raise ValueError("alpha must be a finite float between zero and one")
         if not 0.0 < alpha < 1.0:
             raise ValueError("alpha must be between zero and one")
 
-        verdicts = (*baseline, *candidate)
-        if any(type(verdict) is not TrialVerdict for verdict in verdicts):
+        if any(type(verdict) is not TrialVerdict for verdict in baseline) or any(
+            type(verdict) is not TrialVerdict for verdict in candidate
+        ):
             raise ValueError("paired comparison verdicts must be exact TrialVerdict members")
 
         unresolved = {
             TrialVerdict.BLOCKED,
             TrialVerdict.INCONCLUSIVE,
         }
-        if any(verdict in unresolved for verdict in verdicts):
+        if any(verdict in unresolved for verdict in baseline) or any(
+            verdict in unresolved for verdict in candidate
+        ):
             raise ValueError(
                 "paired behavioral comparison requires resolved PASS/FAIL outcomes; "
                 "BLOCKED or INCONCLUSIVE evidence must be resolved separately"
@@ -99,7 +109,12 @@ class PairedComparison:
 
 
 def _exact_mcnemar_p_value(baseline_only: int, candidate_only: int) -> float:
-    """Two-sided exact McNemar/binomial test over discordant paired outcomes."""
+    """Two-sided exact McNemar/binomial test over discordant paired outcomes.
+
+    The binomial tail is evaluated with bounded-size floating-point recurrence rather than
+    constructing ``comb(n, k)`` and ``2**n`` integers. The statistical definition is unchanged;
+    only the arithmetic representation is bounded.
+    """
     if isinstance(baseline_only, bool) or not isinstance(baseline_only, int):
         raise ValueError("discordant counts must be integers")
     if isinstance(candidate_only, bool) or not isinstance(candidate_only, int):
@@ -107,9 +122,28 @@ def _exact_mcnemar_p_value(baseline_only: int, candidate_only: int) -> float:
     if baseline_only < 0 or candidate_only < 0:
         raise ValueError("discordant counts cannot be negative")
     discordant = baseline_only + candidate_only
+    if discordant > MAX_STATISTICAL_TRIALS:
+        raise ValueError(
+            f"discordant count cannot exceed {MAX_STATISTICAL_TRIALS} supported trial pairs"
+        )
     if discordant == 0:
         return 1.0
     tail = min(baseline_only, candidate_only)
-    favorable_mass = sum(comb(discordant, index) for index in range(tail + 1))
-    probability = favorable_mass / (1 << discordant)
+    probability = _binomial_half_lower_tail(discordant, tail)
     return min(1.0, 2.0 * probability)
+
+
+def _binomial_half_lower_tail(trials: int, tail: int) -> float:
+    """Return ``P[X <= tail]`` for ``X ~ Binomial(trials, 0.5)`` without big integers."""
+    log_mass = (
+        lgamma(trials + 1)
+        - lgamma(tail + 1)
+        - lgamma(trials - tail + 1)
+        - trials * _LOG_TWO
+    )
+    mass = exp(log_mass)
+    probability = mass
+    for index in range(tail, 0, -1):
+        mass *= index / (trials - index + 1)
+        probability += mass
+    return min(1.0, probability)

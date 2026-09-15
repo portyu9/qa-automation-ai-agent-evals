@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from math import isfinite, sqrt
 
 from agent_evals.evidence.models import TrialVerdict
+from agent_evals.statistics.limits import MAX_PASS_K, MAX_STATISTICAL_TRIALS
 
 DEFAULT_CONFIDENCE_Z = 1.959963984540054
 
@@ -54,11 +55,13 @@ class ReliabilityReport:
 
         if self.trials < 0:
             raise ValueError("trials cannot be negative")
+        if self.trials > MAX_STATISTICAL_TRIALS:
+            raise ValueError(f"trials cannot exceed {MAX_STATISTICAL_TRIALS}")
         for name in ("resolved_trials", "passes", "failures", "blocked", "inconclusive"):
             if getattr(self, name) < 0:
                 raise ValueError(f"{name} cannot be negative")
-        if self.k < 1:
-            raise ValueError("k must be >= 1")
+        if not 1 <= self.k <= MAX_PASS_K:
+            raise ValueError(f"k must be between 1 and {MAX_PASS_K}")
         _validate_confidence_z(self.confidence_z)
 
         for name in (
@@ -97,17 +100,26 @@ class ReliabilityReport:
     ) -> ReliabilityReport:
         if not verdicts:
             raise ValueError("at least one trial verdict is required")
-        if isinstance(k, bool) or not isinstance(k, int) or k < 1:
-            raise ValueError("k must be an integer >= 1")
+        if len(verdicts) > MAX_STATISTICAL_TRIALS:
+            raise ValueError(f"reliability supports at most {MAX_STATISTICAL_TRIALS} trials")
+        if isinstance(k, bool) or not isinstance(k, int) or not 1 <= k <= MAX_PASS_K:
+            raise ValueError(f"k must be an integer between 1 and {MAX_PASS_K}")
         _validate_confidence_z(confidence_z)
-        if any(type(verdict) is not TrialVerdict for verdict in verdicts):
-            raise ValueError("trial verdicts must be exact TrialVerdict members")
+
+        passes = failures = blocked = inconclusive = 0
+        for verdict in verdicts:
+            if type(verdict) is not TrialVerdict:
+                raise ValueError("trial verdicts must be exact TrialVerdict members")
+            if verdict is TrialVerdict.PASS:
+                passes += 1
+            elif verdict is TrialVerdict.FAIL:
+                failures += 1
+            elif verdict is TrialVerdict.BLOCKED:
+                blocked += 1
+            else:
+                inconclusive += 1
 
         trials = len(verdicts)
-        passes = sum(verdict is TrialVerdict.PASS for verdict in verdicts)
-        failures = sum(verdict is TrialVerdict.FAIL for verdict in verdicts)
-        blocked = sum(verdict is TrialVerdict.BLOCKED for verdict in verdicts)
-        inconclusive = sum(verdict is TrialVerdict.INCONCLUSIVE for verdict in verdicts)
         resolved_trials = passes + failures
         metrics = _derive_metrics(
             passes=passes,
@@ -167,6 +179,8 @@ def _wilson_interval(successes: int, trials: int, z: float) -> tuple[float, floa
         raise ValueError("trials must be an integer")
     if trials <= 0:
         raise ValueError("trials must be positive")
+    if trials > MAX_STATISTICAL_TRIALS:
+        raise ValueError(f"trials cannot exceed {MAX_STATISTICAL_TRIALS}")
     if not 0 <= successes <= trials:
         raise ValueError("successes must be between zero and trials")
     _validate_confidence_z(z)

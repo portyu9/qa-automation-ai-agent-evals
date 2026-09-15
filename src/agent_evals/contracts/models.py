@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 from enum import StrEnum
+from math import isfinite
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -13,6 +14,14 @@ from agent_evals.contracts.resource import ResourceIdentifier, ResourceScope
 from agent_evals.contracts.semantic import SemanticRubricSpec
 from agent_evals.retrieval.models import RetrievalContractSpec
 from agent_evals.side_effect.models import SideEffectIdempotencySpec
+
+_MAX_CANONICAL_DEPTH = 32
+_MAX_CANONICAL_NODES = 100_000
+_MAX_CANONICAL_COLLECTION_ITEMS = 10_000
+_MAX_CANONICAL_SCALAR_UTF8_BYTES = 1 * 1024 * 1024
+_MAX_CANONICAL_JSON_BYTES = 4 * 1024 * 1024
+_MAX_TEXT_HASH_BYTES = 4 * 1024 * 1024
+_MAX_CANONICAL_INTEGER_BITS = 4_096
 
 
 class ScenarioKind(StrEnum):
@@ -205,6 +214,10 @@ class AuthorityPolicy(BaseModel):
         cls,
         value: tuple[HandoffAuthorityGrant, ...],
     ) -> tuple[HandoffAuthorityGrant, ...]:
+        if len(value) > _MAX_CANONICAL_COLLECTION_ITEMS:
+            raise ValueError(
+                "handoff authority grants exceed the contract collection complexity ceiling"
+            )
         return tuple(sorted(value, key=lambda grant: grant.transition))
 
     @model_validator(mode="after")
@@ -306,10 +319,14 @@ class EvaluationScenario(BaseModel):
     @field_validator("initial_state", "required_outcomes", "forbidden_outcomes")
     @classmethod
     def require_json_serializable(cls, value: dict[str, Any]) -> dict[str, Any]:
+        _validate_canonical_material(value)
         try:
-            json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False)
+            canonical = json.dumps(
+                value, sort_keys=True, separators=(",", ":"), allow_nan=False
+            )
         except (TypeError, ValueError) as exc:
             raise ValueError("scenario state/outcomes must be finite JSON-compatible data") from exc
+        _require_canonical_json_size(canonical)
         return value
 
     @field_validator("tags")
@@ -381,22 +398,126 @@ def _agent_path_requires_approval(policy: AuthorityPolicy, *, agent: str, tool: 
 
 
 def _canonical_resource_scopes(value: tuple[ResourceScope, ...]) -> tuple[ResourceScope, ...]:
+    if len(value) > _MAX_CANONICAL_COLLECTION_ITEMS:
+        raise ValueError("resource scopes exceed the contract collection complexity ceiling")
     canonical = {scope.canonical_json: scope for scope in value}
     return tuple(canonical[key] for key in sorted(canonical))
 
 
 def _sha256_text(value: str) -> str:
-    return hashlib.sha256(value.encode("utf-8")).hexdigest()
+    encoded = _bounded_utf8_bytes(value, limit=_MAX_TEXT_HASH_BYTES, label="hashed text")
+    return hashlib.sha256(encoded).hexdigest()
 
 
 def _sha256_json(value: Any) -> str:
+    _validate_canonical_material(value)
     canonical = json.dumps(
         _canonicalize(value),
         sort_keys=True,
         separators=(",", ":"),
         allow_nan=False,
     )
-    return _sha256_text(canonical)
+    encoded = _require_canonical_json_size(canonical)
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def _validate_canonical_material(value: Any) -> None:
+    """Fail before recursive serialization when contract material exceeds safe work ceilings."""
+    nodes = 0
+    scalar_bytes = 0
+    active_containers: set[int] = set()
+    stack: list[tuple[Any, int, bool]] = [(value, 0, False)]
+
+    while stack:
+        current, depth, exiting = stack.pop()
+        if exiting:
+            active_containers.remove(id(current))
+            continue
+
+        nodes += 1
+        if nodes > _MAX_CANONICAL_NODES:
+            raise ValueError("contract material exceeds the canonical node complexity ceiling")
+        if depth > _MAX_CANONICAL_DEPTH:
+            raise ValueError("contract material exceeds the canonical nesting depth ceiling")
+
+        if isinstance(current, BaseModel):
+            stack.append((current.model_dump(mode="python", exclude_none=True), depth, False))
+            continue
+
+        if isinstance(current, str):
+            scalar_bytes += len(
+                _bounded_utf8_bytes(
+                    current,
+                    limit=_MAX_CANONICAL_SCALAR_UTF8_BYTES,
+                    label="contract string",
+                )
+            )
+            if scalar_bytes > _MAX_CANONICAL_SCALAR_UTF8_BYTES:
+                raise ValueError("contract material exceeds the canonical scalar-byte ceiling")
+            continue
+
+        if isinstance(current, bool) or current is None:
+            continue
+        if isinstance(current, int):
+            if current.bit_length() > _MAX_CANONICAL_INTEGER_BITS:
+                raise ValueError("contract integer exceeds the canonical integer-size ceiling")
+            continue
+        if isinstance(current, float):
+            if not isfinite(current):
+                raise ValueError("contract material requires finite floating-point values")
+            continue
+
+        if isinstance(current, dict):
+            if len(current) > _MAX_CANONICAL_COLLECTION_ITEMS:
+                raise ValueError("contract object exceeds the canonical collection-size ceiling")
+            container_id = id(current)
+            if container_id in active_containers:
+                raise ValueError("contract material must not contain reference cycles")
+            active_containers.add(container_id)
+            stack.append((current, depth, True))
+            for key, item in current.items():
+                if not isinstance(key, str):
+                    raise ValueError(
+                        "contract JSON object keys must be strings to preserve unambiguous identity"
+                    )
+                scalar_bytes += len(
+                    _bounded_utf8_bytes(
+                        key,
+                        limit=_MAX_CANONICAL_SCALAR_UTF8_BYTES,
+                        label="contract object key",
+                    )
+                )
+                if scalar_bytes > _MAX_CANONICAL_SCALAR_UTF8_BYTES:
+                    raise ValueError("contract material exceeds the canonical scalar-byte ceiling")
+                stack.append((item, depth + 1, False))
+            continue
+
+        if isinstance(current, (set, frozenset, list, tuple)):
+            if len(current) > _MAX_CANONICAL_COLLECTION_ITEMS:
+                raise ValueError("contract array/set exceeds the canonical collection-size ceiling")
+            container_id = id(current)
+            if container_id in active_containers:
+                raise ValueError("contract material must not contain reference cycles")
+            active_containers.add(container_id)
+            stack.append((current, depth, True))
+            for item in current:
+                stack.append((item, depth + 1, False))
+
+
+def _bounded_utf8_bytes(value: str, *, limit: int, label: str) -> bytes:
+    if len(value) > limit:
+        raise ValueError(f"{label} exceeds the configured UTF-8 byte ceiling")
+    encoded = value.encode("utf-8")
+    if len(encoded) > limit:
+        raise ValueError(f"{label} exceeds the configured UTF-8 byte ceiling")
+    return encoded
+
+
+def _require_canonical_json_size(value: str) -> bytes:
+    encoded = _bounded_utf8_bytes(
+        value, limit=_MAX_CANONICAL_JSON_BYTES, label="canonical contract JSON"
+    )
+    return encoded
 
 
 def _canonicalize(value: Any) -> Any:
