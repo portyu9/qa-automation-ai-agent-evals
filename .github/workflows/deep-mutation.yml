@@ -1,0 +1,73 @@
+name: Deep mutation assurance
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "23 6 * * 1"
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/mutation/**"
+      - ".github/scripts/run_deep_mutation.py"
+      - ".github/scripts/check_mutation_score.py"
+      - ".github/workflows/deep-mutation.yml"
+      - "MUTATION_ASSURANCE.md"
+      - "tests/unit/test_deep_mutation_policy.py"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deep-mutation-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  deep-mutation:
+    name: Deep mutation / authority kernels
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    env:
+      EXACT_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
+    steps:
+      - name: Checkout exact subject commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ env.EXACT_COMMIT }}
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install deep mutation dependencies
+        run: python -m pip install --disable-pip-version-check -e '.[dev]'
+
+      - name: Dependency consistency
+        run: python -m pip check
+
+      - name: Verify exact checked-out commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          observed="$(git rev-parse HEAD)"
+          test "$observed" = "$EXACT_COMMIT"
+          printf '%s\n' "$observed" > deep-mutation-commit.txt
+
+      - name: Run deep mutation campaigns
+        run: >-
+          python .github/scripts/run_deep_mutation.py
+          --manifest .github/mutation/deep_targets.json
+          --output deep-mutation-results
+
+      - name: Upload exact-commit deep mutation evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d8c41dfb06fa169f9a5376533e73c4ed6
+        with:
+          name: deep-mutation-${{ env.EXACT_COMMIT }}
+          path: |
+            deep-mutation-commit.txt
+            deep-mutation-results/
+          if-no-files-found: error
+          retention-days: 21
