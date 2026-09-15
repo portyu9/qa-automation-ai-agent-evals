@@ -9,23 +9,20 @@
   "minimum_total_mutants": 100,
   "score_policy": {
     "numerator": "killed",
-    "denominator": "total - skipped - caught_by_type_check",
-    "excluded_statuses": [
-      "skipped",
-      "caught_by_type_check"
-    ],
+    "denominator": "total",
     "penalized_statuses": [
       "survived",
       "no_tests"
     ],
     "fatal_statuses": [
-      "not_checked",
-      "check_was_interrupted_by_user",
+      "skipped",
       "suspicious",
       "timeout",
-      "segfault"
+      "check_was_interrupted_by_user",
+      "segfault",
+      "unclassified"
     ],
-    "require_zero_excluded_statuses": true
+    "allow_hidden_exclusions": false
   },
   "targets": [
     {
