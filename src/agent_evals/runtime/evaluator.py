@@ -16,6 +16,11 @@ from agent_evals.contracts.models import EvaluationScenario, SubjectFingerprint
 from agent_evals.evidence.models import EvidenceEvent, EvidenceKind, TrialEvidence, TrialVerdict
 from agent_evals.oracles.deterministic import OracleResult
 from agent_evals.runtime.grading import grade_deterministic_evidence
+from agent_evals.runtime.metric_provenance import (
+    RuntimeMetricProvenance,
+    classify_metric_source,
+    snapshot_adapter_metric_assertion,
+)
 from agent_evals.runtime.preconditions import (
     EvaluationPreconditionError,
     has_blocking_evidence,
@@ -42,6 +47,7 @@ class EvaluatedTrial:
     verdict: TrialVerdict
     semantic_judgment: SemanticJudgmentReceipt | None = None
     evaluator_elapsed_ms: float | None = field(default=None, kw_only=True)
+    metric_provenance: RuntimeMetricProvenance | None = field(default=None, kw_only=True)
     completion_evidence_root: str = field(init=False)
 
     def __post_init__(self) -> None:
@@ -55,6 +61,8 @@ class EvaluatedTrial:
             if not math.isfinite(normalized_elapsed_ms) or normalized_elapsed_ms < 0.0:
                 raise ValueError("evaluator_elapsed_ms must be a finite non-negative number")
             object.__setattr__(self, "evaluator_elapsed_ms", normalized_elapsed_ms)
+        if self.metric_provenance is not None:
+            self.metric_provenance.validate_against_evidence(self.evidence)
         object.__setattr__(self, "completion_evidence_root", self.evidence.evidence_root)
 
     @property
@@ -101,6 +109,45 @@ class TrialRunner:
         trial_id: str,
     ) -> EvaluatedTrial:
         started = perf_counter()
+        try:
+            metric_assertion = snapshot_adapter_metric_assertion(adapter)
+            runtime_adapter_name = adapter.name
+            if (
+                not isinstance(runtime_adapter_name, str)
+                or not runtime_adapter_name
+                or runtime_adapter_name != runtime_adapter_name.strip()
+            ):
+                raise ValueError("runtime adapter name is invalid")
+            metric_source, metric_source_assertion = classify_metric_source(
+                adapter,
+                metric_assertion,
+            )
+        except (AttributeError, TypeError, ValueError):
+            evaluator_elapsed_ms = max(0.0, (perf_counter() - started) * 1000.0)
+            event = EvidenceEvent(
+                sequence=0,
+                kind=EvidenceKind.EVALUATION_ERROR,
+                source="evaluator:metric-provenance",
+                payload={
+                    "code": "invalid_metric_provenance_assertion",
+                    "reason": "adapter runtime metric provenance assertion failed validation",
+                },
+                critical=True,
+            )
+            evidence = TrialEvidence(
+                trial_id=trial_id,
+                subject_identity=subject.identity,
+                scenario_identity=scenario.identity,
+                events=(event,),
+                elapsed_ms=evaluator_elapsed_ms,
+            )
+            return EvaluatedTrial(
+                evidence=evidence,
+                oracle_results=(),
+                verdict=TrialVerdict.BLOCKED,
+                evaluator_elapsed_ms=evaluator_elapsed_ms,
+            )
+
         evaluated = await self._run_trial(
             adapter,
             subject=subject,
@@ -109,12 +156,19 @@ class TrialRunner:
             started=started,
         )
         evaluator_elapsed_ms = max(0.0, (perf_counter() - started) * 1000.0)
+        metric_provenance = RuntimeMetricProvenance.create(
+            evidence=evaluated.evidence,
+            runtime_adapter_name=runtime_adapter_name,
+            source=metric_source,
+            source_assertion=metric_source_assertion,
+        )
         return EvaluatedTrial(
             evidence=evaluated.evidence,
             oracle_results=evaluated.oracle_results,
             verdict=evaluated.verdict,
             semantic_judgment=evaluated.semantic_judgment,
             evaluator_elapsed_ms=evaluator_elapsed_ms,
+            metric_provenance=metric_provenance,
         )
 
     async def _run_trial(
