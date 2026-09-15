@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from dataclasses import dataclass
 from enum import StrEnum
 from math import comb, fsum, isfinite
@@ -128,7 +129,7 @@ def _exact_mcnemar_p_value(baseline_only: int, candidate_only: int) -> float:
     return min(1.0, 2.0 * probability)
 
 
-def _lower_binomial_tail_terms(trials: int, tail: int):  # type: ignore[no-untyped-def]
+def _lower_binomial_tail_terms(trials: int, tail: int) -> Iterator[float]:
     """Yield Binomial(n, 0.5) mass from ``tail`` down to zero with one ``comb`` call."""
     term = comb(trials, tail) / (1 << trials)
     yield term
