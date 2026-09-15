@@ -41,7 +41,7 @@ def _evaluate(stats: dict[str, int]) -> dict[str, Any]:
 
 
 def test_mutation_policy_cli_validates_checked_in_configuration() -> None:
-    completed = subprocess.run(  # noqa: S603
+    completed = subprocess.run(
         [sys.executable, ".github/scripts/mutation_gate.py", "validate"],
         cwd=_ROOT,
         check=False,
