@@ -25,16 +25,39 @@ def _stats(**overrides: object) -> dict[str, object]:
     return payload
 
 
-def _run_gate(tmp_path: Path, payload: object) -> subprocess.CompletedProcess[str]:
-    stats_path = tmp_path / "mutmut-cicd-stats.json"
-    stats_path.write_text(json.dumps(payload), encoding="utf-8")
+def _run_command(
+    tmp_path: Path,
+    stats_path: Path,
+    *,
+    mutation_exit: str | None = "0",
+) -> subprocess.CompletedProcess[str]:
+    exit_path = tmp_path / "mutation-run-exit-code.txt"
+    if mutation_exit is not None:
+        exit_path.write_text(mutation_exit, encoding="ascii")
     return subprocess.run(
-        [sys.executable, str(_GATE), str(stats_path)],
+        [
+            sys.executable,
+            str(_GATE),
+            str(stats_path),
+            "--run-exit-code-file",
+            str(exit_path),
+        ],
         cwd=_PROJECT_ROOT,
         check=False,
         capture_output=True,
         text=True,
     )
+
+
+def _run_gate(
+    tmp_path: Path,
+    payload: object,
+    *,
+    mutation_exit: str | None = "0",
+) -> subprocess.CompletedProcess[str]:
+    stats_path = tmp_path / "mutmut-cicd-stats.json"
+    stats_path.write_text(json.dumps(payload), encoding="utf-8")
+    return _run_command(tmp_path, stats_path, mutation_exit=mutation_exit)
 
 
 def test_mutation_score_policy_accepts_exact_threshold(tmp_path: Path) -> None:
@@ -100,30 +123,41 @@ def test_mutation_score_policy_rejects_schema_drift(tmp_path: Path) -> None:
     assert "new_status" in result.stderr
 
 
+def test_mutation_score_policy_rejects_nonzero_mutmut_exit_even_with_passing_stats(
+    tmp_path: Path,
+) -> None:
+    result = _run_gate(tmp_path, _stats(), mutation_exit="1")
+
+    assert result.returncode == 1
+    assert "incomplete or failed with exit code 1" in result.stderr
+
+
+def test_mutation_score_policy_rejects_missing_mutmut_exit_code(tmp_path: Path) -> None:
+    result = _run_gate(tmp_path, _stats(), mutation_exit=None)
+
+    assert result.returncode == 1
+    assert "exit-code file is missing" in result.stderr
+
+
+def test_mutation_score_policy_rejects_noncanonical_mutmut_exit_code(tmp_path: Path) -> None:
+    result = _run_gate(tmp_path, _stats(), mutation_exit="00")
+
+    assert result.returncode == 1
+    assert "canonical integer text" in result.stderr
+
+
 def test_mutation_score_policy_rejects_malformed_json(tmp_path: Path) -> None:
     stats_path = tmp_path / "mutmut-cicd-stats.json"
     stats_path.write_text("{not-json", encoding="utf-8")
 
-    result = subprocess.run(
-        [sys.executable, str(_GATE), str(stats_path)],
-        cwd=_PROJECT_ROOT,
-        check=False,
-        capture_output=True,
-        text=True,
-    )
+    result = _run_command(tmp_path, stats_path)
 
     assert result.returncode == 1
     assert "cannot read valid mutation statistics" in result.stderr
 
 
 def test_mutation_score_policy_rejects_missing_statistics_file(tmp_path: Path) -> None:
-    result = subprocess.run(
-        [sys.executable, str(_GATE), str(tmp_path / "missing.json")],
-        cwd=_PROJECT_ROOT,
-        check=False,
-        capture_output=True,
-        text=True,
-    )
+    result = _run_command(tmp_path, tmp_path / "missing.json")
 
     assert result.returncode == 1
     assert "statistics file is missing" in result.stderr
