@@ -43,18 +43,31 @@ _EXPECTED_TRUST_CLASSES = {
 }
 
 
-def _load_json(path: Path) -> dict[str, Any]:
+def _resolve_path(path: Path) -> Path:
+    return path if path.is_absolute() else _ROOT / path
+
+
+def _display_path(path: Path) -> str:
+    resolved = _resolve_path(path).resolve()
     try:
-        value = json.loads(path.read_text(encoding="utf-8"))
+        return str(resolved.relative_to(_ROOT))
+    except ValueError:
+        return str(resolved)
+
+
+def _load_json(path: Path) -> dict[str, Any]:
+    resolved = _resolve_path(path)
+    try:
+        value = json.loads(resolved.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
-        raise ValueError(f"could not read valid JSON from {path.relative_to(_ROOT)}") from exc
+        raise ValueError(f"could not read valid JSON from {_display_path(path)}") from exc
     if type(value) is not dict:
-        raise ValueError(f"{path.relative_to(_ROOT)} must contain one JSON object")
+        raise ValueError(f"{_display_path(path)} must contain one JSON object")
     return value
 
 
 def _sha256(path: Path) -> str:
-    return hashlib.sha256(path.read_bytes()).hexdigest()
+    return hashlib.sha256(_resolve_path(path).read_bytes()).hexdigest()
 
 
 def _noncomment_requirement_lines() -> list[str]:
@@ -94,7 +107,6 @@ def validate_policy(*, check_installed: bool) -> dict[str, Any]:
     if type(minimum_total) is not int or minimum_total <= 0:
         errors.append("minimum_total_mutants must be a positive integer")
 
-    score_policy = policy.get("score_policy")
     expected_score_policy = {
         "numerator": "killed",
         "denominator": "total",
@@ -102,7 +114,7 @@ def validate_policy(*, check_installed: bool) -> dict[str, Any]:
         "fatal_statuses": list(_FATAL_STATUSES),
         "allow_hidden_exclusions": False,
     }
-    if score_policy != expected_score_policy:
+    if policy.get("score_policy") != expected_score_policy:
         errors.append("score_policy must use the fail-closed v1 killed/total contract")
 
     targets = policy.get("targets")
@@ -142,12 +154,16 @@ def validate_policy(*, check_installed: bool) -> dict[str, Any]:
     if missing_classes:
         errors.append(f"mutation target manifest misses trust classes: {sorted(missing_classes)!r}")
 
+    pyproject: dict[str, Any] = {}
+    mutmut_config: dict[str, Any] = {}
     try:
         pyproject = tomllib.loads(_PYPROJECT_PATH.read_text(encoding="utf-8"))
-        mutmut_config = pyproject["tool"]["mutmut"]
+        candidate = pyproject["tool"]["mutmut"]
+        if type(candidate) is not dict:
+            raise TypeError("[tool.mutmut] must be a table")
+        mutmut_config = candidate
     except (OSError, tomllib.TOMLDecodeError, KeyError, TypeError) as exc:
         errors.append(f"could not read [tool.mutmut]: {exc}")
-        mutmut_config = {}
 
     if mutmut_config.get("source_paths") != target_paths:
         errors.append("[tool.mutmut].source_paths must exactly match mutation-policy.json targets")
@@ -173,7 +189,10 @@ def validate_policy(*, check_installed: bool) -> dict[str, Any]:
         )
 
     dev_dependencies = pyproject.get("project", {}).get("optional-dependencies", {}).get("dev", [])
-    if any(str(dependency).split("=", 1)[0].strip().lower() == "mutmut" for dependency in dev_dependencies):
+    if any(
+        str(dependency).split("=", 1)[0].strip().lower() == "mutmut"
+        for dependency in dev_dependencies
+    ):
         errors.append("mutmut must remain isolated from the ordinary dev dependency set")
 
     if check_installed and tool_version:
@@ -246,7 +265,8 @@ def _render_markdown(report: dict[str, Any], policy: dict[str, Any]) -> str:
         f"- Commit: `{report['commit_sha']}`",
         f"- Workflow run: `{report['run_id']}` attempt `{report['run_attempt']}`",
         f"- Tool: `mutmut=={policy['tool']['version']}` on Python `{policy['python_version']}`",
-        f"- Mutation score: **{report['score_percent']:.2f}%** (required: **{report['threshold_percent']:.2f}%**)",
+        f"- Mutation score: **{report['score_percent']:.2f}%** "
+        f"(required: **{report['threshold_percent']:.2f}%**)",
         f"- Gate: **{'PASS' if report['passed'] else 'FAIL'}**",
         "",
         "## Counts",
@@ -256,24 +276,10 @@ def _render_markdown(report: dict[str, Any], policy: dict[str, Any]) -> str:
     ]
     for key in (*_EXPORTED_STATUSES, "unclassified", "total"):
         lines.append(f"| `{key}` | {counts[key]} |")
-    lines.extend(
-        [
-            "",
-            "## Target manifest",
-            "",
-        ]
-    )
+    lines.extend(["", "## Target manifest", ""])
     for target in policy["targets"]:
-        lines.append(
-            f"- `{target['path']}` — `{target['trust_class']}` — {target['reason']}"
-        )
-    lines.extend(
-        [
-            "",
-            "## Gate diagnostics",
-            "",
-        ]
-    )
+        lines.append(f"- `{target['path']}` — `{target['trust_class']}` — {target['reason']}")
+    lines.extend(["", "## Gate diagnostics", ""])
     if report["errors"]:
         lines.extend(f"- {error}" for error in report["errors"])
     else:
@@ -283,7 +289,11 @@ def _render_markdown(report: dict[str, Any], policy: dict[str, Any]) -> str:
             "",
             "## Nonclaims",
             "",
-            "This score is test-strength evidence for the checked-in target set only. It is not formal verification, provider/remote-system evidence, authentication, a security certification, or evidence that unmutated modules have equivalent assurance. Surviving mutants still require human review; the score must not be widened into grading or release authority.",
+            "This score is test-strength evidence for the checked-in target set only. It is not "
+            "formal verification, provider/remote-system evidence, authentication, a security "
+            "certification, or evidence that unmutated modules have equivalent assurance. "
+            "Surviving mutants still require human review; the score must not be widened into "
+            "grading or release authority.",
             "",
         ]
     )
@@ -346,6 +356,11 @@ def _command_evaluate(args: argparse.Namespace) -> int:
         return 1
 
     evaluation = evaluate_stats(stats, policy)
+    if "counts" not in evaluation:
+        for error in evaluation["errors"]:
+            print(f"mutation gate: {error}", file=sys.stderr)
+        return 1
+
     if args.run_exit_code != 0:
         evaluation["passed"] = False
         evaluation["errors"].append(
