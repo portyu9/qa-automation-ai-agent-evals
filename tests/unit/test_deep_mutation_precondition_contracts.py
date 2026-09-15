@@ -210,6 +210,67 @@ def test_typed_resource_missing_identity_uses_exact_active_handoff_state() -> No
     )
 
 
+def test_typed_resource_check_does_not_replay_future_handoff_state() -> None:
+    grandchild = "Worker agent"
+    authority = AuthorityPolicy(
+        allowed_tools=frozenset({"read"}),
+        allowed_resource_scopes=(_scope("7"),),
+        max_tool_calls=5,
+        max_handoffs=3,
+        root_agent=_ROOT,
+        handoff_grants=(
+            HandoffAuthorityGrant(
+                source_agent=_ROOT,
+                target_agent=_CHILD,
+                allowed_tools=frozenset({"read"}),
+                allowed_resource_scopes=(_scope("7", "orders"),),
+                max_tool_calls=3,
+                max_handoffs=2,
+            ),
+            HandoffAuthorityGrant(
+                source_agent=_CHILD,
+                target_agent=grandchild,
+                allowed_tools=frozenset({"read"}),
+                allowed_resource_scopes=(),
+                max_tool_calls=2,
+                max_handoffs=1,
+            ),
+        ),
+    )
+    scenario = _scenario(authority)
+    evidence = _evidence(
+        scenario,
+        _event(
+            0,
+            EvidenceKind.HANDOFF,
+            source_agent=_ROOT,
+            target_agent=_CHILD,
+        ),
+        _event(
+            1,
+            EvidenceKind.TOOL_REQUEST,
+            agent=_CHILD,
+            tool="read",
+            call_id="missing-resource",
+        ),
+        _event(
+            2,
+            EvidenceKind.HANDOFF,
+            source_agent=_CHILD,
+            target_agent=grandchild,
+        ),
+    )
+
+    with pytest.raises(EvaluationPreconditionError) as captured:
+        preconditions._verify_typed_resource_evidence(scenario, evidence)
+
+    assert captured.value.source == "evaluator:resource-identity"
+    assert captured.value.code == "resource_identity_unverified"
+    assert captured.value.reason == (
+        "tool_request evidence lacks the resource identity required by the active typed resource scope"
+    )
+
+
 def test_handoff_state_replay_skips_unrelated_events_before_transition() -> None:
     authority = _handoff_authority()
     events = (
