@@ -14,6 +14,7 @@ on:
       - "MUTATION_ASSURANCE.md"
       - "tests/unit/test_deep_mutation_canonical_contracts.py"
       - "tests/unit/test_deep_mutation_contract_edges.py"
+      - "tests/unit/test_deep_mutation_oracle_contracts.py"
       - "tests/unit/test_deep_mutation_policy.py"
       - "tests/unit/test_deep_mutation_precondition_contracts.py"
 
