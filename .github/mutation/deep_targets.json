@@ -72,6 +72,7 @@
         "tests/unit/test_assurance_pregrading_closure.py",
         "tests/unit/test_attack_delivery_live_authority_boundary.py",
         "tests/unit/test_composed_handoff_provenance_precondition.py",
+        "tests/unit/test_deep_mutation_evaluator_contracts.py",
         "tests/unit/test_evaluator_deadline.py",
         "tests/unit/test_evaluator_observed_duration.py",
         "tests/unit/test_evidence_resource_limits.py",
