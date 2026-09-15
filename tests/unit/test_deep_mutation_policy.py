@@ -117,9 +117,7 @@ def test_checked_in_manifest_covers_named_item34_trust_surfaces() -> None:
         not source.startswith("src/agent_evals/adapters/openai_") for source in observed_sources
     )
 
-    campaign_tests = {
-        campaign.campaign_id: set(campaign.tests) for campaign in manifest.campaigns
-    }
+    campaign_tests = {campaign.campaign_id: set(campaign.tests) for campaign in manifest.campaigns}
     for campaign_id, required_tests in _REQUIRED_DEEP_TESTS.items():
         assert required_tests <= campaign_tests[campaign_id]
 
