@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 import pytest
@@ -960,7 +960,7 @@ def test_side_effect_receipt_creation_and_event_contracts_are_exact() -> None:
     )
 
 
-class _ProbeEnum(str, Enum):
+class _ProbeEnum(StrEnum):
     VALUE = "value"
 
 
