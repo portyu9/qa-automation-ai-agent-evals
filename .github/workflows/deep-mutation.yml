@@ -63,7 +63,7 @@ jobs:
 
       - name: Upload exact-commit deep mutation evidence
         if: always()
-        uses: actions/upload-artifact@043fb46d8c41dfb06fa169f9a5376533e73c4ed6
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: deep-mutation-${{ env.EXACT_COMMIT }}
           path: |
