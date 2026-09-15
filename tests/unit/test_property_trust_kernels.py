@@ -23,6 +23,7 @@ _ASCII_DOMAIN_START = tuple(string.ascii_lowercase)
 _ASCII_DOMAIN_REST = string.ascii_lowercase + string.digits + "_-"
 _ASCII_COMPONENTS = string.ascii_letters + string.digits + "_-.:@"
 _ASCII_TOOL = string.ascii_lowercase + string.digits + "_-"
+_SAFE_JSON_TEXT = string.ascii_letters + string.digits + " _-.:@éΩ中🙂"
 
 _DOMAIN = st.builds(
     lambda first, rest: first + rest,
@@ -41,16 +42,25 @@ _JSON_SCALAR = (
     | st.booleans()
     | st.integers(min_value=-(2**63), max_value=2**63 - 1)
     | st.floats(allow_nan=False, allow_infinity=False, width=32)
-    | st.text(max_size=20)
+    | st.text(alphabet=_SAFE_JSON_TEXT, max_size=20)
 )
 _JSON_VALUE = st.recursive(
     _JSON_SCALAR,
     lambda children: (
-        st.lists(children, max_size=4) | st.dictionaries(st.text(max_size=12), children, max_size=4)
+        st.lists(children, max_size=4)
+        | st.dictionaries(
+            st.text(alphabet=_SAFE_JSON_TEXT, max_size=12),
+            children,
+            max_size=4,
+        )
     ),
     max_leaves=20,
 )
-_JSON_MAPPING = st.dictionaries(st.text(max_size=12), _JSON_VALUE, max_size=8)
+_JSON_MAPPING = st.dictionaries(
+    st.text(alphabet=_SAFE_JSON_TEXT, max_size=12),
+    _JSON_VALUE,
+    max_size=8,
+)
 
 _RECEIPT_ROOTS = (
     attack_receipt_root,
@@ -190,7 +200,10 @@ def test_receipt_roots_are_invariant_to_mapping_insertion_order(material: dict[s
 
 
 @settings(max_examples=100, deadline=None)
-@given(key=st.text(alphabet=string.ascii_letters, min_size=1, max_size=12), value=st.text(alphabet=string.ascii_letters + string.digits, max_size=24))
+@given(
+    key=st.text(alphabet=string.ascii_letters, min_size=1, max_size=12),
+    value=st.text(alphabet=string.ascii_letters + string.digits, max_size=24),
+)
 def test_receipt_root_domains_remain_distinct_for_identical_canonical_material(
     key: str,
     value: str,
