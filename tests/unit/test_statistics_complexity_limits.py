@@ -133,8 +133,7 @@ def test_vector_guard_accepts_exact_ceiling_and_rejects_next_item() -> None:
     rejected = [None] * (MAX_STATISTICAL_TRIALS + 1)
 
     assert (
-        validate_materialized_statistical_vector(accepted, label="sample")
-        == MAX_STATISTICAL_TRIALS
+        validate_materialized_statistical_vector(accepted, label="sample") == MAX_STATISTICAL_TRIALS
     )
     with pytest.raises(ValueError) as exc_info:
         validate_materialized_statistical_vector(rejected, label="sample")
@@ -161,6 +160,4 @@ def test_reliability_k_guard_rejects_immediately_above_upper_bound() -> None:
     with pytest.raises(ValueError) as exc_info:
         validate_reliability_k(MAX_RELIABILITY_K + 1)
 
-    assert str(exc_info.value) == (
-        f"k exceeds maximum reliability retry depth {MAX_RELIABILITY_K}"
-    )
+    assert str(exc_info.value) == (f"k exceeds maximum reliability retry depth {MAX_RELIABILITY_K}")
