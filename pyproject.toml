@@ -50,7 +50,7 @@ agent-evals = "agent_evals.cli:app"
 
 [project.urls]
 Homepage = "https://github.com/portyu9/qa-automation-ai-agent-evals"
-Repository = "https://github.com/portyu9/qa-automation-ai-agent-evals"
+Repository = "https://github.com/portyu9/qa-automation-ai-agent-evals/tree/main"
 Documentation = "https://github.com/portyu9/qa-automation-ai-agent-evals/tree/main/docs"
 Issues = "https://github.com/portyu9/qa-automation-ai-agent-evals/issues"
 
@@ -128,3 +128,20 @@ ignore_missing_imports = true
 
 [tool.bandit]
 exclude_dirs = ["tests"]
+
+[tool.mutmut]
+source_paths = [
+  "src/agent_evals/authority.py",
+  "src/agent_evals/runtime/preconditions.py",
+  "src/agent_evals/runtime/evaluator.py",
+  "src/agent_evals/runtime/grading.py",
+  "src/agent_evals/oracles/deterministic.py",
+  "src/agent_evals/adversarial/delivery.py",
+  "src/agent_evals/retrieval/receipt.py",
+  "src/agent_evals/semantic/receipt.py",
+  "src/agent_evals/side_effect/receipt.py",
+  "src/agent_evals/evidence/store.py",
+  "src/agent_evals/gates/release.py",
+]
+pytest_add_cli_args_test_selection = ["tests/unit"]
+pytest_add_cli_args = ["--hypothesis-seed=20260915"]
