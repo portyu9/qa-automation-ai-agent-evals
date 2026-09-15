@@ -327,8 +327,8 @@ async def test_session_retains_each_trial_metric_provenance_without_using_it_as_
     )
 
     assert all(trial.metric_provenance is not None for trial in session.trials)
-    assert session.reliability.total == 2
-    assert session.reliability.passed == 2
+    assert session.reliability.trials == 2
+    assert session.reliability.passes == 2
     assert all(
         trial.metric_provenance is not None
         and trial.metric_provenance.authority is MetricTelemetryAuthority.UNVERIFIED
