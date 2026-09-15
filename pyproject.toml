@@ -36,6 +36,7 @@ mcp = [
 dev = [
   "bandit>=1.8,<2",
   "hypothesis>=6.100,<7",
+  "mutmut==3.8.0",
   "mypy>=1.14,<3",
   "pip-audit>=2.8,<3",
   "pytest>=9,<10",
@@ -70,6 +71,18 @@ markers = [
   "mcp_oauth: deterministic MCP OAuth authorization-code/PKCE tests with separated loopback AS and RS origins",
 ]
 asyncio_mode = "auto"
+
+[tool.mutmut]
+source_paths = ["src/agent_evals"]
+only_mutate = [
+  "src/agent_evals/evidence/limits.py",
+  "src/agent_evals/statistics/limits.py",
+]
+pytest_add_cli_args_test_selection = [
+  "tests/unit/test_evidence_resource_limits.py",
+  "tests/unit/test_statistics_complexity_limits.py",
+]
+process_isolation = "fork"
 
 [tool.coverage.run]
 branch = true
