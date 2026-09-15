@@ -36,6 +36,8 @@ RECEIPT_MATERIAL_BUDGET = JsonMaterialBudget(
 )
 MAX_TRIAL_EVENTS = 4_096
 MAX_FINAL_OUTPUT_UTF8_BYTES = 1024 * 1024
+MAX_JSON_INTEGER_DECIMAL_DIGITS = 4_096
+_MAX_JSON_INTEGER_BITS = math.ceil(MAX_JSON_INTEGER_DECIMAL_DIGITS * math.log2(10))
 
 
 class ResourceLimitError(ValueError):
@@ -54,6 +56,10 @@ def validate_json_material(
     representation of JSON numeric/literal scalars. JSON punctuation/escaping overhead is not part
     of this pre-canonicalization budget; canonical output remains bounded indirectly by node count
     and the material-byte ceiling.
+
+    Only exact built-in JSON scalar/container types are admitted. Rejecting subclasses before
+    invoking ``len()``, iteration, ``items()``, encoding, or numeric rendering prevents attacker-
+    supplied Python override methods from running inside this trust-critical preflight guard.
     """
 
     # Stack entries are (value, depth, exiting_container). Exit markers let us distinguish an
@@ -82,24 +88,31 @@ def validate_json_material(
             material_bytes += 4
         elif current is False:
             material_bytes += 5
-        elif isinstance(current, str):
+        elif type(current) is str:
             if len(current) > budget.max_utf8_bytes:
                 raise ResourceLimitError(
                     f"{label} exceeds maximum UTF-8 material bytes {budget.max_utf8_bytes}"
                 )
             material_bytes += len(current.encode("utf-8"))
-        elif isinstance(current, int) and not isinstance(current, bool):
-            try:
-                material_bytes += len(str(current))
-            except ValueError as exc:
+        elif type(current) is int:
+            if current.bit_length() > _MAX_JSON_INTEGER_BITS:
                 raise ResourceLimitError(
-                    f"{label} contains an integer too large to normalize"
-                ) from exc
-        elif isinstance(current, float):
+                    f"{label} contains an integer exceeding maximum decimal digits "
+                    f"{MAX_JSON_INTEGER_DECIMAL_DIGITS}"
+                )
+            rendered = str(current)
+            decimal_digits = len(rendered) - int(rendered.startswith("-"))
+            if decimal_digits > MAX_JSON_INTEGER_DECIMAL_DIGITS:
+                raise ResourceLimitError(
+                    f"{label} contains an integer exceeding maximum decimal digits "
+                    f"{MAX_JSON_INTEGER_DECIMAL_DIGITS}"
+                )
+            material_bytes += len(rendered)
+        elif type(current) is float:
             if not math.isfinite(current):
                 raise ResourceLimitError(f"{label} contains a non-finite number")
             material_bytes += 24
-        elif isinstance(current, dict):
+        elif type(current) is dict:
             identity = id(current)
             if identity in active_containers:
                 raise ResourceLimitError(f"{label} contains a reference cycle")
@@ -110,8 +123,8 @@ def validate_json_material(
             active_containers.add(identity)
             stack.append((current, depth, True))
             for key, child in current.items():
-                if not isinstance(key, str):
-                    raise ResourceLimitError(f"{label} object keys must be strings")
+                if type(key) is not str:
+                    raise ResourceLimitError(f"{label} object keys must be exact strings")
                 if len(key) > budget.max_utf8_bytes:
                     raise ResourceLimitError(
                         f"{label} exceeds maximum UTF-8 material bytes {budget.max_utf8_bytes}"
@@ -122,7 +135,7 @@ def validate_json_material(
                         f"{label} exceeds maximum UTF-8 material bytes {budget.max_utf8_bytes}"
                     )
                 stack.append((child, depth + 1, False))
-        elif isinstance(current, (list, tuple)):
+        elif type(current) in (list, tuple):
             identity = id(current)
             if identity in active_containers:
                 raise ResourceLimitError(f"{label} contains a reference cycle")
@@ -148,5 +161,7 @@ def validate_json_material(
 def validate_utf8_text(value: str | None, *, max_bytes: int, label: str) -> None:
     if value is None:
         return
+    if type(value) is not str:
+        raise ResourceLimitError(f"{label} must be an exact string or null")
     if len(value) > max_bytes or len(value.encode("utf-8")) > max_bytes:
         raise ResourceLimitError(f"{label} exceeds maximum UTF-8 bytes {max_bytes}")
