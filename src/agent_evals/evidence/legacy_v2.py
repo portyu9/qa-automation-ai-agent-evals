@@ -90,7 +90,7 @@ def verify_historical_v2_record(
     try:
         raw = json.loads(payload)
         historical_root = _historical_v2_root(raw)
-    except (KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
+    except (KeyError, TypeError, ValueError) as exc:
         raise EvidenceIntegrityError("historical v2 evidence root material is malformed") from exc
     if historical_root != manifest.evidence_root:
         raise EvidenceIntegrityError("stored historical v2 evidence root does not match manifest")
