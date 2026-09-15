@@ -6,7 +6,12 @@ import pytest
 
 from agent_evals.evidence.models import TrialVerdict
 from agent_evals.statistics.comparison import PairedComparison, _exact_mcnemar_p_value
-from agent_evals.statistics.limits import MAX_RELIABILITY_K, MAX_STATISTICAL_TRIALS
+from agent_evals.statistics.limits import (
+    MAX_RELIABILITY_K,
+    MAX_STATISTICAL_TRIALS,
+    validate_materialized_statistical_vector,
+    validate_reliability_k,
+)
 from agent_evals.statistics.reliability import ReliabilityReport
 
 
@@ -107,3 +112,55 @@ def test_statistical_entry_points_reject_container_subclasses_before_len() -> No
         ReliabilityReport.from_verdicts(hostile)
     with pytest.raises(ValueError, match="exact list or tuple"):
         PairedComparison.compare(hostile, [TrialVerdict.PASS])
+
+
+def test_vector_guard_accepts_exact_builtin_list_and_tuple_lengths() -> None:
+    assert validate_materialized_statistical_vector([], label="sample") == 0
+    assert validate_materialized_statistical_vector((1, 2, 3), label="sample") == 3
+
+
+def test_vector_guard_rejects_non_builtin_container_before_len() -> None:
+    hostile = _HostileList([TrialVerdict.PASS])
+
+    with pytest.raises(ValueError) as exc_info:
+        validate_materialized_statistical_vector(hostile, label="sample")
+
+    assert str(exc_info.value) == "sample must be an exact list or tuple"
+
+
+def test_vector_guard_accepts_exact_ceiling_and_rejects_next_item() -> None:
+    accepted = [None] * MAX_STATISTICAL_TRIALS
+    rejected = [None] * (MAX_STATISTICAL_TRIALS + 1)
+
+    assert (
+        validate_materialized_statistical_vector(accepted, label="sample")
+        == MAX_STATISTICAL_TRIALS
+    )
+    with pytest.raises(ValueError) as exc_info:
+        validate_materialized_statistical_vector(rejected, label="sample")
+
+    assert str(exc_info.value) == (
+        f"sample exceeds maximum statistical trial count {MAX_STATISTICAL_TRIALS}"
+    )
+
+
+def test_reliability_k_guard_accepts_exact_lower_and_upper_bounds() -> None:
+    assert validate_reliability_k(1) == 1
+    assert validate_reliability_k(MAX_RELIABILITY_K) == MAX_RELIABILITY_K
+
+
+@pytest.mark.parametrize("value", [0, -1, True, 1.0, "1", None])
+def test_reliability_k_guard_rejects_nonpositive_or_non_exact_integer(value: object) -> None:
+    with pytest.raises(ValueError) as exc_info:
+        validate_reliability_k(value)  # type: ignore[arg-type]
+
+    assert str(exc_info.value) == "k must be an integer >= 1"
+
+
+def test_reliability_k_guard_rejects_immediately_above_upper_bound() -> None:
+    with pytest.raises(ValueError) as exc_info:
+        validate_reliability_k(MAX_RELIABILITY_K + 1)
+
+    assert str(exc_info.value) == (
+        f"k exceeds maximum reliability retry depth {MAX_RELIABILITY_K}"
+    )
