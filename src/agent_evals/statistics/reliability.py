@@ -7,7 +7,6 @@ from math import isfinite, sqrt
 
 from agent_evals.evidence.models import TrialVerdict
 from agent_evals.statistics.limits import (
-    MAX_RELIABILITY_K,
     MAX_STATISTICAL_TRIALS,
     validate_materialized_statistical_vector,
     validate_reliability_k,
