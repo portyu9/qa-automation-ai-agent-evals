@@ -40,6 +40,11 @@ _INITIAL_PR_TARGETS = {
     "src/agent_evals/evidence/limits.py",
     "src/agent_evals/statistics/limits.py",
 }
+_APPROVED_ACTION_REFS = {
+    "3d3c42e5aac5ba805825da76410c181273ba90b1",
+    "5fda3b95a4ea91299a34e894583c3862153e4b97",
+    "043fb46d1a93c77aae656e7c1c64a875d1fc6a0a",
+}
 
 
 def _load_runner() -> ModuleType:
@@ -196,7 +201,7 @@ def test_deep_workflow_is_least_privilege_exact_head_and_non_release_authority()
     assert "actions: write" not in workflow
 
     action_refs = re.findall(r"uses:\s+[^@\s]+@([^\s]+)", workflow)
-    assert action_refs
+    assert set(action_refs) == _APPROVED_ACTION_REFS
     assert all(re.fullmatch(r"[0-9a-f]{40}", ref) for ref in action_refs)
 
 
