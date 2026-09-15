@@ -85,12 +85,18 @@ def validate_json_material(
         elif current is False:
             material_bytes += 5
         elif isinstance(current, str):
+            if len(current) > budget.max_utf8_bytes:
+                raise ResourceLimitError(
+                    f"{label} exceeds maximum UTF-8 material bytes {budget.max_utf8_bytes}"
+                )
             material_bytes += len(current.encode("utf-8"))
         elif isinstance(current, int) and not isinstance(current, bool):
             try:
                 material_bytes += len(str(current))
             except ValueError as exc:
-                raise ResourceLimitError(f"{label} contains an integer too large to normalize") from exc
+                raise ResourceLimitError(
+                    f"{label} contains an integer too large to normalize"
+                ) from exc
         elif isinstance(current, float):
             if not math.isfinite(current):
                 raise ResourceLimitError(f"{label} contains a non-finite number")
@@ -99,20 +105,36 @@ def validate_json_material(
             identity = id(current)
             if identity in active_containers:
                 raise ResourceLimitError(f"{label} contains a reference cycle")
+            if len(current) > budget.max_nodes - nodes:
+                raise ResourceLimitError(
+                    f"{label} exceeds maximum JSON node count {budget.max_nodes}"
+                )
             active_containers.add(identity)
             stack.append((current, depth, True))
-            for key, child in reversed(tuple(current.items())):
+            for key, child in current.items():
                 if not isinstance(key, str):
                     raise ResourceLimitError(f"{label} object keys must be strings")
+                if len(key) > budget.max_utf8_bytes:
+                    raise ResourceLimitError(
+                        f"{label} exceeds maximum UTF-8 material bytes {budget.max_utf8_bytes}"
+                    )
                 material_bytes += len(key.encode("utf-8"))
+                if material_bytes > budget.max_utf8_bytes:
+                    raise ResourceLimitError(
+                        f"{label} exceeds maximum UTF-8 material bytes {budget.max_utf8_bytes}"
+                    )
                 stack.append((child, depth + 1, False))
         elif isinstance(current, (list, tuple)):
             identity = id(current)
             if identity in active_containers:
                 raise ResourceLimitError(f"{label} contains a reference cycle")
+            if len(current) > budget.max_nodes - nodes:
+                raise ResourceLimitError(
+                    f"{label} exceeds maximum JSON node count {budget.max_nodes}"
+                )
             active_containers.add(identity)
             stack.append((current, depth, True))
-            for child in reversed(current):
+            for child in current:
                 stack.append((child, depth + 1, False))
         else:
             raise ResourceLimitError(
@@ -128,5 +150,5 @@ def validate_json_material(
 def validate_utf8_text(value: str | None, *, max_bytes: int, label: str) -> None:
     if value is None:
         return
-    if len(value.encode("utf-8")) > max_bytes:
+    if len(value) > max_bytes or len(value.encode("utf-8")) > max_bytes:
         raise ResourceLimitError(f"{label} exceeds maximum UTF-8 bytes {max_bytes}")
