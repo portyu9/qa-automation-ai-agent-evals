@@ -80,6 +80,7 @@ only_mutate = [
 ]
 pytest_add_cli_args_test_selection = [
   "tests/unit/test_evidence_resource_limits.py",
+  "tests/unit/test_evidence_limit_mutation_boundaries.py",
   "tests/unit/test_statistics_complexity_limits.py",
 ]
 process_isolation = "fork"
