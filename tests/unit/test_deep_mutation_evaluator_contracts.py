@@ -119,6 +119,7 @@ def test_run_clamps_negative_observed_elapsed_time_to_zero(
 ) -> None:
     subject = _subject()
     scenario = _scenario()
+    adapter = _adapter()
     inner = _inner_result(subject, scenario)
 
     async def fake_run_trial(
@@ -131,7 +132,7 @@ def test_run_clamps_negative_observed_elapsed_time_to_zero(
         started: float,
     ) -> EvaluatedTrial:
         assert isinstance(self, TrialRunner)
-        assert isinstance(adapter_arg, AgentAdapter)
+        assert adapter_arg is adapter
         assert subject.identity == inner.evidence.subject_identity
         assert scenario.identity == inner.evidence.scenario_identity
         assert trial_id == "negative-clock"
@@ -144,7 +145,7 @@ def test_run_clamps_negative_observed_elapsed_time_to_zero(
 
     result = asyncio.run(
         TrialRunner().run(
-            _adapter(),
+            adapter,
             subject=subject,
             scenario=scenario,
             trial_id="negative-clock",
