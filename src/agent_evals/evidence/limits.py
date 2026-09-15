@@ -78,9 +78,7 @@ def validate_json_material(
         if nodes > budget.max_nodes:
             raise ResourceLimitError(f"{label} exceeds maximum JSON node count {budget.max_nodes}")
 
-        if current is None:
-            material_bytes += 4
-        elif current is True:
+        if current is None or current is True:
             material_bytes += 4
         elif current is False:
             material_bytes += 5
