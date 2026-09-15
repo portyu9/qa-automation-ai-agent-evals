@@ -150,8 +150,7 @@ def test_advance_handoff_fail_closed_diagnostics_and_valid_transition() -> None:
     )
     assert wrong_state == state
     assert wrong_reasons == (
-        "handoff source is not the currently active agent: "
-        f"observed={_CHILD!r} active={_ROOT!r}",
+        f"handoff source is not the currently active agent: observed={_CHILD!r} active={_ROOT!r}",
     )
 
     denied_state, denied_reasons = advance_handoff(
@@ -160,9 +159,7 @@ def test_advance_handoff_fail_closed_diagnostics_and_valid_transition() -> None:
         _handoff(0, _ROOT, "Unknown agent"),
     )
     assert denied_state == state
-    assert denied_reasons == (
-        f"unauthorized handoff transition: {_ROOT!r} -> {'Unknown agent'!r}",
-    )
+    assert denied_reasons == (f"unauthorized handoff transition: {_ROOT!r} -> {'Unknown agent'!r}",)
 
     child_state, reasons = advance_handoff(policy, state, _handoff(0, _ROOT, _CHILD))
     assert reasons == ()
@@ -245,9 +242,7 @@ def test_authority_attenuation_reports_tool_and_resource_reexpansion() -> None:
     )
 
     assert len(reasons) == 2
-    assert reasons[0].startswith(
-        "handoff authority broadens source tool authority for transition "
-    )
+    assert reasons[0].startswith("handoff authority broadens source tool authority for transition ")
     assert reasons[1].startswith(
         "handoff authority broadens source resource authority for transition "
     )
@@ -331,9 +326,10 @@ def test_attack_delivery_canonical_bytes_and_domain_root_are_exact() -> None:
     expected = b'{"a":"\\u03a9","z":1}'
 
     assert attack_delivery._canonical_json_bytes(value) == expected
-    assert attack_delivery._receipt_root(value) == hashlib.sha256(
-        b"agent-evals/attack-delivery/v1\0" + expected
-    ).hexdigest()
+    assert (
+        attack_delivery._receipt_root(value)
+        == hashlib.sha256(b"agent-evals/attack-delivery/v1\0" + expected).hexdigest()
+    )
 
 
 def test_attack_delivery_canonicalization_rejects_nonfinite_json() -> None:
@@ -395,9 +391,7 @@ def test_release_gate_threshold_equality_is_accepted() -> None:
 
 
 def test_release_gate_reports_each_noncompensatory_and_uncertainty_boundary() -> None:
-    half_success = ReliabilityReport.from_verdicts(
-        [TrialVerdict.PASS, TrialVerdict.FAIL]
-    )
+    half_success = ReliabilityReport.from_verdicts([TrialVerdict.PASS, TrialVerdict.FAIL])
     rejected = ReleaseGate(_gate_policy(min_success_rate=0.75)).decide(
         half_success,
         critical_violations=1,
@@ -408,9 +402,7 @@ def test_release_gate_reports_each_noncompensatory_and_uncertainty_boundary() ->
         "success rate 0.5000 is below 0.7500",
     )
 
-    blocked_report = ReliabilityReport.from_verdicts(
-        [TrialVerdict.PASS, TrialVerdict.BLOCKED]
-    )
+    blocked_report = ReliabilityReport.from_verdicts([TrialVerdict.PASS, TrialVerdict.BLOCKED])
     blocked = ReleaseGate(_gate_policy(max_blocked_trials=0)).decide(
         blocked_report,
         critical_violations=0,
@@ -464,9 +456,7 @@ def test_release_gate_zero_resolved_trials_preserve_uncertainty_not_failure() ->
 
 
 def test_release_gate_reject_keeps_hard_failure_before_uncertainty() -> None:
-    report = ReliabilityReport.from_verdicts(
-        [TrialVerdict.FAIL, TrialVerdict.BLOCKED]
-    )
+    report = ReliabilityReport.from_verdicts([TrialVerdict.FAIL, TrialVerdict.BLOCKED])
     result = ReleaseGate(
         _gate_policy(
             min_success_rate=1.0,
