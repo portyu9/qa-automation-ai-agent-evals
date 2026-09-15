@@ -40,7 +40,7 @@ def test_receipt_roots_use_exact_domain_separation() -> None:
 def test_receipt_canonicalization_preserves_declared_unicode_policy() -> None:
     material = {"z": 1, "a": "Ω"}
     escaped = b'{"a":"\\u03a9","z":1}'
-    unicode_bytes = '{"a":"Ω","z":1}'.encode("utf-8")
+    unicode_bytes = '{"a":"Ω","z":1}'.encode()
 
     assert retrieval_receipt._receipt_root(material) == hashlib.sha256(
         b"agent-evals/retrieval-delivery-receipt/v1\0" + escaped
@@ -79,7 +79,7 @@ def test_retrieval_json_default_is_explicit_and_fail_closed() -> None:
     )
     with pytest.raises(
         TypeError,
-        match="^unsupported receipt value type: object$",
+        match=r"^unsupported receipt value type: object$",
     ):
         retrieval_receipt._json_default(object())
 
@@ -88,7 +88,7 @@ def test_side_effect_json_default_is_explicit_and_fail_closed() -> None:
     assert side_effect_receipt._json_default(_ProbeModel(value=7)) == {"value": 7}
     with pytest.raises(
         TypeError,
-        match="^unsupported side-effect receipt value type: object$",
+        match=r"^unsupported side-effect receipt value type: object$",
     ):
         side_effect_receipt._json_default(object())
 
@@ -97,7 +97,7 @@ def test_semantic_canonicalization_rejects_nonfinite_or_unsupported_material() -
     for value in ({"value": float("nan")}, {"value": object()}):
         with pytest.raises(
             ValueError,
-            match="^semantic judgment material must be finite JSON-compatible data$",
+            match=r"^semantic judgment material must be finite JSON-compatible data$",
         ):
             semantic_receipt._canonical_json_bytes(value)
 
