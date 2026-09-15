@@ -129,13 +129,16 @@ def test_resource_scope_authorization_is_structural_domain_aware_and_transitive(
     outer = ResourceScope(domain=domain, components=components[:outer_depth])
     inner = ResourceScope(domain=domain, components=components[:inner_depth])
     resource = ResourceIdentifier(domain=domain, components=components)
+    policy = AuthorityPolicy(allowed_resource_scopes=(outer,))
 
     assert outer.contains_scope(inner)
     assert inner.contains_identifier(resource)
     assert outer.contains_identifier(resource)
+    assert policy.authorizes_resource(resource)
 
     foreign = ResourceIdentifier(domain=f"{domain}x", components=components)
     assert not outer.contains_identifier(foreign)
+    assert not policy.authorizes_resource(foreign)
 
 
 @settings(max_examples=100, deadline=None)
@@ -147,8 +150,10 @@ def test_resource_scope_does_not_authorize_lexical_prefix_collisions(
 ) -> None:
     scope = ResourceScope(domain=domain, components=(component,))
     resource = ResourceIdentifier(domain=domain, components=(f"{component}{suffix}",))
+    policy = AuthorityPolicy(allowed_resource_scopes=(scope,))
 
     assert not scope.contains_identifier(resource)
+    assert not policy.authorizes_resource(resource)
 
 
 @settings(max_examples=100, deadline=None)
