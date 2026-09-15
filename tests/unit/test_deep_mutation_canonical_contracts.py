@@ -25,15 +25,20 @@ def test_receipt_roots_use_exact_domain_separation() -> None:
     semantic_root = semantic_receipt._receipt_root(material)
     side_effect_root = side_effect_receipt._receipt_root(material)
 
-    assert retrieval_root == hashlib.sha256(
-        b"agent-evals/retrieval-delivery-receipt/v1\0" + canonical
-    ).hexdigest()
-    assert semantic_root == hashlib.sha256(
-        b"agent-evals/semantic-judgment-receipt/v1\0" + canonical
-    ).hexdigest()
-    assert side_effect_root == hashlib.sha256(
-        b"agent-evals/side-effect-idempotency-receipt/v1\0" + canonical
-    ).hexdigest()
+    assert (
+        retrieval_root
+        == hashlib.sha256(b"agent-evals/retrieval-delivery-receipt/v1\0" + canonical).hexdigest()
+    )
+    assert (
+        semantic_root
+        == hashlib.sha256(b"agent-evals/semantic-judgment-receipt/v1\0" + canonical).hexdigest()
+    )
+    assert (
+        side_effect_root
+        == hashlib.sha256(
+            b"agent-evals/side-effect-idempotency-receipt/v1\0" + canonical
+        ).hexdigest()
+    )
     assert len({retrieval_root, semantic_root, side_effect_root}) == 3
 
 
@@ -42,16 +47,19 @@ def test_receipt_canonicalization_preserves_declared_unicode_policy() -> None:
     escaped = b'{"a":"\\u03a9","z":1}'
     unicode_bytes = '{"a":"Ω","z":1}'.encode()
 
-    assert retrieval_receipt._receipt_root(material) == hashlib.sha256(
-        b"agent-evals/retrieval-delivery-receipt/v1\0" + escaped
-    ).hexdigest()
-    assert side_effect_receipt._receipt_root(material) == hashlib.sha256(
-        b"agent-evals/side-effect-idempotency-receipt/v1\0" + escaped
-    ).hexdigest()
+    assert (
+        retrieval_receipt._receipt_root(material)
+        == hashlib.sha256(b"agent-evals/retrieval-delivery-receipt/v1\0" + escaped).hexdigest()
+    )
+    assert (
+        side_effect_receipt._receipt_root(material)
+        == hashlib.sha256(b"agent-evals/side-effect-idempotency-receipt/v1\0" + escaped).hexdigest()
+    )
     assert semantic_receipt._canonical_json_bytes(material) == unicode_bytes
-    assert semantic_receipt._receipt_root(material) == hashlib.sha256(
-        b"agent-evals/semantic-judgment-receipt/v1\0" + unicode_bytes
-    ).hexdigest()
+    assert (
+        semantic_receipt._receipt_root(material)
+        == hashlib.sha256(b"agent-evals/semantic-judgment-receipt/v1\0" + unicode_bytes).hexdigest()
+    )
 
 
 @pytest.mark.parametrize(
@@ -73,10 +81,7 @@ def test_receipt_roots_preserve_resource_limit_labels(
 
 def test_retrieval_json_default_is_explicit_and_fail_closed() -> None:
     assert retrieval_receipt._json_default(_ProbeModel(value=7)) == {"value": 7}
-    assert (
-        retrieval_receipt._json_default(RetrievalPoisonRelation.ENTER_TOP_K)
-        == "enter_top_k"
-    )
+    assert retrieval_receipt._json_default(RetrievalPoisonRelation.ENTER_TOP_K) == "enter_top_k"
     with pytest.raises(
         TypeError,
         match=r"^unsupported receipt value type: object$",
