@@ -93,7 +93,9 @@ def _load_json(path: Path) -> object:
     except FileNotFoundError as exc:
         raise MutationScorePolicyError(f"mutation statistics file is missing: {path}") from exc
     except (OSError, UnicodeError, json.JSONDecodeError) as exc:
-        raise MutationScorePolicyError(f"cannot read valid mutation statistics from {path}: {exc}") from exc
+        raise MutationScorePolicyError(
+            f"cannot read valid mutation statistics from {path}: {exc}"
+        ) from exc
 
 
 def main() -> int:
