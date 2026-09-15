@@ -165,8 +165,10 @@ def validate_policy(*, check_installed: bool) -> dict[str, Any]:
     except (OSError, tomllib.TOMLDecodeError, KeyError, TypeError) as exc:
         errors.append(f"could not read [tool.mutmut]: {exc}")
 
-    if mutmut_config.get("source_paths") != target_paths:
-        errors.append("[tool.mutmut].source_paths must exactly match mutation-policy.json targets")
+    if mutmut_config.get("source_paths") != ["src/agent_evals"]:
+        errors.append("[tool.mutmut].source_paths must copy the complete src/agent_evals package")
+    if mutmut_config.get("only_mutate") != target_paths:
+        errors.append("[tool.mutmut].only_mutate must exactly match mutation-policy.json targets")
     if mutmut_config.get("pytest_add_cli_args_test_selection") != ["tests/unit"]:
         errors.append("mutation tests must remain scoped to deterministic unit tests")
     if mutmut_config.get("pytest_add_cli_args") != ["--hypothesis-seed=20260915"]:
