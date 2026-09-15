@@ -8,7 +8,11 @@ from agent_evals.contracts.models import (
     HandoffAuthorityGrant,
     ScenarioKind,
 )
-from agent_evals.contracts.resource import ResourceIdentifier, ResourceScope, resource_identifier_payload
+from agent_evals.contracts.resource import (
+    ResourceIdentifier,
+    ResourceScope,
+    resource_identifier_payload,
+)
 from agent_evals.evidence.models import EvidenceEvent, EvidenceKind, TrialEvidence, TrialVerdict
 from agent_evals.oracles.deterministic import OutcomeOracle, PolicyOracle
 from agent_evals.side_effect.models import SideEffectIdempotencySpec, canonical_json_sha256
