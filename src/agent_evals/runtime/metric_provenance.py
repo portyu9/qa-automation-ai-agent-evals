@@ -85,7 +85,10 @@ class RuntimeMetricProvenance(BaseModel):
 
     model_config = ConfigDict(frozen=True, extra="forbid", revalidate_instances="always")
 
-    schema_version: str = Field(default=_SCHEMA_VERSION, pattern=r"^agent-evals/runtime-metric-provenance/v1$")
+    schema_version: str = Field(
+        default=_SCHEMA_VERSION,
+        pattern=r"^agent-evals/runtime-metric-provenance/v1$",
+    )
     authority: MetricTelemetryAuthority = MetricTelemetryAuthority.UNVERIFIED
     source: MetricTelemetrySource
     runtime_adapter_name: str = Field(min_length=1, max_length=_MAX_LABEL_LENGTH)
@@ -108,7 +111,10 @@ class RuntimeMetricProvenance(BaseModel):
         if self.source is MetricTelemetrySource.ADAPTER_ASSERTED:
             if self.source_assertion is None:
                 raise ValueError("adapter-asserted metric source requires its bounded assertion")
-        elif self.source_assertion is not None and self.source is not MetricTelemetrySource.OPENAI_AGENTS_SDK_USAGE:
+        elif (
+            self.source_assertion is not None
+            and self.source is not MetricTelemetrySource.OPENAI_AGENTS_SDK_USAGE
+        ):
             raise ValueError("metric source assertion is not valid for this source classification")
 
         has_pricing = (
@@ -140,6 +146,18 @@ class RuntimeMetricProvenance(BaseModel):
             if source_assertion is not None
             else None
         )
+
+        # The exact built-in OpenAI adapter reads token counts from the SDK usage surface only on a
+        # completed SDK result. If no token telemetry was retained, do not claim that source merely
+        # because the adapter type is capable of producing it; downgrade to explicit unknown.
+        if (
+            source is MetricTelemetrySource.OPENAI_AGENTS_SDK_USAGE
+            and evidence.input_tokens == 0
+            and evidence.output_tokens == 0
+        ):
+            source = MetricTelemetrySource.UNKNOWN
+            assertion = None
+
         pricing_status = (
             PricingProvenanceStatus.ADAPTER_ASSERTED
             if assertion is not None and assertion.pricing_source is not None
@@ -191,6 +209,8 @@ def snapshot_adapter_metric_assertion(adapter: object) -> RuntimeMetricSourceAss
         raw = getattr(adapter, "runtime_metric_provenance_assertion")
     except AttributeError:
         return None
+    except Exception as exc:
+        raise ValueError("adapter runtime metric provenance assertion is unavailable") from exc
     try:
         if isinstance(raw, RuntimeMetricSourceAssertion):
             return RuntimeMetricSourceAssertion.model_validate(raw.model_dump(mode="json"))
