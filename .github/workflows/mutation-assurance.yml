@@ -1,0 +1,97 @@
+name: Mutation assurance
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 3 * * 1"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mutation-assurance-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  trust-kernels:
+    name: Trust-kernel mutation score
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install deterministic mutation toolchain
+        run: |
+          python -m pip install --disable-pip-version-check -e '.[dev]' -r requirements-mutation.txt
+          python -m pip check
+      - name: Validate checked-in mutation policy
+        run: python .github/scripts/mutation_gate.py validate --check-installed
+      - name: Require a clean mutation workspace
+        run: |
+          if [ -e mutants ] || [ -e mutation-artifacts ]; then
+            echo "refusing stale mutation state in clean CI checkout" >&2
+            exit 1
+          fi
+          mkdir mutation-artifacts
+      - name: Execute and evaluate mutation assurance
+        shell: bash
+        run: |
+          set -o pipefail
+          set +e
+          mutmut run 2>&1 | tee mutation-artifacts/mutmut-run.log
+          run_status=${PIPESTATUS[0]}
+          mutmut results > mutation-artifacts/mutmut-results.txt 2>&1
+          results_status=$?
+          mutmut export-cicd-stats 2>&1 | tee mutation-artifacts/mutmut-export.log
+          export_status=${PIPESTATUS[0]}
+          set -e
+
+          printf '%s\n' "$run_status" > mutation-artifacts/mutmut-run-exit-code.txt
+          printf '%s\n' "$results_status" > mutation-artifacts/mutmut-results-exit-code.txt
+          printf '%s\n' "$export_status" > mutation-artifacts/mutmut-export-exit-code.txt
+
+          if [ "$export_status" -ne 0 ]; then
+            echo "mutmut stats export failed with exit code $export_status" >&2
+            exit "$export_status"
+          fi
+
+          python .github/scripts/mutation_gate.py evaluate \
+            --check-installed \
+            --stats mutants/mutmut-cicd-stats.json \
+            --commit-sha "$GITHUB_SHA" \
+            --run-id "$GITHUB_RUN_ID" \
+            --run-attempt "$GITHUB_RUN_ATTEMPT" \
+            --run-exit-code "$run_status" \
+            --output-json mutation-artifacts/mutation-report.json \
+            --output-markdown mutation-artifacts/mutation-report.md
+      - name: Publish run summary
+        if: always()
+        run: |
+          if [ -f mutation-artifacts/mutation-report.md ]; then
+            cat mutation-artifacts/mutation-report.md >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "# Mutation assurance report" >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "The mutation runner did not produce a complete policy report. Inspect retained logs." >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - name: Retain mutation evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: mutation-assurance-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            mutation-policy.json
+            requirements-mutation.txt
+            mutation-artifacts/
+            mutants/mutmut-cicd-stats.json
+            mutants/mutmut-stats.json
+          if-no-files-found: warn
+          compression-level: 6
+          retention-days: 30
