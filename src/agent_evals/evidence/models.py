@@ -10,6 +10,16 @@ from typing import Any, Self
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from agent_evals.evidence.limits import (
+    EVENT_PAYLOAD_BUDGET,
+    FINAL_STATE_BUDGET,
+    MAX_FINAL_OUTPUT_UTF8_BYTES,
+    MAX_TRIAL_EVENTS,
+    JsonMaterialBudget,
+    validate_json_material,
+    validate_utf8_text,
+)
+
 _EVIDENCE_ROOT_DOMAIN = b"agent-evals/trial-evidence/v2\0"
 
 
@@ -55,7 +65,12 @@ class EvidenceEvent(BaseModel):
     @field_validator("payload", mode="before")
     @classmethod
     def detach_json_payload(cls, value: Any) -> Any:
-        return _detached_json(value, error="evidence payload must be finite JSON-compatible data")
+        return _detached_json(
+            value,
+            error="evidence payload must be finite JSON-compatible data within resource limits",
+            budget=EVENT_PAYLOAD_BUDGET,
+            label="evidence payload",
+        )
 
     @property
     def digest(self) -> str:
@@ -74,6 +89,10 @@ class TrialEvidence(BaseModel):
     rejected so a later report cannot silently reorder the causal record. JSON-bearing state and
     event payloads are detached during validation so adapter-owned nested containers cannot change
     the evaluator's evidence after normalization.
+
+    Resource ceilings are an ingestion policy around the historical v2 schema/root algorithm. For
+    accepted material, root derivation is unchanged; over-budget material is rejected before the
+    expensive canonicalization/hashing path.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -94,10 +113,37 @@ class TrialEvidence(BaseModel):
         strict=True,
     )
 
+    @field_validator("events", mode="before")
+    @classmethod
+    def bound_event_count(cls, value: Any) -> Any:
+        try:
+            count = len(value)
+        except TypeError as exc:
+            raise ValueError("events must be a bounded materialized collection") from exc
+        if count > MAX_TRIAL_EVENTS:
+            raise ValueError(f"trial evidence exceeds maximum event count {MAX_TRIAL_EVENTS}")
+        return value
+
     @field_validator("final_state", mode="before")
     @classmethod
     def detach_final_state(cls, value: Any) -> Any:
-        return _detached_json(value, error="final_state must be finite JSON-compatible data")
+        return _detached_json(
+            value,
+            error="final_state must be finite JSON-compatible data within resource limits",
+            budget=FINAL_STATE_BUDGET,
+            label="final_state",
+        )
+
+    @field_validator("final_output", mode="before")
+    @classmethod
+    def bound_final_output(cls, value: Any) -> Any:
+        if isinstance(value, str) or value is None:
+            validate_utf8_text(
+                value,
+                max_bytes=MAX_FINAL_OUTPUT_UTF8_BYTES,
+                label="final_output",
+            )
+        return value
 
     @model_validator(mode="after")
     def validate_event_sequence(self) -> Self:
@@ -143,9 +189,16 @@ class TrialEvidence(BaseModel):
         return type(self).model_validate_json(self.model_dump_json())
 
 
-def _detached_json(value: Any, *, error: str) -> Any:
-    """Round-trip one JSON value to sever nested aliases while preserving JSON semantics."""
+def _detached_json(
+    value: Any,
+    *,
+    error: str,
+    budget: JsonMaterialBudget,
+    label: str,
+) -> Any:
+    """Bound then round-trip one JSON value to sever aliases while preserving JSON semantics."""
     try:
+        validate_json_material(value, budget=budget, label=label)
         return json.loads(_canonical_json_bytes(value))
     except (TypeError, ValueError) as exc:
         raise ValueError(error) from exc
