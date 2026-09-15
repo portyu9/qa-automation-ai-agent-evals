@@ -4,9 +4,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import StrEnum
-from math import comb, isfinite
+from math import comb, fsum, isfinite
 
 from agent_evals.evidence.models import TrialVerdict
+from agent_evals.statistics.limits import (
+    MAX_STATISTICAL_TRIALS,
+    validate_materialized_statistical_vector,
+)
 
 
 class ComparisonDecision(StrEnum):
@@ -36,31 +40,38 @@ class PairedComparison:
         *,
         alpha: float = 0.05,
     ) -> PairedComparison:
-        if len(baseline) != len(candidate):
+        baseline_pairs = validate_materialized_statistical_vector(
+            baseline,
+            label="baseline verdict vector",
+        )
+        candidate_pairs = validate_materialized_statistical_vector(
+            candidate,
+            label="candidate verdict vector",
+        )
+        if baseline_pairs != candidate_pairs:
             raise ValueError("paired comparison requires equal-length trial vectors")
-        if not baseline:
+        if baseline_pairs == 0:
             raise ValueError("paired comparison requires at least one pair")
         if isinstance(alpha, bool) or not isinstance(alpha, float) or not isfinite(alpha):
             raise ValueError("alpha must be a finite float between zero and one")
         if not 0.0 < alpha < 1.0:
             raise ValueError("alpha must be between zero and one")
 
-        verdicts = (*baseline, *candidate)
-        if any(type(verdict) is not TrialVerdict for verdict in verdicts):
-            raise ValueError("paired comparison verdicts must be exact TrialVerdict members")
-
-        unresolved = {
-            TrialVerdict.BLOCKED,
-            TrialVerdict.INCONCLUSIVE,
-        }
-        if any(verdict in unresolved for verdict in verdicts):
-            raise ValueError(
-                "paired behavioral comparison requires resolved PASS/FAIL outcomes; "
-                "BLOCKED or INCONCLUSIVE evidence must be resolved separately"
-            )
-
         both_pass = baseline_only = candidate_only = both_fail = 0
         for baseline_verdict, candidate_verdict in zip(baseline, candidate, strict=True):
+            if (
+                type(baseline_verdict) is not TrialVerdict
+                or type(candidate_verdict) is not TrialVerdict
+            ):
+                raise ValueError("paired comparison verdicts must be exact TrialVerdict members")
+            if baseline_verdict in (TrialVerdict.BLOCKED, TrialVerdict.INCONCLUSIVE) or (
+                candidate_verdict in (TrialVerdict.BLOCKED, TrialVerdict.INCONCLUSIVE)
+            ):
+                raise ValueError(
+                    "paired behavioral comparison requires resolved PASS/FAIL outcomes; "
+                    "BLOCKED or INCONCLUSIVE evidence must be resolved separately"
+                )
+
             baseline_pass = baseline_verdict is TrialVerdict.PASS
             candidate_pass = candidate_verdict is TrialVerdict.PASS
             if baseline_pass and candidate_pass:
@@ -72,7 +83,7 @@ class PairedComparison:
             else:
                 both_fail += 1
 
-        pairs = len(baseline)
+        pairs = baseline_pairs
         baseline_rate = (both_pass + baseline_only) / pairs
         candidate_rate = (both_pass + candidate_only) / pairs
         p_value = _exact_mcnemar_p_value(baseline_only, candidate_only)
@@ -99,17 +110,28 @@ class PairedComparison:
 
 
 def _exact_mcnemar_p_value(baseline_only: int, candidate_only: int) -> float:
-    """Two-sided exact McNemar/binomial test over discordant paired outcomes."""
-    if isinstance(baseline_only, bool) or not isinstance(baseline_only, int):
-        raise ValueError("discordant counts must be integers")
-    if isinstance(candidate_only, bool) or not isinstance(candidate_only, int):
+    """Two-sided exact McNemar/binomial test over bounded discordant paired outcomes."""
+    if type(baseline_only) is not int or type(candidate_only) is not int:
         raise ValueError("discordant counts must be integers")
     if baseline_only < 0 or candidate_only < 0:
         raise ValueError("discordant counts cannot be negative")
     discordant = baseline_only + candidate_only
+    if discordant > MAX_STATISTICAL_TRIALS:
+        raise ValueError(
+            f"discordant counts exceed maximum statistical trial count {MAX_STATISTICAL_TRIALS}"
+        )
     if discordant == 0:
         return 1.0
+
     tail = min(baseline_only, candidate_only)
-    favorable_mass = sum(comb(discordant, index) for index in range(tail + 1))
-    probability = favorable_mass / (1 << discordant)
+    probability = fsum(_lower_binomial_tail_terms(discordant, tail))
     return min(1.0, 2.0 * probability)
+
+
+def _lower_binomial_tail_terms(trials: int, tail: int):  # type: ignore[no-untyped-def]
+    """Yield Binomial(n, 0.5) mass from ``tail`` down to zero with one ``comb`` call."""
+    term = comb(trials, tail) / (1 << trials)
+    yield term
+    for index in range(tail, 0, -1):
+        term *= index / (trials - index + 1)
+        yield term
