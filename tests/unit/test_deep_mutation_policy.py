@@ -79,8 +79,7 @@ def test_checked_in_manifest_covers_named_item34_trust_surfaces() -> None:
     assert len(manifest.campaigns) == 10
     assert all(campaign.tests for campaign in manifest.campaigns)
     assert all(
-        not source.startswith("src/agent_evals/adapters/openai_")
-        for source in observed_sources
+        not source.startswith("src/agent_evals/adapters/openai_") for source in observed_sources
     )
 
 
