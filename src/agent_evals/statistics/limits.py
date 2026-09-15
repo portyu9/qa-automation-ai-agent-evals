@@ -8,7 +8,11 @@ MAX_STATISTICAL_TRIALS = 100_000
 MAX_RELIABILITY_K = 1_000_000
 
 
-def validate_materialized_statistical_vector(value: Any, *, label: str) -> int:
+def validate_materialized_statistical_vector(
+    value: list[Any] | tuple[Any, ...],
+    *,
+    label: str,
+) -> int:
     """Require one bounded built-in list/tuple before statistical iteration begins."""
     if type(value) not in (list, tuple):
         raise ValueError(f"{label} must be an exact list or tuple")
@@ -20,7 +24,7 @@ def validate_materialized_statistical_vector(value: Any, *, label: str) -> int:
     return count
 
 
-def validate_reliability_k(value: Any) -> int:
+def validate_reliability_k(value: int) -> int:
     """Bound algebraic retry depth before float exponentiation."""
     if type(value) is not int or value < 1:
         raise ValueError("k must be an integer >= 1")
