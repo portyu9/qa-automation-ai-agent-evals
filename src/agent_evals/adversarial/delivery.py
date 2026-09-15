@@ -11,6 +11,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_valida
 
 from agent_evals.adversarial.cases import AttackChannel, extract_attack
 from agent_evals.contracts.models import EvaluationScenario
+from agent_evals.evidence.limits import RECEIPT_MATERIAL_BUDGET, validate_json_material
 from agent_evals.evidence.models import EvidenceEvent, EvidenceKind, TrialEvidence
 
 _DELIVERY_SCHEMA: Literal["agent-evals/attack-delivery/v1"] = "agent-evals/attack-delivery/v1"
@@ -128,6 +129,11 @@ def verify_attack_delivery(
 
 
 def _receipt_root(value: object) -> str:
+    validate_json_material(
+        value,
+        budget=RECEIPT_MATERIAL_BUDGET,
+        label="attack delivery receipt material",
+    )
     return hashlib.sha256(_DELIVERY_DOMAIN + _canonical_json_bytes(value)).hexdigest()
 
 
