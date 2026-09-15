@@ -161,6 +161,7 @@
       "tests": [
         "tests/unit/test_assurance_semantic.py",
         "tests/unit/test_deep_mutation_canonical_contracts.py",
+        "tests/unit/test_deep_mutation_receipt_contracts.py",
         "tests/unit/test_property_trust_kernels.py",
         "tests/unit/test_receipt_resource_limits.py",
         "tests/unit/test_semantic_calibration_commitments.py",
@@ -184,6 +185,7 @@
         "tests/unit/test_assurance_deterministic_side_effect_regrade.py",
         "tests/unit/test_assurance_side_effect_oracle_binding.py",
         "tests/unit/test_deep_mutation_canonical_contracts.py",
+        "tests/unit/test_deep_mutation_receipt_contracts.py",
         "tests/unit/test_property_trust_kernels.py",
         "tests/unit/test_receipt_resource_limits.py",
         "tests/unit/test_side_effect_idempotency.py",
