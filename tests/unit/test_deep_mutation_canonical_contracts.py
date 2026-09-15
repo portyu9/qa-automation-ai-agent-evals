@@ -324,9 +324,7 @@ def test_retrieval_poison_relation_diagnostics_are_exact() -> None:
 
     contract = _retrieval_contract()
     assert contract.poison is not None
-    wrong_displacement = contract.poison.model_copy(
-        update={"expected_displaced_chunk_id": "third"}
-    )
+    wrong_displacement = contract.poison.model_copy(update={"expected_displaced_chunk_id": "third"})
     changed = contract.model_copy(update={"poison": wrong_displacement})
     changed_output = _retrieval_output(changed)
     with pytest.raises(retrieval_receipt.RetrievalReceiptError) as captured:
@@ -484,9 +482,7 @@ def test_retrieval_verifier_request_and_result_diagnostics_are_exact() -> None:
         "retrieval contract requires exactly one target tool request",
     )
 
-    wrong_call = request.model_copy(
-        update={"payload": {**request.payload, "call_id": "other"}}
-    )
+    wrong_call = request.model_copy(update={"payload": {**request.payload, "call_id": "other"}})
     _assert_retrieval_error(
         scenario,
         evidence.model_copy(update={"events": (wrong_call, delivery, result)}),
@@ -500,9 +496,7 @@ def test_retrieval_verifier_request_and_result_diagnostics_are_exact() -> None:
         "retrieval receipt requires exactly one matching tool result",
     )
 
-    non_string = result.model_copy(
-        update={"payload": {"call_id": "call-1", "output": {}}}
-    )
+    non_string = result.model_copy(update={"payload": {"call_id": "call-1", "output": {}}})
     _assert_retrieval_error(
         scenario,
         evidence.model_copy(update={"events": (request, delivery, non_string)}),
@@ -524,9 +518,7 @@ def test_retrieval_verifier_request_and_result_diagnostics_are_exact() -> None:
         "retrieval chronology must order request before delivery before tool result",
     )
 
-    different_output = result.model_copy(
-        update={"payload": {"call_id": "call-1", "output": "{}"}}
-    )
+    different_output = result.model_copy(update={"payload": {"call_id": "call-1", "output": "{}"}})
     _assert_retrieval_error(
         scenario,
         evidence.model_copy(update={"events": (request, delivery, different_output)}),
