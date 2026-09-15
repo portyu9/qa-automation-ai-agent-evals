@@ -8,6 +8,7 @@ from typing import Any, Literal, Self
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from agent_evals.evidence.limits import RECEIPT_MATERIAL_BUDGET, validate_json_material
 from agent_evals.evidence.models import EvidenceEvent, EvidenceKind
 from agent_evals.retrieval.models import RetrievalContractSpec, RetrievalPoisonRelation
 from agent_evals.retrieval.ranker import RetrievalHit, rank_corpus
@@ -180,6 +181,21 @@ def _require_contiguous_ranks(
 
 
 def _receipt_root(value: dict[str, Any]) -> str:
+    budget_material = dict(value)
+    for key in ("baseline_hits", "active_hits"):
+        hits = budget_material.get(key)
+        if isinstance(hits, tuple):
+            budget_material[key] = [
+                hit.model_dump(mode="json") if isinstance(hit, BaseModel) else hit for hit in hits
+            ]
+    relation = budget_material.get("poison_relation")
+    if isinstance(relation, RetrievalPoisonRelation):
+        budget_material["poison_relation"] = relation.value
+    validate_json_material(
+        budget_material,
+        budget=RECEIPT_MATERIAL_BUDGET,
+        label="retrieval receipt material",
+    )
     canonical = json.dumps(
         value,
         sort_keys=True,

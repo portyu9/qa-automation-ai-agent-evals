@@ -8,6 +8,7 @@ from typing import Any, Literal, Self
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from agent_evals.evidence.limits import RECEIPT_MATERIAL_BUDGET, validate_json_material
 from agent_evals.evidence.models import EvidenceEvent, EvidenceKind
 from agent_evals.side_effect.models import SideEffectIdempotencySpec
 
@@ -124,6 +125,18 @@ def expected_event_source() -> str:
 
 
 def _receipt_root(value: dict[str, Any]) -> str:
+    budget_material = dict(value)
+    attempts = budget_material.get("attempts")
+    if isinstance(attempts, tuple):
+        budget_material["attempts"] = [
+            attempt.model_dump(mode="json") if isinstance(attempt, BaseModel) else attempt
+            for attempt in attempts
+        ]
+    validate_json_material(
+        budget_material,
+        budget=RECEIPT_MATERIAL_BUDGET,
+        label="side-effect receipt material",
+    )
     canonical = json.dumps(
         value,
         sort_keys=True,

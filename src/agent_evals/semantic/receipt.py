@@ -9,6 +9,7 @@ from typing import Literal, Self
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from agent_evals.evidence.limits import RECEIPT_MATERIAL_BUDGET, validate_json_material
 from agent_evals.semantic.calibration import SemanticCalibrationReceipt
 from agent_evals.semantic.models import (
     SemanticCriterionResult,
@@ -143,6 +144,11 @@ def _require_accepted_matching_calibration(
 
 
 def _receipt_root(value: object) -> str:
+    validate_json_material(
+        value,
+        budget=RECEIPT_MATERIAL_BUDGET,
+        label="semantic judgment receipt material",
+    )
     return hashlib.sha256(_RECEIPT_DOMAIN + _canonical_json_bytes(value)).hexdigest()
 
 
