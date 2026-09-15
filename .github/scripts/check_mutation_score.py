@@ -105,7 +105,9 @@ def _require_successful_mutation_run(path: Path) -> None:
     except FileNotFoundError as exc:
         raise MutationScorePolicyError(f"mutation run exit-code file is missing: {path}") from exc
     except (OSError, UnicodeError) as exc:
-        raise MutationScorePolicyError(f"cannot read mutation run exit code from {path}: {exc}") from exc
+        raise MutationScorePolicyError(
+            f"cannot read mutation run exit code from {path}: {exc}"
+        ) from exc
 
     try:
         exit_code = int(raw)
