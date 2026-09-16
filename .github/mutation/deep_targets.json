@@ -1,0 +1,228 @@
+{
+  "schema_version": 1,
+  "tool": {
+    "name": "mutmut",
+    "version": "3.8.0"
+  },
+  "minimum_score": 95.0,
+  "max_children": 2,
+  "campaign_timeout_seconds": 900,
+  "campaigns": [
+    {
+      "id": "authority",
+      "surface": "authority separation and typed-resource authorization",
+      "sources": [
+        "src/agent_evals/authority.py"
+      ],
+      "tests": [
+        "tests/unit/test_assurance_blocked_policy_facts.py",
+        "tests/unit/test_authority_policy_configuration.py",
+        "tests/unit/test_composed_handoff_provenance_precondition.py",
+        "tests/unit/test_deep_mutation_contract_edges.py",
+        "tests/unit/test_deep_mutation_precondition_contracts.py",
+        "tests/unit/test_handoff_authority.py",
+        "tests/unit/test_handoff_authority_state_machine.py",
+        "tests/unit/test_metamorphic_handoff_authority.py",
+        "tests/unit/test_property_trust_kernels.py",
+        "tests/unit/test_resource_scope_algebra.py",
+        "tests/unit/test_typed_resource_authority_config.py",
+        "tests/unit/test_typed_resource_pregrading.py"
+      ]
+    },
+    {
+      "id": "preconditions",
+      "surface": "adapter and protocol evaluation preconditions",
+      "sources": [
+        "src/agent_evals/runtime/preconditions.py"
+      ],
+      "tests": [
+        "tests/unit/test_adapter_preconditions.py",
+        "tests/unit/test_approval_live_authority_boundary.py",
+        "tests/unit/test_assurance_blocked_evidence_binding.py",
+        "tests/unit/test_assurance_pregrading_closure.py",
+        "tests/unit/test_attack_delivery_live_authority_boundary.py",
+        "tests/unit/test_composed_handoff_provenance_precondition.py",
+        "tests/unit/test_deep_mutation_contract_edges.py",
+        "tests/unit/test_deep_mutation_precondition_contracts.py",
+        "tests/unit/test_protocol_delivery_live_authority_boundary.py",
+        "tests/unit/test_retrieval_live_authority_boundary.py",
+        "tests/unit/test_runtime_blocked_policy_criticality.py",
+        "tests/unit/test_side_effect_live_authority_boundary.py",
+        "tests/unit/test_typed_resource_pregrading.py"
+      ]
+    },
+    {
+      "id": "evaluator",
+      "surface": "deterministic evaluator, grading, and verdict derivation",
+      "sources": [
+        "src/agent_evals/runtime/_evaluator_core.py",
+        "src/agent_evals/runtime/evaluator.py",
+        "src/agent_evals/runtime/grading.py"
+      ],
+      "tests": [
+        "tests/integration/test_runtime.py",
+        "tests/integration/test_terminal_metric_validation_boundary.py",
+        "tests/unit/test_adapter_preconditions.py",
+        "tests/unit/test_approval_live_authority_boundary.py",
+        "tests/unit/test_assurance_blocked_evidence_binding.py",
+        "tests/unit/test_assurance_blocked_policy_facts.py",
+        "tests/unit/test_assurance_core_oracle_contract.py",
+        "tests/unit/test_assurance_deterministic_regrade.py",
+        "tests/unit/test_assurance_deterministic_side_effect_regrade.py",
+        "tests/unit/test_assurance_pregrading_closure.py",
+        "tests/unit/test_attack_delivery_live_authority_boundary.py",
+        "tests/unit/test_composed_handoff_provenance_precondition.py",
+        "tests/unit/test_deep_mutation_evaluator_contracts.py",
+        "tests/unit/test_evaluator_deadline.py",
+        "tests/unit/test_evaluator_observed_duration.py",
+        "tests/unit/test_evidence_resource_limits.py",
+        "tests/unit/test_protocol_delivery_live_authority_boundary.py",
+        "tests/unit/test_retrieval_live_authority_boundary.py",
+        "tests/unit/test_runtime_blocked_policy_criticality.py",
+        "tests/unit/test_runtime_contract_snapshot.py",
+        "tests/unit/test_runtime_metric_provenance.py",
+        "tests/unit/test_runtime_metric_provenance_deadline.py",
+        "tests/unit/test_semantic_live_authority_boundary.py",
+        "tests/unit/test_semantic_runtime.py",
+        "tests/unit/test_session_finalized_evidence_binding.py",
+        "tests/unit/test_side_effect_live_authority_boundary.py",
+        "tests/unit/test_trial_completion_root_binding.py",
+        "tests/unit/test_typed_resource_pregrading.py"
+      ]
+    },
+    {
+      "id": "deterministic-oracles",
+      "surface": "deterministic behavioral and side-effect oracle kernels",
+      "sources": [
+        "src/agent_evals/oracles/deterministic.py",
+        "src/agent_evals/side_effect/oracle.py"
+      ],
+      "tests": [
+        "tests/unit/test_approval_chronology_state_machine.py",
+        "tests/unit/test_approval_continuation_chronology.py",
+        "tests/unit/test_approval_decision_source.py",
+        "tests/unit/test_approval_intent.py",
+        "tests/unit/test_approval_intent_fail_closed.py",
+        "tests/unit/test_assurance_blocked_policy_facts.py",
+        "tests/unit/test_assurance_core_oracle_contract.py",
+        "tests/unit/test_assurance_deterministic_regrade.py",
+        "tests/unit/test_assurance_deterministic_side_effect_regrade.py",
+        "tests/unit/test_assurance_oracle_criticality_integrity.py",
+        "tests/unit/test_assurance_side_effect_oracle_binding.py",
+        "tests/unit/test_deep_mutation_oracle_contracts.py",
+        "tests/unit/test_handoff_authority.py",
+        "tests/unit/test_handoff_authority_state_machine.py",
+        "tests/unit/test_metamorphic.py",
+        "tests/unit/test_metamorphic_handoff_authority.py",
+        "tests/unit/test_oracles.py",
+        "tests/unit/test_side_effect_idempotency.py",
+        "tests/unit/test_side_effect_idempotency_boundaries.py",
+        "tests/unit/test_side_effect_idempotency_fail_closed.py"
+      ]
+    },
+    {
+      "id": "attack-delivery-receipt",
+      "surface": "attack-delivery receipt root and verification",
+      "sources": [
+        "src/agent_evals/adversarial/delivery.py"
+      ],
+      "tests": [
+        "tests/unit/test_adversarial_delivery.py",
+        "tests/unit/test_adversarial_full_contract_derivation.py",
+        "tests/unit/test_attack_delivery_live_authority_boundary.py",
+        "tests/unit/test_deep_mutation_contract_edges.py",
+        "tests/unit/test_property_trust_kernels.py",
+        "tests/unit/test_receipt_resource_limits.py"
+      ]
+    },
+    {
+      "id": "retrieval-receipt",
+      "surface": "retrieval receipt root and verification",
+      "sources": [
+        "src/agent_evals/retrieval/receipt.py",
+        "src/agent_evals/retrieval/verification.py"
+      ],
+      "tests": [
+        "tests/unit/test_deep_mutation_canonical_contracts.py",
+        "tests/unit/test_property_trust_kernels.py",
+        "tests/unit/test_receipt_resource_limits.py",
+        "tests/unit/test_retrieval_assurance.py",
+        "tests/unit/test_retrieval_fail_closed.py",
+        "tests/unit/test_retrieval_live_authority_boundary.py"
+      ]
+    },
+    {
+      "id": "semantic-receipt",
+      "surface": "semantic-judgment receipt root and verification",
+      "sources": [
+        "src/agent_evals/semantic/receipt.py",
+        "src/agent_evals/semantic/verification.py"
+      ],
+      "tests": [
+        "tests/unit/test_assurance_semantic.py",
+        "tests/unit/test_deep_mutation_canonical_contracts.py",
+        "tests/unit/test_deep_mutation_receipt_contracts.py",
+        "tests/unit/test_property_trust_kernels.py",
+        "tests/unit/test_receipt_resource_limits.py",
+        "tests/unit/test_semantic_calibration_commitments.py",
+        "tests/unit/test_semantic_contracts.py",
+        "tests/unit/test_semantic_input_binding.py",
+        "tests/unit/test_semantic_live_authority_boundary.py",
+        "tests/unit/test_semantic_receipt.py",
+        "tests/unit/test_semantic_replay.py",
+        "tests/unit/test_semantic_runtime.py",
+        "tests/unit/test_semantic_verification.py"
+      ]
+    },
+    {
+      "id": "side-effect-receipt",
+      "surface": "side-effect idempotency receipt root and verification",
+      "sources": [
+        "src/agent_evals/side_effect/receipt.py",
+        "src/agent_evals/side_effect/verification.py"
+      ],
+      "tests": [
+        "tests/unit/test_assurance_deterministic_side_effect_regrade.py",
+        "tests/unit/test_assurance_side_effect_oracle_binding.py",
+        "tests/unit/test_deep_mutation_canonical_contracts.py",
+        "tests/unit/test_deep_mutation_receipt_contracts.py",
+        "tests/unit/test_property_trust_kernels.py",
+        "tests/unit/test_receipt_resource_limits.py",
+        "tests/unit/test_side_effect_idempotency.py",
+        "tests/unit/test_side_effect_idempotency_boundaries.py",
+        "tests/unit/test_side_effect_idempotency_fail_closed.py",
+        "tests/unit/test_side_effect_live_authority_boundary.py"
+      ]
+    },
+    {
+      "id": "evidence-store",
+      "surface": "local evidence-store immutable publication and verification",
+      "sources": [
+        "src/agent_evals/evidence/store.py"
+      ],
+      "tests": [
+        "tests/unit/test_deep_mutation_canonical_contracts.py",
+        "tests/unit/test_evidence_manifest_contract.py",
+        "tests/unit/test_evidence_publication.py",
+        "tests/unit/test_evidence_store.py",
+        "tests/unit/test_evidence_store_boundaries.py",
+        "tests/unit/test_evidence_store_configuration.py",
+        "tests/unit/test_evidence_store_state_machine.py"
+      ]
+    },
+    {
+      "id": "release-gate",
+      "surface": "release-policy derivation and fail-closed revalidation",
+      "sources": [
+        "src/agent_evals/gates/release.py"
+      ],
+      "tests": [
+        "tests/unit/test_assurance_reliability_scalar_integrity.py",
+        "tests/unit/test_deep_mutation_contract_edges.py",
+        "tests/unit/test_release_policy_scalar_integrity.py",
+        "tests/unit/test_statistics_and_gate.py",
+        "tests/unit/test_statistics_runtime_integrity.py"
+      ]
+    }
+  ]
+}
