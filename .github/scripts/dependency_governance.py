@@ -428,7 +428,6 @@ def validate_action_semantics(files: list[dict[str, Any]]) -> None:
                 raise PolicyBlock(f"action SHA did not change: {action}")
 
 
-
 def _repo_text_at_sha(api: GitHubApi, path: str, sha: str) -> str:
     payload = api.get(
         f"/contents/{urllib.parse.quote(path, safe='/')}?ref={urllib.parse.quote(sha, safe='')}"
@@ -492,7 +491,9 @@ def _validate_same_dependency_identities(before: Any, after: Any, *, context: st
     old = _dependency_map(before, context=context)
     new = _dependency_map(after, context=context)
     if set(old) != set(new):
-        raise PolicyBlock(f"{context} dependency identities changed; add/remove/rename requires review")
+        raise PolicyBlock(
+            f"{context} dependency identities changed; add/remove/rename requires review"
+        )
     return old != new
 
 
@@ -517,7 +518,9 @@ def validate_pyproject_dependency_semantics(before_text: str, after_text: str) -
         build = original.get("build-system")
         control_project = control.get("project")
         control_build = control.get("build-system")
-        if not all(isinstance(item, dict) for item in (project, build, control_project, control_build)):
+        if not all(
+            isinstance(item, dict) for item in (project, build, control_project, control_build)
+        ):
             raise PolicyBlock(f"{label} pyproject lacks project/build-system tables")
         control_project["dependencies"] = []
         optional = project.get("optional-dependencies", {})
@@ -587,8 +590,7 @@ def validate_change_semantics(
 ) -> str:
     paths = [str(row["filename"]) for row in files]
     if paths and all(
-        path.startswith(".github/workflows/") and path.endswith((".yml", ".yaml"))
-        for path in paths
+        path.startswith(".github/workflows/") and path.endswith((".yml", ".yaml")) for path in paths
     ):
         validate_action_semantics(files)
         return "github-actions"
@@ -784,9 +786,7 @@ def selftest(config: dict[str, Any]) -> None:
             {
                 "filename": ".github/workflows/ci.yml",
                 "status": "modified",
-                "patch": "@@ -1 +1 @@\n-      - uses: actions/checkout@"
-                + "a" * 40
-                + " # v7.0.1\n"
+                "patch": "@@ -1 +1 @@\n-      - uses: actions/checkout@" + "a" * 40 + " # v7.0.1\n"
                 "+      - uses: actions/checkout@" + "b" * 40 + " # v8.0.0\n",
             }
         ]
@@ -807,8 +807,8 @@ dev = ["beta==2.0.0"]
     for unsafe in (
         base_manifest.replace('version = "1.0.0"', 'version = "2.0.0"'),
         base_manifest.replace('["alpha>=1,<2"]', '["alpha>=1,<2", "gamma>=1"]'),
-        base_manifest.replace('alpha>=1,<2', 'alpha @ https://example.invalid/pkg.whl'),
-        base_manifest.replace('alpha>=1,<2', 'alpha>=1,<2; python_version >= "3.12"'),
+        base_manifest.replace("alpha>=1,<2", "alpha @ https://example.invalid/pkg.whl"),
+        base_manifest.replace("alpha>=1,<2", 'alpha>=1,<2; python_version >= "3.12"'),
     ):
         try:
             validate_pyproject_dependency_semantics(base_manifest, unsafe)
