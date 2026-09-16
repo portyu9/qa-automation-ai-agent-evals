@@ -1,0 +1,38 @@
+name: temporary-link-automation-doc
+
+on:
+  push:
+    branches: [automation/harden-dependabot-governance]
+
+permissions:
+  contents: write
+
+jobs:
+  link-doc:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Checkout automation branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v6.0.2
+        with:
+          ref: automation/harden-dependabot-governance
+      - name: Register operator guide in documentation hub
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('docs/README.md')
+          text = path.read_text(encoding='utf-8')
+          if '](DEPENDABOT_AUTOMATION.md)' not in text:
+              text = text.rstrip() + '\n\n## Dependency automation operations\n\n- [Dependabot automation](DEPENDABOT_AUTOMATION.md) — provenance-gated green merge authority, bounded transient recovery, manual-review boundaries, and operator controls.\n'
+              path.write_text(text, encoding='utf-8')
+          PY
+      - name: Commit documentation registration
+        run: |
+          if git diff --quiet -- docs/README.md; then
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/README.md
+          git commit -m "docs: register dependency automation guide"
+          git push origin HEAD:automation/harden-dependabot-governance
