@@ -2,9 +2,12 @@
 from __future__ import annotations
 
 import argparse
+import base64
+import copy
 import json
 import os
 import re
+import tomllib
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -34,6 +37,8 @@ UPDATE_TYPE = re.compile(
     re.MULTILINE,
 )
 SHA = re.compile(r"^[0-9a-f]{40}$")
+DEPENDENCY_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*")
+MAX_MANIFEST_BYTES = 256 * 1024
 
 
 class GovernanceError(RuntimeError):
@@ -73,8 +78,10 @@ def validate_config(config: dict[str, Any]) -> list[str]:
         errors.append("mergeMethod must equal merge")
     if config.get("automergeEnabled") is not True:
         errors.append("automergeEnabled must be true")
-    if config.get("pipMode") != "manual":
-        errors.append("pipMode must equal manual")
+    if config.get("pipMode") != "exact-subject-green":
+        errors.append("pipMode must equal exact-subject-green")
+    if config.get("pipManifestPaths") != ["pyproject.toml"]:
+        errors.append("pipManifestPaths must equal [pyproject.toml]")
     for key, maximum in (("maxChangedFiles", 100), ("maxPullRequestAgeDays", 90)):
         value = config.get(key)
         if not isinstance(value, int) or isinstance(value, bool) or not (1 <= value <= maximum):
@@ -121,12 +128,14 @@ def validate_config(config: dict[str, Any]) -> list[str]:
     expected_allowed = {
         "version-update:semver-patch",
         "version-update:semver-minor",
+        "version-update:semver-major",
         "security-update:semver-patch",
         "security-update:semver-minor",
+        "security-update:semver-major",
     }
     if not isinstance(allowed, list) or set(allowed) != expected_allowed:
         errors.append(
-            "allowedActionUpdateTypes must be exactly patch/minor version and security updates"
+            "allowedActionUpdateTypes must be exactly patch/minor/major version and security updates"
         )
     publish = config.get("publishTrustedStatus")
     if not isinstance(publish, bool):
@@ -413,10 +422,180 @@ def validate_action_semantics(files: list[dict[str, Any]]) -> None:
                 )
             old_v = next(iter(old_versions))
             new_v = next(iter(new_versions))
-            if old_v[0] != new_v[0]:
-                raise PolicyBlock(f"major action update requires manual review: {action}")
+            if new_v <= old_v:
+                raise PolicyBlock(f"action update must advance the semantic version: {action}")
             if next(iter(old_shas)) == next(iter(new_shas)):
                 raise PolicyBlock(f"action SHA did not change: {action}")
+
+
+
+def _repo_text_at_sha(api: GitHubApi, path: str, sha: str) -> str:
+    payload = api.get(
+        f"/contents/{urllib.parse.quote(path, safe='/')}?ref={urllib.parse.quote(sha, safe='')}"
+    )
+    if not isinstance(payload, dict) or payload.get("type") != "file":
+        raise PolicyBlock(f"unable to resolve repository file at exact subject: {path}")
+    size = payload.get("size")
+    encoded = payload.get("content")
+    if (
+        not isinstance(size, int)
+        or isinstance(size, bool)
+        or size < 1
+        or size > MAX_MANIFEST_BYTES
+        or payload.get("encoding") != "base64"
+        or not isinstance(encoded, str)
+    ):
+        raise PolicyBlock(f"repository file exceeds bounded manifest contract: {path}")
+    try:
+        raw = base64.b64decode("".join(encoded.split()), validate=True)
+        text = raw.decode("utf-8")
+    except (ValueError, UnicodeDecodeError) as exc:
+        raise PolicyBlock(f"repository file is not canonical UTF-8/base64: {path}") from exc
+    if len(raw) != size or not text or "\x00" in text:
+        raise PolicyBlock(f"repository file identity/size contract failed: {path}")
+    return text
+
+
+def _canonical_dependency_name(raw: str, *, context: str) -> str:
+    if not isinstance(raw, str) or not raw.strip():
+        raise PolicyBlock(f"{context} contains an invalid dependency declaration")
+    lowered = raw.lower()
+    if any(token in lowered for token in ("@", ";", "://", "git+", "file:", "../", "./")):
+        raise PolicyBlock(f"{context} introduces URL/VCS/path/marker authority: {raw}")
+    match = DEPENDENCY_NAME.match(raw.strip())
+    if match is None:
+        raise PolicyBlock(f"{context} contains an unparseable dependency declaration: {raw}")
+    remainder = raw.strip()[match.end() :].lstrip()
+    if remainder.startswith("["):
+        close = remainder.find("]")
+        if close <= 1:
+            raise PolicyBlock(f"{context} contains malformed dependency extras: {raw}")
+        remainder = remainder[close + 1 :].lstrip()
+    if remainder and remainder[0] not in "<>=!~":
+        raise PolicyBlock(f"{context} contains unsupported dependency syntax: {raw}")
+    return re.sub(r"[-_.]+", "-", match.group(0)).lower()
+
+
+def _dependency_map(values: Any, *, context: str) -> dict[str, str]:
+    if not isinstance(values, list) or not all(isinstance(item, str) for item in values):
+        raise PolicyBlock(f"{context} must be a string list")
+    result: dict[str, str] = {}
+    for raw in values:
+        name = _canonical_dependency_name(raw, context=context)
+        if name in result:
+            raise PolicyBlock(f"{context} contains duplicate dependency identity: {name}")
+        result[name] = raw
+    return result
+
+
+def _validate_same_dependency_identities(before: Any, after: Any, *, context: str) -> bool:
+    old = _dependency_map(before, context=context)
+    new = _dependency_map(after, context=context)
+    if set(old) != set(new):
+        raise PolicyBlock(f"{context} dependency identities changed; add/remove/rename requires review")
+    return old != new
+
+
+def validate_pyproject_dependency_semantics(before_text: str, after_text: str) -> None:
+    try:
+        before = tomllib.loads(before_text)
+        after = tomllib.loads(after_text)
+    except tomllib.TOMLDecodeError as exc:
+        raise PolicyBlock(f"pyproject.toml is not valid TOML: {exc}") from exc
+    if not isinstance(before, dict) or not isinstance(after, dict):
+        raise PolicyBlock("pyproject.toml root must be a table")
+
+    before_control = copy.deepcopy(before)
+    after_control = copy.deepcopy(after)
+    changed = False
+
+    for original, control, label in (
+        (before, before_control, "before"),
+        (after, after_control, "after"),
+    ):
+        project = original.get("project")
+        build = original.get("build-system")
+        control_project = control.get("project")
+        control_build = control.get("build-system")
+        if not all(isinstance(item, dict) for item in (project, build, control_project, control_build)):
+            raise PolicyBlock(f"{label} pyproject lacks project/build-system tables")
+        control_project["dependencies"] = []
+        optional = project.get("optional-dependencies", {})
+        control_optional = control_project.get("optional-dependencies", {})
+        if not isinstance(optional, dict) or not isinstance(control_optional, dict):
+            raise PolicyBlock(f"{label} optional-dependencies must be a table")
+        control_project["optional-dependencies"] = {key: [] for key in sorted(optional)}
+        control_build["requires"] = []
+
+    if before_control != after_control:
+        raise PolicyBlock("pyproject change includes non-dependency semantic authority")
+
+    before_project = before["project"]
+    after_project = after["project"]
+    changed |= _validate_same_dependency_identities(
+        before_project.get("dependencies", []),
+        after_project.get("dependencies", []),
+        context="project.dependencies",
+    )
+
+    before_optional = before_project.get("optional-dependencies", {})
+    after_optional = after_project.get("optional-dependencies", {})
+    if set(before_optional) != set(after_optional):
+        raise PolicyBlock("optional dependency group identities changed")
+    for group in sorted(before_optional):
+        changed |= _validate_same_dependency_identities(
+            before_optional[group],
+            after_optional[group],
+            context=f"project.optional-dependencies.{group}",
+        )
+
+    changed |= _validate_same_dependency_identities(
+        before["build-system"].get("requires", []),
+        after["build-system"].get("requires", []),
+        context="build-system.requires",
+    )
+    if not changed:
+        raise PolicyBlock("pyproject dependency update contains no dependency-spec change")
+
+
+def validate_pip_semantics(
+    api: GitHubApi,
+    files: list[dict[str, Any]],
+    base_sha: str,
+    head_sha: str,
+    config: dict[str, Any],
+) -> None:
+    allowed = set(config["pipManifestPaths"])
+    paths = {str(row["filename"]) for row in files}
+    if paths != allowed:
+        raise PolicyBlock(f"pip update must change exactly {sorted(allowed)}; got {sorted(paths)}")
+    for row in files:
+        if row.get("status") != "modified":
+            raise PolicyBlock("pip manifest must be modified in place")
+    path = config["pipManifestPaths"][0]
+    before = _repo_text_at_sha(api, path, base_sha)
+    after = _repo_text_at_sha(api, path, head_sha)
+    validate_pyproject_dependency_semantics(before, after)
+
+
+def validate_change_semantics(
+    api: GitHubApi,
+    files: list[dict[str, Any]],
+    base_sha: str,
+    head_sha: str,
+    config: dict[str, Any],
+) -> str:
+    paths = [str(row["filename"]) for row in files]
+    if paths and all(
+        path.startswith(".github/workflows/") and path.endswith((".yml", ".yaml"))
+        for path in paths
+    ):
+        validate_action_semantics(files)
+        return "github-actions"
+    if config["pipMode"] == "exact-subject-green" and set(paths) == set(config["pipManifestPaths"]):
+        validate_pip_semantics(api, files, base_sha, head_sha, config)
+        return "pip"
+    raise PolicyBlock("mixed or unsupported dependency change set requires manual review")
 
 
 def verify_merge_subject(
@@ -472,7 +651,7 @@ def assess(
     head_sha, base_sha, number = validate_pr_identity(api, pr, config)
     validate_commits(api, number, config)
     files = changed_files(api, number, config)
-    validate_action_semantics(files)
+    ecosystem = validate_change_semantics(api, files, base_sha, head_sha, config)
     merge_sha = verify_merge_subject(api, pr, number, head_sha, base_sha)
     if require_checks:
         require_green_checks(api, head_sha, config)
@@ -481,6 +660,7 @@ def assess(
         "headSha": head_sha,
         "baseSha": base_sha,
         "mergeSha": merge_sha,
+        "ecosystem": ecosystem,
         "files": [str(row["filename"]) for row in files],
     }
 
@@ -599,23 +779,43 @@ def selftest(config: dict[str, Any]) -> None:
         pass
     else:
         raise GovernanceError("semantic validator accepted non-action workflow mutation")
-    try:
-        validate_action_semantics(
-            [
-                {
-                    "filename": ".github/workflows/ci.yml",
-                    "status": "modified",
-                    "patch": "@@ -1 +1 @@\n-      - uses: actions/checkout@"
-                    + "a" * 40
-                    + " # v7.0.1\n"
-                    "+      - uses: actions/checkout@" + "b" * 40 + " # v8.0.0\n",
-                }
-            ]
-        )
-    except PolicyBlock:
-        pass
-    else:
-        raise GovernanceError("semantic validator accepted action major update")
+    validate_action_semantics(
+        [
+            {
+                "filename": ".github/workflows/ci.yml",
+                "status": "modified",
+                "patch": "@@ -1 +1 @@\n-      - uses: actions/checkout@"
+                + "a" * 40
+                + " # v7.0.1\n"
+                "+      - uses: actions/checkout@" + "b" * 40 + " # v8.0.0\n",
+            }
+        ]
+    )
+
+    base_manifest = """[build-system]
+requires = ["hatchling==1.32.0"]
+build-backend = "hatchling.build"
+[project]
+name = "example"
+version = "1.0.0"
+dependencies = ["alpha>=1,<2"]
+[project.optional-dependencies]
+dev = ["beta==2.0.0"]
+"""
+    major_manifest = base_manifest.replace("alpha>=1,<2", "alpha>=2,<3")
+    validate_pyproject_dependency_semantics(base_manifest, major_manifest)
+    for unsafe in (
+        base_manifest.replace('version = "1.0.0"', 'version = "2.0.0"'),
+        base_manifest.replace('["alpha>=1,<2"]', '["alpha>=1,<2", "gamma>=1"]'),
+        base_manifest.replace('alpha>=1,<2', 'alpha @ https://example.invalid/pkg.whl'),
+        base_manifest.replace('alpha>=1,<2', 'alpha>=1,<2; python_version >= "3.12"'),
+    ):
+        try:
+            validate_pyproject_dependency_semantics(base_manifest, unsafe)
+        except PolicyBlock:
+            pass
+        else:
+            raise GovernanceError("pip semantic validator accepted authority expansion")
     print("dependency-governance self-test: ok")
 
 

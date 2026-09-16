@@ -4,7 +4,10 @@
   "baseBranch": "main",
   "mergeMethod": "merge",
   "automergeEnabled": true,
-  "pipMode": "manual",
+  "pipMode": "exact-subject-green",
+  "pipManifestPaths": [
+    "pyproject.toml"
+  ],
   "maxChangedFiles": 25,
   "maxPullRequestAgeDays": 14,
   "manualReviewLabels": [
@@ -18,8 +21,10 @@
   "allowedActionUpdateTypes": [
     "version-update:semver-patch",
     "version-update:semver-minor",
+    "version-update:semver-major",
     "security-update:semver-patch",
-    "security-update:semver-minor"
+    "security-update:semver-minor",
+    "security-update:semver-major"
   ],
   "publishTrustedStatus": false,
   "trustedStatusContext": "",
