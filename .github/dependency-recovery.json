@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "enabled": true,
+  "maxRunAttempts": 2,
+  "workflow": "CI",
+  "aggregateJobs": [
+    "ci-gate"
+  ],
+  "transientSteps": [
+    "Set up Python",
+    "Install",
+    "Install mutation test dependencies",
+    "Install OpenAI adapter test dependencies",
+    "Install MCP fault-lab test dependencies",
+    "Install MCP remote-auth test dependencies",
+    "Install MCP OAuth-flow test dependencies",
+    "Upload mutation diagnostics",
+    "Upload exact tested package artifacts"
+  ]
+}
