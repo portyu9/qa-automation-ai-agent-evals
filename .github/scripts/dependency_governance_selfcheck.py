@@ -3,6 +3,5 @@ from __future__ import annotations
 
 from dependency_governance import load_config, selftest
 
-
 if __name__ == "__main__":
     selftest(load_config())
