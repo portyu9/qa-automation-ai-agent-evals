@@ -1,0 +1,32 @@
+name: temporary-format-governance
+
+on:
+  push:
+    branches: [automation/harden-dependabot-governance]
+
+permissions:
+  contents: write
+
+jobs:
+  format:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout automation branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v6.0.2
+        with:
+          ref: automation/harden-dependabot-governance
+      - name: Format controllers with repository Ruff version
+        run: |
+          python -m pip install --disable-pip-version-check ruff==0.16.7
+          ruff format .github/scripts/dependency_governance.py .github/scripts/dependency_recovery.py
+      - name: Commit deterministic formatting
+        run: |
+          if git diff --quiet -- .github/scripts/dependency_governance.py .github/scripts/dependency_recovery.py; then
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .github/scripts/dependency_governance.py .github/scripts/dependency_recovery.py
+          git commit -m "style: apply Ruff to governance controllers"
+          git push origin HEAD:automation/harden-dependabot-governance
