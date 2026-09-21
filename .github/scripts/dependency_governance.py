@@ -734,9 +734,7 @@ def _post_merge_ci_candidates(rows: list[dict[str, Any]], subject_sha: str) -> l
         if status not in {"queued", "in_progress", "completed"}:
             raise GovernanceError(f"exact-subject CI run has invalid status: {status}")
         if status == "completed" and conclusion != "success":
-            raise GovernanceError(
-                f"exact-subject CI run completed non-successfully: {conclusion}"
-            )
+            raise GovernanceError(f"exact-subject CI run completed non-successfully: {conclusion}")
         candidates.append(row)
     return candidates
 
@@ -979,9 +977,7 @@ dev = ["beta==2.0.0"]
                 f"post-merge CI selector accepted terminal non-success: {terminal}"
             )
     try:
-        _select_post_merge_ci_run(
-            [canonical_run, dict(canonical_run, id=102)], exact_sha
-        )
+        _select_post_merge_ci_run([canonical_run, dict(canonical_run, id=102)], exact_sha)
     except GovernanceError:
         pass
     else:
