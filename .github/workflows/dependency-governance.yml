@@ -11,6 +11,7 @@ on:
       - '.github/scripts/dependency_recovery.py'
       - '.github/scripts/dependency_recovery_selfcheck.py'
       - '.github/workflows/dependency-governance.yml'
+      - '.github/workflows/ci.yml'
       - '.github/workflows/dependabot-auto-merge.yml'
       - '.github/workflows/codeql.yml'
   pull_request_target:
