@@ -152,6 +152,22 @@ def validate_config(config: dict[str, Any]) -> list[str]:
     return unique(errors)
 
 
+def _paginated_rows(payload: Any, path: str) -> list[dict[str, Any]]:
+    """Extract one known GitHub collection without treating an empty collection as absent."""
+    if isinstance(payload, dict):
+        keys = [key for key in ("check_runs", "workflow_runs", "jobs") if key in payload]
+        if len(keys) != 1:
+            raise GovernanceError(f"unexpected paginated response for {path}")
+        rows = payload[keys[0]]
+    else:
+        rows = payload
+    if not isinstance(rows, list):
+        raise GovernanceError(f"unexpected paginated response for {path}")
+    if not all(isinstance(row, dict) for row in rows):
+        raise GovernanceError(f"unexpected paginated response row for {path}")
+    return rows
+
+
 class GitHubApi:
     def __init__(self, token: str, repository: str) -> None:
         if not token:
@@ -235,14 +251,7 @@ class GitHubApi:
         separator = "&" if "?" in path else "?"
         for page in range(1, max_pages + 1):
             payload = self.get(f"{path}{separator}per_page=100&page={page}")
-            if isinstance(payload, dict):
-                rows = (
-                    payload.get("check_runs") or payload.get("workflow_runs") or payload.get("jobs")
-                )
-            else:
-                rows = payload
-            if not isinstance(rows, list):
-                raise GovernanceError(f"unexpected paginated response for {path}")
+            rows = _paginated_rows(payload, path)
             items.extend(row for row in rows if isinstance(row, dict))
             if len(rows) < 100:
                 break
@@ -943,6 +952,24 @@ dev = ["beta==2.0.0"]
             pass
         else:
             raise GovernanceError("pip semantic validator accepted authority expansion")
+    empty_runs = {"total_count": 0, "workflow_runs": []}
+    if _paginated_rows(empty_runs, "/actions/runs?head_sha=fixture") != []:
+        raise GovernanceError("empty workflow_runs collection did not normalize to an empty list")
+    for malformed_collection in (
+        {"total_count": 0},
+        {"workflow_runs": None},
+        {"workflow_runs": [], "jobs": []},
+        {"workflow_runs": [None]},
+    ):
+        try:
+            _paginated_rows(malformed_collection, "/actions/runs?head_sha=fixture")
+        except GovernanceError:
+            pass
+        else:
+            raise GovernanceError(
+                "paginated collection parser accepted a missing, ambiguous, or malformed collection"
+            )
+
     exact_sha = "1" * 40
     canonical_run = {
         "id": 101,
