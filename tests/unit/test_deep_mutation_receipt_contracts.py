@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime, timezone
 from enum import StrEnum
 from typing import Any
 
@@ -968,3 +969,65 @@ def test_side_effect_json_default_uses_json_mode_for_base_models() -> None:
     assert side_effect_receipt._json_default(_EnumProbe(state=_ProbeEnum.VALUE)) == {
         "state": "value"
     }
+
+
+class _DatetimeProbe(BaseModel):
+    observed_at: datetime
+
+
+def test_side_effect_receipt_json_normalization_is_semantically_json_mode() -> None:
+    probe = _DatetimeProbe(
+        observed_at=datetime(2026, 1, 2, 3, 4, 5, tzinfo=timezone.utc)
+    )
+
+    normalized = side_effect_receipt._json_default(probe)
+    assert type(normalized["observed_at"]) is str
+
+    # The resource-budget projection must normalize nested BaseModels to JSON-safe
+    # material before the canonical hash path receives the original objects.
+    root = side_effect_receipt._receipt_root({"attempts": (probe,)})
+    assert type(root) is str
+    assert len(root) == 64
+
+
+def test_side_effect_verification_requires_strict_attempt_pairing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    scenario = _side_effect_scenario()
+    receipt = _side_effect_receipt()
+    evidence = _side_effect_evidence(_side_effect_events(receipt), scenario=scenario)
+    truncated = receipt.model_copy(update={"attempts": (receipt.attempts[0],)})
+
+    monkeypatch.setattr(
+        side_effect_verification.SideEffectIdempotencyReceipt,
+        "model_validate",
+        lambda *_args, **_kwargs: truncated,
+    )
+
+    with pytest.raises(ValueError, match=r"zip\(\) argument 2 is shorter than argument 1"):
+        side_effect_verification.verify_side_effect_observation(scenario, evidence)
+
+
+@pytest.mark.parametrize("left_index,right_index", [(0, 1), (1, 2), (2, 3), (3, 4)])
+def test_side_effect_chronology_requires_strictly_increasing_boundaries(
+    left_index: int,
+    right_index: int,
+) -> None:
+    scenario = _side_effect_scenario()
+    receipt = _side_effect_receipt()
+    events = list(_side_effect_events(receipt))
+
+    shared_sequence = events[left_index].sequence
+    events[right_index] = events[right_index].model_copy(
+        update={"sequence": shared_sequence}
+    )
+    evidence = _side_effect_evidence(
+        _side_effect_events(receipt),
+        scenario=scenario,
+    ).model_copy(update={"events": tuple(events)})
+
+    _assert_side_effect_error(
+        scenario,
+        evidence,
+        "side-effect chronology must serialize request/result pairs before observation",
+    )
