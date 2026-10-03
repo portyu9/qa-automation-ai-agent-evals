@@ -6,7 +6,7 @@ from typing import cast
 import pytest
 
 import agent_evals.runtime._evaluator_core as evaluator_core
-from agent_evals.adapters.base import AdapterResult, AgentAdapter
+from agent_evals.adapters.base import AdapterPreconditionError, AdapterResult, AgentAdapter
 from agent_evals.adapters.scripted import ScriptedAdapter
 from agent_evals.contracts.models import (
     AuthorityPolicy,
@@ -14,10 +14,13 @@ from agent_evals.contracts.models import (
     ScenarioKind,
     SubjectFingerprint,
 )
+from agent_evals.contracts.semantic import SemanticCriterionSpec, SemanticRubricSpec
 from agent_evals.evidence.models import EvidenceEvent, EvidenceKind, TrialEvidence, TrialVerdict
 from agent_evals.oracles.deterministic import OracleResult
 from agent_evals.runtime._evaluator_core import EvaluatedTrial, TrialRunner
+from agent_evals.runtime.preconditions import EvaluationPreconditionError
 from agent_evals.semantic.receipt import SemanticJudgmentReceipt
+from agent_evals.semantic.verification import SemanticJudgmentError
 
 
 def _subject() -> SubjectFingerprint:
@@ -475,3 +478,443 @@ def test_live_evaluator_owned_evidence_violation_diagnostics_are_exact(
         evidence,
     )
     assert observed == expected
+
+
+def _semantic_scenario() -> EvaluationScenario:
+    return EvaluationScenario(
+        scenario_id="mutation.evaluator-semantic",
+        revision="1",
+        kind=ScenarioKind.CAPABILITY,
+        objective="Grade one semantic answer.",
+        authority=AuthorityPolicy(),
+        semantic_rubric=SemanticRubricSpec(
+            rubric_id="mutation-evaluator",
+            revision="1",
+            criteria=(
+                SemanticCriterionSpec(
+                    criterion_id="grounded",
+                    description="The answer remains grounded.",
+                    minimum_score=3,
+                ),
+            ),
+        ),
+    )
+
+
+class _PreconditionFailAdapter:
+    @property
+    def name(self) -> str:
+        return "mutation-precondition"
+
+    async def execute(
+        self,
+        *,
+        subject: SubjectFingerprint,
+        scenario: EvaluationScenario,
+        trial_id: str,
+    ) -> AdapterResult:
+        del subject, scenario, trial_id
+        raise AdapterPreconditionError(
+            code="controlled_precondition",
+            reason="controlled adapter precondition",
+        )
+
+
+class _RuntimeFailAdapter:
+    @property
+    def name(self) -> str:
+        return "mutation-runtime"
+
+    async def execute(
+        self,
+        *,
+        subject: SubjectFingerprint,
+        scenario: EvaluationScenario,
+        trial_id: str,
+    ) -> AdapterResult:
+        del subject, scenario, trial_id
+        raise LookupError("provider detail must not escape")
+
+
+class _JudgeRuntimeFailure:
+    async def judge(self, judge_input: object) -> object:
+        del judge_input
+        raise LookupError("judge detail must not escape")
+
+
+class _JudgeUnexpectedResponse:
+    async def judge(self, judge_input: object) -> object:
+        del judge_input
+        return object()
+
+
+def _assert_single_blocking_error(
+    result: EvaluatedTrial,
+    *,
+    source: str,
+    code: str,
+    reason: str,
+) -> None:
+    assert result.verdict is TrialVerdict.BLOCKED
+    assert result.oracle_results == ()
+    event = result.evidence.events[-1]
+    assert event.kind is EvidenceKind.EVALUATION_ERROR
+    assert event.source == source
+    assert event.payload == {"code": code, "reason": reason}
+    assert event.critical is True
+
+
+@pytest.mark.parametrize(
+    ("adapter", "kind", "source", "payload"),
+    [
+        (
+            _PreconditionFailAdapter(),
+            EvidenceKind.EVALUATION_ERROR,
+            "adapter:mutation-precondition",
+            {
+                "code": "controlled_precondition",
+                "reason": "controlled adapter precondition",
+            },
+        ),
+        (
+            _RuntimeFailAdapter(),
+            EvidenceKind.RUNTIME_ERROR,
+            "adapter:mutation-runtime",
+            {
+                "exception_type": "LookupError",
+                "detail_retained": False,
+            },
+        ),
+    ],
+)
+def test_adapter_failures_normalize_to_exact_blocked_evidence(
+    adapter: object,
+    kind: EvidenceKind,
+    source: str,
+    payload: dict[str, object],
+) -> None:
+    result = asyncio.run(
+        TrialRunner()._run_trial(
+            adapter,  # type: ignore[arg-type]
+            subject=_subject(),
+            scenario=_scenario(),
+            trial_id="adapter-failure",
+            started=0.0,
+        )
+    )
+
+    assert result.verdict is TrialVerdict.BLOCKED
+    assert result.oracle_results == ()
+    assert len(result.evidence.events) == 1
+    event = result.evidence.events[0]
+    assert event.sequence == 0
+    assert event.kind is kind
+    assert event.source == source
+    assert event.payload == payload
+    assert event.critical is True
+
+
+def test_blocking_adapter_evidence_short_circuits_grading(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    blocking_event = EvidenceEvent(
+        sequence=0,
+        kind=EvidenceKind.EVALUATION_ERROR,
+        source="adapter:controlled",
+        payload={"code": "blocked", "reason": "controlled"},
+        critical=True,
+    )
+
+    class BlockingEvidenceAdapter(_PassingAdapter):
+        async def execute(
+            self,
+            *,
+            subject: SubjectFingerprint,
+            scenario: EvaluationScenario,
+            trial_id: str,
+        ) -> AdapterResult:
+            del subject, scenario, trial_id
+            return AdapterResult(events=(blocking_event,), final_output="ignored")
+
+    monkeypatch.setattr(
+        evaluator_core,
+        "grade_deterministic_evidence",
+        lambda *_args, **_kwargs: pytest.fail("blocking evidence reached grading"),
+    )
+    result = asyncio.run(
+        TrialRunner()._run_trial(
+            BlockingEvidenceAdapter(),  # type: ignore[arg-type]
+            subject=_subject(),
+            scenario=_scenario(),
+            trial_id="blocking-evidence",
+            started=0.0,
+        )
+    )
+
+    assert result.verdict is TrialVerdict.BLOCKED
+    assert result.oracle_results == ()
+    assert result.evidence.events == (blocking_event,)
+
+
+def test_pregrading_failure_appends_exact_evaluator_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def fail_pregrading(*_args: object, **_kwargs: object) -> None:
+        raise EvaluationPreconditionError(
+            source="evaluator:controlled-precondition",
+            code="controlled_unverified",
+            reason="controlled pregrading failure",
+        )
+
+    monkeypatch.setattr(evaluator_core, "verify_pregrading_closure", fail_pregrading)
+    result = asyncio.run(
+        TrialRunner()._run_trial(
+            _PassingAdapter(),  # type: ignore[arg-type]
+            subject=_subject(),
+            scenario=_scenario(),
+            trial_id="pregrading-failure",
+            started=0.0,
+        )
+    )
+
+    _assert_single_blocking_error(
+        result,
+        source="evaluator:controlled-precondition",
+        code="controlled_unverified",
+        reason="controlled pregrading failure",
+    )
+
+
+def test_semantic_verification_failure_appends_exact_evaluator_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        evaluator_core,
+        "verify_semantic_judgment",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            SemanticJudgmentError("controlled recorded semantic failure")
+        ),
+    )
+    result = asyncio.run(
+        TrialRunner()._run_trial(
+            _PassingAdapter(),  # type: ignore[arg-type]
+            subject=_subject(),
+            scenario=_scenario(),
+            trial_id="semantic-verification-failure",
+            started=0.0,
+        )
+    )
+
+    _assert_single_blocking_error(
+        result,
+        source="evaluator:semantic-judgment",
+        code="semantic_judgment_unverified",
+        reason="controlled recorded semantic failure",
+    )
+
+
+@pytest.mark.parametrize(
+    ("final_output", "code", "reason"),
+    [
+        (
+            "candidate",
+            "semantic_judge_missing",
+            "scenario requires semantic grading but no calibrated judge is configured",
+        ),
+        (
+            None,
+            "semantic_judge_missing",
+            "scenario requires semantic grading but no calibrated judge is configured",
+        ),
+    ],
+)
+def test_semantic_missing_judge_is_exact_and_precedes_candidate_validation(
+    final_output: str | None,
+    code: str,
+    reason: str,
+) -> None:
+    class SemanticAdapter(_PassingAdapter):
+        async def execute(
+            self,
+            *,
+            subject: SubjectFingerprint,
+            scenario: EvaluationScenario,
+            trial_id: str,
+        ) -> AdapterResult:
+            del subject, scenario, trial_id
+            return AdapterResult(final_output=final_output)
+
+    result = asyncio.run(
+        TrialRunner()._run_trial(
+            SemanticAdapter(),  # type: ignore[arg-type]
+            subject=_subject(),
+            scenario=_semantic_scenario(),
+            trial_id="semantic-missing-judge",
+            started=0.0,
+        )
+    )
+
+    _assert_single_blocking_error(
+        result,
+        source="evaluator:semantic-judge",
+        code=code,
+        reason=reason,
+    )
+
+
+def test_semantic_candidate_missing_is_exact_when_judge_is_configured(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    judge = _JudgeUnexpectedResponse()
+    runner = TrialRunner(semantic_judge=judge)  # type: ignore[arg-type]
+
+    class NoOutputAdapter(_PassingAdapter):
+        async def execute(
+            self,
+            *,
+            subject: SubjectFingerprint,
+            scenario: EvaluationScenario,
+            trial_id: str,
+        ) -> AdapterResult:
+            del subject, scenario, trial_id
+            return AdapterResult(final_output=None)
+
+    # Candidate absence is checked before judge authority is consulted.
+    monkeypatch.setattr(
+        evaluator_core,
+        "validate_semantic_judge_authority",
+        lambda *_args, **_kwargs: pytest.fail("judge authority must not be consulted"),
+    )
+    result = asyncio.run(
+        runner._run_trial(
+            NoOutputAdapter(),  # type: ignore[arg-type]
+            subject=_subject(),
+            scenario=_semantic_scenario(),
+            trial_id="semantic-candidate-missing",
+            started=0.0,
+        )
+    )
+
+    _assert_single_blocking_error(
+        result,
+        source="evaluator:semantic-judge",
+        code="semantic_candidate_missing",
+        reason="scenario requires semantic grading but the subject produced no final output",
+    )
+
+
+def test_semantic_judge_authority_failure_is_exact(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    runner = TrialRunner(semantic_judge=_JudgeUnexpectedResponse())  # type: ignore[arg-type]
+
+    def fail_authority(*_args: object, **_kwargs: object) -> tuple[object, object]:
+        raise LookupError("controlled authority failure")
+
+    monkeypatch.setattr(evaluator_core, "validate_semantic_judge_authority", fail_authority)
+    result = asyncio.run(
+        runner._run_trial(
+            _PassingAdapter(),  # type: ignore[arg-type]
+            subject=_subject(),
+            scenario=_semantic_scenario(),
+            trial_id="semantic-authority-failure",
+            started=0.0,
+        )
+    )
+
+    _assert_single_blocking_error(
+        result,
+        source="evaluator:semantic-judge",
+        code="semantic_judge_uncalibrated",
+        reason="semantic judge authority is unavailable: LookupError",
+    )
+
+
+@pytest.mark.parametrize(
+    ("judge", "code", "reason"),
+    [
+        (
+            _JudgeRuntimeFailure(),
+            "semantic_judge_runtime_error",
+            "semantic judge invocation failed: LookupError",
+        ),
+        (
+            _JudgeUnexpectedResponse(),
+            "semantic_judgment_invalid",
+            "semantic judge returned an unexpected response type",
+        ),
+    ],
+)
+def test_semantic_judge_runtime_and_response_failures_are_exact(
+    judge: object,
+    code: str,
+    reason: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    runner = TrialRunner(semantic_judge=judge)  # type: ignore[arg-type]
+    monkeypatch.setattr(
+        evaluator_core,
+        "validate_semantic_judge_authority",
+        lambda *_args, **_kwargs: (object(), object()),
+    )
+    result = asyncio.run(
+        runner._run_trial(
+            _PassingAdapter(),  # type: ignore[arg-type]
+            subject=_subject(),
+            scenario=_semantic_scenario(),
+            trial_id="semantic-judge-failure",
+            started=0.0,
+        )
+    )
+
+    _assert_single_blocking_error(
+        result,
+        source=(
+            "evaluator:semantic-judge"
+            if code == "semantic_judge_runtime_error"
+            else "evaluator:semantic-judgment"
+        ),
+        code=code,
+        reason=reason,
+    )
+
+
+def test_deterministic_failure_with_recorded_semantic_is_rejected_exactly(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    failed = OracleResult(
+        name="controlled-failure",
+        verdict=TrialVerdict.FAIL,
+        reasons=("controlled",),
+        critical=True,
+    )
+    monkeypatch.setattr(
+        evaluator_core,
+        "grade_deterministic_evidence",
+        lambda *_args, **_kwargs: (failed,),
+    )
+    monkeypatch.setattr(
+        evaluator_core,
+        "verify_semantic_judgment",
+        lambda *_args, **_kwargs: cast(SemanticJudgmentReceipt, object()),
+    )
+
+    result = asyncio.run(
+        TrialRunner()._run_trial(
+            _PassingAdapter(),  # type: ignore[arg-type]
+            subject=_subject(),
+            scenario=_scenario(),
+            trial_id="impossible-semantic",
+            started=0.0,
+        )
+    )
+
+    _assert_single_blocking_error(
+        result,
+        source="evaluator:semantic-judgment",
+        code="semantic_judgment_after_deterministic_failure",
+        reason=(
+            "recorded semantic judgment is impossible because deterministic "
+            "grading already failed and must have short-circuited the judge"
+        ),
+    )
