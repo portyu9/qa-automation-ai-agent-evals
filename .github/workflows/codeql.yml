@@ -31,10 +31,30 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      - name: Validate zero-alert gate implementation
+        run: |
+          python3 -m py_compile .github/scripts/validate_codeql_sarif.py .github/scripts/validate_codeql_sarif_selfcheck.py
+          python3 .github/scripts/validate_codeql_sarif_selfcheck.py
+          python3 .github/scripts/validate_security_stack.py
       - name: Initialize CodeQL
         uses: github/codeql-action/init@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # v4.38.0
         with:
-          languages: python
+          languages: python,actions
           queries: security-extended
       - name: Analyze
+        id: analyze-source
         uses: github/codeql-action/analyze@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # v4.38.0
+        with:
+          output: reports/security/codeql-source
+      - name: Enforce zero CodeQL alerts
+        env:
+          SARIF_DIR: ${{ steps.analyze-source.outputs.sarif-output }}
+        run: python3 .github/scripts/validate_codeql_sarif.py "$SARIF_DIR"
+      - name: Upload CodeQL SARIF evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: codeql-sarif-${{ github.run_id }}
+          path: reports/security/codeql-source/
+          if-no-files-found: error
+          retention-days: 14

@@ -46,6 +46,9 @@ POST_MERGE_CI_REGISTRATION_ATTEMPTS = 15
 POST_MERGE_CI_REGISTRATION_DELAY_SECONDS = 2
 DEPENDENCY_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*")
 MAX_MANIFEST_BYTES = 256 * 1024
+OWNER_REVIEW_MARKER = "<!-- dependency-governance:owner-review:"
+OWNER_APPROVAL_MARKER = "<!-- dependency-governance:owner-approval:"
+OWNER_REFRESH_MARKER = "<!-- dependency-governance:owner-refresh:"
 
 
 class GovernanceError(RuntimeError):
@@ -85,6 +88,21 @@ def validate_config(config: dict[str, Any]) -> list[str]:
         errors.append("mergeMethod must equal merge")
     if config.get("automergeEnabled") is not True:
         errors.append("automergeEnabled must be true")
+    if config.get("statusCommentMarker") != "<!-- dependency-governance:v1 -->":
+        errors.append("statusCommentMarker must equal the v1 governance marker")
+    pages = config.get("maxPaginationPages")
+    if not isinstance(pages, int) or isinstance(pages, bool) or not (1 <= pages <= 20):
+        errors.append("maxPaginationPages must be an integer from 1 to 20")
+    if config.get("ownerApprovalRequired") is not True:
+        errors.append("ownerApprovalRequired must remain true")
+    if (
+        not isinstance(config.get("ownerApprovalLogin"), str)
+        or not config["ownerApprovalLogin"].strip()
+    ):
+        errors.append("ownerApprovalLogin must be non-empty")
+    owner_id = config.get("ownerApprovalUserId")
+    if not isinstance(owner_id, int) or isinstance(owner_id, bool) or owner_id <= 0:
+        errors.append("ownerApprovalUserId must be a positive integer")
     if config.get("pipMode") != "exact-subject-green":
         errors.append("pipMode must equal exact-subject-green")
     if config.get("pipManifestPaths") != ["pyproject.toml"]:
@@ -116,6 +134,9 @@ def validate_config(config: dict[str, Any]) -> list[str]:
         ".github/scripts/dependency_governance_selfcheck.py",
         ".github/scripts/dependency_recovery.py",
         ".github/scripts/dependency_recovery_selfcheck.py",
+        ".github/scripts/validate_codeql_sarif.py",
+        ".github/scripts/validate_codeql_sarif_selfcheck.py",
+        ".github/scripts/validate_security_stack.py",
         ".github/workflows/dependency-governance.yml",
         ".github/workflows/codeql.yml",
     }
@@ -187,11 +208,17 @@ class GitHubApi:
         token: str | None = None,
         max_bytes: int = MAX_RESPONSE_BYTES,
     ) -> bytes:
-        if not path.startswith("/") or ".." in path:
-            raise GovernanceError("GitHub API path must be absolute and repository-local")
+        if path == f"{API_ROOT}/user":
+            url = path
+        elif path.startswith("/") and ".." not in path:
+            url = f"{self.root}{path}"
+        else:
+            raise GovernanceError(
+                "GitHub API path must be repository-local or the authenticated-user endpoint"
+            )
         data = None if payload is None else json.dumps(payload, separators=(",", ":")).encode()
         request = urllib.request.Request(
-            f"{self.root}{path}",
+            url,
             data=data,
             method=method,
             headers={
@@ -831,6 +858,10 @@ def _merge(api: GitHubApi, subject: dict[str, Any], config: dict[str, Any]) -> d
     rebound = assess(api, fresh, config, require_checks=True)
     if rebound != subject:
         raise PolicyBlock("pull request changed before merge")
+    if config["ownerApprovalRequired"] and not _has_exact_owner_approval(
+        api, int(subject["number"]), subject["headSha"], config
+    ):
+        raise PolicyBlock("exact-head owner approval is required immediately before merge")
     result = api.put(
         f"/pulls/{subject['number']}/merge",
         {"sha": subject["headSha"], "merge_method": config["mergeMethod"]},
@@ -849,6 +880,165 @@ def _merge(api: GitHubApi, subject: dict[str, Any], config: dict[str, Any]) -> d
     }
 
 
+def _verified_owner_token(api: GitHubApi, config: dict[str, Any]) -> str:
+    token = os.environ.get("DEPENDABOT_OWNER_TOKEN", "")
+    if not token:
+        raise GovernanceError(
+            "DEPENDABOT_OWNER_TOKEN is required for owner-authenticated Dependabot refresh, review, and approval"
+        )
+    identity = api.request("GET", f"{API_ROOT}/user", token=token)
+    if not isinstance(identity, dict):
+        raise GovernanceError("owner token identity response is invalid")
+    if (
+        identity.get("login") != config["ownerApprovalLogin"]
+        or identity.get("id") != config["ownerApprovalUserId"]
+    ):
+        raise GovernanceError(
+            "DEPENDABOT_OWNER_TOKEN does not authenticate the configured repository owner identity"
+        )
+    return token
+
+
+def _request_stale_dependabot_refresh(
+    api: GitHubApi, pr: dict[str, Any], config: dict[str, Any]
+) -> bool:
+    number = pr.get("number")
+    user = pr.get("user") or {}
+    head = pr.get("head") or {}
+    base = pr.get("base") or {}
+    if (
+        not isinstance(number, int)
+        or number < 1
+        or user.get("login") != BOT_LOGIN
+        or user.get("id") != BOT_USER_ID
+        or pr.get("state") != "open"
+        or pr.get("draft") is not False
+        or (head.get("repo") or {}).get("full_name") != config["repository"]
+        or (base.get("repo") or {}).get("full_name") != config["repository"]
+        or base.get("ref") != config["baseBranch"]
+    ):
+        return False
+    head_sha = require_sha(head.get("sha"), "head SHA")
+    base_sha = require_sha(base.get("sha"), "base SHA")
+    live_sha = _live_main_sha(api, config)
+    if base_sha == live_sha:
+        return False
+    if _labels(pr) & set(config["manualReviewLabels"]):
+        raise PolicyBlock("stale Dependabot pull request carries a manual-review blocker label")
+    age_days = (datetime.now(UTC) - _parse_time(pr.get("created_at"))).total_seconds() / 86400
+    if age_days < 0 or age_days > config["maxPullRequestAgeDays"]:
+        raise PolicyBlock(
+            "stale Dependabot pull request is outside the bounded automatic-merge age"
+        )
+    validate_commits(api, number, config)
+    files = changed_files(api, number, config)
+    validate_change_semantics(api, files, base_sha, head_sha, config)
+    fresh = api.get(f"/pulls/{number}")
+    if require_sha(((fresh or {}).get("head") or {}).get("sha"), "fresh head SHA") != head_sha:
+        raise PolicyBlock("Dependabot head changed before owner-authenticated refresh")
+    if require_sha(((fresh or {}).get("base") or {}).get("sha"), "fresh base SHA") != base_sha:
+        raise PolicyBlock("Dependabot base changed before owner-authenticated refresh")
+    if _live_main_sha(api, config) != live_sha:
+        raise PolicyBlock("main changed before owner-authenticated refresh; retry reconciliation")
+
+    owner_token = _verified_owner_token(api, config)
+    marker = f"{OWNER_REFRESH_MARKER}{head_sha}:{live_sha}:rebase -->"
+    comments = api.list_all(f"/issues/{number}/comments", max_pages=config["maxPaginationPages"])
+    matches = [
+        row
+        for row in comments
+        if marker in str(row.get("body") or "")
+        and (row.get("user") or {}).get("login") == config["ownerApprovalLogin"]
+        and (row.get("user") or {}).get("id") == config["ownerApprovalUserId"]
+    ]
+    if len(matches) > 1:
+        raise GovernanceError(
+            f"PR #{number} has duplicate owner refresh commands for the same exact head"
+        )
+    if not matches:
+        api.post(
+            f"/issues/{number}/comments",
+            {
+                "body": (
+                    "@dependabot rebase\n\n"
+                    f"{marker}\n"
+                    "Requested by the configured push-capable repository owner because this exact "
+                    "Dependabot proposal is no longer based on current main. Qualification restarts "
+                    "on the new exact head; no merge, review, or security gate is bypassed."
+                )
+            },
+            token=owner_token,
+        )
+    return True
+
+
+def _has_exact_owner_approval(
+    api: GitHubApi, number: int, head_sha: str, config: dict[str, Any]
+) -> bool:
+    reviews = api.list_all(f"/pulls/{number}/reviews", max_pages=config["maxPaginationPages"])
+    return any(
+        review.get("state") == "APPROVED"
+        and review.get("commit_id") == head_sha
+        and (review.get("user") or {}).get("login") == config["ownerApprovalLogin"]
+        and (review.get("user") or {}).get("id") == config["ownerApprovalUserId"]
+        for review in reviews
+    )
+
+
+def _ensure_owner_review_and_approval(
+    api: GitHubApi, subject: dict[str, Any], config: dict[str, Any]
+) -> None:
+    owner_token = _verified_owner_token(api, config)
+    number = int(subject["number"])
+    head_sha = str(subject["headSha"])
+
+    comment_marker = f"{OWNER_REVIEW_MARKER}{head_sha} -->"
+    comments = api.list_all(f"/issues/{number}/comments", max_pages=config["maxPaginationPages"])
+    owner_comments = [
+        row
+        for row in comments
+        if comment_marker in str(row.get("body") or "")
+        and (row.get("user") or {}).get("login") == config["ownerApprovalLogin"]
+        and (row.get("user") or {}).get("id") == config["ownerApprovalUserId"]
+    ]
+    if len(owner_comments) > 1:
+        raise GovernanceError(f"PR #{number} has duplicate exact-head owner review comments")
+    if not owner_comments:
+        api.post(
+            f"/issues/{number}/comments",
+            {
+                "body": (
+                    f"{comment_marker}\n"
+                    "## Owner-authenticated Dependabot review\n\n"
+                    f"- Exact head: `{head_sha}`\n"
+                    "- Canonical Dependabot provenance: **pass**\n"
+                    "- Governed dependency semantics: **pass**\n"
+                    "- Exact-head CI and zero-alert CodeQL qualification: **pass**\n"
+                    "- Action: approve this exact head, then revalidate it immediately before merge.\n"
+                )
+            },
+            token=owner_token,
+        )
+
+    if not _has_exact_owner_approval(api, number, head_sha, config):
+        api.post(
+            f"/pulls/{number}/reviews",
+            {
+                "event": "APPROVE",
+                "commit_id": head_sha,
+                "body": (
+                    f"{OWNER_APPROVAL_MARKER}{head_sha} -->\n"
+                    "Owner-authenticated automated approval for this exact Dependabot head after "
+                    "canonical provenance, governed semantic scope, and all required exact-head "
+                    "qualification gates passed. Repository rules remain authoritative."
+                ),
+            },
+            token=owner_token,
+        )
+    if not _has_exact_owner_approval(api, number, head_sha, config):
+        raise GovernanceError(f"PR #{number} does not have the required exact-head owner approval")
+
+
 def reconcile(config: dict[str, Any], *, allow_merge: bool) -> int:
     repository = os.environ.get("GITHUB_REPOSITORY", "")
     if repository != config["repository"]:
@@ -858,9 +1048,20 @@ def reconcile(config: dict[str, Any], *, allow_merge: bool) -> int:
     for summary in open_dependabot_prs(api):
         number = summary.get("number")
         try:
-            subject = assess(api, api.get(f"/pulls/{number}"), config, require_checks=True)
+            pr = api.get(f"/pulls/{number}")
+            if _request_stale_dependabot_refresh(api, pr, config):
+                print(json.dumps({"pr": number, "decision": "refresh-requested"}, sort_keys=True))
+                continue
+            subject = assess(api, pr, config, require_checks=True)
             eligible += 1
             print(json.dumps({"pr": number, "decision": "eligible", **subject}, sort_keys=True))
+            if config["ownerApprovalRequired"]:
+                _ensure_owner_review_and_approval(api, subject, config)
+                rebound = assess(api, api.get(f"/pulls/{number}"), config, require_checks=True)
+                if rebound != subject:
+                    raise PolicyBlock("pull request changed after owner-authenticated review")
+                if not _has_exact_owner_approval(api, int(number), subject["headSha"], config):
+                    raise PolicyBlock("exact-head owner approval is absent after revalidation")
             if allow_merge and config["automergeEnabled"]:
                 _post_trusted_status(api, subject, config)
                 merge_evidence = _merge(api, subject, config)
@@ -888,6 +1089,34 @@ def selftest(config: dict[str, Any]) -> None:
     errors = validate_config(config)
     if errors:
         raise GovernanceError("config self-test failed: " + "; ".join(errors))
+    for key, bad in (
+        ("ownerApprovalRequired", False),
+        ("ownerApprovalLogin", ""),
+        ("ownerApprovalUserId", 0),
+    ):
+        broken = copy.deepcopy(config)
+        broken[key] = bad
+        if not validate_config(broken):
+            raise GovernanceError(f"config validator accepted unsafe owner identity setting: {key}")
+    workflow_text = (ROOT / ".github" / "workflows" / "dependency-governance.yml").read_text(
+        encoding="utf-8"
+    )
+    owner_secret = "DEPENDABOT_OWNER_TOKEN: ${{ secrets.DEPENDABOT_OWNER_TOKEN }}"
+    if workflow_text.count(owner_secret) != 1:
+        raise GovernanceError("owner token must be wired exactly once in dependency governance")
+    reconcile_anchor = "Reconcile Dependabot merge authority"
+    if reconcile_anchor not in workflow_text:
+        raise GovernanceError("dependency governance reconcile step is missing")
+    reconcile_index = workflow_text.index(reconcile_anchor)
+    if (
+        owner_secret in workflow_text[:reconcile_index]
+        or owner_secret not in workflow_text[reconcile_index:]
+    ):
+        raise GovernanceError("owner token must be scoped only to the reconciliation step")
+    if "cron: '17 * * * *'" not in workflow_text:
+        raise GovernanceError("hourly dependency reconciliation schedule is missing")
+    if "issues: write" not in workflow_text:
+        raise GovernanceError("dependency reconciliation requires issue-comment authority")
     good = "      - uses: actions/checkout@" + "a" * 40 + " # v7.0.1"
     bad_tag = "      - uses: actions/checkout@v7 # v7.0.1"
     if parse_action_change(good) is None:
