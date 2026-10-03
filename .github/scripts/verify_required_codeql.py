@@ -77,21 +77,15 @@ def select_codeql_run(
         if status not in ACTIVE_STATUSES | {"completed"}:
             raise GateError(f"exact-subject CodeQL run has invalid status: {status!r}")
         if status == "completed" and conclusion != "success":
-            raise GateError(
-                "exact-subject CodeQL run completed non-successfully: "
-                f"{conclusion!r}"
-            )
+            raise GateError(f"exact-subject CodeQL run completed non-successfully: {conclusion!r}")
         if status != "completed" and conclusion is not None:
-            raise GateError(
-                "non-terminal exact-subject CodeQL run unexpectedly has a conclusion"
-            )
+            raise GateError("non-terminal exact-subject CodeQL run unexpectedly has a conclusion")
         candidates.append(row)
 
     if len(candidates) > 1:
         run_ids = sorted(int(row["id"]) for row in candidates)
         raise GateError(
-            f"ambiguous exact-subject CodeQL evidence for {subject_sha}: "
-            f"run ids {run_ids}"
+            f"ambiguous exact-subject CodeQL evidence for {subject_sha}: run ids {run_ids}"
         )
     return candidates[0] if candidates else None
 
@@ -101,9 +95,7 @@ def fetch_runs(repository: str, subject_sha: str, token: str) -> list[dict[str, 
         raise GateError("repository must be in owner/name form")
     subject_sha = require_sha(subject_sha)
     if not token:
-        raise GateError(
-            "GITHUB_TOKEN is required to read exact-subject workflow evidence"
-        )
+        raise GateError("GITHUB_TOKEN is required to read exact-subject workflow evidence")
 
     encoded_sha = urllib.parse.quote(subject_sha, safe="")
     url = (
@@ -124,16 +116,10 @@ def fetch_runs(repository: str, subject_sha: str, token: str) -> list[dict[str, 
             payload = json.loads(response.read().decode("utf-8"))
     except urllib.error.HTTPError as exc:
         if exc.code in {429, 500, 502, 503, 504}:
-            raise TransientApiError(
-                f"GitHub Actions API transient HTTP {exc.code}"
-            ) from exc
-        raise GateError(
-            f"GitHub Actions API rejected evidence query: HTTP {exc.code}"
-        ) from exc
+            raise TransientApiError(f"GitHub Actions API transient HTTP {exc.code}") from exc
+        raise GateError(f"GitHub Actions API rejected evidence query: HTTP {exc.code}") from exc
     except urllib.error.URLError as exc:
-        raise TransientApiError(
-            f"GitHub Actions API transport failure: {exc.reason}"
-        ) from exc
+        raise TransientApiError(f"GitHub Actions API transport failure: {exc.reason}") from exc
     except (UnicodeDecodeError, json.JSONDecodeError) as exc:
         raise GateError("GitHub Actions API returned malformed JSON") from exc
 
@@ -185,9 +171,7 @@ def wait_for_success(
 
     if last_transient is not None:
         raise last_transient
-    raise GateError(
-        "exact-subject CodeQL success did not register before the bounded gate timeout"
-    )
+    raise GateError("exact-subject CodeQL success did not register before the bounded gate timeout")
 
 
 def self_test() -> None:
