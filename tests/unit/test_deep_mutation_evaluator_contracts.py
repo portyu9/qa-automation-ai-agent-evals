@@ -1354,22 +1354,22 @@ def test_deadline_expired_treats_exact_zero_as_expired(
 
 
 def test_cancel_late_task_registers_exact_result_consumer() -> None:
-    async def exercise() -> None:
-        future = asyncio.get_running_loop().create_future()
-        callbacks: list[object] = []
-        original = future.add_done_callback
+    class RecordingFuture:
+        def __init__(self) -> None:
+            self.cancelled = False
+            self.callbacks: list[object] = []
 
-        def recording_callback(callback: object, *args: object, **kwargs: object) -> None:
-            callbacks.append(callback)
-            original(callback, *args, **kwargs)  # type: ignore[arg-type]
+        def cancel(self) -> None:
+            self.cancelled = True
 
-        future.add_done_callback = recording_callback  # type: ignore[method-assign]
-        TrialRunner._cancel_late_task(future)
-        assert future.cancelled()
-        assert callbacks == [TrialRunner._consume_late_task_result]
-        await asyncio.sleep(0)
+        def add_done_callback(self, callback: object) -> None:
+            self.callbacks.append(callback)
 
-    asyncio.run(exercise())
+    future = RecordingFuture()
+    TrialRunner._cancel_late_task(future)  # type: ignore[arg-type]
+
+    assert future.cancelled is True
+    assert future.callbacks == [TrialRunner._consume_late_task_result]
 
 
 def test_scenario_contract_drift_detection_is_exact() -> None:
