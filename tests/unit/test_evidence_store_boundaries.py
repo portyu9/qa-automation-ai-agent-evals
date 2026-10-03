@@ -362,9 +362,7 @@ def test_store_scalar_record_key_and_validation_contracts_are_exact(tmp_path: Pa
 
     with pytest.raises(EvidenceIntegrityError) as captured:
         store_module._validate_record_key("A" * 64)
-    assert str(captured.value) == (
-        "record key must be exactly 64 lowercase hexadecimal characters"
-    )
+    assert str(captured.value) == ("record key must be exactly 64 lowercase hexadecimal characters")
 
 
 def test_presence_and_lock_creation_use_exact_filesystem_contract(
@@ -440,9 +438,7 @@ def test_store_directory_creation_uses_exact_private_creation_arguments(
 
 def test_payload_and_manifest_exact_ceiling_are_accepted(tmp_path: Path) -> None:
     evidence = _evidence()
-    payload = store_module._canonical_json_bytes(
-        evidence.snapshot().model_dump(mode="json")
-    )
+    payload = store_module._canonical_json_bytes(evidence.snapshot().model_dump(mode="json"))
     probe = LocalEvidenceStore(tmp_path / "payload-exact", max_payload_bytes=len(payload))
     manifest = probe.write(evidence)
     assert manifest.payload_bytes == len(payload)
@@ -547,9 +543,7 @@ def test_safe_read_detects_growth_beyond_initial_metadata(
 
     with pytest.raises(EvidenceIntegrityError) as captured:
         store_module._safe_read_regular_file(path, 4)
-    assert str(captured.value) == (
-        "evidence artifact changed during bounded read: growth.bin"
-    )
+    assert str(captured.value) == ("evidence artifact changed during bounded read: growth.bin")
 
 
 def test_atomic_materialize_refuses_existing_regular_file_with_exact_error(
@@ -560,9 +554,7 @@ def test_atomic_materialize_refuses_existing_regular_file_with_exact_error(
 
     with pytest.raises(EvidenceConflictError) as captured:
         store_module._atomic_materialize(path, b"new")
-    assert str(captured.value) == (
-        "refusing to replace existing evidence artifact: existing.json"
-    )
+    assert str(captured.value) == ("refusing to replace existing evidence artifact: existing.json")
     assert path.read_bytes() == b"old"
 
 
@@ -639,9 +631,7 @@ def test_release_lock_failure_diagnostics_are_exact(
     disappeared.unlink()
     with pytest.raises(EvidenceIntegrityError) as captured:
         store_module._release_lock(disappeared, fd)
-    assert str(captured.value) == (
-        "record lock disappeared before release: disappeared.lock"
-    )
+    assert str(captured.value) == ("record lock disappeared before release: disappeared.lock")
 
     path = tmp_path / "unlink-failure.lock"
     fd = LocalEvidenceStore._acquire_lock(path)
@@ -676,9 +666,7 @@ def test_read_integrity_diagnostics_are_exact(tmp_path: Path) -> None:
     key = "a" * 64
     with pytest.raises(IncompleteEvidenceRecordError) as captured:
         empty.read(key)
-    assert str(captured.value) == (
-        f"record key {key} does not have both payload and manifest"
-    )
+    assert str(captured.value) == (f"record key {key} does not have both payload and manifest")
 
     store = LocalEvidenceStore(tmp_path / "schema")
     manifest = store.write(_evidence())
@@ -710,9 +698,7 @@ def test_read_integrity_diagnostics_are_exact(tmp_path: Path) -> None:
     manifest_path.write_bytes(_json_bytes(altered))
     with pytest.raises(EvidenceIntegrityError) as captured:
         store.read(manifest.record_key)
-    assert str(captured.value) == (
-        "manifest identity does not derive the requested record key"
-    )
+    assert str(captured.value) == ("manifest identity does not derive the requested record key")
 
     manifest_path.write_bytes(_json_bytes(manifest_data))
     altered = dict(manifest_data)
@@ -728,9 +714,7 @@ def test_read_integrity_diagnostics_are_exact(tmp_path: Path) -> None:
     manifest_path.write_bytes(_json_bytes(altered))
     with pytest.raises(EvidenceIntegrityError) as captured:
         store.read(manifest.record_key)
-    assert str(captured.value) == (
-        "stored evidence payload hash does not match manifest"
-    )
+    assert str(captured.value) == ("stored evidence payload hash does not match manifest")
 
 
 def test_bucket_symlink_diagnostic_is_exact(tmp_path: Path) -> None:
