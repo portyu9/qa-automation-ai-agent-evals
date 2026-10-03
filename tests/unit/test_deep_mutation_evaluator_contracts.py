@@ -1026,9 +1026,7 @@ def test_exception_deadline_checkpoint_preserves_exact_context(
         evidence: TrialEvidence | None = None,
     ) -> EvaluatedTrial:
         assert isinstance(self, TrialRunner)
-        observed.append(
-            (subject.identity, scenario.identity, trial_id, started, evidence)
-        )
+        observed.append((subject.identity, scenario.identity, trial_id, started, evidence))
         return EvaluatedTrial(
             evidence=TrialEvidence(
                 trial_id=trial_id,
@@ -1082,9 +1080,7 @@ def test_exception_scenario_drift_preserves_exact_context(
         trial_id: str,
         elapsed_ms: float,
     ) -> EvaluatedTrial:
-        observed.append(
-            (adapter, subject.identity, scenario.identity, trial_id, elapsed_ms)
-        )
+        observed.append((adapter, subject.identity, scenario.identity, trial_id, elapsed_ms))
         return EvaluatedTrial(
             evidence=TrialEvidence(
                 trial_id=trial_id,
@@ -1137,9 +1133,7 @@ def test_normal_scenario_drift_call_binding_is_exact(
         trial_id: str,
         elapsed_ms: float,
     ) -> EvaluatedTrial:
-        observed.append(
-            (adapter, subject.identity, scenario.identity, trial_id, elapsed_ms)
-        )
+        observed.append((adapter, subject.identity, scenario.identity, trial_id, elapsed_ms))
         return EvaluatedTrial(
             evidence=TrialEvidence(
                 trial_id=trial_id,
@@ -1203,9 +1197,7 @@ def test_invalid_adapter_result_call_binding_is_exact(
         trial_id: str,
         elapsed_ms: float,
     ) -> EvaluatedTrial:
-        observed.append(
-            (adapter, subject.identity, scenario.identity, trial_id, elapsed_ms)
-        )
+        observed.append((adapter, subject.identity, scenario.identity, trial_id, elapsed_ms))
         return EvaluatedTrial(
             evidence=TrialEvidence(
                 trial_id=trial_id,
