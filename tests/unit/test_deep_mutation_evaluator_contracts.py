@@ -918,3 +918,88 @@ def test_deterministic_failure_with_recorded_semantic_is_rejected_exactly(
             "grading already failed and must have short-circuited the judge"
         ),
     )
+
+
+@pytest.mark.parametrize(
+    ("kind", "source", "expected"),
+    [
+        (
+            EvidenceKind.RETRIEVAL_DELIVERY,
+            "evaluator-owned-retrieval",
+            (
+                "evaluator:retrieval-delivery",
+                "retrieval_delivery_live_injection",
+                (
+                    "live adapter output cannot supply evaluator-owned retrieval-delivery "
+                    "evidence; live retrieval delivery is accepted only from the exact "
+                    "built-in retrieval adapter or through exact evidence replay"
+                ),
+            ),
+        ),
+        (
+            EvidenceKind.APPROVAL_DECISION,
+            "evaluator-owned-approval",
+            (
+                "evaluator:approval-intent",
+                "approval_decision_live_injection",
+                (
+                    "live adapter output cannot supply framework-owned approval-decision "
+                    "evidence; live approval decisions are accepted only from the exact "
+                    "built-in HITL approval adapter or through exact evidence replay"
+                ),
+            ),
+        ),
+        (
+            EvidenceKind.SIDE_EFFECT_OBSERVATION,
+            "bridge:side-effect-idempotency",
+            (
+                "evaluator:side-effect-observer",
+                "side_effect_observation_live_injection",
+                (
+                    "live adapter output cannot supply evaluator-owned side-effect observation "
+                    "evidence; live physical-effect observations are accepted only from the "
+                    "exact built-in side-effect observer or through exact evidence replay"
+                ),
+            ),
+        ),
+        (
+            EvidenceKind.PROTOCOL_DELIVERY,
+            "bridge:mcp-agent:tool-result",
+            (
+                "evaluator:protocol-delivery",
+                "protocol_delivery_live_injection",
+                (
+                    "live adapter output cannot supply framework-owned MCP protocol delivery "
+                    "source 'bridge:mcp-agent:tool-result'; fresh bridge evidence is accepted "
+                    "only from its exact built-in bridge adapter or through exact evidence replay"
+                ),
+            ),
+        ),
+    ],
+)
+def test_live_producer_authority_violation_diagnostics_are_exact(
+    kind: EvidenceKind,
+    source: str,
+    expected: tuple[str, str, str],
+) -> None:
+    evidence = TrialEvidence(
+        trial_id="producer-authority",
+        subject_identity=_subject().identity,
+        scenario_identity=_scenario().identity,
+        events=(
+            EvidenceEvent(
+                sequence=0,
+                kind=kind,
+                source=source,
+                payload={},
+            ),
+        ),
+    )
+
+    assert (
+        TrialRunner._live_evaluator_owned_evidence_violation(
+            _PassingAdapter(),  # type: ignore[arg-type]
+            evidence,
+        )
+        == expected
+    )
