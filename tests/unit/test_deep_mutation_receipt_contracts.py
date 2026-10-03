@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Any
 
@@ -977,7 +977,7 @@ class _DatetimeProbe(BaseModel):
 
 def test_side_effect_receipt_json_normalization_is_semantically_json_mode() -> None:
     probe = _DatetimeProbe(
-        observed_at=datetime(2026, 1, 2, 3, 4, 5, tzinfo=timezone.utc)
+        observed_at=datetime(2026, 1, 2, 3, 4, 5, tzinfo=UTC)
     )
 
     normalized = side_effect_receipt._json_default(probe)
