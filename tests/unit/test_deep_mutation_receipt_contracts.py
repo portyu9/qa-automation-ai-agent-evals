@@ -976,9 +976,7 @@ class _DatetimeProbe(BaseModel):
 
 
 def test_side_effect_receipt_json_normalization_is_semantically_json_mode() -> None:
-    probe = _DatetimeProbe(
-        observed_at=datetime(2026, 1, 2, 3, 4, 5, tzinfo=UTC)
-    )
+    probe = _DatetimeProbe(observed_at=datetime(2026, 1, 2, 3, 4, 5, tzinfo=UTC))
 
     normalized = side_effect_receipt._json_default(probe)
     assert type(normalized["observed_at"]) is str
@@ -1018,9 +1016,7 @@ def test_side_effect_chronology_requires_strictly_increasing_boundaries(
     events = list(_side_effect_events(receipt))
 
     shared_sequence = events[left_index].sequence
-    events[right_index] = events[right_index].model_copy(
-        update={"sequence": shared_sequence}
-    )
+    events[right_index] = events[right_index].model_copy(update={"sequence": shared_sequence})
     evidence = _side_effect_evidence(
         _side_effect_events(receipt),
         scenario=scenario,
