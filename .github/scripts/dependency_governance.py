@@ -1098,6 +1098,22 @@ def selftest(config: dict[str, Any]) -> None:
         broken[key] = bad
         if not validate_config(broken):
             raise GovernanceError(f"config validator accepted unsafe owner identity setting: {key}")
+    workflow_text = (ROOT / ".github" / "workflows" / "dependency-governance.yml").read_text(
+        encoding="utf-8"
+    )
+    owner_secret = "DEPENDABOT_OWNER_TOKEN: ${{ secrets.DEPENDABOT_OWNER_TOKEN }}"
+    if workflow_text.count(owner_secret) != 1:
+        raise GovernanceError("owner token must be wired exactly once in dependency governance")
+    reconcile_anchor = "Reconcile Dependabot merge authority"
+    if reconcile_anchor not in workflow_text:
+        raise GovernanceError("dependency governance reconcile step is missing")
+    reconcile_index = workflow_text.index(reconcile_anchor)
+    if owner_secret in workflow_text[:reconcile_index] or owner_secret not in workflow_text[reconcile_index:]:
+        raise GovernanceError("owner token must be scoped only to the reconciliation step")
+    if "cron: '17 * * * *'" not in workflow_text:
+        raise GovernanceError("hourly dependency reconciliation schedule is missing")
+    if "issues: write" not in workflow_text:
+        raise GovernanceError("dependency reconciliation requires issue-comment authority")
     good = "      - uses: actions/checkout@" + "a" * 40 + " # v7.0.1"
     bad_tag = "      - uses: actions/checkout@v7 # v7.0.1"
     if parse_action_change(good) is None:
