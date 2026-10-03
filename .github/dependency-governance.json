@@ -39,6 +39,13 @@
     ".github/workflows/dependency-governance.yml",
     ".github/workflows/codeql.yml",
     ".github/workflows/deep-mutation.yml",
-    ".github/mutation"
-  ]
+    ".github/mutation",
+    ".github/scripts/validate_codeql_sarif.py",
+    ".github/scripts/validate_codeql_sarif_selfcheck.py"
+  ],
+  "statusCommentMarker": "<!-- dependency-governance:v1 -->",
+  "maxPaginationPages": 10,
+  "ownerApprovalRequired": true,
+  "ownerApprovalLogin": "portyu9",
+  "ownerApprovalUserId": 35150859
 }

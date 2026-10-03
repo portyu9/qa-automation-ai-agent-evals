@@ -10,24 +10,25 @@ on:
       - '.github/scripts/dependency_governance_selfcheck.py'
       - '.github/scripts/dependency_recovery.py'
       - '.github/scripts/dependency_recovery_selfcheck.py'
+      - '.github/scripts/validate_codeql_sarif.py'
+      - '.github/scripts/validate_codeql_sarif_selfcheck.py'
       - '.github/workflows/dependency-governance.yml'
       - '.github/workflows/ci.yml'
-      - '.github/workflows/dependabot-auto-merge.yml'
       - '.github/workflows/codeql.yml'
   pull_request_target:
-    types: [opened, reopened, synchronize, ready_for_review]
+    types: [opened, reopened, synchronize, ready_for_review, labeled, unlabeled]
   workflow_run:
     workflows: [CI, CodeQL]
     types: [completed]
   schedule:
-    - cron: '23 */6 * * *'
+    - cron: '17 * * * *'
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: dependency-governance-${{ github.event.pull_request.head.ref || github.event.workflow_run.head_branch || github.ref_name || github.run_id }}-${{ github.event_name == 'pull_request' && 'self-test' || 'reconcile' }}
+  group: dependency-governance-${{ github.event_name == 'pull_request' && github.event.pull_request.head.ref || 'reconcile' }}
   cancel-in-progress: false
 
 env:
@@ -58,6 +59,8 @@ jobs:
           .github/scripts/dependency_governance_selfcheck.py
           .github/scripts/dependency_recovery.py
           .github/scripts/dependency_recovery_selfcheck.py
+          .github/scripts/validate_codeql_sarif.py
+          .github/scripts/validate_codeql_sarif_selfcheck.py
       - name: Validate governance and recovery configuration
         run: |
           python .github/scripts/dependency_governance.py --validate-config
@@ -66,6 +69,7 @@ jobs:
         run: |
           python .github/scripts/dependency_governance_selfcheck.py
           python .github/scripts/dependency_recovery_selfcheck.py
+          python .github/scripts/validate_codeql_sarif_selfcheck.py
 
   govern:
     name: govern-dependabot
@@ -76,6 +80,7 @@ jobs:
       actions: write
       checks: read
       contents: write
+      issues: write
       pull-requests: write
       statuses: read
     steps:
@@ -101,6 +106,7 @@ jobs:
       - name: Reconcile Dependabot merge authority
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DEPENDABOT_OWNER_TOKEN: ${{ secrets.DEPENDABOT_OWNER_TOKEN }}
         run: |
           args=(--reconcile)
           case "$GITHUB_EVENT_NAME" in

@@ -8,7 +8,7 @@ Autonomous merge covers canonical Dependabot Python and GitHub Actions version/s
 
 GitHub Actions changes must be one-for-one immutable action-SHA replacements for the same action identity and an advancing semantic version; arbitrary workflow edits remain blocked. Python changes must modify only `pyproject.toml` dependency specifications: package identities and optional-dependency groups must remain unchanged, additions/removals/renames are rejected, direct URL/VCS/path/marker authority is rejected, and every non-dependency TOML semantic must remain identical. The CI matrix installs the candidate `pyproject.toml` graph on Python 3.11-3.14 and `ci-gate` aggregates the behavioral, typing, security, packaging, mutation, OpenAI, and MCP evidence before merge.
 
-Governance/recovery/workflow control-plane files, manual-review labels, stale PRs, and mixed-ecosystem diffs remain fail-closed. Dependabot uses native rebasing; governance does not call the update-branch API.
+Governance/recovery/workflow control-plane files, manual-review labels, and mixed-ecosystem diffs remain fail-closed. An hourly reconciliation sweep detects stale canonical Dependabot proposals and, through an identity-verified `DEPENDABOT_OWNER_TOKEN`, asks Dependabot to rebase them natively; governance never calls the update-branch API. The same owner-scoped token is used only for the exact-head audit comment and exact-head approval after all qualification gates pass. The controller revalidates the unchanged head and approval immediately before merge.
 
 ## Red-path recovery
 
@@ -18,4 +18,6 @@ Tests, mutation scores, OpenAI/MCP behavioral lanes, package verification, secur
 
 ## Code scanning
 
-`codeql.yml` runs Python CodeQL with `security-extended` queries on pull requests, `main`, a weekly schedule, and manual dispatch. External-fork pull requests do not receive write-capable code-scanning execution.
+`codeql.yml` runs Python and GitHub Actions CodeQL with `security-extended` queries on pull requests, `main`, a weekly schedule, and manual dispatch. The analysis retains SARIF evidence for 14 days and a fail-closed zero-alert gate rejects every CodeQL result before the `CodeQL` check can become green; scanner execution success alone is not merge evidence. External-fork pull requests do not receive write-capable code-scanning execution.
+
+The owner token must authenticate `portyu9` (numeric user ID `35150859`) and be repository-scoped with only the permissions needed to comment on issues/pull requests and submit pull-request reviews. It is not used for repository contents writes, Actions reruns, or merges; those remain on the repository workflow token and existing exact-head governance path.
