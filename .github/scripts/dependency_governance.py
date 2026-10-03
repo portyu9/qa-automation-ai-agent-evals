@@ -868,9 +868,7 @@ def _ensure_post_merge_workflow(
     subject_sha = require_sha(subject_sha, "post-merge workflow subject SHA")
     workflow = str(expected["workflow"])
     if _live_main_sha(api, config) != subject_sha:
-        raise GovernanceError(
-            f"post-merge {workflow} dispatch subject is no longer current main"
-        )
+        raise GovernanceError(f"post-merge {workflow} dispatch subject is no longer current main")
 
     existing = _select_post_merge_workflow_run(
         _post_merge_runs(api, subject_sha), subject_sha, expected, config
@@ -1377,9 +1375,7 @@ dev = ["beta==2.0.0"]
         "conclusion": None,
     }
     if (
-        _select_post_merge_workflow_run(
-            [canonical_ci], exact_sha, ci_expected, config
-        )
+        _select_post_merge_workflow_run([canonical_ci], exact_sha, ci_expected, config)
         != canonical_ci
     ):
         raise GovernanceError("post-merge CI selector rejected canonical exact-subject dispatch")
@@ -1396,9 +1392,7 @@ dev = ["beta==2.0.0"]
         "conclusion": None,
     }
     if (
-        _select_post_merge_workflow_run(
-            [canonical_codeql], exact_sha, codeql_expected, config
-        )
+        _select_post_merge_workflow_run([canonical_codeql], exact_sha, codeql_expected, config)
         != canonical_codeql
     ):
         raise GovernanceError(
@@ -1443,9 +1437,7 @@ dev = ["beta==2.0.0"]
 
     completed_codeql = dict(canonical_codeql, status="completed", conclusion="success")
     if (
-        _select_post_merge_workflow_run(
-            [completed_codeql], exact_sha, codeql_expected, config
-        )
+        _select_post_merge_workflow_run([completed_codeql], exact_sha, codeql_expected, config)
         != completed_codeql
     ):
         raise GovernanceError(
