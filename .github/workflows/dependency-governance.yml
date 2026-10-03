@@ -13,6 +13,7 @@ on:
       - '.github/scripts/validate_codeql_sarif.py'
       - '.github/scripts/validate_codeql_sarif_selfcheck.py'
       - '.github/scripts/validate_security_stack.py'
+      - '.github/scripts/verify_required_codeql.py'
       - '.github/workflows/dependency-governance.yml'
       - '.github/workflows/ci.yml'
       - '.github/workflows/codeql.yml'
@@ -63,6 +64,7 @@ jobs:
           .github/scripts/validate_codeql_sarif.py
           .github/scripts/validate_codeql_sarif_selfcheck.py
           .github/scripts/validate_security_stack.py
+          .github/scripts/verify_required_codeql.py
       - name: Validate governance and recovery configuration
         run: |
           python .github/scripts/dependency_governance.py --validate-config
@@ -73,6 +75,7 @@ jobs:
           python .github/scripts/dependency_recovery_selfcheck.py
           python .github/scripts/validate_codeql_sarif_selfcheck.py
           python .github/scripts/validate_security_stack.py
+          python .github/scripts/verify_required_codeql.py --self-test
 
   govern:
     name: govern-dependabot
