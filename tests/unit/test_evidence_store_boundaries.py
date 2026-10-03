@@ -813,17 +813,21 @@ def test_directory_inspection_oserror_diagnostic_is_exact(
 ) -> None:
     root = tmp_path / "existing"
     root.mkdir()
+    real_is_symlink = Path.is_symlink
     real_lstat = Path.lstat
-    calls = {"count": 0}
 
-    def fail_second_lstat(path: Path) -> os.stat_result:
+    def is_symlink(path: Path) -> bool:
         if path == root:
-            calls["count"] += 1
-            if calls["count"] == 2:
-                raise OSError("controlled inspection failure")
+            return False
+        return real_is_symlink(path)
+
+    def fail_root_lstat(path: Path) -> os.stat_result:
+        if path == root:
+            raise OSError("controlled inspection failure")
         return real_lstat(path)
 
-    monkeypatch.setattr(Path, "lstat", fail_second_lstat)
+    monkeypatch.setattr(Path, "is_symlink", is_symlink)
+    monkeypatch.setattr(Path, "lstat", fail_root_lstat)
 
     with pytest.raises(EvidenceIntegrityError) as captured:
         store_module._ensure_store_directory(root)
