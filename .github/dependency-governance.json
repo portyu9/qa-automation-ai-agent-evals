@@ -18,6 +18,19 @@
     "ci-gate",
     "CodeQL"
   ],
+  "requiredWorkflows": [
+    {
+      "workflow": "CI",
+      "gate": "ci-gate",
+      "file": "ci.yml",
+      "subjectInput": "subject_sha"
+    },
+    {
+      "workflow": "CodeQL",
+      "gate": "CodeQL",
+      "file": "codeql.yml"
+    }
+  ],
   "allowedActionUpdateTypes": [
     "version-update:semver-patch",
     "version-update:semver-minor",
