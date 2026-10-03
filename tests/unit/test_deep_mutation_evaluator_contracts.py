@@ -378,7 +378,7 @@ def test_evaluation_error_helpers_preserve_exact_fail_closed_contract() -> None:
     assert appended.input_tokens == 2
     assert appended.output_tokens == 4
     assert appended.estimated_cost_usd == 0.02
-    assert appended.events[-1].model_dump(mode="json") == {
+    assert appended.events[-1].model_dump(mode="json", exclude={"observed_at"}) == {
         "sequence": 0,
         "kind": EvidenceKind.EVALUATION_ERROR.value,
         "source": "evaluator:test",
@@ -1091,7 +1091,7 @@ def test_exception_scenario_drift_preserves_exact_context(
             verdict=TrialVerdict.BLOCKED,
         )
 
-    monkeypatch.setattr(TrialRunner, "_scenario_contract_mutated", mutated)
+    monkeypatch.setattr(TrialRunner, "_scenario_contract_mutated", staticmethod(mutated))
     result = asyncio.run(
         TrialRunner()._run_trial(
             adapter,  # type: ignore[arg-type]
@@ -1144,7 +1144,7 @@ def test_normal_scenario_drift_call_binding_is_exact(
             verdict=TrialVerdict.BLOCKED,
         )
 
-    monkeypatch.setattr(TrialRunner, "_scenario_contract_mutated", mutated)
+    monkeypatch.setattr(TrialRunner, "_scenario_contract_mutated", staticmethod(mutated))
     result = asyncio.run(
         TrialRunner()._run_trial(
             adapter,  # type: ignore[arg-type]
@@ -1208,7 +1208,7 @@ def test_invalid_adapter_result_call_binding_is_exact(
             verdict=TrialVerdict.BLOCKED,
         )
 
-    monkeypatch.setattr(TrialRunner, "_invalid_adapter_result", invalid)
+    monkeypatch.setattr(TrialRunner, "_invalid_adapter_result", staticmethod(invalid))
     adapter = InvalidAdapter()
     result = asyncio.run(
         TrialRunner()._run_trial(
