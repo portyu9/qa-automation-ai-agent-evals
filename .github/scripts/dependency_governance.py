@@ -1098,9 +1098,9 @@ def selftest(config: dict[str, Any]) -> None:
         broken[key] = bad
         if not validate_config(broken):
             raise GovernanceError(f"config validator accepted unsafe owner identity setting: {key}")
-    workflow_text = (ROOT / ".github" / "workflows" / "dependency-governance.yml").read_text(
-        encoding="utf-8"
-    )
+    workflow_text = (
+        ROOT / ".github" / "workflows" / "dependency-governance.yml"
+    ).read_text(encoding="utf-8")
     owner_secret = "DEPENDABOT_OWNER_TOKEN: ${{ secrets.DEPENDABOT_OWNER_TOKEN }}"
     if workflow_text.count(owner_secret) != 1:
         raise GovernanceError("owner token must be wired exactly once in dependency governance")
@@ -1108,7 +1108,10 @@ def selftest(config: dict[str, Any]) -> None:
     if reconcile_anchor not in workflow_text:
         raise GovernanceError("dependency governance reconcile step is missing")
     reconcile_index = workflow_text.index(reconcile_anchor)
-    if owner_secret in workflow_text[:reconcile_index] or owner_secret not in workflow_text[reconcile_index:]:
+    if (
+        owner_secret in workflow_text[:reconcile_index]
+        or owner_secret not in workflow_text[reconcile_index:]
+    ):
         raise GovernanceError("owner token must be scoped only to the reconciliation step")
     if "cron: '17 * * * *'" not in workflow_text:
         raise GovernanceError("hourly dependency reconciliation schedule is missing")
