@@ -101,7 +101,9 @@ def fetch_runs(repository: str, subject_sha: str, token: str) -> list[dict[str, 
         raise GateError("repository must be in owner/name form")
     subject_sha = require_sha(subject_sha)
     if not token:
-        raise GateError("GITHUB_TOKEN is required to read exact-subject workflow evidence")
+        raise GateError(
+            "GITHUB_TOKEN is required to read exact-subject workflow evidence"
+        )
 
     encoded_sha = urllib.parse.quote(subject_sha, safe="")
     url = (
@@ -122,8 +124,12 @@ def fetch_runs(repository: str, subject_sha: str, token: str) -> list[dict[str, 
             payload = json.loads(response.read().decode("utf-8"))
     except urllib.error.HTTPError as exc:
         if exc.code in {429, 500, 502, 503, 504}:
-            raise TransientApiError(f"GitHub Actions API transient HTTP {exc.code}") from exc
-        raise GateError(f"GitHub Actions API rejected evidence query: HTTP {exc.code}") from exc
+            raise TransientApiError(
+                f"GitHub Actions API transient HTTP {exc.code}"
+            ) from exc
+        raise GateError(
+            f"GitHub Actions API rejected evidence query: HTTP {exc.code}"
+        ) from exc
     except urllib.error.URLError as exc:
         raise TransientApiError(
             f"GitHub Actions API transport failure: {exc.reason}"
