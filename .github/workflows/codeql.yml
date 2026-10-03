@@ -37,13 +37,13 @@ jobs:
           python3 .github/scripts/validate_codeql_sarif_selfcheck.py
           python3 .github/scripts/validate_security_stack.py
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # v4.38.0
+        uses: github/codeql-action/init@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
         with:
           languages: python,actions
           queries: security-extended
       - name: Analyze
         id: analyze-source
-        uses: github/codeql-action/analyze@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # v4.38.0
+        uses: github/codeql-action/analyze@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
         with:
           output: reports/security/codeql-source
       - name: Enforce zero CodeQL alerts
