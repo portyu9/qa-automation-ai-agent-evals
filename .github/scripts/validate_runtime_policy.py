@@ -196,8 +196,7 @@ if not any(reference in protected_gate for reference in needs_result_reference("
 if "actions: read" not in protected_gate:
     fail("protected-gate must have Actions read permission for exact-subject evidence")
 if not any(
-    action.startswith("actions/checkout@")
-    for action in _WORKFLOW_USES_RE.findall(protected_gate)
+    action.startswith("actions/checkout@") for action in _WORKFLOW_USES_RE.findall(protected_gate)
 ):
     fail("protected-gate must checkout its exact workflow subject without floating action refs")
 if "persist-credentials: false" not in protected_gate:
