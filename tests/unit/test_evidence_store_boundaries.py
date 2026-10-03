@@ -761,3 +761,199 @@ def test_directory_fsync_uses_exact_open_flags_and_error_diagnostic(
     assert str(captured.value) == (
         f"cannot open evidence directory for durability sync: {tmp_path}"
     )
+def test_subject_only_identity_mismatch_reports_identity_error_exactly(
+    tmp_path: Path,
+) -> None:
+    store = LocalEvidenceStore(tmp_path / "evidence")
+    manifest = store.write(_evidence())
+    payload_path, manifest_path = _artifact_paths(store)
+    payload_data = json.loads(payload_path.read_text(encoding="utf-8"))
+    payload_data["subject_identity"] = "c" * 64
+    _rewrite_payload_and_manifest(payload_path, manifest_path, payload_data)
+
+    with pytest.raises(EvidenceIntegrityError) as captured:
+        store.read(manifest.record_key)
+
+    assert str(captured.value) == "stored evidence identity does not match manifest"
+
+
+def test_payload_schema_failure_diagnostic_is_exact(tmp_path: Path) -> None:
+    store = LocalEvidenceStore(tmp_path / "evidence")
+    manifest = store.write(_evidence())
+    payload_path, manifest_path = _artifact_paths(store)
+    payload_data = json.loads(payload_path.read_text(encoding="utf-8"))
+    payload_data["input_tokens"] = -1
+    _rewrite_payload_and_manifest(payload_path, manifest_path, payload_data)
+
+    with pytest.raises(EvidenceIntegrityError) as captured:
+        store.read(manifest.record_key)
+
+    assert str(captured.value) == "stored evidence payload failed schema validation"
+
+
+def test_payload_root_failure_diagnostic_is_exact(tmp_path: Path) -> None:
+    store = LocalEvidenceStore(tmp_path / "evidence")
+    manifest = store.write(_evidence())
+    payload_path, manifest_path = _artifact_paths(store)
+    payload_data = json.loads(payload_path.read_text(encoding="utf-8"))
+    payload_data["final_output"] = "valid-but-different"
+    _rewrite_payload_and_manifest(payload_path, manifest_path, payload_data)
+
+    with pytest.raises(EvidenceIntegrityError) as captured:
+        store.read(manifest.record_key)
+
+    assert str(captured.value) == "stored evidence root does not match manifest"
+
+
+def test_directory_inspection_oserror_diagnostic_is_exact(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    root = tmp_path / "existing"
+    root.mkdir()
+    real_lstat = Path.lstat
+    calls = {"count": 0}
+
+    def fail_second_lstat(path: Path) -> os.stat_result:
+        if path == root:
+            calls["count"] += 1
+            if calls["count"] == 2:
+                raise OSError("controlled inspection failure")
+        return real_lstat(path)
+
+    monkeypatch.setattr(Path, "lstat", fail_second_lstat)
+
+    with pytest.raises(EvidenceIntegrityError) as captured:
+        store_module._ensure_store_directory(root)
+
+    assert str(captured.value) == f"cannot inspect evidence-store directory: {root}"
+
+
+@pytest.mark.skipif(os.name != "posix", reason="POSIX private-directory contract")
+def test_directory_chmod_oserror_diagnostic_is_exact(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    root = tmp_path / "private-root"
+    real_chmod = Path.chmod
+
+    def fail_root_chmod(path: Path, mode: int) -> None:
+        if path == root:
+            raise OSError("controlled chmod failure")
+        real_chmod(path, mode)
+
+    monkeypatch.setattr(Path, "chmod", fail_root_chmod)
+
+    with pytest.raises(EvidenceIntegrityError) as captured:
+        store_module._ensure_store_directory(root)
+
+    assert str(captured.value) == (
+        f"cannot set private permissions on evidence-store directory: {root}"
+    )
+
+
+def test_release_lock_inspection_oserror_diagnostic_is_exact(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = LocalEvidenceStore(tmp_path / "evidence")
+    lock_path = store.root / "records" / "inspect-error.lock"
+    lock_fd = store._acquire_lock(lock_path)
+    real_lstat = Path.lstat
+
+    def fail_lock_lstat(path: Path) -> os.stat_result:
+        if path == lock_path:
+            raise OSError("controlled lock inspection failure")
+        return real_lstat(path)
+
+    monkeypatch.setattr(Path, "lstat", fail_lock_lstat)
+
+    with pytest.raises(EvidenceIntegrityError) as captured:
+        store_module._release_lock(lock_path, lock_fd)
+
+    assert str(captured.value) == (
+        "cannot inspect record lock before release: inspect-error.lock"
+    )
+
+
+def test_release_lock_disappearance_diagnostic_is_exact(tmp_path: Path) -> None:
+    store = LocalEvidenceStore(tmp_path / "evidence")
+    lock_path = store.root / "records" / "disappeared.lock"
+    lock_fd = store._acquire_lock(lock_path)
+    lock_path.unlink()
+
+    with pytest.raises(EvidenceIntegrityError) as captured:
+        store_module._release_lock(lock_path, lock_fd)
+
+    assert str(captured.value) == (
+        "record lock disappeared before release: disappeared.lock"
+    )
+
+
+def test_nonregular_lock_identity_diagnostic_is_exact(tmp_path: Path) -> None:
+    store = LocalEvidenceStore(tmp_path / "evidence")
+    lock_path = store.root / "records" / "identity.lock"
+    lock_fd = store._acquire_lock(lock_path)
+    try:
+        acquired = os.fstat(lock_fd)
+        current = tmp_path.stat()
+
+        with pytest.raises(EvidenceIntegrityError) as captured:
+            store_module._verify_lock_identity(lock_path, acquired, current)
+
+        assert str(captured.value) == (
+            "record lock ownership changed before release: "
+            "identity.lock; refusing cleanup"
+        )
+    finally:
+        os.close(lock_fd)
+        lock_path.unlink()
+
+
+def test_safe_open_oserror_diagnostic_is_exact(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    artifact = tmp_path / "blocked.evidence.json"
+    artifact.write_bytes(b"{}")
+    real_open = store_module.os.open
+
+    def denied_open(path: object, flags: int, *args: object) -> int:
+        if path == artifact:
+            raise PermissionError("controlled safe-open denial")
+        return real_open(path, flags, *args)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(store_module.os, "open", denied_open)
+
+    with pytest.raises(EvidenceIntegrityError) as captured:
+        store_module._safe_read_regular_file(artifact, 1024)
+
+    assert str(captured.value) == (
+        "cannot safely open evidence artifact: blocked.evidence.json"
+    )
+
+
+@pytest.mark.skipif(
+    not getattr(os, "O_DIRECTORY", 0),
+    reason="platform has no directory-open flag",
+)
+def test_directory_sync_open_oserror_diagnostic_is_exact(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    real_open = store_module.os.open
+
+    def denied_open(path: object, flags: int, *args: object) -> int:
+        if path == tmp_path:
+            raise PermissionError("controlled directory-open denial")
+        return real_open(path, flags, *args)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(store_module.os, "open", denied_open)
+
+    with pytest.raises(EvidenceStoreError) as captured:
+        store_module._fsync_directory(tmp_path)
+
+    assert str(captured.value) == (
+        f"cannot open evidence directory for durability sync: {tmp_path}"
+    )
+
