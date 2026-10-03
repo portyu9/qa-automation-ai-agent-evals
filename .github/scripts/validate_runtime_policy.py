@@ -140,6 +140,8 @@ for job, next_job in (
         fail(f"{job} must depend on the repository policy job")
 
 package = job_block(workflow, "package", "package-reverify")
+if "name: Package build and inspection" not in package:
+    fail("package job must use the non-protected Package build and inspection check name")
 if "package_artifact_manifest.py create" not in package:
     fail("package job must create the retained package artifact manifest")
 if not any(
@@ -173,7 +175,7 @@ if (
 ):
     fail("package-reverify must exercise the downloaded wheel and sdist")
 
-ci_gate = job_block(workflow, "ci-gate", None)
+ci_gate = job_block(workflow, "ci-gate", "protected-gate")
 if not re.search(r"^\s+if:\s*always\(\)\s*$", ci_gate, flags=re.MULTILINE):
     fail("ci-gate must run with if: always()")
 for job in REQUIRED_JOBS:
@@ -181,6 +183,35 @@ for job in REQUIRED_JOBS:
         fail(f"ci-gate needs list must include {job}")
     if not any(reference in ci_gate for reference in needs_result_reference(job)):
         fail(f"ci-gate must evaluate {job} result")
+
+protected_gate = job_block(workflow, "protected-gate", None)
+if "name: Package integrity" not in protected_gate:
+    fail("protected-gate must retain the ruleset-bound Package integrity check name")
+if not re.search(r"^\s+if:\s*always\(\)\s*$", protected_gate, flags=re.MULTILINE):
+    fail("protected-gate must run with if: always()")
+if "      - ci-gate\n" not in protected_gate:
+    fail("protected-gate must depend on ci-gate")
+if not any(reference in protected_gate for reference in needs_result_reference("ci-gate")):
+    fail("protected-gate must explicitly evaluate the ci-gate result")
+if "actions: read" not in protected_gate:
+    fail("protected-gate must have Actions read permission for exact-subject evidence")
+if not any(
+    action.startswith("actions/checkout@") for action in _WORKFLOW_USES_RE.findall(protected_gate)
+):
+    fail("protected-gate must checkout its exact workflow subject without floating action refs")
+if "persist-credentials: false" not in protected_gate:
+    fail("protected-gate checkout must not persist repository credentials")
+if "verify_required_codeql.py --self-test" not in protected_gate:
+    fail("protected-gate must self-test the exact-subject CodeQL bridge")
+if "python .github/scripts/verify_required_codeql.py" not in protected_gate:
+    fail("protected-gate must enforce exact-subject CodeQL success")
+for expression in (
+    "github.event.pull_request.head.sha || github.sha",
+    "github.event.pull_request.head.ref || github.ref_name",
+    "github.event_name",
+):
+    if expression not in protected_gate:
+        fail(f"protected-gate is missing exact-subject binding expression: {expression}")
 
 ci_action_uses = _WORKFLOW_USES_RE.findall(workflow)
 if not any(action.startswith("actions/setup-python@") for action in ci_action_uses):
@@ -195,7 +226,7 @@ if not any(action.startswith("actions/download-artifact@") for action in ci_acti
 print(
     "runtime policy validated: "
     f"python={','.join(SUPPORTED_PYTHONS)}; requires-python={REQUIRES_PYTHON}; "
-    f"runner={RUNNER}; workflows={len(workflows)}; gate=ci-gate; "
+    f"runner={RUNNER}; workflows={len(workflows)}; gate=ci-gate+protected-codeql; "
     "package-artifacts=retained-and-reverified"
 )
 sys.exit(0)
