@@ -761,6 +761,8 @@ def test_directory_fsync_uses_exact_open_flags_and_error_diagnostic(
     assert str(captured.value) == (
         f"cannot open evidence directory for durability sync: {tmp_path}"
     )
+
+
 def test_subject_only_identity_mismatch_reports_identity_error_exactly(
     tmp_path: Path,
 ) -> None:
@@ -871,9 +873,7 @@ def test_release_lock_inspection_oserror_diagnostic_is_exact(
     with pytest.raises(EvidenceIntegrityError) as captured:
         store_module._release_lock(lock_path, lock_fd)
 
-    assert str(captured.value) == (
-        "cannot inspect record lock before release: inspect-error.lock"
-    )
+    assert str(captured.value) == ("cannot inspect record lock before release: inspect-error.lock")
 
 
 def test_release_lock_disappearance_diagnostic_is_exact(tmp_path: Path) -> None:
@@ -885,9 +885,7 @@ def test_release_lock_disappearance_diagnostic_is_exact(tmp_path: Path) -> None:
     with pytest.raises(EvidenceIntegrityError) as captured:
         store_module._release_lock(lock_path, lock_fd)
 
-    assert str(captured.value) == (
-        "record lock disappeared before release: disappeared.lock"
-    )
+    assert str(captured.value) == ("record lock disappeared before release: disappeared.lock")
 
 
 def test_nonregular_lock_identity_diagnostic_is_exact(tmp_path: Path) -> None:
@@ -902,8 +900,7 @@ def test_nonregular_lock_identity_diagnostic_is_exact(tmp_path: Path) -> None:
             store_module._verify_lock_identity(lock_path, acquired, current)
 
         assert str(captured.value) == (
-            "record lock ownership changed before release: "
-            "identity.lock; refusing cleanup"
+            "record lock ownership changed before release: identity.lock; refusing cleanup"
         )
     finally:
         os.close(lock_fd)
@@ -928,9 +925,7 @@ def test_safe_open_oserror_diagnostic_is_exact(
     with pytest.raises(EvidenceIntegrityError) as captured:
         store_module._safe_read_regular_file(artifact, 1024)
 
-    assert str(captured.value) == (
-        "cannot safely open evidence artifact: blocked.evidence.json"
-    )
+    assert str(captured.value) == ("cannot safely open evidence artifact: blocked.evidence.json")
 
 
 @pytest.mark.skipif(
@@ -956,4 +951,3 @@ def test_directory_sync_open_oserror_diagnostic_is_exact(
     assert str(captured.value) == (
         f"cannot open evidence directory for durability sync: {tmp_path}"
     )
-
