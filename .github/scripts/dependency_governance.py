@@ -403,10 +403,18 @@ def changed_files(api: GitHubApi, number: int, config: dict[str, Any]) -> list[d
         path = row.get("filename")
         if not isinstance(path, str) or not path:
             raise PolicyBlock("changed file path is invalid")
+    return files
+
+
+def require_unprotected_non_action_scope(
+    files: list[dict[str, Any]], config: dict[str, Any]
+) -> None:
+    """Keep control-plane paths manual unless the whole diff proves exact action-pin semantics."""
+    for row in files:
+        path = str(row["filename"])
         for protected in config["manualReviewPaths"]:
             if path_matches(path, protected):
                 raise PolicyBlock(f"control-plane path requires manual review: {path}")
-    return files
 
 
 def parse_action_change(line: str) -> tuple[str, str, tuple[int, ...]] | None:
@@ -635,8 +643,13 @@ def validate_change_semantics(
     if paths and all(
         path.startswith(".github/workflows/") and path.endswith((".yml", ".yaml")) for path in paths
     ):
+        # Match the accepted k6 governance boundary: a canonical Dependabot action-only
+        # workflow diff is itself the reviewed semantic scope, even when the workflow is
+        # otherwise control-plane protected. Any non-action edit fails inside the strict
+        # one-for-one immutable action-pin validator below.
         validate_action_semantics(files)
         return "github-actions"
+    require_unprotected_non_action_scope(files, config)
     if config["pipMode"] == "exact-subject-green" and set(paths) == set(config["pipManifestPaths"]):
         validate_pip_semantics(api, files, base_sha, head_sha, config)
         return "pip"
@@ -1132,6 +1145,67 @@ def selftest(config: dict[str, Any]) -> None:
         }
     ]
     validate_action_semantics(synthetic)
+    protected_action = [
+        {
+            "filename": ".github/workflows/codeql.yml",
+            "status": "modified",
+            "patch": "@@ -1 +1 @@\n-      - uses: github/codeql-action/init@"
+            + "a" * 40
+            + " # v4.38.0\n+      - uses: github/codeql-action/init@"
+            + "b" * 40
+            + " # v4.38.1\n",
+        }
+    ]
+    if (
+        validate_change_semantics(
+            None,
+            protected_action,
+            "1" * 40,
+            "2" * 40,
+            config,  # type: ignore[arg-type]
+        )
+        != "github-actions"
+    ):
+        raise GovernanceError("protected workflow action-only update was not classified autonomous")
+    try:
+        validate_change_semantics(
+            None,  # type: ignore[arg-type]
+            [
+                {
+                    "filename": ".github/workflows/codeql.yml",
+                    "status": "modified",
+                    "patch": "@@ -1 +1 @@\n-run: echo old\n+run: echo new\n",
+                }
+            ],
+            "1" * 40,
+            "2" * 40,
+            config,
+        )
+    except PolicyBlock:
+        pass
+    else:
+        raise GovernanceError("protected workflow accepted a non-action semantic mutation")
+    try:
+        validate_change_semantics(
+            None,  # type: ignore[arg-type]
+            [
+                {
+                    "filename": ".github/dependency-governance.json",
+                    "status": "modified",
+                    "patch": '@@ -1 +1 @@\n-{}\n+{"unsafe": true}\n',
+                }
+            ],
+            "1" * 40,
+            "2" * 40,
+            config,
+        )
+    except PolicyBlock as exc:
+        if "control-plane path requires manual review" not in str(exc):
+            raise GovernanceError(
+                "protected non-action path lost its manual-review boundary"
+            ) from exc
+    else:
+        raise GovernanceError("protected non-action path became autonomous")
     try:
         validate_action_semantics(
             [
