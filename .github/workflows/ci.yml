@@ -226,7 +226,7 @@ jobs:
         run: pytest -m mcp_oauth tests/integration/test_mcp_*.py
 
   package:
-    name: Package integrity
+    name: Package build and inspection
     needs: policy
     runs-on: ubuntu-24.04
     timeout-minutes: 10
@@ -514,3 +514,38 @@ jobs:
           for result in "$POLICY" "$QUALITY" "$MUTATION" "$OPENAI_ADAPTER" "$MCP_LAB" "$MCP_REMOTE_AUTH" "$MCP_OAUTH_FLOW" "$PACKAGE" "$PACKAGE_REVERIFY"; do
             [[ "$result" == "success" ]] || { echo "required job result=$result"; exit 1; }
           done
+
+  protected-gate:
+    name: Package integrity
+    if: always()
+    needs:
+      - ci-gate
+    permissions:
+      actions: read
+      contents: read
+    runs-on: ubuntu-24.04
+    timeout-minutes: 7
+    steps:
+      - name: Require aggregate CI success
+        env:
+          CI_GATE: ${{ needs.ci-gate.result }}
+        run: |
+          set -euo pipefail
+          [[ "$CI_GATE" == "success" ]] || {
+            echo "::error::aggregate ci-gate result=$CI_GATE"
+            exit 1
+          }
+      - name: Self-test exact-subject CodeQL bridge
+        run: python .github/scripts/verify_required_codeql.py --self-test
+      - name: Require exact-subject CodeQL success
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SUBJECT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          SUBJECT_BRANCH: ${{ github.event.pull_request.head.ref || github.ref_name }}
+          TRIGGER_EVENT: ${{ github.event_name }}
+        run: |
+          python .github/scripts/verify_required_codeql.py \
+            --subject-sha "$SUBJECT_SHA" \
+            --branch "$SUBJECT_BRANCH" \
+            --trigger-event "$TRIGGER_EVENT"
+
