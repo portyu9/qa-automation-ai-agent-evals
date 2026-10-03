@@ -8,7 +8,12 @@ from pathlib import Path
 from validate_codeql_sarif import evaluate
 
 
-def sarif(*, rule_id: str = "actions/missing-workflow-permissions", security_severity: str | None = "5.0", security_tag: bool = True) -> dict:
+def sarif(
+    *,
+    rule_id: str = "actions/missing-workflow-permissions",
+    security_severity: str | None = "5.0",
+    security_tag: bool = True,
+) -> dict:
     properties: dict[str, object] = {}
     if security_severity is not None:
         properties["security-severity"] = security_severity

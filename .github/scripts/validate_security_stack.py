@@ -1,4 +1,5 @@
 """Fail closed when first-party code exists without a security scanner."""
+
 from __future__ import annotations
 
 import re
@@ -13,11 +14,33 @@ CODEQL_BY_SUFFIX = {
     ".pyi": "python",
 }
 KNOWN_CODE_SUFFIXES = set(CODEQL_BY_SUFFIX) | {
-    ".js", ".jsx", ".ts", ".tsx", ".go",
-    ".sh", ".bash", ".zsh", ".ksh",
-    ".c", ".cc", ".cpp", ".cxx", ".h", ".hh", ".hpp",
-    ".cs", ".java", ".kt", ".kts", ".rb", ".rs", ".swift",
-    ".php", ".scala", ".lua", ".ps1",
+    ".js",
+    ".jsx",
+    ".ts",
+    ".tsx",
+    ".go",
+    ".sh",
+    ".bash",
+    ".zsh",
+    ".ksh",
+    ".c",
+    ".cc",
+    ".cpp",
+    ".cxx",
+    ".h",
+    ".hh",
+    ".hpp",
+    ".cs",
+    ".java",
+    ".kt",
+    ".kts",
+    ".rb",
+    ".rs",
+    ".swift",
+    ".php",
+    ".scala",
+    ".lua",
+    ".ps1",
 }
 SHELL_SHEBANG = re.compile(r"^#!.*\b(?:ba|da|k|z)?sh\b")
 

@@ -95,7 +95,10 @@ def validate_config(config: dict[str, Any]) -> list[str]:
         errors.append("maxPaginationPages must be an integer from 1 to 20")
     if config.get("ownerApprovalRequired") is not True:
         errors.append("ownerApprovalRequired must remain true")
-    if not isinstance(config.get("ownerApprovalLogin"), str) or not config["ownerApprovalLogin"].strip():
+    if (
+        not isinstance(config.get("ownerApprovalLogin"), str)
+        or not config["ownerApprovalLogin"].strip()
+    ):
         errors.append("ownerApprovalLogin must be non-empty")
     owner_id = config.get("ownerApprovalUserId")
     if not isinstance(owner_id, int) or isinstance(owner_id, bool) or owner_id <= 0:
@@ -210,7 +213,9 @@ class GitHubApi:
         elif path.startswith("/") and ".." not in path:
             url = f"{self.root}{path}"
         else:
-            raise GovernanceError("GitHub API path must be repository-local or the authenticated-user endpoint")
+            raise GovernanceError(
+                "GitHub API path must be repository-local or the authenticated-user endpoint"
+            )
         data = None if payload is None else json.dumps(payload, separators=(",", ":")).encode()
         request = urllib.request.Request(
             url,
@@ -922,7 +927,9 @@ def _request_stale_dependabot_refresh(
         raise PolicyBlock("stale Dependabot pull request carries a manual-review blocker label")
     age_days = (datetime.now(UTC) - _parse_time(pr.get("created_at"))).total_seconds() / 86400
     if age_days < 0 or age_days > config["maxPullRequestAgeDays"]:
-        raise PolicyBlock("stale Dependabot pull request is outside the bounded automatic-merge age")
+        raise PolicyBlock(
+            "stale Dependabot pull request is outside the bounded automatic-merge age"
+        )
     validate_commits(api, number, config)
     files = changed_files(api, number, config)
     validate_change_semantics(api, files, base_sha, head_sha, config)
@@ -945,7 +952,9 @@ def _request_stale_dependabot_refresh(
         and (row.get("user") or {}).get("id") == config["ownerApprovalUserId"]
     ]
     if len(matches) > 1:
-        raise GovernanceError(f"PR #{number} has duplicate owner refresh commands for the same exact head")
+        raise GovernanceError(
+            f"PR #{number} has duplicate owner refresh commands for the same exact head"
+        )
     if not matches:
         api.post(
             f"/issues/{number}/comments",
@@ -1080,7 +1089,11 @@ def selftest(config: dict[str, Any]) -> None:
     errors = validate_config(config)
     if errors:
         raise GovernanceError("config self-test failed: " + "; ".join(errors))
-    for key, bad in (("ownerApprovalRequired", False), ("ownerApprovalLogin", ""), ("ownerApprovalUserId", 0)):
+    for key, bad in (
+        ("ownerApprovalRequired", False),
+        ("ownerApprovalLogin", ""),
+        ("ownerApprovalUserId", 0),
+    ):
         broken = copy.deepcopy(config)
         broken[key] = bad
         if not validate_config(broken):

@@ -1,4 +1,5 @@
 """Fail closed when CodeQL SARIF contains any code-scanning alert."""
+
 from __future__ import annotations
 
 import json
@@ -24,7 +25,7 @@ def _sarif_files(path: Path) -> list[Path]:
 
 
 def _rule_for_result(run: dict[str, Any], result: dict[str, Any]) -> dict[str, Any]:
-    driver = ((run.get("tool") or {}).get("driver") or {})
+    driver = (run.get("tool") or {}).get("driver") or {}
     rules = driver.get("rules") or []
     index = result.get("ruleIndex")
     if isinstance(index, int) and 0 <= index < len(rules):
@@ -43,7 +44,7 @@ def _location(result: dict[str, Any]) -> str:
     locations = result.get("locations") or []
     if not locations:
         return "unknown"
-    physical = (locations[0].get("physicalLocation") or {})
+    physical = locations[0].get("physicalLocation") or {}
     artifact = (physical.get("artifactLocation") or {}).get("uri") or ""
     region = physical.get("region") or {}
     line = region.get("startLine")
@@ -92,9 +93,11 @@ def evaluate(paths: list[Path]) -> tuple[int, list[str]]:
                         or properties.get("security-severity")
                         or "unrated"
                     )
-                    level = result.get("level") or (
-                        (rule.get("defaultConfiguration") or {}).get("level")
-                    ) or "unspecified"
+                    level = (
+                        result.get("level")
+                        or ((rule.get("defaultConfiguration") or {}).get("level"))
+                        or "unspecified"
+                    )
                     tags = ",".join(str(tag) for tag in (properties.get("tags") or []))
                     message = ((result.get("message") or {}).get("text") or "").strip()
                     print(
