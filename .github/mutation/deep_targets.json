@@ -4,7 +4,7 @@
     "name": "mutmut",
     "version": "3.8.0"
   },
-  "minimum_score": 95.0,
+  "minimum_score": 95,
   "max_children": 2,
   "campaign_timeout_seconds": 900,
   "campaigns": [
@@ -69,7 +69,12 @@
         "tests/unit/test_assurance_core_oracle_contract.py",
         "tests/unit/test_assurance_deterministic_regrade.py",
         "tests/unit/test_assurance_deterministic_side_effect_regrade.py",
+        "tests/unit/test_assurance_oracle_criticality_integrity.py",
         "tests/unit/test_assurance_pregrading_closure.py",
+        "tests/unit/test_assurance_reliability_scalar_integrity.py",
+        "tests/unit/test_assurance_report.py",
+        "tests/unit/test_assurance_semantic.py",
+        "tests/unit/test_assurance_side_effect_oracle_binding.py",
         "tests/unit/test_attack_delivery_live_authority_boundary.py",
         "tests/unit/test_composed_handoff_provenance_precondition.py",
         "tests/unit/test_deep_mutation_evaluator_contracts.py",
@@ -77,6 +82,7 @@
         "tests/unit/test_evaluator_observed_duration.py",
         "tests/unit/test_evidence_resource_limits.py",
         "tests/unit/test_protocol_delivery_live_authority_boundary.py",
+        "tests/unit/test_retrieval_assurance.py",
         "tests/unit/test_retrieval_live_authority_boundary.py",
         "tests/unit/test_runtime_blocked_policy_criticality.py",
         "tests/unit/test_runtime_contract_snapshot.py",
@@ -86,6 +92,7 @@
         "tests/unit/test_semantic_runtime.py",
         "tests/unit/test_session_finalized_evidence_binding.py",
         "tests/unit/test_side_effect_live_authority_boundary.py",
+        "tests/unit/test_statistics_runtime_integrity.py",
         "tests/unit/test_trial_completion_root_binding.py",
         "tests/unit/test_typed_resource_pregrading.py"
       ]
@@ -207,7 +214,9 @@
         "tests/unit/test_evidence_store.py",
         "tests/unit/test_evidence_store_boundaries.py",
         "tests/unit/test_evidence_store_configuration.py",
-        "tests/unit/test_evidence_store_state_machine.py"
+        "tests/unit/test_evidence_store_state_machine.py",
+        "tests/unit/test_evidence_timestamp_compatibility.py",
+        "tests/unit/test_replay_state_machine.py"
       ]
     },
     {
