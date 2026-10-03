@@ -1098,9 +1098,9 @@ def selftest(config: dict[str, Any]) -> None:
         broken[key] = bad
         if not validate_config(broken):
             raise GovernanceError(f"config validator accepted unsafe owner identity setting: {key}")
-    workflow_text = (
-        ROOT / ".github" / "workflows" / "dependency-governance.yml"
-    ).read_text(encoding="utf-8")
+    workflow_text = (ROOT / ".github" / "workflows" / "dependency-governance.yml").read_text(
+        encoding="utf-8"
+    )
     owner_secret = "DEPENDABOT_OWNER_TOKEN: ${{ secrets.DEPENDABOT_OWNER_TOKEN }}"
     if workflow_text.count(owner_secret) != 1:
         raise GovernanceError("owner token must be wired exactly once in dependency governance")
