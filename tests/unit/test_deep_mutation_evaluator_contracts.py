@@ -1368,6 +1368,8 @@ def test_scenario_contract_drift_detection_is_exact() -> None:
     scenario = _scenario()
     assert TrialRunner._scenario_contract_drifted(scenario, scenario.identity) is False
     assert TrialRunner._scenario_contract_drifted(scenario, "0" * 64) is True
+
+
 def _install_exact_deadline_probe(
     monkeypatch: pytest.MonkeyPatch,
     *,
@@ -1474,9 +1476,7 @@ def test_configured_adapter_zero_remaining_binds_exact_block_context(
     monkeypatch.setattr(
         TrialRunner,
         "_remaining_deadline_seconds",
-        lambda _self, started: 0.0
-        if started == 81.0
-        else pytest.fail("wrong deadline origin"),
+        lambda _self, started: 0.0 if started == 81.0 else pytest.fail("wrong deadline origin"),
     )
     monkeypatch.setattr(TrialRunner, "_deadline_blocked", blocked)
 
@@ -1553,9 +1553,7 @@ def test_configured_adapter_wait_timeout_binds_wait_cancel_and_block_context(
     monkeypatch.setattr(
         TrialRunner,
         "_remaining_deadline_seconds",
-        lambda _self, started: 0.5
-        if started == 82.0
-        else pytest.fail("wrong deadline origin"),
+        lambda _self, started: 0.5 if started == 82.0 else pytest.fail("wrong deadline origin"),
     )
     monkeypatch.setattr(evaluator_core.asyncio, "wait", fake_wait)
     monkeypatch.setattr(TrialRunner, "_cancel_late_task", cancel)
@@ -1847,9 +1845,9 @@ def test_semantic_final_deadline_checkpoint_binds_exact_context(
     monkeypatch.setattr(
         evaluator_core,
         "append_semantic_judgment",
-        lambda evidence, receipt: evidence
-        if receipt is fake_receipt
-        else pytest.fail("wrong semantic receipt"),
+        lambda evidence, receipt: (
+            evidence if receipt is fake_receipt else pytest.fail("wrong semantic receipt")
+        ),
     )
 
     result = asyncio.run(
@@ -2029,9 +2027,7 @@ def test_configured_semantic_judge_wait_timeout_binds_exact_context(
     monkeypatch.setattr(
         TrialRunner,
         "_remaining_deadline_seconds",
-        lambda _self, started: 0.5
-        if started == 39.0
-        else pytest.fail("wrong deadline origin"),
+        lambda _self, started: 0.5 if started == 39.0 else pytest.fail("wrong deadline origin"),
     )
     monkeypatch.setattr(TrialRunner, "_deadline_expired", lambda _self, _started: False)
     monkeypatch.setattr(TrialRunner, "_deadline_blocked", deadline_blocked)
@@ -2100,4 +2096,3 @@ def test_recorded_semantic_result_preserves_deterministic_oracle_results(
     assert result.verdict is TrialVerdict.PASS
     assert result.oracle_results == (oracle,)
     assert result.semantic_judgment is recorded
-
