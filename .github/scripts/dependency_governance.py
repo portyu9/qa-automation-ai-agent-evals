@@ -133,6 +133,7 @@ def validate_config(config: dict[str, Any]) -> list[str]:
         ".github/scripts/dependency_recovery_selfcheck.py",
         ".github/scripts/validate_codeql_sarif.py",
         ".github/scripts/validate_codeql_sarif_selfcheck.py",
+        ".github/scripts/validate_security_stack.py",
         ".github/workflows/dependency-governance.yml",
         ".github/workflows/codeql.yml",
     }
@@ -874,12 +875,6 @@ def _merge(api: GitHubApi, subject: dict[str, Any], config: dict[str, Any]) -> d
     }
 
 
-
-def _live_main_sha(api: GitHubApi, config: dict[str, Any]) -> str:
-    branch = api.get(f"/branches/{urllib.parse.quote(config['baseBranch'], safe='')}")
-    return require_sha(((branch or {}).get("commit") or {}).get("sha"), "live main SHA")
-
-
 def _verified_owner_token(api: GitHubApi, config: dict[str, Any]) -> str:
     token = os.environ.get("DEPENDABOT_OWNER_TOKEN", "")
     if not token:
@@ -923,6 +918,21 @@ def _request_stale_dependabot_refresh(
     live_sha = _live_main_sha(api, config)
     if base_sha == live_sha:
         return False
+    if _labels(pr) & set(config["manualReviewLabels"]):
+        raise PolicyBlock("stale Dependabot pull request carries a manual-review blocker label")
+    age_days = (datetime.now(UTC) - _parse_time(pr.get("created_at"))).total_seconds() / 86400
+    if age_days < 0 or age_days > config["maxPullRequestAgeDays"]:
+        raise PolicyBlock("stale Dependabot pull request is outside the bounded automatic-merge age")
+    validate_commits(api, number, config)
+    files = changed_files(api, number, config)
+    validate_change_semantics(api, files, base_sha, head_sha, config)
+    fresh = api.get(f"/pulls/{number}")
+    if require_sha(((fresh or {}).get("head") or {}).get("sha"), "fresh head SHA") != head_sha:
+        raise PolicyBlock("Dependabot head changed before owner-authenticated refresh")
+    if require_sha(((fresh or {}).get("base") or {}).get("sha"), "fresh base SHA") != base_sha:
+        raise PolicyBlock("Dependabot base changed before owner-authenticated refresh")
+    if _live_main_sha(api, config) != live_sha:
+        raise PolicyBlock("main changed before owner-authenticated refresh; retry reconciliation")
 
     owner_token = _verified_owner_token(api, config)
     marker = f"{OWNER_REFRESH_MARKER}{head_sha}:{live_sha}:rebase -->"

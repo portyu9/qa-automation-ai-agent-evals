@@ -20,4 +20,6 @@ Tests, mutation scores, OpenAI/MCP behavioral lanes, package verification, secur
 
 `codeql.yml` runs Python and GitHub Actions CodeQL with `security-extended` queries on pull requests, `main`, a weekly schedule, and manual dispatch. The analysis retains SARIF evidence for 14 days and a fail-closed zero-alert gate rejects every CodeQL result before the `CodeQL` check can become green; scanner execution success alone is not merge evidence. External-fork pull requests do not receive write-capable code-scanning execution.
 
+A tracked-source inventory contract also fails closed if a first-party code language appears without scanner coverage. Today the repository's first-party executable stack is Python plus GitHub Actions, so the required CodeQL mapping is exactly `python,actions`; adding another recognized code language requires extending the scanner contract in the same change.
+
 The owner token must authenticate `portyu9` (numeric user ID `35150859`) and be repository-scoped with only the permissions needed to comment on issues/pull requests and submit pull-request reviews. It is not used for repository contents writes, Actions reruns, or merges; those remain on the repository workflow token and existing exact-head governance path.

@@ -35,6 +35,7 @@ jobs:
         run: |
           python3 -m py_compile .github/scripts/validate_codeql_sarif.py .github/scripts/validate_codeql_sarif_selfcheck.py
           python3 .github/scripts/validate_codeql_sarif_selfcheck.py
+          python3 .github/scripts/validate_security_stack.py
       - name: Initialize CodeQL
         uses: github/codeql-action/init@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # v4.38.0
         with:
