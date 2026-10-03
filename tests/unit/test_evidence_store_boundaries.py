@@ -15,6 +15,7 @@ from agent_evals.evidence.store import (
     EvidenceConflictError,
     EvidenceIntegrityError,
     EvidenceStoreError,
+    IncompleteEvidenceRecordError,
     EvidenceStoreResourceError,
     LocalEvidenceStore,
 )
