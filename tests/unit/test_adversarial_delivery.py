@@ -6,6 +6,7 @@ import json
 import pytest
 from pydantic import ValidationError
 
+import agent_evals.adversarial.delivery as attack_delivery
 from agent_evals.adapters.base import AdapterResult
 from agent_evals.adapters.scripted import ScriptedAdapter
 from agent_evals.adversarial import (
@@ -101,7 +102,10 @@ def test_receipt_binds_exact_scenario_attack_channel_point_and_payload_digest() 
 
 
 def test_receipt_requires_an_adversarial_scenario() -> None:
-    with pytest.raises(ValueError, match="requires an adversarial scenario"):
+    with pytest.raises(
+        ValueError,
+        match=r"^attack delivery receipt requires an adversarial scenario$",
+    ):
         AttackDeliveryReceipt.from_scenario(
             base_scenario(),
             injection_point="conversation:user-message:0",
@@ -126,10 +130,16 @@ def test_receipt_event_requires_an_explicit_injector_source_identity() -> None:
         injection_point="conversation:user-message:0",
     )
 
-    with pytest.raises(ValueError, match="injector:<identity>"):
+    exact = r"^attack delivery evidence source must be 'injector:<identity>'$"
+    with pytest.raises(ValueError, match=exact):
         receipt.to_event(sequence=0, source="adapter:scripted")
-    with pytest.raises(ValueError, match="injector:<identity>"):
+    with pytest.raises(ValueError, match=exact):
         receipt.to_event(sequence=0, source="injector:")
+
+
+def test_receipt_root_resource_label_is_stable() -> None:
+    with pytest.raises(ValueError, match=r"^attack delivery receipt material"):
+        attack_delivery._receipt_root(object())
 
 
 def test_delivery_verifier_ignores_non_adversarial_scenarios() -> None:
@@ -178,7 +188,10 @@ def test_delivery_verifier_rejects_untrusted_source_label() -> None:
         payload=receipt.model_dump(mode="json"),
     )
 
-    with pytest.raises(AttackDeliveryError, match="untrusted injector source"):
+    with pytest.raises(
+        AttackDeliveryError,
+        match=r"^attack delivery receipt has an untrusted injector source label$",
+    ):
         verify_attack_delivery(scenario, trial_evidence(scenario, event))
 
 
@@ -197,7 +210,10 @@ def test_delivery_verifier_rejects_malformed_receipt() -> None:
         payload=payload,
     )
 
-    with pytest.raises(AttackDeliveryError, match="malformed or internally inconsistent"):
+    with pytest.raises(
+        AttackDeliveryError,
+        match=r"^attack delivery receipt is malformed or internally inconsistent$",
+    ):
         verify_attack_delivery(scenario, trial_evidence(scenario, event))
 
 
@@ -213,7 +229,12 @@ def test_delivery_verifier_rejects_valid_receipt_from_another_scenario() -> None
     )
     event = receipt.to_event(sequence=0, source="injector:wrong-scenario")
 
-    with pytest.raises(AttackDeliveryError, match="does not match the exact scenario"):
+    with pytest.raises(
+        AttackDeliveryError,
+        match=(
+            r"^attack delivery receipt does not match the exact scenario, attack, channel, or payload$"
+        ),
+    ):
         verify_attack_delivery(expected, trial_evidence(expected, event))
 
 

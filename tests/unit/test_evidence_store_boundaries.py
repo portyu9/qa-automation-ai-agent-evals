@@ -270,18 +270,46 @@ def test_short_write_is_wrapped_and_temporary_state_is_cleaned(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     store = LocalEvidenceStore(tmp_path / "evidence")
+    calls = 0
 
     def short_write(fd: int, data: bytes) -> int:
+        nonlocal calls
         del fd, data
-        return 0
+        calls += 1
+        if calls == 1:
+            return 0
+        raise AssertionError("zero-byte evidence write was retried")
 
     monkeypatch.setattr(store_module.os, "write", short_write)
 
     with pytest.raises(EvidenceStoreError, match="short write while materializing"):
         store.write(_evidence())
 
+    assert calls == 1
     assert not tuple(store.root.rglob("*.lock"))
     assert not tuple(store.root.rglob("*.tmp"))
+
+
+def test_atomic_materialize_advances_after_full_write(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    path = tmp_path / "artifact.json"
+    real_write = os.write
+    calls = 0
+
+    def write_once(fd: int, data: bytes) -> int:
+        nonlocal calls
+        calls += 1
+        if calls > 1:
+            raise AssertionError("completed evidence write was retried")
+        return real_write(fd, data)
+
+    monkeypatch.setattr(store_module.os, "write", write_once)
+
+    store_module._atomic_materialize(path, b"x")
+
+    assert calls == 1
+    assert path.read_bytes() == b"x"
 
 
 def test_directory_fsync_failure_is_wrapped_and_record_remains_fail_closed(
