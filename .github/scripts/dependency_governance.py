@@ -1001,7 +1001,7 @@ def _ensure_owner_review_and_approval(
                 "body": (
                     f"{comment_marker}\n"
                     "## Owner-authenticated Dependabot review\n\n"
-                    f"- Exact head: \`{head_sha}\`\n"
+                    f"- Exact head: `{head_sha}`\n"
                     "- Canonical Dependabot provenance: **pass**\n"
                     "- Governed dependency semantics: **pass**\n"
                     "- Exact-head CI and zero-alert CodeQL qualification: **pass**\n"
