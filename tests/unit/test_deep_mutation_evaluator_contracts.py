@@ -1368,3 +1368,736 @@ def test_scenario_contract_drift_detection_is_exact() -> None:
     scenario = _scenario()
     assert TrialRunner._scenario_contract_drifted(scenario, scenario.identity) is False
     assert TrialRunner._scenario_contract_drifted(scenario, "0" * 64) is True
+def _install_exact_deadline_probe(
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    expire_on: int,
+    expected_subject: SubjectFingerprint,
+    expected_scenario: EvaluationScenario,
+    expected_trial_id: str,
+    expected_started: float,
+    require_evidence: bool,
+) -> dict[str, int]:
+    calls = {"expired": 0, "blocked": 0}
+
+    def expired(self: TrialRunner, started: float) -> bool:
+        assert isinstance(self, TrialRunner)
+        assert started == expected_started
+        calls["expired"] += 1
+        return calls["expired"] == expire_on
+
+    def blocked(
+        self: TrialRunner,
+        *,
+        subject: SubjectFingerprint,
+        scenario: EvaluationScenario,
+        trial_id: str,
+        started: float,
+        evidence: TrialEvidence | None = None,
+    ) -> EvaluatedTrial:
+        assert isinstance(self, TrialRunner)
+        assert subject.identity == expected_subject.identity
+        assert scenario.identity == expected_scenario.identity
+        assert trial_id == expected_trial_id
+        assert started == expected_started
+        if require_evidence:
+            assert evidence is not None
+            assert evidence.trial_id == expected_trial_id
+            assert evidence.subject_identity == expected_subject.identity
+            assert evidence.scenario_identity == expected_scenario.identity
+        else:
+            assert evidence is None
+        calls["blocked"] += 1
+        blocked_evidence = evidence or TrialEvidence(
+            trial_id=trial_id,
+            subject_identity=subject.identity,
+            scenario_identity=scenario.identity,
+        )
+        return EvaluatedTrial(
+            evidence=blocked_evidence,
+            oracle_results=(),
+            verdict=TrialVerdict.BLOCKED,
+        )
+
+    monkeypatch.setattr(TrialRunner, "_deadline_expired", expired)
+    monkeypatch.setattr(TrialRunner, "_deadline_blocked", blocked)
+    return calls
+
+
+def test_configured_adapter_zero_remaining_binds_exact_block_context(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    subject = _subject()
+    scenario = _scenario()
+    executed = {"count": 0}
+    observed = {"blocked": 0}
+
+    class CountingAdapter(_PassingAdapter):
+        async def execute(
+            self,
+            *,
+            subject: SubjectFingerprint,
+            scenario: EvaluationScenario,
+            trial_id: str,
+        ) -> AdapterResult:
+            del subject, scenario, trial_id
+            executed["count"] += 1
+            return AdapterResult(final_output="unexpected")
+
+    def blocked(
+        self: TrialRunner,
+        *,
+        subject: SubjectFingerprint,
+        scenario: EvaluationScenario,
+        trial_id: str,
+        started: float,
+        evidence: TrialEvidence | None = None,
+    ) -> EvaluatedTrial:
+        assert isinstance(self, TrialRunner)
+        assert subject.identity == _subject().identity
+        assert scenario.identity == _scenario().identity
+        assert trial_id == "adapter-zero-remaining"
+        assert started == 81.0
+        assert evidence is None
+        observed["blocked"] += 1
+        return EvaluatedTrial(
+            evidence=TrialEvidence(
+                trial_id=trial_id,
+                subject_identity=subject.identity,
+                scenario_identity=scenario.identity,
+            ),
+            oracle_results=(),
+            verdict=TrialVerdict.BLOCKED,
+        )
+
+    runner = TrialRunner(deadline_seconds=1.0)
+    monkeypatch.setattr(
+        TrialRunner,
+        "_remaining_deadline_seconds",
+        lambda _self, started: 0.0
+        if started == 81.0
+        else pytest.fail("wrong deadline origin"),
+    )
+    monkeypatch.setattr(TrialRunner, "_deadline_blocked", blocked)
+
+    result = asyncio.run(
+        runner._run_trial(
+            CountingAdapter(),  # type: ignore[arg-type]
+            subject=subject,
+            scenario=scenario,
+            trial_id="adapter-zero-remaining",
+            started=81.0,
+        )
+    )
+
+    assert result.verdict is TrialVerdict.BLOCKED
+    assert executed["count"] == 0
+    assert observed["blocked"] == 1
+
+
+def test_configured_adapter_wait_timeout_binds_wait_cancel_and_block_context(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    subject = _subject()
+    scenario = _scenario()
+    observed: dict[str, object] = {"waits": 0, "cancels": 0, "blocked": 0}
+    task_holder: list[asyncio.Task[object]] = []
+
+    async def fake_wait(
+        awaitables: object,
+        *,
+        timeout: float,
+    ) -> tuple[set[asyncio.Task[object]], set[asyncio.Task[object]]]:
+        assert timeout == 0.5
+        tasks = tuple(awaitables)  # type: ignore[arg-type]
+        assert len(tasks) == 1
+        task = tasks[0]
+        assert isinstance(task, asyncio.Task)
+        task_holder.append(task)
+        observed["waits"] = int(observed["waits"]) + 1
+        return set(), {task}
+
+    def cancel(self: TrialRunner, task: asyncio.Task[object]) -> None:
+        assert isinstance(self, TrialRunner)
+        assert task_holder == [task]
+        observed["cancels"] = int(observed["cancels"]) + 1
+        task.cancel()
+
+    def blocked(
+        self: TrialRunner,
+        *,
+        subject: SubjectFingerprint,
+        scenario: EvaluationScenario,
+        trial_id: str,
+        started: float,
+        evidence: TrialEvidence | None = None,
+    ) -> EvaluatedTrial:
+        assert isinstance(self, TrialRunner)
+        assert subject.identity == _subject().identity
+        assert scenario.identity == _scenario().identity
+        assert trial_id == "adapter-wait-timeout"
+        assert started == 82.0
+        assert evidence is None
+        observed["blocked"] = int(observed["blocked"]) + 1
+        return EvaluatedTrial(
+            evidence=TrialEvidence(
+                trial_id=trial_id,
+                subject_identity=subject.identity,
+                scenario_identity=scenario.identity,
+            ),
+            oracle_results=(),
+            verdict=TrialVerdict.BLOCKED,
+        )
+
+    runner = TrialRunner(deadline_seconds=1.0)
+    monkeypatch.setattr(
+        TrialRunner,
+        "_remaining_deadline_seconds",
+        lambda _self, started: 0.5
+        if started == 82.0
+        else pytest.fail("wrong deadline origin"),
+    )
+    monkeypatch.setattr(evaluator_core.asyncio, "wait", fake_wait)
+    monkeypatch.setattr(TrialRunner, "_cancel_late_task", cancel)
+    monkeypatch.setattr(TrialRunner, "_deadline_blocked", blocked)
+
+    result = asyncio.run(
+        runner._run_trial(
+            _PassingAdapter(),  # type: ignore[arg-type]
+            subject=subject,
+            scenario=scenario,
+            trial_id="adapter-wait-timeout",
+            started=82.0,
+        )
+    )
+
+    assert result.verdict is TrialVerdict.BLOCKED
+    assert observed == {"waits": 1, "cancels": 1, "blocked": 1}
+
+
+@pytest.mark.parametrize("adapter", [_PreconditionFailAdapter(), _RuntimeFailAdapter()])
+def test_adapter_failure_elapsed_time_is_exact(
+    adapter: object,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(evaluator_core, "perf_counter", lambda: 10.25)
+    result = asyncio.run(
+        TrialRunner()._run_trial(
+            adapter,  # type: ignore[arg-type]
+            subject=_subject(),
+            scenario=_scenario(),
+            trial_id="adapter-elapsed",
+            started=10.0,
+        )
+    )
+    assert result.evidence.elapsed_ms == 250.0
+
+
+def test_validation_error_deadline_checkpoint_binds_exact_context(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    subject = _subject()
+    scenario = _scenario()
+    calls = _install_exact_deadline_probe(
+        monkeypatch,
+        expire_on=2,
+        expected_subject=subject,
+        expected_scenario=scenario,
+        expected_trial_id="validation-deadline",
+        expected_started=31.0,
+        require_evidence=False,
+    )
+
+    def invalid_evidence(*_args: object, **_kwargs: object) -> TrialEvidence:
+        return TrialEvidence.model_validate({})
+
+    monkeypatch.setattr(TrialRunner, "_to_evidence", invalid_evidence)
+    result = asyncio.run(
+        TrialRunner()._run_trial(
+            _PassingAdapter(),  # type: ignore[arg-type]
+            subject=subject,
+            scenario=scenario,
+            trial_id="validation-deadline",
+            started=31.0,
+        )
+    )
+
+    assert result.verdict is TrialVerdict.BLOCKED
+    assert calls == {"expired": 2, "blocked": 1}
+
+
+def test_pregrading_exception_deadline_checkpoint_binds_exact_context(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    subject = _subject()
+    scenario = _scenario()
+    calls = _install_exact_deadline_probe(
+        monkeypatch,
+        expire_on=5,
+        expected_subject=subject,
+        expected_scenario=scenario,
+        expected_trial_id="pregrading-deadline",
+        expected_started=32.0,
+        require_evidence=True,
+    )
+
+    def fail_pregrading(*_args: object, **_kwargs: object) -> None:
+        raise EvaluationPreconditionError(
+            source="evaluator:deadline-probe",
+            code="deadline_probe",
+            reason="force pregrading exception checkpoint",
+        )
+
+    monkeypatch.setattr(evaluator_core, "verify_pregrading_closure", fail_pregrading)
+    result = asyncio.run(
+        TrialRunner()._run_trial(
+            _PassingAdapter(),  # type: ignore[arg-type]
+            subject=subject,
+            scenario=scenario,
+            trial_id="pregrading-deadline",
+            started=32.0,
+        )
+    )
+
+    assert result.verdict is TrialVerdict.BLOCKED
+    assert calls == {"expired": 5, "blocked": 1}
+
+
+def test_semantic_verification_exception_deadline_binds_exact_context(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    subject = _subject()
+    scenario = _scenario()
+    calls = _install_exact_deadline_probe(
+        monkeypatch,
+        expire_on=7,
+        expected_subject=subject,
+        expected_scenario=scenario,
+        expected_trial_id="semantic-verify-deadline",
+        expected_started=33.0,
+        require_evidence=True,
+    )
+
+    def fail_semantic(*_args: object, **_kwargs: object) -> object:
+        raise SemanticJudgmentError("force semantic verification exception checkpoint")
+
+    monkeypatch.setattr(evaluator_core, "verify_semantic_judgment", fail_semantic)
+    result = asyncio.run(
+        TrialRunner()._run_trial(
+            _PassingAdapter(),  # type: ignore[arg-type]
+            subject=subject,
+            scenario=scenario,
+            trial_id="semantic-verify-deadline",
+            started=33.0,
+        )
+    )
+
+    assert result.verdict is TrialVerdict.BLOCKED
+    assert calls == {"expired": 7, "blocked": 1}
+
+
+def test_semantic_authority_exception_deadline_binds_exact_context(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    subject = _subject()
+    scenario = _semantic_scenario()
+    calls = _install_exact_deadline_probe(
+        monkeypatch,
+        expire_on=8,
+        expected_subject=subject,
+        expected_scenario=scenario,
+        expected_trial_id="semantic-authority-deadline",
+        expected_started=34.0,
+        require_evidence=True,
+    )
+
+    def fail_authority(*_args: object, **_kwargs: object) -> tuple[object, object]:
+        raise LookupError("force semantic authority exception checkpoint")
+
+    monkeypatch.setattr(evaluator_core, "validate_semantic_judge_authority", fail_authority)
+    result = asyncio.run(
+        TrialRunner(semantic_judge=_JudgeUnexpectedResponse())._run_trial(  # type: ignore[arg-type]
+            _PassingAdapter(),  # type: ignore[arg-type]
+            subject=subject,
+            scenario=scenario,
+            trial_id="semantic-authority-deadline",
+            started=34.0,
+        )
+    )
+
+    assert result.verdict is TrialVerdict.BLOCKED
+    assert calls == {"expired": 8, "blocked": 1}
+
+
+def test_semantic_runtime_exception_deadline_binds_exact_context(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    subject = _subject()
+    scenario = _semantic_scenario()
+    calls = _install_exact_deadline_probe(
+        monkeypatch,
+        expire_on=9,
+        expected_subject=subject,
+        expected_scenario=scenario,
+        expected_trial_id="semantic-runtime-deadline",
+        expected_started=35.0,
+        require_evidence=True,
+    )
+    monkeypatch.setattr(
+        evaluator_core,
+        "validate_semantic_judge_authority",
+        lambda *_args, **_kwargs: (object(), object()),
+    )
+
+    result = asyncio.run(
+        TrialRunner(semantic_judge=_JudgeRuntimeFailure())._run_trial(  # type: ignore[arg-type]
+            _PassingAdapter(),  # type: ignore[arg-type]
+            subject=subject,
+            scenario=scenario,
+            trial_id="semantic-runtime-deadline",
+            started=35.0,
+        )
+    )
+
+    assert result.verdict is TrialVerdict.BLOCKED
+    assert calls == {"expired": 9, "blocked": 1}
+
+
+def test_semantic_invalid_response_exception_deadline_binds_exact_context(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    subject = _subject()
+    scenario = _semantic_scenario()
+    calls = _install_exact_deadline_probe(
+        monkeypatch,
+        expire_on=10,
+        expected_subject=subject,
+        expected_scenario=scenario,
+        expected_trial_id="semantic-invalid-deadline",
+        expected_started=36.0,
+        require_evidence=True,
+    )
+    monkeypatch.setattr(
+        evaluator_core,
+        "validate_semantic_judge_authority",
+        lambda *_args, **_kwargs: (object(), object()),
+    )
+
+    result = asyncio.run(
+        TrialRunner(semantic_judge=_JudgeUnexpectedResponse())._run_trial(  # type: ignore[arg-type]
+            _PassingAdapter(),  # type: ignore[arg-type]
+            subject=subject,
+            scenario=scenario,
+            trial_id="semantic-invalid-deadline",
+            started=36.0,
+        )
+    )
+
+    assert result.verdict is TrialVerdict.BLOCKED
+    assert calls == {"expired": 10, "blocked": 1}
+
+
+def test_semantic_final_deadline_checkpoint_binds_exact_context(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from agent_evals.semantic.models import (
+        SemanticCriterionResult,
+        SemanticDecision,
+        SemanticJudgeResponse,
+    )
+
+    subject = _subject()
+    scenario = _semantic_scenario()
+    calls = _install_exact_deadline_probe(
+        monkeypatch,
+        expire_on=10,
+        expected_subject=subject,
+        expected_scenario=scenario,
+        expected_trial_id="semantic-final-deadline",
+        expected_started=37.0,
+        require_evidence=True,
+    )
+    response = SemanticJudgeResponse(
+        criteria=(
+            SemanticCriterionResult(
+                criterion_id="grounded",
+                decision=SemanticDecision.PASS,
+                score=4,
+            ),
+        ),
+        overall=SemanticDecision.PASS,
+    )
+
+    class ValidJudge:
+        async def judge(self, judge_input: object) -> SemanticJudgeResponse:
+            assert judge_input is not None
+            return response
+
+    monkeypatch.setattr(
+        evaluator_core,
+        "validate_semantic_judge_authority",
+        lambda *_args, **_kwargs: (object(), object()),
+    )
+    fake_receipt = cast(SemanticJudgmentReceipt, object())
+    monkeypatch.setattr(
+        evaluator_core.SemanticJudgmentReceipt,
+        "create",
+        lambda **_kwargs: fake_receipt,
+    )
+    monkeypatch.setattr(
+        evaluator_core,
+        "append_semantic_judgment",
+        lambda evidence, receipt: evidence
+        if receipt is fake_receipt
+        else pytest.fail("wrong semantic receipt"),
+    )
+
+    result = asyncio.run(
+        TrialRunner(semantic_judge=ValidJudge())._run_trial(  # type: ignore[arg-type]
+            _PassingAdapter(),  # type: ignore[arg-type]
+            subject=subject,
+            scenario=scenario,
+            trial_id="semantic-final-deadline",
+            started=37.0,
+        )
+    )
+
+    assert result.verdict is TrialVerdict.BLOCKED
+    assert calls == {"expired": 10, "blocked": 1}
+
+
+@pytest.mark.parametrize("judge_remaining", [0.0, 0.5])
+def test_configured_semantic_judge_remaining_boundary_is_exact(
+    judge_remaining: float,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    subject = _subject()
+    scenario = _semantic_scenario()
+    judge_calls = {"count": 0}
+    wait_calls = {"count": 0}
+    blocked_calls = {"count": 0}
+    remaining_values = iter((2.0, judge_remaining))
+
+    class Judge:
+        async def judge(self, judge_input: object) -> object:
+            assert judge_input is not None
+            judge_calls["count"] += 1
+            return object()
+
+    async def fake_wait(
+        awaitables: object,
+        *,
+        timeout: float,
+    ) -> tuple[set[asyncio.Task[object]], set[asyncio.Task[object]]]:
+        tasks = tuple(awaitables)  # type: ignore[arg-type]
+        assert len(tasks) == 1
+        task = tasks[0]
+        assert isinstance(task, asyncio.Task)
+        wait_calls["count"] += 1
+        if wait_calls["count"] == 1:
+            assert timeout == 2.0
+        else:
+            assert timeout == judge_remaining
+        await task
+        return {task}, set()
+
+    def remaining(_self: TrialRunner, started: float) -> float:
+        assert started == 38.0
+        return next(remaining_values)
+
+    def blocked(
+        self: TrialRunner,
+        *,
+        subject: SubjectFingerprint,
+        scenario: EvaluationScenario,
+        trial_id: str,
+        started: float,
+        evidence: TrialEvidence | None = None,
+    ) -> EvaluatedTrial:
+        assert isinstance(self, TrialRunner)
+        assert subject.identity == _subject().identity
+        assert scenario.identity == _semantic_scenario().identity
+        assert trial_id == "semantic-remaining"
+        assert started == 38.0
+        assert evidence is not None
+        blocked_calls["count"] += 1
+        return EvaluatedTrial(
+            evidence=evidence,
+            oracle_results=(),
+            verdict=TrialVerdict.BLOCKED,
+        )
+
+    runner = TrialRunner(semantic_judge=Judge(), deadline_seconds=3.0)  # type: ignore[arg-type]
+    monkeypatch.setattr(TrialRunner, "_remaining_deadline_seconds", remaining)
+    monkeypatch.setattr(TrialRunner, "_deadline_expired", lambda _self, _started: False)
+    monkeypatch.setattr(TrialRunner, "_deadline_blocked", blocked)
+    monkeypatch.setattr(evaluator_core.asyncio, "wait", fake_wait)
+    monkeypatch.setattr(
+        evaluator_core,
+        "validate_semantic_judge_authority",
+        lambda *_args, **_kwargs: (object(), object()),
+    )
+
+    result = asyncio.run(
+        runner._run_trial(
+            _PassingAdapter(),  # type: ignore[arg-type]
+            subject=subject,
+            scenario=scenario,
+            trial_id="semantic-remaining",
+            started=38.0,
+        )
+    )
+
+    if judge_remaining == 0.0:
+        assert result.verdict is TrialVerdict.BLOCKED
+        assert judge_calls["count"] == 0
+        assert wait_calls["count"] == 1
+        assert blocked_calls["count"] == 1
+    else:
+        assert judge_calls["count"] == 1
+        assert wait_calls["count"] == 2
+        assert blocked_calls["count"] == 0
+        _assert_single_blocking_error(
+            result,
+            source="evaluator:semantic-judgment",
+            code="semantic_judgment_invalid",
+            reason="semantic judge returned an unexpected response type",
+        )
+
+
+def test_configured_semantic_judge_wait_timeout_binds_exact_context(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    subject = _subject()
+    scenario = _semantic_scenario()
+    waits = {"count": 0}
+    cancels = {"count": 0}
+    blocked = {"count": 0}
+    task_holder: list[asyncio.Task[object]] = []
+
+    class Judge:
+        async def judge(self, judge_input: object) -> object:
+            assert judge_input is not None
+            return object()
+
+    async def fake_wait(
+        awaitables: object,
+        *,
+        timeout: float,
+    ) -> tuple[set[asyncio.Task[object]], set[asyncio.Task[object]]]:
+        tasks = tuple(awaitables)  # type: ignore[arg-type]
+        assert len(tasks) == 1
+        task = tasks[0]
+        assert isinstance(task, asyncio.Task)
+        waits["count"] += 1
+        assert timeout == 0.5
+        if waits["count"] == 1:
+            await task
+            return {task}, set()
+        task_holder.append(task)
+        return set(), {task}
+
+    def cancel(self: TrialRunner, task: asyncio.Task[object]) -> None:
+        assert isinstance(self, TrialRunner)
+        assert task_holder == [task]
+        cancels["count"] += 1
+        task.cancel()
+
+    def deadline_blocked(
+        self: TrialRunner,
+        *,
+        subject: SubjectFingerprint,
+        scenario: EvaluationScenario,
+        trial_id: str,
+        started: float,
+        evidence: TrialEvidence | None = None,
+    ) -> EvaluatedTrial:
+        assert isinstance(self, TrialRunner)
+        assert subject.identity == _subject().identity
+        assert scenario.identity == _semantic_scenario().identity
+        assert trial_id == "semantic-wait-timeout"
+        assert started == 39.0
+        assert evidence is not None
+        blocked["count"] += 1
+        return EvaluatedTrial(
+            evidence=evidence,
+            oracle_results=(),
+            verdict=TrialVerdict.BLOCKED,
+        )
+
+    runner = TrialRunner(semantic_judge=Judge(), deadline_seconds=3.0)  # type: ignore[arg-type]
+    monkeypatch.setattr(
+        TrialRunner,
+        "_remaining_deadline_seconds",
+        lambda _self, started: 0.5
+        if started == 39.0
+        else pytest.fail("wrong deadline origin"),
+    )
+    monkeypatch.setattr(TrialRunner, "_deadline_expired", lambda _self, _started: False)
+    monkeypatch.setattr(TrialRunner, "_deadline_blocked", deadline_blocked)
+    monkeypatch.setattr(TrialRunner, "_cancel_late_task", cancel)
+    monkeypatch.setattr(evaluator_core.asyncio, "wait", fake_wait)
+    monkeypatch.setattr(
+        evaluator_core,
+        "validate_semantic_judge_authority",
+        lambda *_args, **_kwargs: (object(), object()),
+    )
+
+    result = asyncio.run(
+        runner._run_trial(
+            _PassingAdapter(),  # type: ignore[arg-type]
+            subject=subject,
+            scenario=scenario,
+            trial_id="semantic-wait-timeout",
+            started=39.0,
+        )
+    )
+
+    assert result.verdict is TrialVerdict.BLOCKED
+    assert waits["count"] == 2
+    assert cancels["count"] == 1
+    assert blocked["count"] == 1
+
+
+def test_recorded_semantic_result_preserves_deterministic_oracle_results(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from types import SimpleNamespace
+
+    from agent_evals.semantic.models import SemanticDecision
+
+    oracle = OracleResult(
+        name="recorded-semantic-oracle",
+        verdict=TrialVerdict.PASS,
+        reasons=("preserved",),
+        critical=True,
+    )
+    recorded = cast(
+        SemanticJudgmentReceipt,
+        SimpleNamespace(decision=SemanticDecision.PASS),
+    )
+    monkeypatch.setattr(
+        evaluator_core,
+        "grade_deterministic_evidence",
+        lambda *_args, **_kwargs: (oracle,),
+    )
+    monkeypatch.setattr(
+        evaluator_core,
+        "verify_semantic_judgment",
+        lambda *_args, **_kwargs: recorded,
+    )
+
+    result = asyncio.run(
+        TrialRunner()._run_trial(
+            _PassingAdapter(),  # type: ignore[arg-type]
+            subject=_subject(),
+            scenario=_semantic_scenario(),
+            trial_id="recorded-semantic-oracles",
+            started=0.0,
+        )
+    )
+
+    assert result.verdict is TrialVerdict.PASS
+    assert result.oracle_results == (oracle,)
+    assert result.semantic_judgment is recorded
+
