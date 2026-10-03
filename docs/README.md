@@ -279,3 +279,7 @@ Audited protected-`main` implementation checkpoint `f440d24a815c9e251f4b6fd82a5b
 This checkpoint is intentionally bound to the exact commit and CI run above. It verifies the repository behavior and controls exercised by those required jobs—including the current Assurance current revision, authority, replay, retrieval, side-effect, semantic-judging, OpenAI composition, and MCP paths—but it is not a claim about untested hosted providers, external production systems, remote attestation, publisher identity, or behavior introduced after that SHA. Any later code, dependency, workflow, or documentation change requires its own exact-head and post-merge `main` verification before inheriting this checkpoint.
 
 [← Repository README](../README.md)
+
+## Dependency automation operations
+
+- [Dependabot automation](DEPENDABOT_AUTOMATION.md) — provenance-gated green merge authority, bounded transient recovery, manual-review boundaries, and operator controls.

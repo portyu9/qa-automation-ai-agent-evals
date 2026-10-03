@@ -1,0 +1,65 @@
+{
+  "schemaVersion": 1,
+  "repository": "portyu9/qa-automation-ai-agent-evals",
+  "baseBranch": "main",
+  "mergeMethod": "merge",
+  "automergeEnabled": true,
+  "pipMode": "exact-subject-green",
+  "pipManifestPaths": [
+    "pyproject.toml"
+  ],
+  "maxChangedFiles": 25,
+  "maxPullRequestAgeDays": 14,
+  "manualReviewLabels": [
+    "manual-review",
+    "do-not-merge"
+  ],
+  "requiredChecks": [
+    "ci-gate",
+    "CodeQL"
+  ],
+  "requiredWorkflows": [
+    {
+      "workflow": "CI",
+      "gate": "ci-gate",
+      "file": "ci.yml",
+      "subjectInput": "subject_sha"
+    },
+    {
+      "workflow": "CodeQL",
+      "gate": "CodeQL",
+      "file": "codeql.yml"
+    }
+  ],
+  "allowedActionUpdateTypes": [
+    "version-update:semver-patch",
+    "version-update:semver-minor",
+    "version-update:semver-major",
+    "security-update:semver-patch",
+    "security-update:semver-minor",
+    "security-update:semver-major"
+  ],
+  "publishTrustedStatus": false,
+  "trustedStatusContext": "",
+  "manualReviewPaths": [
+    ".github/dependabot.yml",
+    ".github/dependency-governance.json",
+    ".github/dependency-recovery.json",
+    ".github/scripts/dependency_governance.py",
+    ".github/scripts/dependency_governance_selfcheck.py",
+    ".github/scripts/dependency_recovery.py",
+    ".github/scripts/dependency_recovery_selfcheck.py",
+    ".github/workflows/dependency-governance.yml",
+    ".github/workflows/codeql.yml",
+    ".github/workflows/deep-mutation.yml",
+    ".github/mutation",
+    ".github/scripts/validate_codeql_sarif.py",
+    ".github/scripts/validate_codeql_sarif_selfcheck.py",
+    ".github/scripts/validate_security_stack.py"
+  ],
+  "statusCommentMarker": "<!-- dependency-governance:v1 -->",
+  "maxPaginationPages": 10,
+  "ownerApprovalRequired": true,
+  "ownerApprovalLogin": "portyu9",
+  "ownerApprovalUserId": 35150859
+}
