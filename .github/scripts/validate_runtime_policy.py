@@ -195,6 +195,13 @@ if not any(reference in protected_gate for reference in needs_result_reference("
     fail("protected-gate must explicitly evaluate the ci-gate result")
 if "actions: read" not in protected_gate:
     fail("protected-gate must have Actions read permission for exact-subject evidence")
+if not any(
+    action.startswith("actions/checkout@")
+    for action in _WORKFLOW_USES_RE.findall(protected_gate)
+):
+    fail("protected-gate must checkout its exact workflow subject without floating action refs")
+if "persist-credentials: false" not in protected_gate:
+    fail("protected-gate checkout must not persist repository credentials")
 if "verify_required_codeql.py --self-test" not in protected_gate:
     fail("protected-gate must self-test the exact-subject CodeQL bridge")
 if "python .github/scripts/verify_required_codeql.py" not in protected_gate:
