@@ -406,7 +406,9 @@ def changed_files(api: GitHubApi, number: int, config: dict[str, Any]) -> list[d
     return files
 
 
-def require_unprotected_non_action_scope(files: list[dict[str, Any]], config: dict[str, Any]) -> None:
+def require_unprotected_non_action_scope(
+    files: list[dict[str, Any]], config: dict[str, Any]
+) -> None:
     """Keep control-plane paths manual unless the whole diff proves exact action-pin semantics."""
     for row in files:
         path = str(row["filename"])
@@ -1156,7 +1158,11 @@ def selftest(config: dict[str, Any]) -> None:
     ]
     if (
         validate_change_semantics(
-            None, protected_action, "1" * 40, "2" * 40, config  # type: ignore[arg-type]
+            None,
+            protected_action,
+            "1" * 40,
+            "2" * 40,
+            config,  # type: ignore[arg-type]
         )
         != "github-actions"
     ):
@@ -1186,7 +1192,7 @@ def selftest(config: dict[str, Any]) -> None:
                 {
                     "filename": ".github/dependency-governance.json",
                     "status": "modified",
-                    "patch": "@@ -1 +1 @@\n-{}\n+{\"unsafe\": true}\n",
+                    "patch": '@@ -1 +1 @@\n-{}\n+{"unsafe": true}\n',
                 }
             ],
             "1" * 40,
@@ -1195,7 +1201,9 @@ def selftest(config: dict[str, Any]) -> None:
         )
     except PolicyBlock as exc:
         if "control-plane path requires manual review" not in str(exc):
-            raise GovernanceError("protected non-action path lost its manual-review boundary") from exc
+            raise GovernanceError(
+                "protected non-action path lost its manual-review boundary"
+            ) from exc
     else:
         raise GovernanceError("protected non-action path became autonomous")
     try:
