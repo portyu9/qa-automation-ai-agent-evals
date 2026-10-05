@@ -53,13 +53,11 @@ def validate_adapter_result(value: object) -> AdapterResult:
 
     if type(value.events) is not tuple:
         raise AdapterConformanceError("adapter events must be an exact tuple")
-    expected_sequence = 0
-    for event in value.events:
+    for expected_sequence, event in enumerate(value.events):
         if type(event) is not EvidenceEvent:
             raise AdapterConformanceError("adapter events must contain exact EvidenceEvent values")
         if event.sequence != expected_sequence:
             raise AdapterConformanceError("adapter event sequence must be contiguous from zero")
-        expected_sequence += 1
 
     if type(value.final_state) is not dict:
         raise AdapterConformanceError("adapter final_state must be an exact dict")
