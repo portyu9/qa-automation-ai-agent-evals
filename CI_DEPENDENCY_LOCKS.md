@@ -21,7 +21,7 @@ python -m pip install --require-hashes -r requirements/locks/core-py311.txt
 The local project is then installed without dependency resolution or build isolation:
 
 ```bash
-python -m pip install --no-deps --no-build-isolation -e .
+python -m pip install --no-deps --no-build-isolation .
 ```
 
 Package builds use the already-installed locked backend environment:
