@@ -143,7 +143,9 @@ class ProviderCanaryObservation:
         if self.historical_observation is not True:
             raise ValueError("provider canary observations must remain historical observations")
         if self.provider_attestation is not False:
-            raise ValueError("provider canary observations cannot self-declare provider attestation")
+            raise ValueError(
+                "provider canary observations cannot self-declare provider attestation"
+            )
 
     def canonical_json(self) -> str:
         return json.dumps(
