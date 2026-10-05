@@ -1,9 +1,9 @@
 """Public trial evaluator with evaluator-owned runtime metric provenance.
 
-The grading engine lives in ``_evaluator_core`` unchanged.  This facade validates optional
-adapter metric-source assertions before subject execution and attaches a versioned provenance
-sidecar after the core evaluator has finalized evidence.  ``TrialEvidence/v2`` remains historical
-and unchanged.
+The grading engine lives in ``_evaluator_core``. This facade validates optional adapter
+metric-source assertions, inserts the evaluator-owned adapter conformance boundary before subject
+execution, and attaches a versioned provenance sidecar after the core evaluator has finalized
+evidence. ``TrialEvidence/v2`` remains historical and unchanged.
 """
 
 from __future__ import annotations
@@ -12,6 +12,7 @@ from dataclasses import dataclass, field
 from time import perf_counter
 
 from agent_evals.adapters.base import AdapterPreconditionError, AdapterResult, AgentAdapter
+from agent_evals.adapters.conformance import conformance_checked
 from agent_evals.contracts.models import EvaluationScenario, SubjectFingerprint
 from agent_evals.runtime._evaluator_core import (
     EvaluatedTrial as _CoreEvaluatedTrial,
@@ -72,12 +73,12 @@ class TrialRunner(_CoreTrialRunner):
         started = perf_counter()
         try:
             runtime_adapter_name, origin, assertion = resolve_metric_provenance(adapter)
-            execution_adapter: AgentAdapter = adapter
+            execution_adapter = conformance_checked(adapter)
         except MetricProvenanceError:
             runtime_adapter_name = _REJECTED_ADAPTER_NAME
             origin = MetricOrigin.ADAPTER_BOUNDARY
             assertion = None
-            execution_adapter = _RejectedMetricProvenanceAdapter()
+            execution_adapter = conformance_checked(_RejectedMetricProvenanceAdapter())
 
         evaluated = await self._run_trial(
             execution_adapter,
