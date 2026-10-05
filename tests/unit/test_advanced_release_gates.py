@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import pytest
-
 from agent_evals.evidence.models import TrialVerdict
 from agent_evals.gates.advanced import (
     OperationalReleaseGate,
