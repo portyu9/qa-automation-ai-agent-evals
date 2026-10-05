@@ -11,8 +11,7 @@ import json
 import math
 from typing import Any
 
-from agent_evals.evidence.limits import MAX_JSON_INTEGER_DECIMAL_DIGITS
-
+MAX_JSON_INTEGER_DECIMAL_DIGITS = 4_096
 _DEFAULT_MAX_DEPTH = 64
 
 
