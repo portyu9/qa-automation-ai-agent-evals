@@ -804,6 +804,7 @@ jobs:
               --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/ci.yml" \
               --source-digest "$GITHUB_SHA" \
               --source-ref "$GITHUB_REF" \
+              --predicate-type "https://slsa.dev/provenance/v1" \
               --deny-self-hosted-runners \
               --format json \
               > "release-provenance/verification/${base}.json"
