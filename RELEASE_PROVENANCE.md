@@ -70,7 +70,7 @@ SHA-256 values remain content-integrity identifiers rather than authentication b
 
 This stage therefore does not claim:
 
-- a digital signature, MAC, DSSE/in-toto envelope, or non-repudiation;
+- a general-purpose signed envelope over arbitrary assurance reports/evidence bundles, human-key signature, or non-repudiation guarantee beyond the GitHub/Sigstore workflow provenance described above;
 - authenticated human, maintainer, runner, or publisher identity outside the GitHub execution boundary;
 - a signature over the GitHub Release entity itself (the retained release assets have provenance, but the Release object is not separately signed);
 - publisher authentication merely because a dependency archive matches a committed SHA-256 lock entry;
@@ -89,4 +89,4 @@ The target chain remains:
 
 The signed-provenance/attestation link is now implemented for the five retained release subjects on trusted main pushes. A separately signed GitHub Release entity and optional PyPI Trusted Publishing remain future #207 slices.
 
-The invariant introduced here is still deliberately narrow: the CI run must retain/reverify the tested package bytes, independently reproduce those exact bytes from the same source in a fresh runner, generate a canonical SPDX/runtime-license evidence pair bound to the retained package manifest and checked-in license policy, and independently reverify that evidence in another clean job. Publication consumes only the original retained, qualified bytes and retained supply-chain evidence from the explicitly validated CI run and existing version tag; the publisher itself never rebuilds or regenerates release evidence.
+The invariant introduced here is still deliberately narrow: the CI run must retain/reverify the tested package bytes, independently reproduce those exact bytes from the same source in a fresh runner, generate a canonical SPDX/runtime-license evidence pair bound to the retained package manifest and checked-in license policy, and independently reverify that evidence in another clean job. Publication consumes only the original retained, qualified bytes, retained supply-chain evidence, and retained provenance bundle from the explicitly validated CI run and existing version tag; the publisher itself never rebuilds, regenerates, or re-signs release evidence.
