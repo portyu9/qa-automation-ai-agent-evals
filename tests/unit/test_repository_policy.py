@@ -76,6 +76,7 @@ def test_policy_accepts_pinned_action_in_second_workflow(tmp_path: Path) -> None
     assert result.returncode == 0, result.stderr
     assert "workflows=4" in result.stdout
 
+
 def test_policy_rejects_missing_reproducible_package_comparison(tmp_path: Path) -> None:
     workspace = _policy_workspace(tmp_path)
     workflow = workspace / ".github/workflows/ci.yml"
