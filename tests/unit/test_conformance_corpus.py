@@ -39,6 +39,8 @@ from agent_evals.security.taxonomy import ThreatClass
 from agent_evals.semantic import models as semantic_models
 from agent_evals.semantic.calibration import (
     _case_commitment_root as semantic_calibration_case_root,
+)
+from agent_evals.semantic.calibration import (
     _receipt_root as semantic_calibration_receipt_root,
 )
 from agent_evals.semantic.receipt import _receipt_root as semantic_receipt_root
