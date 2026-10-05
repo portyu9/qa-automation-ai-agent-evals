@@ -20,6 +20,8 @@ REQUIRED_JOBS = (
     "package",
     "package-reverify",
     "package-reproduce",
+    "release-supply-chain",
+    "release-supply-chain-reverify",
 )
 _WORKFLOW_USES_RE = re.compile(r"^\s*(?:-\s*)?uses:\s*([^\s#]+)", flags=re.MULTILINE)
 
@@ -84,6 +86,36 @@ publish_release_path = Path(".github/workflows/publish-release.yml")
 publish_release = workflows.get(publish_release_path)
 if publish_release is None:
     fail("repository must contain .github/workflows/publish-release.yml")
+license_policy_path = Path(".github/dependency-license-policy.json")
+if not license_policy_path.is_file():
+    fail("repository must contain .github/dependency-license-policy.json")
+try:
+    license_policy = json.loads(license_policy_path.read_text(encoding="utf-8"))
+except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+    fail(f"dependency license policy must be valid JSON: {exc}")
+if not isinstance(license_policy, dict):
+    fail("dependency license policy root must be an object")
+if license_policy.get("schema_version") != "agent-evals/dependency-license-policy/v1":
+    fail("dependency license policy must use the v1 schema")
+if license_policy.get("allow_license_refs") is not False:
+    fail("dependency license policy must fail closed on LicenseRef values")
+allowed_licenses = license_policy.get("allowed_spdx_licenses")
+denied_licenses = license_policy.get("denied_spdx_licenses")
+if (
+    not isinstance(allowed_licenses, list)
+    or not allowed_licenses
+    or allowed_licenses != sorted(set(allowed_licenses))
+    or not all(isinstance(item, str) and item for item in allowed_licenses)
+):
+    fail("dependency license allowlist must be a non-empty sorted unique string list")
+if (
+    not isinstance(denied_licenses, list)
+    or denied_licenses != sorted(set(denied_licenses))
+    or not all(isinstance(item, str) and item for item in denied_licenses)
+):
+    fail("dependency license denylist must be a sorted unique string list")
+if set(allowed_licenses) & set(denied_licenses):
+    fail("dependency license allowlist and denylist must not overlap")
 validate_action_pins(workflows)
 project = pyproject["project"]
 pytest_options = pyproject.get("tool", {}).get("pytest", {}).get("ini_options", {})
@@ -260,6 +292,11 @@ for required in (
     "run-id: ${{ steps.candidate.outputs.ci_run_id }}",
     "github-token: ${{ secrets.GITHUB_TOKEN }}",
     "package_artifact_manifest.py verify",
+    "release-supply-chain-${{ steps.candidate.outputs.ci_run_id }}",
+    "release_supply_chain.py verify",
+    ".github/dependency-license-policy.json",
+    "retained-supply-chain/release-sbom.spdx.json",
+    "retained-supply-chain/release-supply-chain-evidence.json",
     '--workflow "CI"',
     "retained-dist/*.whl",
     "retained-dist/*.tar.gz",
@@ -344,7 +381,7 @@ if (
     fail("package-reverify must exercise the downloaded wheel and sdist")
 
 
-package_reproduce = job_block(workflow, "package-reproduce", "ci-gate")
+package_reproduce = job_block(workflow, "package-reproduce", "release-supply-chain")
 if not re.search(r"^\s+needs:\s*package\s*$", package_reproduce, flags=re.MULTILINE):
     fail("package-reproduce must depend on the package job")
 if not any(
@@ -370,6 +407,55 @@ if '--reference-dir "$RUNNER_TEMP/retained-dist"' not in package_reproduce:
     fail("package-reproduce comparison must bind the isolated retained reference directory")
 if '--dist-dir "$RUNNER_TEMP/reproduced-dist"' not in package_reproduce:
     fail("package-reproduce comparison must bind the isolated fresh rebuilt directory")
+
+if "release_supply_chain.py self-test" not in workflow:
+    fail("CI policy job must self-test the release supply-chain verifier")
+
+release_supply_chain = job_block(
+    workflow,
+    "release-supply-chain",
+    "release-supply-chain-reverify",
+)
+if not re.search(r"^\s+needs:\s*package\s*$", release_supply_chain, flags=re.MULTILINE):
+    fail("release-supply-chain must depend on the package job")
+for required in (
+    "package-artifacts-${{ github.run_id }}",
+    "package_artifact_manifest.py verify",
+    "release_supply_chain.py create",
+    "release_supply_chain.py verify",
+    ".github/dependency-license-policy.json",
+    'SOURCE_DATE_EPOCH="$(git show -s --format=%ct "$GITHUB_SHA")"',
+    "release-supply-chain-${{ github.run_id }}",
+    "supply-chain/release-sbom.spdx.json",
+    "supply-chain/release-supply-chain-evidence.json",
+):
+    if required not in release_supply_chain:
+        fail(f"release-supply-chain is missing required contract text: {required}")
+if "python -m build" in release_supply_chain:
+    fail("release-supply-chain must consume retained package bytes without rebuilding")
+
+release_supply_chain_reverify = job_block(
+    workflow,
+    "release-supply-chain-reverify",
+    "ci-gate",
+)
+for dependency in ("package", "release-supply-chain"):
+    if f"      - {dependency}\n" not in release_supply_chain_reverify:
+        fail(f"release-supply-chain-reverify must depend on {dependency}")
+for required in (
+    "package-artifacts-${{ github.run_id }}",
+    "release-supply-chain-${{ github.run_id }}",
+    "package_artifact_manifest.py verify",
+    "release_supply_chain.py verify",
+    ".github/dependency-license-policy.json",
+    "retained-supply-chain",
+):
+    if required not in release_supply_chain_reverify:
+        fail(f"release-supply-chain-reverify is missing required contract text: {required}")
+if "release_supply_chain.py create" in release_supply_chain_reverify:
+    fail("release-supply-chain-reverify must not regenerate evidence")
+if "python -m build" in release_supply_chain_reverify:
+    fail("release-supply-chain-reverify must not rebuild package distributions")
 
 ci_gate = job_block(workflow, "ci-gate", "protected-gate")
 if not re.search(r"^\s+if:\s*always\(\)\s*$", ci_gate, flags=re.MULTILINE):
@@ -423,6 +509,6 @@ print(
     "runtime policy validated: "
     f"python={','.join(SUPPORTED_PYTHONS)}; requires-python={REQUIRES_PYTHON}; "
     f"runner={RUNNER}; workflows={len(workflows)}; gate=ci-gate+protected-codeql; "
-    "package-artifacts=retained-reverified-reproduced-and-default-branch-published"
+    "package-artifacts=retained-reverified-reproduced-with-spdx-license-evidence-and-default-branch-published"
 )
 sys.exit(0)
