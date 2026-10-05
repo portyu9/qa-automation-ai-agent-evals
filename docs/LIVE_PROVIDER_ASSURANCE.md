@@ -62,9 +62,9 @@ The executable ceilings are intentionally small:
 | Request rate | 6/minute |
 | Input tokens | 256 |
 | Output tokens | 32 |
-| Estimated cost | $0.01 |
+| Total estimated cost across all attempts | $0.01 |
 
-The cost preflight uses an operator/repository-supplied price snapshot. A configuration whose worst-case bounded token usage would exceed the cost ceiling is rejected before any provider request. The resulting cost value is an estimate under that configured price snapshot, not a provider bill or authenticated pricing claim.
+The cost preflight uses an operator/repository-supplied price snapshot. It multiplies the maximum per-request token cost by the maximum attempt count, so a retry-capable configuration whose worst-case total bounded usage would exceed the canary cost ceiling is rejected before any provider request. Runtime observations also accumulate validated usage/cost across retries and fail closed if the total ceiling is exceeded. The resulting cost value is an estimate under that configured price snapshot, not a provider bill or authenticated pricing claim.
 
 ## Retry and verdict classification
 
@@ -95,8 +95,8 @@ Where the public interface exposes them, the observation retains:
 
 - provider request identifier;
 - provider model/revision label;
-- observed input/output token counts;
-- configured-price estimated cost;
+- cumulative observed input/output token counts across validated attempts;
+- cumulative configured-price estimated cost across validated attempts;
 - attempt count and disposition.
 
 The workflow retains the canonical JSON observation as `live-provider-canary-<run_id>` for 14 days. The schema explicitly records:
