@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import time
 from urllib.parse import urlsplit
 
 import pytest
@@ -11,6 +12,7 @@ from agent_evals.mcp import (
     MCPOAuthFlowPolicy,
     MCPOAuthFlowReceipt,
 )
+from agent_evals.mcp.oauth_flow import _access_token_from_introspection
 
 pytestmark = pytest.mark.mcp_oauth
 
@@ -64,6 +66,49 @@ def test_oauth_flow_receipt_detects_tampering() -> None:
 
     with pytest.raises(ValidationError, match="receipt root does not match"):
         MCPOAuthFlowReceipt.model_validate(tampered)
+
+
+def test_introspection_claim_parser_accepts_exact_typed_binding() -> None:
+    expires_at = int(time.time()) + 3600
+    token = _access_token_from_introspection(
+        {
+            "active": True,
+            "iss": "https://issuer.example/",
+            "aud": "https://resource.example/mcp",
+            "scope": "write read",
+            "client_id": "client-1",
+            "exp": expires_at,
+            "sub": "subject-1",
+        },
+        token="opaque-token",
+        expected_issuer="https://issuer.example/",
+        expected_resource="https://resource.example/mcp",
+    )
+
+    assert token is not None
+    assert token.client_id == "client-1"
+    assert token.scopes == ["read", "write"]
+    assert token.expires_at == expires_at
+    assert token.resource == "https://resource.example/mcp"
+    assert token.subject == "subject-1"
+
+
+def test_introspection_claim_parser_rejects_bool_expiry() -> None:
+    token = _access_token_from_introspection(
+        {
+            "active": True,
+            "iss": "https://issuer.example/",
+            "aud": "https://resource.example/mcp",
+            "scope": "read",
+            "client_id": "client-1",
+            "exp": True,
+        },
+        token="opaque-token",
+        expected_issuer="https://issuer.example/",
+        expected_resource="https://resource.example/mcp",
+    )
+
+    assert token is None
 
 
 @pytest.mark.asyncio

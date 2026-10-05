@@ -112,6 +112,7 @@ for required in (
     ".[dev,mcp]",
     "-m fuzz",
     "tests/fuzz",
+    "src/agent_evals/mcp/remote_auth.py",
     '--hypothesis-seed="$FUZZ_SEED"',
     "if: always()",
     "include-hidden-files: true",

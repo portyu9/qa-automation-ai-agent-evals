@@ -18,6 +18,7 @@ on:
       - "src/agent_evals/mcp/models.py"
       - "src/agent_evals/mcp/lab.py"
       - "src/agent_evals/mcp/oauth_flow.py"
+      - "src/agent_evals/mcp/remote_auth.py"
       - "tests/fuzz/**"
       - "tests/unit/test_strict_json.py"
       - "tests/unit/test_evidence_store.py"
