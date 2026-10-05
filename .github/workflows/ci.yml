@@ -715,7 +715,9 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
       - name: Install pinned bootstrap compiler
-        run: python -m pip install --disable-pip-version-check "pip-tools==7.5.2"
+        run: |
+          python -m pip install --disable-pip-version-check "pip==25.3"
+          python -m pip install --disable-pip-version-check "pip-tools==7.5.2"
       - name: Compile hash-checked lock
         run: |
           python .github/scripts/generate_ci_lock.py \
