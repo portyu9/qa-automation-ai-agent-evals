@@ -640,14 +640,20 @@ class MCPOAuthFlowLab:
         request = headless.authorization_request
         response = headless.authorization_response
         introspection = provider.last_introspection
-        prm_authorization_servers = _json_string_sequence(
-            prm.get("authorization_servers"),
-            sort=False,
-        ) or ()
-        prm_scopes_supported = _json_string_sequence(
-            prm.get("scopes_supported"),
-            sort=True,
-        ) or ()
+        prm_authorization_servers = (
+            _json_string_sequence(
+                prm.get("authorization_servers"),
+                sort=False,
+            )
+            or ()
+        )
+        prm_scopes_supported = (
+            _json_string_sequence(
+                prm.get("scopes_supported"),
+                sort=True,
+            )
+            or ()
+        )
         reused_stored_authorization = counts_after_second == counts_after_first
 
         receipt = self._receipt_for_observation(
