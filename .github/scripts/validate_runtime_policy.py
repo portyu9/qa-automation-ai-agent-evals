@@ -300,6 +300,8 @@ if "workflow_dispatch:" in publish_release or "workflow_run:" in publish_release
     fail("publish-release must not expose selectable-ref or upstream-workflow execution surfaces")
 if "permissions:\n  actions: read\n  contents: write" not in publish_release:
     fail("publish-release must grant only actions-read/contents-write authority")
+if "id-token: write" in publish_release or "attestations: write" in publish_release:
+    fail("publish-release must verify retained provenance without minting new attestations")
 if (
     "group: retained-release-publication" not in publish_release
     or "cancel-in-progress: false" not in publish_release
@@ -334,6 +336,15 @@ for required in (
     "--no-deps --no-build-isolation retained-dist/*.tar.gz",
     "release-supply-chain-${{ steps.candidate.outputs.ci_run_id }}",
     "release_supply_chain.py verify",
+    "release-provenance-${{ steps.candidate.outputs.ci_run_id }}",
+    "retained-provenance/release-provenance.sigstore.json",
+    "retained-provenance/subject-checksums.sha256",
+    "retained-provenance/bundle-checksum.sha256",
+    "gh attestation verify",
+    '--signer-workflow "$GITHUB_REPOSITORY/.github/workflows/ci.yml"',
+    '--source-digest "$CI_COMMIT_SHA"',
+    '--source-ref "refs/heads/main"',
+    "--deny-self-hosted-runners",
     ".github/dependency-license-policy.json",
     "retained-supply-chain/release-sbom.spdx.json",
     "retained-supply-chain/release-supply-chain-evidence.json",
@@ -533,7 +544,7 @@ if "python -m build" in release_supply_chain:
 release_supply_chain_reverify = job_block(
     workflow,
     "release-supply-chain-reverify",
-    "ci-gate",
+    "release-provenance",
 )
 for dependency in ("package", "release-supply-chain"):
     if f"      - {dependency}\n" not in release_supply_chain_reverify:
@@ -555,6 +566,68 @@ if "release_supply_chain.py create" in release_supply_chain_reverify:
     fail("release-supply-chain-reverify must not regenerate evidence")
 if "python -m build" in release_supply_chain_reverify:
     fail("release-supply-chain-reverify must not rebuild package distributions")
+
+release_provenance = job_block(workflow, "release-provenance", "ci-gate")
+if "name: Attest retained release artifacts" not in release_provenance:
+    fail("release-provenance must use the canonical qualification job name")
+if "if: github.event_name == 'push' && github.ref == 'refs/heads/main'" not in release_provenance:
+    fail("release-provenance signing authority must be restricted to trusted main pushes")
+for dependency in (
+    "package",
+    "package-reverify",
+    "package-reproduce",
+    "release-supply-chain-reverify",
+):
+    if f"      - {dependency}\n" not in release_provenance:
+        fail(f"release-provenance must depend on {dependency}")
+for permission in (
+    "contents: read",
+    "id-token: write",
+    "attestations: write",
+    "artifact-metadata: write",
+):
+    if permission not in release_provenance:
+        fail(f"release-provenance is missing least-privilege signing permission: {permission}")
+attest_action = "actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6"
+if attest_action not in release_provenance:
+    fail("release-provenance must pin the approved actions/attest v4.2.2 commit")
+if workflow.count("actions/attest@") != 1:
+    fail("CI must contain exactly one attestation action invocation")
+for required in (
+    "package-artifacts-${{ github.run_id }}",
+    "release-supply-chain-${{ github.run_id }}",
+    "package_artifact_manifest.py verify",
+    "release_supply_chain.py verify",
+    "retained-dist/*.whl",
+    "retained-dist/*.tar.gz",
+    "retained-dist/artifact-manifest.json",
+    "retained-supply-chain/release-sbom.spdx.json",
+    "retained-supply-chain/release-supply-chain-evidence.json",
+    "steps.attest.outputs.bundle-path",
+    "release-provenance/release-provenance.sigstore.json",
+    "gh attestation verify",
+    '--signer-workflow "$GITHUB_REPOSITORY/.github/workflows/ci.yml"',
+    '--source-digest "$GITHUB_SHA"',
+    '--source-ref "$GITHUB_REF"',
+    "--deny-self-hosted-runners",
+    "release-provenance-${{ github.run_id }}",
+):
+    if required not in release_provenance:
+        fail(f"release-provenance is missing required contract text: {required}")
+if "github.event.pull_request" in release_provenance:
+    fail("release-provenance must not derive signing authority from pull-request context")
+if "release-provenance" in REQUIRED_JOBS:
+    fail("release-provenance must not become a PR-required ci-gate dependency")
+
+for workflow_path, source in workflows.items():
+    if workflow_path != ci_path and (
+        "id-token: write" in source
+        or "attestations: write" in source
+        or "actions/attest@" in source
+    ):
+        fail(
+            f"{workflow_path.as_posix()} introduces signing authority outside trusted-main CI"
+        )
 
 ci_gate = job_block(workflow, "ci-gate", "protected-gate")
 if not re.search(r"^\s+if:\s*always\(\)\s*$", ci_gate, flags=re.MULTILINE):
@@ -608,6 +681,6 @@ print(
     "runtime policy validated: "
     f"python={','.join(SUPPORTED_PYTHONS)}; requires-python={REQUIRES_PYTHON}; "
     f"runner={RUNNER}; workflows={len(workflows)}; gate=ci-gate+protected-codeql; "
-    "package-artifacts=hashed-locks+retained-reverified-reproduced-with-spdx-license-evidence-and-default-branch-published"
+    "package-artifacts=hashed-locks+retained-reverified-reproduced-with-spdx-license-evidence+trusted-main-oidc-provenance+default-branch-published"
 )
 sys.exit(0)
