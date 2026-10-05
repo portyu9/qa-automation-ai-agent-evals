@@ -7,6 +7,7 @@ from agent_evals.statistics.inference import (
     ComparisonContract,
     ComparisonGoal,
     PairedDeltaAssessment,
+    PowerPlan,
     plan_paired_power,
 )
 from agent_evals.statistics.sufficient import (
@@ -161,4 +162,28 @@ def test_equivalence_requires_positive_margin() -> None:
             goal=ComparisonGoal.EQUIVALENCE,
             margin=0.0,
             alpha=0.05,
+        )
+
+
+def test_power_plan_rejects_forged_cached_derivations() -> None:
+    contract = ComparisonContract(
+        goal=ComparisonGoal.NON_INFERIORITY,
+        margin=0.10,
+        alpha=0.05,
+    )
+    plan = plan_paired_power(
+        contract,
+        anticipated_delta=0.05,
+        target_power=0.80,
+    )
+
+    with pytest.raises(ValueError, match="alternative_gap"):
+        PowerPlan(
+            contract=plan.contract,
+            anticipated_delta=plan.anticipated_delta,
+            target_power=plan.target_power,
+            minimum_pairs=plan.minimum_pairs,
+            alternative_gap=plan.alternative_gap + 0.01,
+            confidence_radius=plan.confidence_radius,
+            sampling_radius=plan.sampling_radius,
         )
