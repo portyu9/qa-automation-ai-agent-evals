@@ -3,7 +3,8 @@ from __future__ import annotations
 import json
 
 import pytest
-from hypothesis import given, settings, strategies as st
+from hypothesis import given, settings
+from hypothesis import strategies as st
 
 from agent_evals._strict_json import strict_json_loads
 from agent_evals.mcp.lab import (
