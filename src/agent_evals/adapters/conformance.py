@@ -12,14 +12,13 @@ that remote state is truthful, or that adapter-supplied telemetry is independent
 from __future__ import annotations
 
 import math
-import re
 
 from agent_evals.adapters.base import AdapterPreconditionError, AdapterResult, AgentAdapter
 from agent_evals.contracts.models import EvaluationScenario, SubjectFingerprint
 from agent_evals.evidence.models import EvidenceEvent
 
 _REJECTED_NAME = "adapter-conformance-rejected"
-_NAME_RE = re.compile(r"^[a-z0-9][a-z0-9._:-]{0,127}$")
+_MAX_ADAPTER_NAME_LENGTH = 128
 
 
 class AdapterConformanceError(AdapterPreconditionError):
@@ -30,11 +29,18 @@ class AdapterConformanceError(AdapterPreconditionError):
 
 
 def validate_adapter_name(value: object) -> str:
-    """Return one bounded canonical adapter name or fail closed."""
+    """Return one bounded safe adapter identity or fail closed."""
 
-    if type(value) is not str or _NAME_RE.fullmatch(value) is None:
+    if type(value) is not str:
+        raise AdapterConformanceError("adapter name must be an exact string")
+    if (
+        not value
+        or len(value) > _MAX_ADAPTER_NAME_LENGTH
+        or value.strip() != value
+        or any(ord(character) < 32 or ord(character) == 127 for character in value)
+    ):
         raise AdapterConformanceError(
-            "adapter name must be 1..128 lowercase ASCII letters, digits, dot, colon, dash or underscore"
+            "adapter name must contain 1..128 trimmed characters without control characters"
         )
     return value
 
