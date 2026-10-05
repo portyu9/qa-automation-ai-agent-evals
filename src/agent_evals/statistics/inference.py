@@ -119,6 +119,23 @@ class PowerPlan:
                 raise ValueError(f"{name} must be a finite float")
             if value <= 0.0:
                 raise ValueError(f"{name} must be positive")
+        expected_gap = _alternative_gap(self.contract, self.anticipated_delta)
+        if self.alternative_gap != expected_gap:
+            raise ValueError("alternative_gap does not recompute from contract and anticipated_delta")
+        expected_confidence = _paired_hoeffding_radius(
+            self.minimum_pairs,
+            self.contract.alpha,
+        )
+        if self.confidence_radius != expected_confidence:
+            raise ValueError("confidence_radius does not recompute from minimum_pairs and alpha")
+        expected_sampling = _paired_hoeffding_radius(
+            self.minimum_pairs,
+            1.0 - self.target_power,
+        )
+        if self.sampling_radius != expected_sampling:
+            raise ValueError("sampling_radius does not recompute from minimum_pairs and power")
+        if self.confidence_radius + self.sampling_radius > self.alternative_gap:
+            raise ValueError("minimum_pairs does not satisfy the declared power guarantee")
 
 
 def plan_paired_power(
