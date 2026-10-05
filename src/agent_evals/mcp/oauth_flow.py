@@ -13,6 +13,7 @@ from urllib.parse import parse_qs, urlsplit
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from agent_evals._strict_json import StrictJsonError, strict_json_loads
 from agent_evals.mcp._loopback import bind_loopback_socket, serve_prebound
 
 _PROTOCOL_VERSION = "2026-07-28"
@@ -612,14 +613,14 @@ class MCPOAuthFlowLab:
                     f"{issuer_url}.well-known/oauth-authorization-server"
                 )
                 as_metadata_response.raise_for_status()
-                as_metadata = _require_json_object(
-                    as_metadata_response.json(),
+                as_metadata = _strict_response_object(
+                    as_metadata_response.content,
                     label="OAuth authorization-server metadata",
                 )
                 prm_response = await metadata_http.get(metadata_url)
                 prm_response.raise_for_status()
-                prm = _require_json_object(
-                    prm_response.json(),
+                prm = _strict_response_object(
+                    prm_response.content,
                     label="OAuth protected-resource metadata",
                 )
         finally:
@@ -873,10 +874,19 @@ async def _oauth_transport(url: str, http: Any) -> AsyncIterator[Any]:
         yield streams
 
 
-def _require_json_object(value: Any, *, label: str) -> dict[str, Any]:
-    if type(value) is not dict:
+def _strict_response_object(value: bytes, *, label: str) -> dict[str, Any]:
+    try:
+        parsed = strict_json_loads(
+            value,
+            label=label,
+            require_object=True,
+            max_depth=32,
+        )
+    except StrictJsonError as exc:
+        raise RuntimeError(f"{label} must contain strict bounded JSON") from exc
+    if type(parsed) is not dict:  # strict decoder owns this invariant; retain local type narrowing
         raise RuntimeError(f"{label} must be a JSON object")
-    return value
+    return parsed
 
 
 def _basic_authorization(client_id: str, client_secret: str) -> str:
