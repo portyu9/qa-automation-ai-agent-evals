@@ -111,9 +111,7 @@ def _preflight_nesting(text: str, *, label: str, max_depth: int) -> None:
         elif character in "[{":
             depth += 1
             if depth > max_depth:
-                raise StrictJsonError(
-                    f"{label} exceeds maximum JSON structural depth {max_depth}"
-                )
+                raise StrictJsonError(f"{label} exceeds maximum JSON structural depth {max_depth}")
         elif character in "]}":
             depth -= 1
             if depth < 0:
