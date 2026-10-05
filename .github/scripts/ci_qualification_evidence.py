@@ -180,9 +180,7 @@ def validate_evidence(value: object) -> dict[str, Any]:
     if evidence["ref"] != EXPECTED_REF:
         raise QualificationEvidenceError(f"evidence ref must be exactly {EXPECTED_REF}")
     if evidence["workflow"] != EXPECTED_WORKFLOW:
-        raise QualificationEvidenceError(
-            f"evidence workflow must be exactly {EXPECTED_WORKFLOW}"
-        )
+        raise QualificationEvidenceError(f"evidence workflow must be exactly {EXPECTED_WORKFLOW}")
     if evidence["event"] != EXPECTED_EVENT:
         raise QualificationEvidenceError(f"evidence event must be exactly {EXPECTED_EVENT}")
     _require_positive_int(evidence["run_id"], "run_id")
@@ -206,9 +204,7 @@ def validate_evidence(value: object) -> dict[str, Any]:
                 f"(expected {expected_job_id!r}, got {item['job_id']!r})"
             )
         if item["result"] != "success":
-            raise QualificationEvidenceError(
-                f"required CI job {expected_job_id!r} did not succeed"
-            )
+            raise QualificationEvidenceError(f"required CI job {expected_job_id!r} did not succeed")
         normalized.append({"job_id": expected_job_id, "result": "success"})
 
     return {
@@ -274,16 +270,13 @@ def verify_expected(
     if expected["ref"] != EXPECTED_REF:
         raise QualificationEvidenceError(f"expected ref must be exactly {EXPECTED_REF}")
     if expected["workflow"] != EXPECTED_WORKFLOW:
-        raise QualificationEvidenceError(
-            f"expected workflow must be exactly {EXPECTED_WORKFLOW}"
-        )
+        raise QualificationEvidenceError(f"expected workflow must be exactly {EXPECTED_WORKFLOW}")
     if expected["event"] != EXPECTED_EVENT:
         raise QualificationEvidenceError(f"expected event must be exactly {EXPECTED_EVENT}")
     for key, expected_value in expected.items():
         if evidence[key] != expected_value:
             raise QualificationEvidenceError(
-                f"CI qualification evidence {key} mismatch: "
-                f"{evidence[key]!r} != {expected_value!r}"
+                f"CI qualification evidence {key} mismatch: {evidence[key]!r} != {expected_value!r}"
             )
 
 
