@@ -5,6 +5,7 @@ import pytest
 from agent_evals.live_provider import (
     CanaryDisposition,
     ProviderCanaryLimits,
+    ProviderCanaryObservation,
     ProviderCanaryResponse,
     run_provider_canary,
 )
@@ -166,3 +167,64 @@ def test_canonical_observation_explicitly_denies_provider_attestation() -> None:
     payload = observation.canonical_json()
     assert '"historical_observation":true' in payload
     assert '"provider_attestation":false' in payload
+
+
+def test_retry_usage_and_cost_are_cumulative_in_retained_observation() -> None:
+    clock = _Clock()
+    responses = iter(
+        (
+            ProviderCanaryResponse(
+                status_code=503,
+                input_tokens=10,
+                output_tokens=1,
+            ),
+            ProviderCanaryResponse(
+                status_code=200,
+                output="CANARY_OK",
+                input_tokens=5,
+                output_tokens=1,
+            ),
+        )
+    )
+
+    observation = run_provider_canary(
+        lambda timeout: next(responses),
+        expected_substring="CANARY_OK",
+        limits=_limits(),
+        clock=clock,
+        sleep=clock.sleep,
+    )
+
+    assert observation.disposition is CanaryDisposition.OBSERVED
+    assert observation.attempts == 2
+    assert observation.input_tokens == 15
+    assert observation.output_tokens == 2
+    assert observation.estimated_cost_usd == pytest.approx(0.000019)
+
+
+def test_total_retry_budget_is_checked_before_any_request() -> None:
+    with pytest.raises(ValueError, match="total canary cost ceiling"):
+        _limits(
+            max_attempts=3,
+            max_input_tokens=100,
+            max_output_tokens=20,
+            input_usd_per_million=2.0,
+            output_usd_per_million=2.0,
+            max_estimated_cost_usd=0.0005,
+        )
+
+
+def test_observation_cannot_self_declare_provider_attestation() -> None:
+    with pytest.raises(ValueError, match="cannot self-declare"):
+        ProviderCanaryObservation(
+            schema_version="agent-evals/live-provider-canary/v1",
+            disposition=CanaryDisposition.OBSERVED,
+            attempts=1,
+            provider_request_id="req_1",
+            provider_model_revision="model-1",
+            input_tokens=1,
+            output_tokens=1,
+            estimated_cost_usd=0.0,
+            reason="valid observation",
+            provider_attestation=True,
+        )
