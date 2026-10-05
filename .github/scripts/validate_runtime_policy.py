@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import re
 import sys
 import tomllib
@@ -121,6 +122,15 @@ if any(value != RUNNER for value in runner_values):
     fail(f"every CI job must use {RUNNER}; found {runner_values}")
 
 quality = job_block(workflow, "quality", "openai-adapter")
+for required in (
+    "--cov-branch",
+    "--cov-report=json:coverage-core.json",
+    "check_coverage_policy.py",
+    "--coverage coverage-core.json",
+    "--profile core-trust",
+):
+    if required not in quality:
+        fail(f"quality job is missing trust-class coverage contract text: {required}")
 matrix_match = re.search(r"python-version:\s*\[([^\]]+)\]", quality)
 if matrix_match is None:
     fail("quality job must declare an explicit python-version matrix")
@@ -133,6 +143,45 @@ if "python .github/scripts/validate_runtime_policy.py" not in policy:
     fail("policy job must execute validate_runtime_policy.py")
 if "python .github/scripts/release_candidate.py self-test" not in policy:
     fail("policy job must self-test retained release candidate validation")
+if "python .github/scripts/check_coverage_policy.py --self-test" not in policy:
+    fail("policy job must self-test the module-specific coverage policy")
+
+coverage_manifest_path = Path(".github/coverage/thresholds.json")
+try:
+    coverage_manifest = json.loads(coverage_manifest_path.read_text(encoding="utf-8"))
+except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+    fail(f"cannot read coverage threshold manifest: {type(exc).__name__}")
+if not isinstance(coverage_manifest, dict) or coverage_manifest.get("schema_version") != 1:
+    fail("coverage threshold manifest must use schema_version 1")
+coverage_profiles = coverage_manifest.get("profiles")
+if not isinstance(coverage_profiles, dict):
+    fail("coverage threshold manifest must contain profiles")
+expected_coverage_profiles = {
+    "core-trust",
+    "openai",
+    "mcp-lab",
+    "mcp-remote-auth",
+    "mcp-oauth",
+}
+if set(coverage_profiles) != expected_coverage_profiles:
+    fail(
+        "coverage profile set mismatch: "
+        f"expected={sorted(expected_coverage_profiles)}, found={sorted(coverage_profiles)}"
+    )
+optional_profile_files: set[str] = set()
+for profile_id, profile_payload in coverage_profiles.items():
+    if not isinstance(profile_payload, dict) or not isinstance(profile_payload.get("files"), dict):
+        fail(f"coverage profile {profile_id!r} must declare files")
+    if profile_id != "core-trust":
+        optional_profile_files.update(profile_payload["files"])
+coverage_run = pyproject.get("tool", {}).get("coverage", {}).get("run", {})
+omitted_core_files = set(coverage_run.get("omit", []))
+if optional_profile_files != omitted_core_files:
+    fail(
+        "optional coverage profiles must exactly cover the core-coverage omit set: "
+        f"missing={sorted(omitted_core_files - optional_profile_files)}, "
+        f"unexpected={sorted(optional_profile_files - omitted_core_files)}"
+    )
 
 if "name: Publish retained release" not in publish_release:
     fail("publish-release workflow must use the canonical workflow name")
@@ -188,17 +237,33 @@ for forbidden in ("python -m build", "twine upload", "uv publish", "pypi.org"):
     if forbidden in publish_release.lower():
         fail(f"publish-release workflow contains forbidden release behavior: {forbidden}")
 
-for job, next_job in (
-    ("quality", "openai-adapter"),
-    ("openai-adapter", "mcp-lab"),
-    ("mcp-lab", "mcp-remote-auth"),
-    ("mcp-remote-auth", "mcp-oauth-flow"),
-    ("mcp-oauth-flow", "package"),
-    ("package", "package-reverify"),
+for job, next_job, coverage_profile, coverage_report in (
+    ("quality", "openai-adapter", None, None),
+    ("openai-adapter", "mcp-lab", "openai", "coverage-openai.json"),
+    ("mcp-lab", "mcp-remote-auth", "mcp-lab", "coverage-mcp-lab.json"),
+    (
+        "mcp-remote-auth",
+        "mcp-oauth-flow",
+        "mcp-remote-auth",
+        "coverage-mcp-remote-auth.json",
+    ),
+    ("mcp-oauth-flow", "package", "mcp-oauth", "coverage-mcp-oauth.json"),
+    ("package", "package-reverify", None, None),
 ):
     block = job_block(workflow, job, next_job)
     if not re.search(r"^\s+needs:\s*policy\s*$", block, flags=re.MULTILINE):
         fail(f"{job} must depend on the repository policy job")
+    if coverage_profile is not None and coverage_report is not None:
+        for required in (
+            "--cov-branch",
+            "--cov-config=.github/coverage/optional.coveragerc",
+            f"--cov-report=json:{coverage_report}",
+            "check_coverage_policy.py",
+            f"--coverage {coverage_report}",
+            f"--profile {coverage_profile}",
+        ):
+            if required not in block:
+                fail(f"{job} is missing optional-module coverage contract text: {required}")
 
 package = job_block(workflow, "package", "package-reverify")
 if "name: Package build and inspection" not in package:
