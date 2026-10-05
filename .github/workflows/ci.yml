@@ -677,6 +677,90 @@ jobs:
             --run-id "$GITHUB_RUN_ID" \
             --run-attempt "$GITHUB_RUN_ATTEMPT"
 
+
+  lock-bootstrap:
+    name: Temporary lock bootstrap / ${{ matrix.profile }} / Python ${{ matrix.python-version }}
+    if: github.event_name == 'pull_request' && github.head_ref == 'hardening/295-hashed-ci-locks'
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - profile: core
+            python-version: "3.11"
+            suffix: py311
+          - profile: core
+            python-version: "3.12"
+            suffix: py312
+          - profile: core
+            python-version: "3.13"
+            suffix: py313
+          - profile: core
+            python-version: "3.14"
+            suffix: py314
+          - profile: mcp
+            python-version: "3.11"
+            suffix: py311
+          - profile: openai-mcp
+            python-version: "3.11"
+            suffix: py311
+    steps:
+      - name: Checkout exact PR head
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install pinned bootstrap compiler
+        run: python -m pip install --disable-pip-version-check "pip-tools==7.5.2"
+      - name: Compile hash-checked lock
+        run: |
+          python .github/scripts/generate_ci_lock.py \
+            --profile "${{ matrix.profile }}" \
+            --output "generated/${{ matrix.profile }}-${{ matrix.suffix }}.txt"
+      - name: Upload generated lock
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: lock-${{ matrix.profile }}-${{ matrix.suffix }}
+          path: generated/*.txt
+          if-no-files-found: error
+          retention-days: 1
+
+  lock-bootstrap-commit:
+    name: Temporary lock bootstrap / commit
+    if: github.event_name == 'pull_request' && github.head_ref == 'hardening/295-hashed-ci-locks'
+    needs: lock-bootstrap
+    permissions:
+      contents: write
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout branch for one-time lock commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: hardening/295-hashed-ci-locks
+      - name: Download all generated locks
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: lock-*
+          path: requirements/locks
+          merge-multiple: true
+      - name: Commit generated locks to active branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add requirements/locks
+          git diff --cached --quiet && {
+            echo "::error::no generated lock changes found"
+            exit 1
+          }
+          git commit -m "ci(deps): generate exact hashed CI lock profiles"
+          git push origin HEAD:hardening/295-hashed-ci-locks
+
   ci-gate:
     name: ci-gate
     if: always()
