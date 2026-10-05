@@ -12,8 +12,10 @@ from agent_evals.adversarial.cases import AttackChannel, AttackFixture
 from agent_evals.adversarial.delivery import (
     AttackDeliveryError,
     AttackDeliveryReceipt,
-    _receipt_root as attack_delivery_root,
     verify_attack_delivery,
+)
+from agent_evals.adversarial.delivery import (
+    _receipt_root as attack_delivery_root,
 )
 from agent_evals.assurance.report import _report_root as assurance_v6_root
 from agent_evals.assurance.report_v7 import _report_root as assurance_v7_root
