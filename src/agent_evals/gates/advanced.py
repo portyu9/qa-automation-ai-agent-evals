@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from math import isfinite
 
 from agent_evals.gates.release import GateDecision, GateResult, ReleaseGate, ReleasePolicy
+from agent_evals.statistics.limits import MAX_STATISTICAL_TRIALS
 from agent_evals.statistics.operational import OperationalInclusion, OperationalSummary
 from agent_evals.statistics.reliability import ReliabilityReport
 
@@ -78,6 +79,10 @@ class SliceReleaseGate:
     def decide(self, slices: tuple[SliceEvidence, ...]) -> SliceGateResult:
         if type(slices) is not tuple or not slices:
             raise ValueError("slices must be a non-empty exact tuple")
+        if len(slices) > MAX_STATISTICAL_TRIALS:
+            raise ValueError(
+                f"slice count exceeds maximum statistical work bound {MAX_STATISTICAL_TRIALS}"
+            )
         seen: set[str] = set()
         by_family: dict[str, list[tuple[SliceEvidence, GateResult]]] = {}
         all_results: list[tuple[SliceEvidence, GateResult]] = []
@@ -169,8 +174,13 @@ class OperationalTailPolicy:
     allow_excluded_unresolved: bool = False
 
     def __post_init__(self) -> None:
-        if type(self.minimum_samples) is not int or self.minimum_samples < 1:
-            raise ValueError("minimum_samples must be a positive exact integer")
+        if (
+            type(self.minimum_samples) is not int
+            or not 1 <= self.minimum_samples <= MAX_STATISTICAL_TRIALS
+        ):
+            raise ValueError(
+                "minimum_samples must be a positive exact integer inside the statistical bound"
+            )
         for name in ("max_latency_p95_ms", "max_cost_p95_usd"):
             value = getattr(self, name)
             if value is not None and (
