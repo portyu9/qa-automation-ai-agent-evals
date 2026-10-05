@@ -25,10 +25,11 @@ The publisher then:
 
 1. validates the dispatch action, repository identity, exact default-branch ref/SHA, and exact two-field request payload;
 2. fetches the explicitly requested Actions run and requires the canonical `CI` workflow, `push` event, `completed/success`, `main` head branch, exact `head_sha`, and positive run attempt;
-3. resolves the already-existing tag, requires it to target the CI-qualified commit, and requires the tag to equal `v<project.version>` from `pyproject.toml` at that commit;
-4. downloads exactly `package-artifacts-<ci_run_id>`, reverifies `agent-evals/package-artifact-manifest/v1` against the exact CI repository/commit/workflow/run/attempt context, and installs the retained wheel and sdist;
-5. revalidates the tag and release-absence state immediately before publication; and
-6. publishes only the retained wheel, sdist, and manifest to the existing tag with `gh release create --verify-tag`.
+3. fetches that run's latest-attempt job graph and requires exactly one successful `Reproduce package artifacts independently` job bound to the same commit and run attempt, so pre-reproducibility historical CI runs cannot qualify for the stronger release path;
+4. resolves the already-existing tag, requires it to target the CI-qualified commit, and requires the tag to equal `v<project.version>` from `pyproject.toml` at that commit;
+5. downloads exactly `package-artifacts-<ci_run_id>`, reverifies `agent-evals/package-artifact-manifest/v1` against the exact CI repository/commit/workflow/run/attempt context, and installs the retained wheel and sdist;
+6. revalidates the tag and release-absence state immediately before publication; and
+7. publishes only the retained wheel, sdist, and manifest to the existing tag with `gh release create --verify-tag`.
 
 Repository policy requires full-SHA action pins and rejects drift that reintroduces `workflow_dispatch`/`workflow_run`, interpolates `client_payload` into shell, drops default-branch SHA binding, omits exact run/artifact bindings, rebuilds packages, or drops tag verification. Ordinary CI also executes the release-candidate validator's deterministic self-test.
 
