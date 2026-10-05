@@ -136,13 +136,19 @@ if "python .github/scripts/release_candidate.py self-test" not in policy:
 
 if "name: Publish retained release" not in publish_release:
     fail("publish-release workflow must use the canonical workflow name")
-if "repository_dispatch:" not in publish_release or "types: [release-request]" not in publish_release:
+if (
+    "repository_dispatch:" not in publish_release
+    or "types: [release-request]" not in publish_release
+):
     fail("publish-release must use the default-branch-bound release-request repository_dispatch")
 if "workflow_dispatch:" in publish_release or "workflow_run:" in publish_release:
     fail("publish-release must not expose selectable-ref or upstream-workflow execution surfaces")
 if "permissions:\n  actions: read\n  contents: write" not in publish_release:
     fail("publish-release must grant only actions-read/contents-write authority")
-if "group: retained-release-publication" not in publish_release or "cancel-in-progress: false" not in publish_release:
+if (
+    "group: retained-release-publication" not in publish_release
+    or "cancel-in-progress: false" not in publish_release
+):
     fail("publish-release must serialize release publication attempts without cancellation")
 if "if: github.ref == 'refs/heads/main'" not in publish_release:
     fail("publish-release job must fail closed unless the dispatch ref is main")
@@ -155,7 +161,9 @@ if "ref: ${{ github.sha }}" not in publish_release:
 if "persist-credentials: false" not in publish_release:
     fail("publish-release checkout must not persist repository credentials")
 if "github.event.client_payload" in publish_release:
-    fail("publish-release must parse client payload as event-file data, not interpolate it into shell")
+    fail(
+        "publish-release must parse client payload as event-file data, not interpolate it into shell"
+    )
 for required in (
     "release_candidate.py self-test",
     "release_candidate.py validate",
