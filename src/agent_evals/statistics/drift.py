@@ -79,9 +79,7 @@ def detect_binary_change_point(
     if count < 2 * minimum_segment_trials:
         raise ValueError("change-point scan requires two complete minimum-sized segments")
     _validate_alpha(alpha)
-    if isinstance(minimum_absolute_delta, bool) or not isinstance(
-        minimum_absolute_delta, float
-    ):
+    if isinstance(minimum_absolute_delta, bool) or not isinstance(minimum_absolute_delta, float):
         raise ValueError("minimum_absolute_delta must be an exact finite float")
     if not isfinite(minimum_absolute_delta) or not 0.0 <= minimum_absolute_delta <= 1.0:
         raise ValueError("minimum_absolute_delta must lie in [0, 1]")
