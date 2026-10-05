@@ -66,7 +66,9 @@ def parse_lock(path: Path, expected_python: str) -> dict[str, str]:
         raise LockPolicyError(f"{path.name} contains no SHA-256 hashes")
     for forbidden in ("--index-url", "--extra-index-url", "--trusted-host", " @ file:", "\n-e "):
         if forbidden in raw:
-            raise LockPolicyError(f"{path.name} contains forbidden requirement source: {forbidden!r}")
+            raise LockPolicyError(
+                f"{path.name} contains forbidden requirement source: {forbidden!r}"
+            )
 
     lines = raw.splitlines()
     pins: dict[str, str] = {}
@@ -123,7 +125,9 @@ def validate() -> None:
     for filename in ("core-py311.txt", "core-py312.txt", "core-py313.txt", "core-py314.txt"):
         contaminated = sorted(forbidden_optional & set(parsed[filename]))
         if contaminated:
-            raise LockPolicyError(f"{filename} contains optional integration packages: {contaminated}")
+            raise LockPolicyError(
+                f"{filename} contains optional integration packages: {contaminated}"
+            )
     if "openai-agents" in parsed["mcp-py311.txt"] or "openai" in parsed["mcp-py311.txt"]:
         raise LockPolicyError("MCP-only lock is contaminated by OpenAI integration packages")
     for required in ("mcp", "httpx2"):
