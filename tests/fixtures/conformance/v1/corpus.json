@@ -1,0 +1,332 @@
+{
+  "schema_version": "agent-evals/conformance-corpus/v1",
+  "generated_against_commit": "8d1b692de07ac633d31778e1754b0c2c525b25be",
+  "scope": {
+    "claim": "Language-neutral integrity vectors for current canonical digest/root formats and selected evidence corruption cases.",
+    "nonclaims": [
+      "Hashes and roots are integrity identities, not signatures, authentication, attestation, or trusted timestamps.",
+      "This corpus does not establish universal JSON, MCP, OAuth, provider, or statistical conformance.",
+      "Behavioral PASS/FAIL/BLOCKED/INCONCLUSIVE semantics remain owned by the evaluator and are not replaced by hash checks."
+    ]
+  },
+  "format_families": [
+    {
+      "name": "json-ascii-sha256",
+      "canonicalization": "UTF-8 JSON, lexicographic object keys, separators ',' and ':', ensure_ascii=true, finite values only",
+      "uses": [
+        "SubjectFingerprint identity",
+        "EvaluationScenario identity",
+        "EvidenceEvent digest",
+        "evidence-store record key and canonical payload digest",
+        "adversarial/retrieval/side-effect/MCP policy and receipt identities that use plain canonical JSON SHA-256"
+      ]
+    },
+    {
+      "name": "json-utf8-sha256",
+      "canonicalization": "UTF-8 JSON, lexicographic object keys, separators ',' and ':', ensure_ascii=false, finite values only",
+      "uses": [
+        "semantic rubric/profile/input/response identities and digests"
+      ]
+    },
+    {
+      "name": "domain-null-json-ascii-sha256",
+      "canonicalization": "SHA-256(domain UTF-8 || 0x00 || json-ascii canonical bytes)",
+      "uses": [
+        "approval intent",
+        "attack delivery",
+        "assurance report v6/v7",
+        "population frame",
+        "randomness/reset receipts",
+        "retrieval receipt",
+        "runtime metric provenance",
+        "session sampling v2",
+        "side-effect receipt and logical operation",
+        "MCP agent bridge receipts except tool-metadata"
+      ]
+    },
+    {
+      "name": "domain-null-json-utf8-sha256",
+      "canonicalization": "SHA-256(domain UTF-8 || 0x00 || json-utf8 canonical bytes)",
+      "uses": [
+        "MCP tool-metadata bridge receipts",
+        "semantic calibration case commitments and receipts",
+        "semantic judgment receipt"
+      ]
+    },
+    {
+      "name": "trial-evidence-v2-chain",
+      "canonicalization": "Domain-separated envelope seed; append-order SHA-256 chain over event digests; domain-separated terminal hash",
+      "uses": [
+        "TrialEvidence.evidence_root and historical TrialEvidence/v2 integrity verification"
+      ]
+    }
+  ],
+  "canonical_material": {
+    "a": 1,
+    "message": "café",
+    "nested": [
+      true,
+      null,
+      "Ω"
+    ]
+  },
+  "canonical_vectors": {
+    "ascii_json": "{\"a\":1,\"message\":\"caf\\u00e9\",\"nested\":[true,null,\"\\u03a9\"]}",
+    "utf8_json": "{\"a\":1,\"message\":\"café\",\"nested\":[true,null,\"Ω\"]}",
+    "ascii_sha256": "a0f32419eaaad557540e7a9ea2249092622f5ef3c5f82d832119b72845ac6d88",
+    "utf8_sha256": "f110c347446580673d2430d6e45e493905a2b958e3fc4e2da763f75aa65485df"
+  },
+  "domain_roots": [
+    {
+      "name": "approval-intent-v2",
+      "domain": "agent-evals/approval-intent/v2",
+      "canonical_mode": "ascii",
+      "expected_sha256": "4d5d88d95c7e8f7f829ef619ebee54eb9497280ce55539f41bf12264f2bcb5bb"
+    },
+    {
+      "name": "assurance-report-v6",
+      "domain": "agent-evals/assurance-report/v6",
+      "canonical_mode": "ascii",
+      "expected_sha256": "4bc11fe46dd0c8a317976050938cddce9155944fdf849e0663eb17d298c7348c"
+    },
+    {
+      "name": "assurance-report-v7",
+      "domain": "agent-evals/assurance-report/v7",
+      "canonical_mode": "ascii",
+      "expected_sha256": "e564ce17fabf06293e79dbc74cd78821d0274a8ae640760ecaad553de23ce8d2"
+    },
+    {
+      "name": "attack-delivery-v1",
+      "domain": "agent-evals/attack-delivery/v1",
+      "canonical_mode": "ascii",
+      "expected_sha256": "cc3ed6610dc6ad89ad634ecd817426ffa4c168ccb8965b25ecea859f0a787b78"
+    },
+    {
+      "name": "mcp-agent-tool-error-recovery-receipt-v1",
+      "domain": "agent-evals/mcp-agent-tool-error-recovery-receipt/v1",
+      "canonical_mode": "ascii",
+      "expected_sha256": "9444543ffd608a2f25884fe0e2b0ca80a6e2bf48427c5335c0bbc21642f68fa7"
+    },
+    {
+      "name": "mcp-agent-tool-identity-drift-receipt-v3",
+      "domain": "agent-evals/mcp-agent-tool-identity-drift-receipt/v3",
+      "canonical_mode": "ascii",
+      "expected_sha256": "d63f22cd17e892effde64635de5480f8adc9f0a13494fae0332c1fb56a5c0d4a"
+    },
+    {
+      "name": "mcp-agent-tool-metadata-receipt-v1",
+      "domain": "agent-evals/mcp-agent-tool-metadata-receipt/v1",
+      "canonical_mode": "utf8",
+      "expected_sha256": "2c0f8ee9aacf80a54cb25a8b78ff1e2e7db205d0a313aee98c601df2ce298ac4"
+    },
+    {
+      "name": "mcp-agent-tool-result-receipt-v1",
+      "domain": "agent-evals/mcp-agent-tool-result-receipt/v1",
+      "canonical_mode": "ascii",
+      "expected_sha256": "78b1dca21c80681759d7c304c48eafcca9bac01ca56d813a6fc39def6e06a6c5"
+    },
+    {
+      "name": "mcp-agent-tool-schema-drift-receipt-v3",
+      "domain": "agent-evals/mcp-agent-tool-schema-drift-receipt/v3",
+      "canonical_mode": "ascii",
+      "expected_sha256": "791aed6bfcdb1c5c7e5d6d09b450f650165f1d4a674ce28e34c323ffcd43b02d"
+    },
+    {
+      "name": "mcp-agent-tool-stale-cache-receipt-v2",
+      "domain": "agent-evals/mcp-agent-tool-stale-cache-receipt/v2",
+      "canonical_mode": "ascii",
+      "expected_sha256": "ec972e0b5298184b0a0795c63eeaadd88cc3baddaf2733ed372766e4c67df789"
+    },
+    {
+      "name": "population-frame-v1",
+      "domain": "agent-evals/population-frame/v1",
+      "canonical_mode": "ascii",
+      "expected_sha256": "c27add1f5b06292bd6f7a717e8abc7eed32295a15d1205c43be3d55257fa3ef2"
+    },
+    {
+      "name": "randomness-control-receipt-v1",
+      "domain": "agent-evals/randomness-control-receipt/v1",
+      "canonical_mode": "ascii",
+      "expected_sha256": "80529b8b56f132cfa5ff921c0510e56a8319400d5e74668d1c81d5a3218ef1ed"
+    },
+    {
+      "name": "reset-isolation-receipt-v1",
+      "domain": "agent-evals/reset-isolation-receipt/v1",
+      "canonical_mode": "ascii",
+      "expected_sha256": "4e852995628b7807f1947f57b8f329d0b8e2a50a4d34d56b7fa26108d0283ecd"
+    },
+    {
+      "name": "retrieval-delivery-receipt-v1",
+      "domain": "agent-evals/retrieval-delivery-receipt/v1",
+      "canonical_mode": "ascii",
+      "expected_sha256": "c4c3c05a0019bcbd5a2325a06d70987c86c491b1b7ca09c8907d96be44643bdd"
+    },
+    {
+      "name": "runtime-metric-provenance-v1",
+      "domain": "agent-evals/runtime-metric-provenance/v1",
+      "canonical_mode": "ascii",
+      "expected_sha256": "897b1ad682293c53a417b3403612f00af8640e544c42afc45de3fe19d8a1e957"
+    },
+    {
+      "name": "semantic-calibration-case-commitment-v1",
+      "domain": "agent-evals/semantic-calibration-case-commitment/v1",
+      "canonical_mode": "utf8",
+      "expected_sha256": "61e3f65a8629ffa24a31eed5cbc17734f96aee4ac61b6c2ba670fb562a4fb5b1"
+    },
+    {
+      "name": "semantic-calibration-receipt-v2",
+      "domain": "agent-evals/semantic-calibration-receipt/v2",
+      "canonical_mode": "utf8",
+      "expected_sha256": "ffd2b731a2e740cda729ea006fd9fb9c708024a96d05383add63ca7e4d9e95d9"
+    },
+    {
+      "name": "semantic-judgment-receipt-v1",
+      "domain": "agent-evals/semantic-judgment-receipt/v1",
+      "canonical_mode": "utf8",
+      "expected_sha256": "071fb8c85467bdb6968a076e115948a51cb55d33ed3c410686090eba940a2257"
+    },
+    {
+      "name": "session-sampling-v2",
+      "domain": "agent-evals/session-sampling/v2",
+      "canonical_mode": "ascii",
+      "expected_sha256": "fa7b1f8959320f95761df5158ed703b4cbcd2e6e63373f866b0106fe42fedc21"
+    },
+    {
+      "name": "side-effect-idempotency-receipt-v1",
+      "domain": "agent-evals/side-effect-idempotency-receipt/v1",
+      "canonical_mode": "ascii",
+      "expected_sha256": "b0e340ab1b3d69bbb72c37d1900026e3bea1e3689f5dbf7591d879c5894614b3"
+    }
+  ],
+  "subject_fingerprint": {
+    "material": {
+      "provider": "example",
+      "model": "model-a",
+      "application_revision": "abc123",
+      "instructions": "Be useful.",
+      "tool_schema": {
+        "tools": [
+          {
+            "name": "lookup"
+          }
+        ]
+      },
+      "policy": {
+        "allowed": [
+          "lookup"
+        ]
+      },
+      "memory_policy": {
+        "retention": "trial"
+      },
+      "adapter": "scripted",
+      "adapter_version": "1"
+    },
+    "component_sha256": {
+      "instructions": "96ec292fb50a8688d93a5c63145586101c95578fe6b57e85f775b456dfdecb4d",
+      "tool_schema": "0372d4fe79744666511516586ee7486a41a43e97ea8d3e11893a0b909d809fa9",
+      "policy": "ca8af5ed2a4f3782f0618fb1693c3b67e7f30327db55b69fa69d001cee76452c",
+      "memory_policy": "1aa892fcd9573cc1fe20f8014ec4a0395be81ec2ac60fcde415eff4eba68a23c"
+    },
+    "expected_identity": "d80e8b01f2f3618af58a13dfaa44d761646735a28186a25993d35174c607c38d",
+    "provenance": "Salvaged from superseded/unmerged PR #265 blob tests/unit/test_algorithmic_complexity.py@fe051dfdbac3f01fc32d198a284cc9c0fd1fa8f0"
+  },
+  "side_effect_operation": {
+    "spec": {
+      "tool": "write",
+      "key_argument": "id",
+      "expected_arguments": {
+        "id": "123",
+        "value": "x"
+      },
+      "attempts": 2,
+      "require_first_mutation": true
+    },
+    "expected_arguments_sha256": "048c2a97c60fdfaf18c97474a8eeb71d57a9a67d18f17a163b3a536142c30701",
+    "key_sha256": "3140d59420ca920c79fdef003360543c12b14da984f00f8665756e9da9c4b743",
+    "expected_spec_identity": "ccecf0a68767d4299e1273ce783daaeb4a8b4185e551b4b3f0acd938cf6f6baa",
+    "expected_logical_operation_identity": "56b3a0ad50ff8f2b4b5f135b9093ad68f4994b4211659e61a4b7906809b1984c"
+  },
+  "trial_evidence": {
+    "evidence": {
+      "trial_id": "corpus-trial",
+      "subject_identity": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "scenario_identity": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "events": [
+        {
+          "sequence": 0,
+          "kind": "state",
+          "source": "adapter:corpus",
+          "payload": {
+            "message": "café",
+            "step": 1
+          },
+          "observed_at": "2026-01-02T03:04:05Z",
+          "critical": false
+        },
+        {
+          "sequence": 1,
+          "kind": "output",
+          "source": "adapter:corpus",
+          "payload": {
+            "text": "ok"
+          },
+          "observed_at": "2026-01-02T03:04:06Z",
+          "critical": false
+        }
+      ],
+      "final_state": {
+        "status": "ok"
+      },
+      "final_output": "a",
+      "elapsed_ms": 12.5,
+      "input_tokens": 3,
+      "output_tokens": 2,
+      "estimated_cost_usd": 0.001
+    },
+    "event_digests": [
+      "b7ad87e416caf7bdd25154125206479e68dceb6ca26c4cb7c6a9205d8b186239",
+      "c8f8c262519357f787961d684d8f4d1d9479542b15bcddf669e053b0588a89a0"
+    ],
+    "evidence_root": "219fcd6d823672500a261ea3e4d1acbec0748775a2d0fa7b28db93323a6061c3"
+  },
+  "corruptions": [
+    {
+      "name": "one-bit-final-output",
+      "mutation": "replace /final_output from UTF-8 byte 0x61 ('a') to 0x63 ('c'); XOR is 0x02, one bit",
+      "expected_result": "root_mismatch",
+      "mutated_evidence_root": "d3afb80e4185e48b793cdcc8ba00ec5a4f4bb74431f58667cdecd2c6200fb410"
+    },
+    {
+      "name": "omit-trial-id",
+      "mutation": "remove /trial_id",
+      "expected_result": "schema_rejection"
+    },
+    {
+      "name": "reorder-events",
+      "mutation": "reverse /events without changing embedded sequence numbers",
+      "expected_result": "sequence_rejection"
+    },
+    {
+      "name": "duplicate-sequence",
+      "mutation": "replace /events/1/sequence with 0",
+      "expected_result": "sequence_rejection"
+    },
+    {
+      "name": "cross-scenario-receipt",
+      "mutation": "replace a valid attack-delivery receipt scenario_identity with a foreign identity and recompute only its internal integrity root",
+      "expected_result": "relation_rejection",
+      "foreign_scenario_identity": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+    },
+    {
+      "name": "schema-confusion",
+      "mutation": "add /schema_version = agent-evals/assurance-report/v6 to TrialEvidence/v2 material",
+      "expected_result": "schema_rejection"
+    }
+  ],
+  "differential_references": {
+    "statistics": "tests/unit/test_statistics_complexity_limits.py::_reference_exact_mcnemar uses an independent exact integer/binomial reference.",
+    "protocol": "tests/fuzz/test_mcp_boundaries.py and tests/fuzz/test_oauth_boundaries.py exercise pinned official MCP SDK behavior and strict OAuth/bearer boundaries; the SDK is a test oracle, not universal conformance.",
+    "canonicalization": "tests/unit/test_conformance_corpus.py recomputes the corpus with an implementation-independent json.dumps/hashlib reference path before comparing production helpers."
+  }
+}
