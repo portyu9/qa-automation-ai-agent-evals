@@ -18,6 +18,7 @@ CI_WORKFLOW_NAME = "CI"
 CI_WORKFLOW_PATH = ".github/workflows/ci.yml"
 REPRODUCIBILITY_JOB_NAME = "Reproduce package artifacts independently"
 SUPPLY_CHAIN_JOB_NAME = "Reverify release supply-chain evidence"
+QUALIFICATION_JOB_NAME = "Retain CI qualification evidence"
 PROVENANCE_JOB_NAME = "Attest retained release artifacts"
 DEFAULT_BRANCH = "main"
 PROJECT_NAME = "qa-automation-ai-agent-evals"
@@ -145,6 +146,7 @@ def validate_release_qualification_jobs(
     for job_name, label in (
         (REPRODUCIBILITY_JOB_NAME, "reproducibility"),
         (SUPPLY_CHAIN_JOB_NAME, "supply-chain evidence"),
+        (QUALIFICATION_JOB_NAME, "CI qualification evidence"),
         (PROVENANCE_JOB_NAME, "provenance attestation"),
     ):
         matches = [job for job in jobs if type(job) is dict and job.get("name") == job_name]
@@ -494,6 +496,13 @@ def self_test() -> None:
         "head_sha": sha,
         "run_attempt": 3,
     }
+    qualification_job = {
+        "name": QUALIFICATION_JOB_NAME,
+        "status": "completed",
+        "conclusion": "success",
+        "head_sha": sha,
+        "run_attempt": 3,
+    }
     provenance_job = {
         "name": PROVENANCE_JOB_NAME,
         "status": "completed",
@@ -502,46 +511,74 @@ def self_test() -> None:
         "run_attempt": 3,
     }
     qualification_jobs = {
-        "total_count": 3,
-        "jobs": [repro_job, supply_chain_job, provenance_job],
+        "total_count": 4,
+        "jobs": [repro_job, supply_chain_job, qualification_job, provenance_job],
     }
     validate_release_qualification_jobs(qualification_jobs, ci_sha=sha, ci_run_attempt=3)
     invalid_job_sets = (
         {"total_count": 0, "jobs": []},
-        {"total_count": 2, "jobs": [repro_job, supply_chain_job]},
         {
             "total_count": 3,
+            "jobs": [repro_job, supply_chain_job, provenance_job],
+        },
+        {
+            "total_count": 4,
             "jobs": [
                 dict(repro_job, conclusion="failure"),
                 supply_chain_job,
+                qualification_job,
                 provenance_job,
             ],
         },
         {
-            "total_count": 3,
+            "total_count": 4,
             "jobs": [
                 repro_job,
                 dict(supply_chain_job, conclusion="failure"),
+                qualification_job,
                 provenance_job,
             ],
         },
         {
-            "total_count": 3,
+            "total_count": 4,
             "jobs": [
                 repro_job,
                 supply_chain_job,
+                dict(qualification_job, conclusion="failure"),
+                provenance_job,
+            ],
+        },
+        {
+            "total_count": 4,
+            "jobs": [
+                repro_job,
+                supply_chain_job,
+                qualification_job,
                 dict(provenance_job, conclusion="failure"),
             ],
         },
         {
-            "total_count": 3,
-            "jobs": [repro_job, supply_chain_job, dict(provenance_job, head_sha="b" * 40)],
+            "total_count": 4,
+            "jobs": [
+                repro_job,
+                supply_chain_job,
+                qualification_job,
+                dict(provenance_job, head_sha="b" * 40),
+            ],
         },
         {
-            "total_count": 3,
-            "jobs": [repro_job, supply_chain_job, dict(provenance_job, run_attempt=2)],
+            "total_count": 4,
+            "jobs": [
+                repro_job,
+                supply_chain_job,
+                dict(qualification_job, run_attempt=2),
+                provenance_job,
+            ],
         },
-        {"total_count": 4, "jobs": [repro_job, supply_chain_job, provenance_job]},
+        {
+            "total_count": 5,
+            "jobs": [repro_job, supply_chain_job, qualification_job, provenance_job],
+        },
     )
     for mutated in invalid_job_sets:
         try:
