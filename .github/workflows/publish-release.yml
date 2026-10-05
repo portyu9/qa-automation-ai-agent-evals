@@ -65,10 +65,11 @@ jobs:
           path: retained-supply-chain
           github-token: ${{ secrets.GITHUB_TOKEN }}
           run-id: ${{ steps.candidate.outputs.ci_run_id }}
-      - name: Exercise retained wheel
+      - name: Exercise retained wheel in exact hash-checked environment
         run: |
-          python -m pip install --disable-pip-version-check -r requirements-dev-ci-build.txt
-          python -m pip install --disable-pip-version-check retained-dist/*.whl
+          python -m pip install --disable-pip-version-check --require-hashes \
+            -r requirements/locks/core-py311.txt
+          python -m pip install --disable-pip-version-check --no-deps retained-dist/*.whl
           python -c "import agent_evals; print(agent_evals.__name__)"
           agent-evals --help >/dev/null
       - name: Reverify retained SPDX SBOM and dependency license evidence
@@ -85,7 +86,7 @@ jobs:
       - name: Exercise retained source distribution
         run: |
           python -m pip uninstall -y qa-automation-ai-agent-evals
-          python -m pip install --disable-pip-version-check --no-deps retained-dist/*.tar.gz
+          python -m pip install --disable-pip-version-check --no-deps --no-build-isolation retained-dist/*.tar.gz
           python -c "import agent_evals; print(agent_evals.__name__)"
           agent-evals --help >/dev/null
       - name: Revalidate tag and release state immediately before publication
