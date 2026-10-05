@@ -89,7 +89,7 @@ jobs:
           python_version="${{ matrix.python-version }}"
           lock_suffix="${python_version/./}"
           python -m pip install --disable-pip-version-check --require-hashes             -r "requirements/locks/core-py${lock_suffix}.txt"
-          python -m pip install --disable-pip-version-check --no-deps --no-build-isolation -e .
+          python -m pip install --disable-pip-version-check --no-deps --no-build-isolation .
       - name: Dependency consistency
         run: python -m pip check
       - name: Ruff
@@ -126,7 +126,7 @@ jobs:
       - name: Install exact hash-checked core profile
         run: |
           python -m pip install --disable-pip-version-check --require-hashes             -r requirements/locks/core-py311.txt
-          python -m pip install --disable-pip-version-check --no-deps --no-build-isolation -e .
+          python -m pip install --disable-pip-version-check --no-deps --no-build-isolation .
       - name: Dependency consistency
         run: python -m pip check
       - name: Run fresh mutation campaign
@@ -173,7 +173,7 @@ jobs:
       - name: Install exact hash-checked OpenAI plus MCP profile
         run: |
           python -m pip install --disable-pip-version-check --require-hashes             -r requirements/locks/openai-mcp-py311.txt
-          python -m pip install --disable-pip-version-check --no-deps --no-build-isolation -e .
+          python -m pip install --disable-pip-version-check --no-deps --no-build-isolation .
       - name: Dependency consistency
         run: python -m pip check
       - name: Run deterministic SDK adapter tests with optional-module coverage
@@ -205,7 +205,7 @@ jobs:
         run: |
           python -m pip install --disable-pip-version-check --require-hashes \
             -r requirements/locks/mcp-py311.txt
-          python -m pip install --disable-pip-version-check --no-deps --no-build-isolation -e .
+          python -m pip install --disable-pip-version-check --no-deps --no-build-isolation .
       - name: Run deterministic MCP protocol tests with optional-module coverage
         run: |
           pytest -m mcp tests/integration/test_mcp_*.py             --cov=agent_evals             --cov-branch             --cov-config=.github/coverage/optional.coveragerc             --cov-report=term-missing             --cov-report=json:coverage-mcp-lab.json
@@ -230,7 +230,7 @@ jobs:
         run: |
           python -m pip install --disable-pip-version-check --require-hashes \
             -r requirements/locks/mcp-py311.txt
-          python -m pip install --disable-pip-version-check --no-deps --no-build-isolation -e .
+          python -m pip install --disable-pip-version-check --no-deps --no-build-isolation .
       - name: Run loopback Streamable HTTP authorization tests with coverage
         run: |
           pytest -m mcp_remote tests/integration/test_mcp_*.py             --cov=agent_evals             --cov-branch             --cov-config=.github/coverage/optional.coveragerc             --cov-report=term-missing             --cov-report=json:coverage-mcp-remote-auth.json
@@ -255,7 +255,7 @@ jobs:
         run: |
           python -m pip install --disable-pip-version-check --require-hashes \
             -r requirements/locks/mcp-py311.txt
-          python -m pip install --disable-pip-version-check --no-deps --no-build-isolation -e .
+          python -m pip install --disable-pip-version-check --no-deps --no-build-isolation .
       - name: Run separated authorization-server/resource-server OAuth tests with coverage
         run: |
           pytest -m mcp_oauth tests/integration/test_mcp_*.py             --cov=agent_evals             --cov-branch             --cov-config=.github/coverage/optional.coveragerc             --cov-report=term-missing             --cov-report=json:coverage-mcp-oauth.json
