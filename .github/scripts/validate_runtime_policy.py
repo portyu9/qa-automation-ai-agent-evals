@@ -400,7 +400,9 @@ for job, lock_path in locked_job_contracts.items():
     block = job_block(workflow, job, locked_job_next[job])
     for required in ("--require-hashes", lock_path, "--no-deps --no-build-isolation ."):
         if required not in block:
-            fail(f"{job} must install the exact repository lock before the local project: {required}")
+            fail(
+                f"{job} must install the exact repository lock before the local project: {required}"
+            )
 
 for workflow_path, source in workflows.items():
     if "pip install --disable-pip-version-check -e '.[" in source:
@@ -484,7 +486,10 @@ if "export PYTHONHASHSEED=0" not in package_reproduce:
     fail("package-reproduce must pin PYTHONHASHSEED")
 if "path: ${{ runner.temp }}/retained-dist" not in package_reproduce:
     fail("package-reproduce must keep retained reference bytes outside the source checkout")
-if 'python -m build --no-isolation --outdir "$RUNNER_TEMP/reproduced-dist"' not in package_reproduce:
+if (
+    'python -m build --no-isolation --outdir "$RUNNER_TEMP/reproduced-dist"'
+    not in package_reproduce
+):
     fail("package-reproduce must independently rebuild without build isolation")
 if "package_artifact_manifest.py compare" not in package_reproduce:
     fail("package-reproduce must compare rebuilt bytes against the retained manifest")
