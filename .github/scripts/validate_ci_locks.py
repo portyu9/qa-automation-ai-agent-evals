@@ -3,8 +3,6 @@ from __future__ import annotations
 import re
 import tomllib
 from pathlib import Path
-from typing import Any
-
 ROOT = Path(__file__).resolve().parents[2]
 LOCK_DIR = ROOT / "requirements" / "locks"
 EXPECTED = {
@@ -61,7 +59,7 @@ def exact_pin(requirement: str) -> str | None:
 
 def parse_lock(path: Path, expected_python: str) -> dict[str, str]:
     raw = path.read_text(encoding="utf-8")
-    if f"Python {expected_python}" not in raw.splitlines()[1:5]:
+    if not any(f"Python {expected_python}" in line for line in raw.splitlines()[1:6]):
         raise LockPolicyError(f"{path.name} is not generated for Python {expected_python}")
     if "--hash=sha256:" not in raw:
         raise LockPolicyError(f"{path.name} contains no SHA-256 hashes")
