@@ -359,6 +359,18 @@ for required in (
 ):
     if required not in publish_release:
         fail(f"publish-release workflow is missing required contract text: {required}")
+for retained_path, minimum_count in (
+    ("retained-dist/*.whl", 3),
+    ("retained-dist/*.tar.gz", 3),
+    ("retained-dist/artifact-manifest.json", 2),
+    ("retained-supply-chain/release-sbom.spdx.json", 2),
+    ("retained-supply-chain/release-supply-chain-evidence.json", 2),
+):
+    if publish_release.count(retained_path) < minimum_count:
+        fail(
+            "publish-release workflow is missing required contract text in both "
+            f"verification/publication surfaces: {retained_path}"
+        )
 if publish_release.count("release_candidate.py validate") < 2:
     fail("publish-release must revalidate tag/release state immediately before publication")
 for forbidden in ("python -m build", "twine upload", "uv publish", "pypi.org"):
