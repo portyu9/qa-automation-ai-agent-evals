@@ -229,6 +229,7 @@ def evaluate(
     group_covered = 0
     group_total = 0
     messages: list[str] = []
+    failures: list[str] = []
     for source, threshold_raw in configured_files.items():
         measured = files.get(source)
         if type(measured) is not dict:
@@ -242,7 +243,7 @@ def evaluate(
         percent = _percentage(covered, total)
         threshold = float(threshold_raw)
         if percent + 1e-12 < threshold:
-            raise CoveragePolicyError(
+            failures.append(
                 f"{profile_id} {source} {metric} coverage {percent:.2f}% "
                 f"is below required {threshold:.2f}%"
             )
@@ -255,7 +256,7 @@ def evaluate(
     group_percent = _percentage(group_covered, group_total)
     group_minimum = float(profile["minimum_group_percent"])
     if group_percent + 1e-12 < group_minimum:
-        raise CoveragePolicyError(
+        failures.append(
             f"{profile_id} aggregate decision coverage {group_percent:.2f}% "
             f"is below required {group_minimum:.2f}%"
         )
@@ -270,13 +271,17 @@ def evaluate(
         mutation_sources = _mutation_sources(mutation_path, required_score=mutation_score)
         missing_mutation = sorted(set(configured_files) - mutation_sources)
         if missing_mutation:
-            raise CoveragePolicyError(
+            failures.append(
                 f"{profile_id} coverage sources lack required mutation campaigns: {missing_mutation}"
             )
-        messages.append(
-            f"{profile_id}: all {len(configured_files)} coverage sources are mutation-targeted "
-            f"with manifest minimum >= {mutation_score:.2f}%"
-        )
+        else:
+            messages.append(
+                f"{profile_id}: all {len(configured_files)} coverage sources are mutation-targeted "
+                f"with manifest minimum >= {mutation_score:.2f}%"
+            )
+    if failures:
+        detail = "\n".join([*messages, *(f"VIOLATION: {failure}" for failure in failures)])
+        raise CoveragePolicyError(detail)
     return messages
 
 
@@ -407,7 +412,7 @@ def main() -> int:
     )
     parser.add_argument("--coverage", type=Path)
     parser.add_argument("--profile")
-    parser.add_argument("--repository-root", type=Path, default=Path("."))
+    parser.add_argument("--repository-root", type=Path, default=Path())
     parser.add_argument("--self-test", action="store_true")
     args = parser.parse_args()
 
