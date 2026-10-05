@@ -65,8 +65,7 @@ def test_change_point_detects_large_corrected_rate_shift() -> None:
 
 def test_change_point_does_not_claim_stationary_noise_shift() -> None:
     verdicts = tuple(
-        TrialVerdict.PASS if index % 2 == 0 else TrialVerdict.FAIL
-        for index in range(100)
+        TrialVerdict.PASS if index % 2 == 0 else TrialVerdict.FAIL for index in range(100)
     )
 
     result = detect_binary_change_point(
