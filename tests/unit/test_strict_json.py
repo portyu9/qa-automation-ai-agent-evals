@@ -66,11 +66,7 @@ def test_strict_json_rejects_excessive_structural_depth_before_decode() -> None:
 
 
 def test_strict_json_rejects_extreme_integer_token() -> None:
-    payload = (
-        '{"value":'
-        + "9" * (MAX_JSON_INTEGER_DECIMAL_DIGITS + 1)
-        + "}"
-    )
+    payload = '{"value":' + "9" * (MAX_JSON_INTEGER_DECIMAL_DIGITS + 1) + "}"
     with pytest.raises(StrictJsonError, match="maximum decimal digits"):
         strict_json_loads(payload, label="test", require_object=True)
 
