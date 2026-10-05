@@ -360,14 +360,16 @@ if 'SOURCE_DATE_EPOCH="$(git show -s --format=%ct "$GITHUB_SHA")"' not in packag
     fail("package-reproduce must derive SOURCE_DATE_EPOCH from the exact source commit")
 if "export PYTHONHASHSEED=0" not in package_reproduce:
     fail("package-reproduce must pin PYTHONHASHSEED")
-if "python -m build --outdir reproduced-dist" not in package_reproduce:
-    fail("package-reproduce must independently rebuild package distributions")
+if 'path: ${{ runner.temp }}/retained-dist' not in package_reproduce:
+    fail("package-reproduce must keep retained reference bytes outside the source checkout")
+if 'python -m build --outdir "$RUNNER_TEMP/reproduced-dist"' not in package_reproduce:
+    fail("package-reproduce must independently rebuild outside the source checkout")
 if "package_artifact_manifest.py compare" not in package_reproduce:
     fail("package-reproduce must compare rebuilt bytes against the retained manifest")
-if "--reference-dir retained-dist" not in package_reproduce:
-    fail("package-reproduce comparison must bind the retained reference directory")
-if "--dist-dir reproduced-dist" not in package_reproduce:
-    fail("package-reproduce comparison must bind the fresh rebuilt directory")
+if '--reference-dir "$RUNNER_TEMP/retained-dist"' not in package_reproduce:
+    fail("package-reproduce comparison must bind the isolated retained reference directory")
+if '--dist-dir "$RUNNER_TEMP/reproduced-dist"' not in package_reproduce:
+    fail("package-reproduce comparison must bind the isolated fresh rebuilt directory")
 
 ci_gate = job_block(workflow, "ci-gate", "protected-gate")
 if not re.search(r"^\s+if:\s*always\(\)\s*$", ci_gate, flags=re.MULTILINE):
