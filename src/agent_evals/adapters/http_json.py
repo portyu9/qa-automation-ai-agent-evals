@@ -9,7 +9,6 @@ from __future__ import annotations
 import inspect
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
-from typing import cast
 
 from agent_evals.adapters.base import AdapterPreconditionError, AdapterResult
 from agent_evals.contracts.models import EvaluationScenario, SubjectFingerprint
@@ -82,7 +81,7 @@ class JsonHttpRuntimeAdapter:
                 code="runtime_response_invalid",
                 reason="JSON runtime transport returned an invalid response object",
             )
-        response = cast(JsonRuntimeResponse, raw)
+        response = raw
         if type(response.status_code) is not int or not 200 <= response.status_code < 300:
             raise AdapterPreconditionError(
                 code="runtime_unavailable",
