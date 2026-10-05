@@ -30,7 +30,9 @@ def test_binary_sufficient_statistics_are_integer_only_and_canonical() -> None:
         '{"blocked":1,"failures":1,"inconclusive":1,"passes":1,'
         '"schema_version":"agent-evals/binary-sufficient-statistics/v1","trials":4}'
     )
-    assert len(stats.statistics_root) == 64
+    assert stats.statistics_root == (
+        "7590d65ec95e7d20ed8f9e9255742db522b4944a2cf0887b808faa4d239cbcf3"
+    )
     assert stats.resolved == 2
 
 
@@ -53,7 +55,9 @@ def test_paired_sufficient_statistics_derive_delta_without_storing_float_authori
 
     assert stats.delta_numerator == 20
     assert '"delta"' not in stats.canonical_json()
-    assert len(stats.statistics_root) == 64
+    assert stats.statistics_root == (
+        "f33d96a57dc82231cb6580540e968e5eee7d8106bdfff807652ac2a96f48ef93"
+    )
 
 
 def test_superiority_contract_uses_predeclared_margin_and_interval() -> None:
