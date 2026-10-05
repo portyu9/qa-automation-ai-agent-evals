@@ -612,10 +612,16 @@ class MCPOAuthFlowLab:
                     f"{issuer_url}.well-known/oauth-authorization-server"
                 )
                 as_metadata_response.raise_for_status()
-                as_metadata = as_metadata_response.json()
+                as_metadata = _require_json_object(
+                    as_metadata_response.json(),
+                    label="OAuth authorization-server metadata",
+                )
                 prm_response = await metadata_http.get(metadata_url)
                 prm_response.raise_for_status()
-                prm = prm_response.json()
+                prm = _require_json_object(
+                    prm_response.json(),
+                    label="OAuth protected-resource metadata",
+                )
         finally:
             if as_listener.fileno() != -1:
                 as_listener.close()
@@ -641,41 +647,6 @@ class MCPOAuthFlowLab:
         )
         reused_stored_authorization = counts_after_second == counts_after_first
 
-        observation: dict[str, Any] = {
-            "authorization_count": provider.authorization_count,
-            "authorization_endpoint": str(as_metadata.get("authorization_endpoint", "")),
-            "authorization_metadata_issuer": str(as_metadata.get("issuer", "")),
-            "authorization_request_code_challenge_method": str(
-                request.get("code_challenge_method", "")
-            ),
-            "authorization_request_code_challenge_present": bool(request.get("code_challenge")),
-            "authorization_request_resource": str(request.get("resource", "")),
-            "authorization_request_scopes": tuple(sorted(str(request.get("scope", "")).split())),
-            "authorization_request_state_present": bool(request.get("state")),
-            "authorization_response_issuer": str(response.get("iss", "")),
-            "code_challenge_methods_supported": tuple(
-                str(item) for item in as_metadata.get("code_challenge_methods_supported", [])
-            ),
-            "introspection_count": provider.introspection_count,
-            "introspection_last_issuer": str(introspection.get("iss", "")),
-            "introspection_last_resource": str(introspection.get("aud", "")),
-            "introspection_last_scopes": tuple(sorted(str(introspection.get("scope", "")).split())),
-            "issuer_url": issuer_url,
-            "protected_resource_authorization_servers": prm_authorization_servers,
-            "protected_resource_metadata_url": metadata_url,
-            "protected_resource_scopes_supported": prm_scopes_supported,
-            "registration_count": provider.registration_count,
-            "registration_endpoint": str(as_metadata.get("registration_endpoint", "")),
-            "resource_url": resource_url,
-            "reconnect_call_text": reconnect_call_text,
-            "reused_stored_authorization": reused_stored_authorization,
-            "token_endpoint": str(as_metadata.get("token_endpoint", "")),
-            "token_exchange_count": provider.token_exchange_count,
-            "transport": _TRANSPORT,
-            "valid_call_text": valid_call_text,
-            "valid_tool_names": valid_tool_names,
-        }
-        observation_json = _canonical_json(observation)
         receipt = self._receipt_for_observation(
             protocol_version=protocol_version,
             issuer_url=issuer_url,
@@ -692,7 +663,6 @@ class MCPOAuthFlowLab:
             counts_after_first=counts_after_first,
             counts_after_second=counts_after_second,
             introspection_count=provider.introspection_count,
-            observation_json=observation_json,
         )
         return MCPOAuthFlowProbeResult(
             policy_identity=self._policy.identity,
@@ -749,7 +719,6 @@ class MCPOAuthFlowLab:
         counts_after_first: tuple[int, int, int],
         counts_after_second: tuple[int, int, int],
         introspection_count: int,
-        observation_json: str,
     ) -> MCPOAuthFlowReceipt | None:
         if protocol_version != _PROTOCOL_VERSION:
             return None
@@ -805,10 +774,50 @@ class MCPOAuthFlowLab:
         )
         if metadata_url != expected_metadata_url:
             return None
+
+        registration_count, authorization_count, token_exchange_count = counts_after_second
+        observation = {
+            "authorization_count": authorization_count,
+            "authorization_endpoint": str(as_metadata.get("authorization_endpoint", "")),
+            "authorization_metadata_issuer": str(as_metadata.get("issuer", "")),
+            "authorization_request_code_challenge_method": str(
+                request.get("code_challenge_method", "")
+            ),
+            "authorization_request_code_challenge_present": bool(request.get("code_challenge")),
+            "authorization_request_resource": str(request.get("resource", "")),
+            "authorization_request_scopes": tuple(sorted(str(request.get("scope", "")).split())),
+            "authorization_request_state_present": bool(request.get("state")),
+            "authorization_response_issuer": str(response.get("iss", "")),
+            "code_challenge_methods_supported": tuple(
+                str(item) for item in as_metadata.get("code_challenge_methods_supported", [])
+            ),
+            "introspection_count": introspection_count,
+            "introspection_last_issuer": str(introspection.get("iss", "")),
+            "introspection_last_resource": str(introspection.get("aud", "")),
+            "introspection_last_scopes": tuple(sorted(str(introspection.get("scope", "")).split())),
+            "issuer_url": issuer_url,
+            "protected_resource_authorization_servers": tuple(
+                str(value) for value in prm.get("authorization_servers", [])
+            ),
+            "protected_resource_metadata_url": metadata_url,
+            "protected_resource_scopes_supported": tuple(
+                sorted(str(value) for value in prm.get("scopes_supported", []))
+            ),
+            "registration_count": registration_count,
+            "registration_endpoint": str(as_metadata.get("registration_endpoint", "")),
+            "resource_url": resource_url,
+            "reconnect_call_text": reconnect_call_text,
+            "reused_stored_authorization": counts_after_second == counts_after_first,
+            "token_endpoint": str(as_metadata.get("token_endpoint", "")),
+            "token_exchange_count": token_exchange_count,
+            "transport": _TRANSPORT,
+            "valid_call_text": valid_call_text,
+            "valid_tool_names": valid_tool_names,
+        }
         return MCPOAuthFlowReceipt.create(
             policy=self._policy,
             protocol_version=protocol_version,
-            observation_json=observation_json,
+            observation_json=_canonical_json(observation),
         )
 
 
@@ -862,6 +871,12 @@ async def _oauth_transport(url: str, http: Any) -> AsyncIterator[Any]:
         terminate_on_close=False,
     ) as streams:
         yield streams
+
+
+def _require_json_object(value: Any, *, label: str) -> dict[str, Any]:
+    if type(value) is not dict:
+        raise RuntimeError(f"{label} must be a JSON object")
+    return value
 
 
 def _basic_authorization(client_id: str, client_secret: str) -> str:
