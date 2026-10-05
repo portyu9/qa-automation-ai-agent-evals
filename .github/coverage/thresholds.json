@@ -1,0 +1,68 @@
+{
+  "schema_version": 1,
+  "mutation_manifest": ".github/mutation/deep_targets.json",
+  "profiles": {
+    "core-trust": {
+      "description": "Near-complete decision coverage for deterministic trust kernels, coupled to deep mutation assurance.",
+      "require_mutation": true,
+      "minimum_mutation_score": 95,
+      "minimum_group_percent": 98,
+      "files": {
+        "src/agent_evals/authority.py": 100,
+        "src/agent_evals/runtime/preconditions.py": 100,
+        "src/agent_evals/runtime/_evaluator_core.py": 97,
+        "src/agent_evals/oracles/deterministic.py": 100,
+        "src/agent_evals/evidence/store.py": 98,
+        "src/agent_evals/gates/release.py": 100
+      }
+    },
+    "openai": {
+      "description": "Deterministic OpenAI SDK adapter modules excluded from provider-neutral core coverage.",
+      "require_mutation": false,
+      "minimum_mutation_score": null,
+      "minimum_group_percent": 80,
+      "files": {
+        "src/agent_evals/adapters/openai_agents.py": 65,
+        "src/agent_evals/adapters/openai_handoff_authority.py": 65,
+        "src/agent_evals/adapters/openai_hitl_approval.py": 65,
+        "src/agent_evals/adapters/openai_mcp_tool_error_recovery.py": 65,
+        "src/agent_evals/adapters/openai_mcp_tool_identity_drift.py": 65,
+        "src/agent_evals/adapters/openai_mcp_tool_metadata.py": 65,
+        "src/agent_evals/adapters/openai_mcp_tool_result.py": 65,
+        "src/agent_evals/adapters/openai_mcp_tool_schema_drift.py": 65,
+        "src/agent_evals/adapters/openai_mcp_tool_stale_cache.py": 65,
+        "src/agent_evals/adapters/openai_retrieval.py": 65,
+        "src/agent_evals/adapters/openai_side_effect_idempotency.py": 65
+      }
+    },
+    "mcp-lab": {
+      "description": "Deterministic stdio MCP fault-lab module excluded from provider-neutral core coverage.",
+      "require_mutation": false,
+      "minimum_mutation_score": null,
+      "minimum_group_percent": 80,
+      "files": {
+        "src/agent_evals/mcp/lab.py": 70
+      }
+    },
+    "mcp-remote-auth": {
+      "description": "Loopback MCP remote-authorization modules excluded from provider-neutral core coverage.",
+      "require_mutation": false,
+      "minimum_mutation_score": null,
+      "minimum_group_percent": 75,
+      "files": {
+        "src/agent_evals/mcp/_loopback.py": 65,
+        "src/agent_evals/mcp/remote_auth.py": 70
+      }
+    },
+    "mcp-oauth": {
+      "description": "Loopback MCP OAuth-flow modules excluded from provider-neutral core coverage.",
+      "require_mutation": false,
+      "minimum_mutation_score": null,
+      "minimum_group_percent": 75,
+      "files": {
+        "src/agent_evals/mcp/_loopback.py": 65,
+        "src/agent_evals/mcp/oauth_flow.py": 70
+      }
+    }
+  }
+}
