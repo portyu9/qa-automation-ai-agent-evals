@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import shutil
 import subprocess
 import sys
 from copy import deepcopy
@@ -31,25 +32,29 @@ def _run(
     *,
     commit: str = _COMMIT,
     run_attempt: str = _RUN_ATTEMPT,
+    reference_dir: Path | None = None,
 ) -> subprocess.CompletedProcess[str]:
+    args = [
+        sys.executable,
+        str(_SCRIPT),
+        mode,
+        "--dist-dir",
+        str(dist),
+        "--repository",
+        _REPOSITORY,
+        "--commit-sha",
+        commit,
+        "--workflow",
+        _WORKFLOW,
+        "--run-id",
+        _RUN_ID,
+        "--run-attempt",
+        run_attempt,
+    ]
+    if reference_dir is not None:
+        args.extend(("--reference-dir", str(reference_dir)))
     return subprocess.run(
-        [
-            sys.executable,
-            str(_SCRIPT),
-            mode,
-            "--dist-dir",
-            str(dist),
-            "--repository",
-            _REPOSITORY,
-            "--commit-sha",
-            commit,
-            "--workflow",
-            _WORKFLOW,
-            "--run-id",
-            _RUN_ID,
-            "--run-attempt",
-            run_attempt,
-        ],
+        args,
         check=False,
         capture_output=True,
         text=True,
@@ -211,3 +216,63 @@ def test_manifest_rejects_invalid_source_field_type_without_traceback(tmp_path: 
     assert result.returncode != 0
     assert "repository must be canonical owner/name text" in result.stderr
     assert "Traceback" not in result.stderr
+
+
+def _reproduced_dir(tmp_path: Path, retained: Path) -> Path:
+    reproduced = tmp_path / "reproduced"
+    reproduced.mkdir()
+    for path in retained.iterdir():
+        if path.name != "artifact-manifest.json":
+            shutil.copy2(path, reproduced / path.name)
+    return reproduced
+
+
+def test_reproduction_comparison_accepts_exact_retained_bytes(tmp_path: Path) -> None:
+    retained = _artifact_dir(tmp_path)
+    _create(retained)
+    reproduced = _reproduced_dir(tmp_path, retained)
+
+    result = _run(reproduced, "compare", reference_dir=retained)
+
+    assert result.returncode == 0, result.stderr
+    assert "reproduced exact retained package bytes" in result.stdout
+
+
+def test_reproduction_comparison_rejects_digest_mutation(tmp_path: Path) -> None:
+    retained = _artifact_dir(tmp_path)
+    _create(retained)
+    reproduced = _reproduced_dir(tmp_path, retained)
+    wheel = next(reproduced.glob("*.whl"))
+    wheel.write_bytes(b"WHEEL")
+
+    result = _run(reproduced, "compare", reference_dir=retained)
+
+    assert result.returncode != 0
+    assert "reproduced artifact digest mismatch" in result.stderr
+
+
+def test_reproduction_comparison_rejects_missing_or_extra_material(tmp_path: Path) -> None:
+    retained = _artifact_dir(tmp_path)
+    _create(retained)
+    reproduced = _reproduced_dir(tmp_path, retained)
+    next(reproduced.glob("*.whl")).unlink()
+    (reproduced / "unexpected.txt").write_text("extra", encoding="utf-8")
+
+    result = _run(reproduced, "compare", reference_dir=retained)
+
+    assert result.returncode != 0
+    assert "reproduced artifact set mismatch" in result.stderr
+
+
+def test_reproduction_comparison_rejects_symlink_material(tmp_path: Path) -> None:
+    retained = _artifact_dir(tmp_path)
+    _create(retained)
+    reproduced = _reproduced_dir(tmp_path, retained)
+    wheel = next(reproduced.glob("*.whl"))
+    wheel.unlink()
+    wheel.symlink_to(next(retained.glob("*.whl")))
+
+    result = _run(reproduced, "compare", reference_dir=retained)
+
+    assert result.returncode != 0
+    assert "reproduced artifact directory must contain regular files only" in result.stderr

@@ -252,9 +252,15 @@ jobs:
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
         with:
           python-version: "3.11"
-      - name: Build
+      - name: Build reproducible package bytes
         run: |
           python -m pip install --disable-pip-version-check -r requirements-dev-ci-build.txt
+          export SOURCE_DATE_EPOCH="$(git show -s --format=%ct "$GITHUB_SHA")"
+          [[ "$SOURCE_DATE_EPOCH" =~ ^[0-9]+$ ]] || {
+            echo "::error::could not derive deterministic SOURCE_DATE_EPOCH from $GITHUB_SHA"
+            exit 1
+          }
+          export PYTHONHASHSEED=0
           python -m build
       - name: Inspect distributions
         run: |
@@ -495,6 +501,56 @@ jobs:
               raise SystemExit(f'doctor version mismatch: {doctor["version"]!r} != {expected!r}')
           PY
 
+
+  package-reproduce:
+    name: Reproduce package artifacts independently
+    needs: package
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout same package source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up independent build Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: "3.11"
+      - name: Download retained reference artifacts
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: package-artifacts-${{ github.run_id }}
+          path: ${{ runner.temp }}/retained-dist
+      - name: Verify retained reference manifest
+        run: |
+          python .github/scripts/package_artifact_manifest.py verify \
+            --dist-dir "$RUNNER_TEMP/retained-dist" \
+            --repository "$GITHUB_REPOSITORY" \
+            --commit-sha "$GITHUB_SHA" \
+            --workflow "$GITHUB_WORKFLOW" \
+            --run-id "$GITHUB_RUN_ID" \
+            --run-attempt "$GITHUB_RUN_ATTEMPT"
+      - name: Rebuild same source in fresh runner
+        run: |
+          python -m pip install --disable-pip-version-check -r requirements-dev-ci-build.txt
+          export SOURCE_DATE_EPOCH="$(git show -s --format=%ct "$GITHUB_SHA")"
+          [[ "$SOURCE_DATE_EPOCH" =~ ^[0-9]+$ ]] || {
+            echo "::error::could not derive deterministic SOURCE_DATE_EPOCH from $GITHUB_SHA"
+            exit 1
+          }
+          export PYTHONHASHSEED=0
+          python -m build --outdir "$RUNNER_TEMP/reproduced-dist"
+      - name: Require exact byte-for-byte reproducibility
+        run: |
+          python .github/scripts/package_artifact_manifest.py compare \
+            --dist-dir "$RUNNER_TEMP/reproduced-dist" \
+            --reference-dir "$RUNNER_TEMP/retained-dist" \
+            --repository "$GITHUB_REPOSITORY" \
+            --commit-sha "$GITHUB_SHA" \
+            --workflow "$GITHUB_WORKFLOW" \
+            --run-id "$GITHUB_RUN_ID" \
+            --run-attempt "$GITHUB_RUN_ATTEMPT"
+
   ci-gate:
     name: ci-gate
     if: always()
@@ -508,6 +564,7 @@ jobs:
       - mcp-oauth-flow
       - package
       - package-reverify
+      - package-reproduce
     runs-on: ubuntu-24.04
     timeout-minutes: 2
     steps:
@@ -522,9 +579,10 @@ jobs:
           MCP_OAUTH_FLOW: ${{ needs['mcp-oauth-flow'].result }}
           PACKAGE: ${{ needs.package.result }}
           PACKAGE_REVERIFY: ${{ needs['package-reverify'].result }}
+          PACKAGE_REPRODUCE: ${{ needs['package-reproduce'].result }}
         run: |
           set -euo pipefail
-          for result in "$POLICY" "$QUALITY" "$MUTATION" "$OPENAI_ADAPTER" "$MCP_LAB" "$MCP_REMOTE_AUTH" "$MCP_OAUTH_FLOW" "$PACKAGE" "$PACKAGE_REVERIFY"; do
+          for result in "$POLICY" "$QUALITY" "$MUTATION" "$OPENAI_ADAPTER" "$MCP_LAB" "$MCP_REMOTE_AUTH" "$MCP_OAUTH_FLOW" "$PACKAGE" "$PACKAGE_REVERIFY" "$PACKAGE_REPRODUCE"; do
             [[ "$result" == "success" ]] || { echo "required job result=$result"; exit 1; }
           done
 

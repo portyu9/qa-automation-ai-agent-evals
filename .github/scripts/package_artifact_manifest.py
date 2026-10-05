@@ -264,10 +264,62 @@ def verify_manifest(
         )
 
 
+def verify_reproduction(
+    reproduced_dir: Path,
+    *,
+    reference_dir: Path,
+    repository: str,
+    commit_sha: str,
+    workflow: str,
+    run_id: int,
+    run_attempt: int,
+) -> None:
+    verify_manifest(
+        reference_dir,
+        repository=repository,
+        commit_sha=commit_sha,
+        workflow=workflow,
+        run_id=run_id,
+        run_attempt=run_attempt,
+    )
+    manifest = _load_manifest(reference_dir / _MANIFEST_NAME)
+    artifacts = manifest["artifacts"]
+    if type(artifacts) is not list:
+        raise ManifestError("reference manifest artifacts must be a list")
+
+    expected: dict[str, dict[str, Any]] = {}
+    for item in artifacts:
+        if type(item) is not dict or type(item.get("filename")) is not str:
+            raise ManifestError("reference manifest artifact entry is malformed")
+        expected[item["filename"]] = item
+
+    entries = list(reproduced_dir.iterdir())
+    if any(not path.is_file() or path.is_symlink() for path in entries):
+        raise ManifestError("reproduced artifact directory must contain regular files only")
+    actual_names = {path.name for path in entries}
+    expected_names = set(expected)
+    if actual_names != expected_names:
+        raise ManifestError(
+            "reproduced artifact set mismatch: "
+            f"unexpected={sorted(actual_names - expected_names)}, "
+            f"missing={sorted(expected_names - actual_names)}"
+        )
+
+    for filename, item in expected.items():
+        path = reproduced_dir / filename
+        size = item["size_bytes"]
+        digest = item["sha256"]
+        if path.stat().st_size != size:
+            raise ManifestError(f"reproduced artifact size mismatch: {filename}")
+        if _sha256(path) != digest:
+            raise ManifestError(f"reproduced artifact digest mismatch: {filename}")
+
+
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("mode", choices=("create", "verify"))
+    parser.add_argument("mode", choices=("create", "verify", "compare"))
     parser.add_argument("--dist-dir", type=Path, default=Path("dist"))
+    parser.add_argument("--reference-dir", type=Path)
     parser.add_argument("--repository", required=True)
     parser.add_argument("--commit-sha", required=True)
     parser.add_argument("--workflow", required=True)
@@ -289,7 +341,7 @@ def main() -> int:
                 run_attempt=args.run_attempt,
             )
             print(path)
-        else:
+        elif args.mode == "verify":
             verify_manifest(
                 args.dist_dir,
                 repository=args.repository,
@@ -299,6 +351,19 @@ def main() -> int:
                 run_attempt=args.run_attempt,
             )
             print(f"verified {args.dist_dir / _MANIFEST_NAME}")
+        else:
+            if args.reference_dir is None:
+                raise ManifestError("compare mode requires --reference-dir")
+            verify_reproduction(
+                args.dist_dir,
+                reference_dir=args.reference_dir,
+                repository=args.repository,
+                commit_sha=args.commit_sha,
+                workflow=args.workflow,
+                run_id=args.run_id,
+                run_attempt=args.run_attempt,
+            )
+            print(f"reproduced exact retained package bytes in {args.dist_dir}")
     except (ManifestError, OSError) as exc:
         raise SystemExit(f"package artifact manifest failed: {exc}") from exc
     return 0

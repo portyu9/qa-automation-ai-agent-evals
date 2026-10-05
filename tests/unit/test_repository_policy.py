@@ -75,3 +75,39 @@ def test_policy_accepts_pinned_action_in_second_workflow(tmp_path: Path) -> None
 
     assert result.returncode == 0, result.stderr
     assert "workflows=4" in result.stdout
+
+
+def test_policy_rejects_missing_reproducible_package_comparison(tmp_path: Path) -> None:
+    workspace = _policy_workspace(tmp_path)
+    workflow = workspace / ".github/workflows/ci.yml"
+    source = workflow.read_text(encoding="utf-8")
+    required = "python .github/scripts/package_artifact_manifest.py compare"
+    assert required in source
+    workflow.write_text(
+        source.replace(required, "python .github/scripts/package_artifact_manifest.py verify", 1),
+        encoding="utf-8",
+    )
+
+    result = _run_policy(workspace)
+
+    assert result.returncode != 0
+    assert (
+        "package-reproduce must compare rebuilt bytes against the retained manifest"
+        in result.stderr
+    )
+
+
+def test_policy_rejects_package_build_without_source_bound_epoch(tmp_path: Path) -> None:
+    workspace = _policy_workspace(tmp_path)
+    workflow = workspace / ".github/workflows/ci.yml"
+    source = workflow.read_text(encoding="utf-8")
+    required = 'export SOURCE_DATE_EPOCH="$(git show -s --format=%ct "$GITHUB_SHA")"'
+    assert source.count(required) >= 2
+    workflow.write_text(source.replace(required, "export SOURCE_DATE_EPOCH=0", 1), encoding="utf-8")
+
+    result = _run_policy(workspace)
+
+    assert result.returncode != 0
+    assert (
+        "package build must derive SOURCE_DATE_EPOCH from the exact source commit" in result.stderr
+    )

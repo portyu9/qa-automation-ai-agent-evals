@@ -16,6 +16,7 @@ CANDIDATE_SCHEMA = "agent-evals/release-candidate/v1"
 DISPATCH_TYPE = "release-request"
 CI_WORKFLOW_NAME = "CI"
 CI_WORKFLOW_PATH = ".github/workflows/ci.yml"
+REPRODUCIBILITY_JOB_NAME = "Reproduce package artifacts independently"
 DEFAULT_BRANCH = "main"
 PROJECT_NAME = "qa-automation-ai-agent-evals"
 
@@ -127,6 +128,36 @@ def validate_ci_run(
     return sha, attempt
 
 
+def validate_reproducibility_job(
+    payload: dict[str, Any], *, ci_sha: str, ci_run_attempt: int
+) -> None:
+    ci_sha = require_sha(ci_sha, "CI head_sha")
+    ci_run_attempt = require_positive_int(ci_run_attempt, "CI run attempt")
+    total_count = payload.get("total_count")
+    jobs = payload.get("jobs")
+    if type(total_count) is not int or total_count < 1 or type(jobs) is not list:
+        raise ReleaseCandidateError("CI jobs response is malformed")
+    if total_count != len(jobs):
+        raise ReleaseCandidateError("CI jobs response is incomplete")
+    matches = [
+        job for job in jobs if type(job) is dict and job.get("name") == REPRODUCIBILITY_JOB_NAME
+    ]
+    if len(matches) != 1:
+        raise ReleaseCandidateError(
+            "release CI run must contain exactly one reproducibility qualification job"
+        )
+    job = matches[0]
+    if job.get("status") != "completed" or job.get("conclusion") != "success":
+        raise ReleaseCandidateError("release reproducibility qualification job must succeed")
+    if require_sha(job.get("head_sha"), "reproducibility job head_sha") != ci_sha:
+        raise ReleaseCandidateError("reproducibility job does not match CI-qualified commit")
+    if (
+        require_positive_int(job.get("run_attempt"), "reproducibility job run attempt")
+        != ci_run_attempt
+    ):
+        raise ReleaseCandidateError("reproducibility job does not match CI run attempt")
+
+
 def validate_version_binding(
     *,
     version_tag: str,
@@ -196,6 +227,19 @@ def _api_url(api_url: str, repository: str, suffix: str) -> str:
 def fetch_ci_run(api_url: str, repository: str, run_id: int, token: str) -> dict[str, Any]:
     result = _request_json(
         _api_url(api_url, repository, f"actions/runs/{require_positive_int(run_id, 'ci_run_id')}"),
+        token,
+    )
+    assert result is not None
+    return result
+
+
+def fetch_ci_jobs(api_url: str, repository: str, run_id: int, token: str) -> dict[str, Any]:
+    result = _request_json(
+        _api_url(
+            api_url,
+            repository,
+            f"actions/runs/{require_positive_int(run_id, 'ci_run_id')}/jobs?filter=latest&per_page=100",
+        ),
         token,
     )
     assert result is not None
@@ -326,6 +370,12 @@ def validate_candidate(
     commit_sha, ci_run_attempt = validate_ci_run(
         ci_run, repository=repository, expected_run_id=ci_run_id
     )
+    ci_jobs = fetch_ci_jobs(api_url, repository, ci_run_id, token)
+    validate_reproducibility_job(
+        ci_jobs,
+        ci_sha=commit_sha,
+        ci_run_attempt=ci_run_attempt,
+    )
     tag_sha = resolve_tag_commit(api_url, repository, version_tag, token)
     pyproject_bytes = fetch_pyproject(api_url, repository, commit_sha, token)
     validate_version_binding(
@@ -421,6 +471,32 @@ def self_test() -> None:
             pass
         else:
             raise ReleaseCandidateError(f"self-test accepted invalid CI field {field}")
+
+    repro_job = {
+        "name": REPRODUCIBILITY_JOB_NAME,
+        "status": "completed",
+        "conclusion": "success",
+        "head_sha": sha,
+        "run_attempt": 3,
+    }
+    repro_jobs = {"total_count": 1, "jobs": [repro_job]}
+    validate_reproducibility_job(repro_jobs, ci_sha=sha, ci_run_attempt=3)
+    invalid_job_sets = (
+        {"total_count": 0, "jobs": []},
+        {"total_count": 1, "jobs": [dict(repro_job, conclusion="failure")]},
+        {"total_count": 1, "jobs": [dict(repro_job, head_sha="b" * 40)]},
+        {"total_count": 1, "jobs": [dict(repro_job, run_attempt=2)]},
+        {"total_count": 2, "jobs": [repro_job]},
+    )
+    for mutated in invalid_job_sets:
+        try:
+            validate_reproducibility_job(mutated, ci_sha=sha, ci_run_attempt=3)
+        except ReleaseCandidateError:
+            pass
+        else:
+            raise ReleaseCandidateError(
+                "self-test accepted invalid reproducibility qualification jobs"
+            )
 
     pyproject = b'[project]\nname = "qa-automation-ai-agent-evals"\nversion = "1.2.3"\n'
     assert (
