@@ -400,35 +400,17 @@ class _IntrospectionTokenVerifier:
         if response.status_code != 200:
             return None
         try:
-            data = response.json()
-        except ValueError:
+            data = _strict_response_object(
+                response.content,
+                label="OAuth introspection response",
+            )
+        except RuntimeError:
             return None
-        if data.get("active") is not True:
-            return None
-        issuer = data.get("iss")
-        resource = data.get("aud")
-        if issuer != self._expected_issuer or resource != self._expected_resource:
-            return None
-        scopes = tuple(sorted(str(data.get("scope", "")).split()))
-        client_id = data.get("client_id")
-        if not isinstance(client_id, str) or not client_id:
-            return None
-        expires_at = data.get("exp")
-        if expires_at is not None and (
-            not isinstance(expires_at, int) or expires_at <= int(time.time())
-        ):
-            return None
-        subject = data.get("sub")
-        if subject is not None and not isinstance(subject, str):
-            return None
-        return AccessToken(
+        return _access_token_from_introspection(
+            data,
             token=token,
-            client_id=client_id,
-            scopes=list(scopes),
-            expires_at=expires_at,
-            resource=resource,
-            subject=subject,
-            claims={"iss": issuer},
+            expected_issuer=self._expected_issuer,
+            expected_resource=self._expected_resource,
         )
 
 
@@ -459,13 +441,14 @@ class _HeadlessOAuth:
             raise RuntimeError(
                 f"MCP OAuth-flow authorization endpoint returned {response.status_code}"
             )
-        redirected = parse_qs(urlsplit(response.headers.get("location", "")).query)
-        issuer = _single_query_value(redirected, "iss")
-        self.authorization_response = {"iss": issuer}
+        code, state, issuer = _parse_authorization_redirect(
+            response.headers.get("location", "")
+        )
+        self.authorization_response = {"iss": issuer or ""}
         self._result = AuthorizationCodeResult(
-            code=_single_query_value(redirected, "code"),
-            state=_single_query_value(redirected, "state") or None,
-            iss=issuer or None,
+            code=code,
+            state=state,
+            iss=issuer,
         )
 
     async def callback_handler(self) -> Any:
@@ -889,6 +872,56 @@ async def _oauth_transport(url: str, http: Any) -> AsyncIterator[Any]:
         terminate_on_close=False,
     ) as streams:
         yield streams
+
+
+def _access_token_from_introspection(
+    data: Mapping[str, Any],
+    *,
+    token: str,
+    expected_issuer: str,
+    expected_resource: str,
+) -> Any | None:
+    from mcp.server.auth.provider import AccessToken
+
+    if data.get("active") is not True:
+        return None
+    issuer = _exact_string(data.get("iss"))
+    resource = _exact_string(data.get("aud"))
+    if issuer != expected_issuer or resource != expected_resource:
+        return None
+    scopes = _space_delimited_scopes(data.get("scope"))
+    if scopes is None:
+        return None
+    client_id = _exact_string(data.get("client_id"))
+    if not client_id:
+        return None
+    expires_at = data.get("exp")
+    if expires_at is not None and (
+        type(expires_at) is not int or expires_at <= int(time.time())
+    ):
+        return None
+    subject = data.get("sub")
+    if subject is not None and type(subject) is not str:
+        return None
+    return AccessToken(
+        token=token,
+        client_id=client_id,
+        scopes=list(scopes),
+        expires_at=expires_at,
+        resource=resource,
+        subject=subject,
+        claims={"iss": issuer},
+    )
+
+
+def _parse_authorization_redirect(location: str) -> tuple[str, str | None, str | None]:
+    if type(location) is not str:
+        return "", None, None
+    query = parse_qs(urlsplit(location).query)
+    code = _single_query_value(query, "code")
+    state = _single_query_value(query, "state") or None
+    issuer = _single_query_value(query, "iss") or None
+    return code, state, issuer
 
 
 def _exact_string(value: Any) -> str | None:
