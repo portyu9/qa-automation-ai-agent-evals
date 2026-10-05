@@ -17,6 +17,7 @@ DISPATCH_TYPE = "release-request"
 CI_WORKFLOW_NAME = "CI"
 CI_WORKFLOW_PATH = ".github/workflows/ci.yml"
 REPRODUCIBILITY_JOB_NAME = "Reproduce package artifacts independently"
+SUPPLY_CHAIN_JOB_NAME = "Reverify release supply-chain evidence"
 DEFAULT_BRANCH = "main"
 PROJECT_NAME = "qa-automation-ai-agent-evals"
 
@@ -139,23 +140,32 @@ def validate_reproducibility_job(
         raise ReleaseCandidateError("CI jobs response is malformed")
     if total_count != len(jobs):
         raise ReleaseCandidateError("CI jobs response is incomplete")
-    matches = [
-        job for job in jobs if type(job) is dict and job.get("name") == REPRODUCIBILITY_JOB_NAME
-    ]
-    if len(matches) != 1:
-        raise ReleaseCandidateError(
-            "release CI run must contain exactly one reproducibility qualification job"
-        )
-    job = matches[0]
-    if job.get("status") != "completed" or job.get("conclusion") != "success":
-        raise ReleaseCandidateError("release reproducibility qualification job must succeed")
-    if require_sha(job.get("head_sha"), "reproducibility job head_sha") != ci_sha:
-        raise ReleaseCandidateError("reproducibility job does not match CI-qualified commit")
-    if (
-        require_positive_int(job.get("run_attempt"), "reproducibility job run attempt")
-        != ci_run_attempt
+
+    for job_name, label in (
+        (REPRODUCIBILITY_JOB_NAME, "reproducibility"),
+        (SUPPLY_CHAIN_JOB_NAME, "supply-chain evidence"),
     ):
-        raise ReleaseCandidateError("reproducibility job does not match CI run attempt")
+        matches = [
+            job for job in jobs if type(job) is dict and job.get("name") == job_name
+        ]
+        if len(matches) != 1:
+            raise ReleaseCandidateError(
+                f"release CI run must contain exactly one {label} qualification job"
+            )
+        job = matches[0]
+        if job.get("status") != "completed" or job.get("conclusion") != "success":
+            raise ReleaseCandidateError(f"release {label} qualification job must succeed")
+        if require_sha(job.get("head_sha"), f"{label} job head_sha") != ci_sha:
+            raise ReleaseCandidateError(
+                f"{label} qualification job does not match CI-qualified commit"
+            )
+        if (
+            require_positive_int(job.get("run_attempt"), f"{label} job run attempt")
+            != ci_run_attempt
+        ):
+            raise ReleaseCandidateError(
+                f"{label} qualification job does not match CI run attempt"
+            )
 
 
 def validate_version_binding(
@@ -479,14 +489,38 @@ def self_test() -> None:
         "head_sha": sha,
         "run_attempt": 3,
     }
-    repro_jobs = {"total_count": 1, "jobs": [repro_job]}
-    validate_reproducibility_job(repro_jobs, ci_sha=sha, ci_run_attempt=3)
+    supply_chain_job = {
+        "name": SUPPLY_CHAIN_JOB_NAME,
+        "status": "completed",
+        "conclusion": "success",
+        "head_sha": sha,
+        "run_attempt": 3,
+    }
+    qualification_jobs = {
+        "total_count": 2,
+        "jobs": [repro_job, supply_chain_job],
+    }
+    validate_reproducibility_job(qualification_jobs, ci_sha=sha, ci_run_attempt=3)
     invalid_job_sets = (
         {"total_count": 0, "jobs": []},
-        {"total_count": 1, "jobs": [dict(repro_job, conclusion="failure")]},
-        {"total_count": 1, "jobs": [dict(repro_job, head_sha="b" * 40)]},
-        {"total_count": 1, "jobs": [dict(repro_job, run_attempt=2)]},
-        {"total_count": 2, "jobs": [repro_job]},
+        {"total_count": 1, "jobs": [repro_job]},
+        {
+            "total_count": 2,
+            "jobs": [dict(repro_job, conclusion="failure"), supply_chain_job],
+        },
+        {
+            "total_count": 2,
+            "jobs": [repro_job, dict(supply_chain_job, conclusion="failure")],
+        },
+        {
+            "total_count": 2,
+            "jobs": [repro_job, dict(supply_chain_job, head_sha="b" * 40)],
+        },
+        {
+            "total_count": 2,
+            "jobs": [repro_job, dict(supply_chain_job, run_attempt=2)],
+        },
+        {"total_count": 3, "jobs": [repro_job, supply_chain_job]},
     )
     for mutated in invalid_job_sets:
         try:
@@ -495,7 +529,7 @@ def self_test() -> None:
             pass
         else:
             raise ReleaseCandidateError(
-                "self-test accepted invalid reproducibility qualification jobs"
+                "self-test accepted invalid release qualification jobs"
             )
 
     pyproject = b'[project]\nname = "qa-automation-ai-agent-evals"\nversion = "1.2.3"\n'
