@@ -1,10 +1,14 @@
 from __future__ import annotations
 
+import pytest
+
 from agent_evals.evidence.models import TrialVerdict
 from agent_evals.gates.advanced import (
     OperationalReleaseGate,
     OperationalTailPolicy,
+    RiskFamilyResult,
     SliceEvidence,
+    SliceGateResult,
     SliceReleaseGate,
 )
 from agent_evals.gates.release import GateDecision, ReleasePolicy
@@ -176,3 +180,20 @@ def test_critical_slice_violation_cannot_be_compensated_by_other_slices() -> Non
 
     assert result.decision is GateDecision.REJECT
     assert any("critical violations" in reason for reason in result.reasons)
+
+
+def test_slice_gate_result_rejects_duplicate_family_cache() -> None:
+    family = RiskFamilyResult(
+        risk_family="safety",
+        decision=GateDecision.ACCEPT,
+        worst_slice="safety.a",
+        reasons=(),
+    )
+
+    with pytest.raises(ValueError, match="unique"):
+        SliceGateResult(
+            decision=GateDecision.ACCEPT,
+            worst_slice="safety.a",
+            family_results=(family, family),
+            reasons=(),
+        )
