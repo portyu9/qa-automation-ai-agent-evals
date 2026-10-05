@@ -65,6 +65,13 @@ jobs:
           path: retained-supply-chain
           github-token: ${{ secrets.GITHUB_TOKEN }}
           run-id: ${{ steps.candidate.outputs.ci_run_id }}
+      - name: Download retained CI qualification evidence
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: ci-qualification-${{ steps.candidate.outputs.ci_run_id }}
+          path: retained-qualification
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: ${{ steps.candidate.outputs.ci_run_id }}
       - name: Download retained release provenance
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
@@ -90,6 +97,17 @@ jobs:
             --workflow "CI" \
             --run-id "${{ steps.candidate.outputs.ci_run_id }}" \
             --run-attempt "${{ steps.candidate.outputs.ci_run_attempt }}"
+      - name: Reverify retained CI qualification evidence
+        run: |
+          python .github/scripts/ci_qualification_evidence.py verify \
+            --evidence retained-qualification/ci-qualification-evidence.json \
+            --repository "$GITHUB_REPOSITORY" \
+            --commit-sha "${{ steps.candidate.outputs.commit_sha }}" \
+            --ref "refs/heads/main" \
+            --workflow "CI" \
+            --run-id "${{ steps.candidate.outputs.ci_run_id }}" \
+            --run-attempt "${{ steps.candidate.outputs.ci_run_attempt }}" \
+            --event "push"
       - name: Reverify retained OIDC provenance
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -110,8 +128,9 @@ jobs:
             retained-dist/artifact-manifest.json
             retained-supply-chain/release-sbom.spdx.json
             retained-supply-chain/release-supply-chain-evidence.json
+            retained-qualification/ci-qualification-evidence.json
           )
-          test "${#subjects[@]}" -eq 5
+          test "${#subjects[@]}" -eq 6
           for subject in "${subjects[@]}"; do
             gh attestation verify "$subject" \
               --repo "$GITHUB_REPOSITORY" \
@@ -154,6 +173,7 @@ jobs:
             retained-dist/artifact-manifest.json \
             retained-supply-chain/release-sbom.spdx.json \
             retained-supply-chain/release-supply-chain-evidence.json \
+            retained-qualification/ci-qualification-evidence.json \
             retained-provenance/release-provenance.sigstore.json \
             retained-provenance/subject-checksums.sha256 \
             retained-provenance/bundle-checksum.sha256 \
@@ -161,4 +181,4 @@ jobs:
             --repo "$GITHUB_REPOSITORY" \
             --verify-tag \
             --title "$VERSION_TAG" \
-            --notes "Published from exact retained CI-tested package bytes with retained SPDX 2.3/license evidence and a reverified GitHub Actions OIDC/Sigstore SLSA provenance bundle for the exact release artifact subjects. The provenance authenticates the GitHub workflow/source identity for those attested files; it does not itself sign the GitHub Release entity, authenticate a human maintainer, retroactively authenticate older unsigned evidence, or establish PyPI Trusted Publishing."
+            --notes "Published from exact retained CI-tested package bytes with retained SPDX 2.3/license evidence, retained canonical CI qualification evidence, and a reverified GitHub Actions OIDC/Sigstore SLSA provenance bundle for the exact attested subjects. The provenance authenticates the GitHub workflow/source identity for those files, including the qualification record; it does not itself sign the GitHub Release entity, authenticate a human maintainer, prove external target behavior, retroactively authenticate older unsigned evidence, or establish PyPI Trusted Publishing."
