@@ -56,6 +56,8 @@ jobs:
         run: python .github/scripts/validate_runtime_policy.py
       - name: Self-test retained release candidate validation
         run: python .github/scripts/release_candidate.py self-test
+      - name: Self-test release SPDX and license evidence
+        run: python .github/scripts/release_supply_chain.py self-test
       - name: Self-test coverage policy
         run: python .github/scripts/check_coverage_policy.py --self-test
 
@@ -551,6 +553,130 @@ jobs:
             --run-id "$GITHUB_RUN_ID" \
             --run-attempt "$GITHUB_RUN_ATTEMPT"
 
+
+  release-supply-chain:
+    name: Generate release SPDX SBOM and license evidence
+    needs: package
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout same package source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: "3.11"
+      - name: Install supply-chain verifier dependency
+        run: python -m pip install --disable-pip-version-check -r requirements-dev-ci-build.txt
+      - name: Download retained package artifacts
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: package-artifacts-${{ github.run_id }}
+          path: retained-dist
+      - name: Verify retained package manifest
+        run: |
+          python .github/scripts/package_artifact_manifest.py verify \
+            --dist-dir retained-dist \
+            --repository "$GITHUB_REPOSITORY" \
+            --commit-sha "$GITHUB_SHA" \
+            --workflow "$GITHUB_WORKFLOW" \
+            --run-id "$GITHUB_RUN_ID" \
+            --run-attempt "$GITHUB_RUN_ATTEMPT"
+      - name: Install retained wheel and exact runtime dependency closure
+        run: python -m pip install --disable-pip-version-check retained-dist/*.whl
+      - name: Generate deterministic SPDX and license evidence
+        run: |
+          export SOURCE_DATE_EPOCH="$(git show -s --format=%ct "$GITHUB_SHA")"
+          [[ "$SOURCE_DATE_EPOCH" =~ ^[0-9]+$ ]] || {
+            echo "::error::could not derive deterministic SOURCE_DATE_EPOCH from $GITHUB_SHA"
+            exit 1
+          }
+          python .github/scripts/release_supply_chain.py create \
+            --package-dir retained-dist \
+            --evidence-dir supply-chain \
+            --policy .github/dependency-license-policy.json \
+            --repository "$GITHUB_REPOSITORY" \
+            --commit-sha "$GITHUB_SHA" \
+            --workflow "$GITHUB_WORKFLOW" \
+            --run-id "$GITHUB_RUN_ID" \
+            --run-attempt "$GITHUB_RUN_ATTEMPT" \
+            --source-date-epoch "$SOURCE_DATE_EPOCH"
+      - name: Verify generated SPDX and license evidence
+        run: |
+          python .github/scripts/release_supply_chain.py verify \
+            --package-dir retained-dist \
+            --evidence-dir supply-chain \
+            --policy .github/dependency-license-policy.json \
+            --repository "$GITHUB_REPOSITORY" \
+            --commit-sha "$GITHUB_SHA" \
+            --workflow "$GITHUB_WORKFLOW" \
+            --run-id "$GITHUB_RUN_ID" \
+            --run-attempt "$GITHUB_RUN_ATTEMPT"
+      - name: Upload release supply-chain evidence
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-supply-chain-${{ github.run_id }}
+          path: |
+            supply-chain/release-sbom.spdx.json
+            supply-chain/release-supply-chain-evidence.json
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
+          overwrite: true
+
+  release-supply-chain-reverify:
+    name: Reverify release supply-chain evidence
+    needs:
+      - package
+      - release-supply-chain
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout exact evidence subject
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: "3.11"
+      - name: Install supply-chain verifier dependency
+        run: python -m pip install --disable-pip-version-check -r requirements-dev-ci-build.txt
+      - name: Download retained package artifacts
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: package-artifacts-${{ github.run_id }}
+          path: retained-dist
+      - name: Download retained supply-chain evidence
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: release-supply-chain-${{ github.run_id }}
+          path: retained-supply-chain
+      - name: Verify retained package manifest
+        run: |
+          python .github/scripts/package_artifact_manifest.py verify \
+            --dist-dir retained-dist \
+            --repository "$GITHUB_REPOSITORY" \
+            --commit-sha "$GITHUB_SHA" \
+            --workflow "$GITHUB_WORKFLOW" \
+            --run-id "$GITHUB_RUN_ID" \
+            --run-attempt "$GITHUB_RUN_ATTEMPT"
+      - name: Install retained wheel and independently resolve runtime closure
+        run: python -m pip install --disable-pip-version-check retained-dist/*.whl
+      - name: Independently reverify SPDX, artifact binding, closure and license policy
+        run: |
+          python .github/scripts/release_supply_chain.py verify \
+            --package-dir retained-dist \
+            --evidence-dir retained-supply-chain \
+            --policy .github/dependency-license-policy.json \
+            --repository "$GITHUB_REPOSITORY" \
+            --commit-sha "$GITHUB_SHA" \
+            --workflow "$GITHUB_WORKFLOW" \
+            --run-id "$GITHUB_RUN_ID" \
+            --run-attempt "$GITHUB_RUN_ATTEMPT"
+
   ci-gate:
     name: ci-gate
     if: always()
@@ -565,6 +691,8 @@ jobs:
       - package
       - package-reverify
       - package-reproduce
+      - release-supply-chain
+      - release-supply-chain-reverify
     runs-on: ubuntu-24.04
     timeout-minutes: 2
     steps:
@@ -580,9 +708,11 @@ jobs:
           PACKAGE: ${{ needs.package.result }}
           PACKAGE_REVERIFY: ${{ needs['package-reverify'].result }}
           PACKAGE_REPRODUCE: ${{ needs['package-reproduce'].result }}
+          RELEASE_SUPPLY_CHAIN: ${{ needs['release-supply-chain'].result }}
+          RELEASE_SUPPLY_CHAIN_REVERIFY: ${{ needs['release-supply-chain-reverify'].result }}
         run: |
           set -euo pipefail
-          for result in "$POLICY" "$QUALITY" "$MUTATION" "$OPENAI_ADAPTER" "$MCP_LAB" "$MCP_REMOTE_AUTH" "$MCP_OAUTH_FLOW" "$PACKAGE" "$PACKAGE_REVERIFY" "$PACKAGE_REPRODUCE"; do
+          for result in "$POLICY" "$QUALITY" "$MUTATION" "$OPENAI_ADAPTER" "$MCP_LAB" "$MCP_REMOTE_AUTH" "$MCP_OAUTH_FLOW" "$PACKAGE" "$PACKAGE_REVERIFY" "$PACKAGE_REPRODUCE" "$RELEASE_SUPPLY_CHAIN" "$RELEASE_SUPPLY_CHAIN_REVERIFY"; do
             [[ "$result" == "success" ]] || { echo "required job result=$result"; exit 1; }
           done
 
