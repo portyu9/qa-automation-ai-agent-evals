@@ -148,9 +148,7 @@ def _artifact_binding(package_dir: Path, source: dict[str, object]) -> tuple[str
     manifest_path = package_dir / "artifact-manifest.json"
     manifest = package_manifest._load_manifest(manifest_path)
     wheel = next(
-        item
-        for item in manifest["artifacts"]
-        if type(item) is dict and item.get("kind") == "wheel"
+        item for item in manifest["artifacts"] if type(item) is dict and item.get("kind") == "wheel"
     )
     return _sha256(manifest_path), str(wheel["sha256"])
 
@@ -209,7 +207,10 @@ def _check_license(expression: str, policy: dict[str, Any], package: str) -> Non
     }
     if not tokens or expression in {"NOASSERTION", "NONE"}:
         raise SupplyChainError(f"dependency license is unknown for {package}")
-    if any(token.startswith("LicenseRef-") for token in tokens) and not policy["allow_license_refs"]:
+    if (
+        any(token.startswith("LicenseRef-") for token in tokens)
+        and not policy["allow_license_refs"]
+    ):
         raise SupplyChainError(f"LicenseRef is not allowed for {package}")
     denied = set(policy["denied_spdx_licenses"])
     blocked = sorted(tokens & denied)
@@ -217,9 +218,7 @@ def _check_license(expression: str, policy: dict[str, Any], package: str) -> Non
         raise SupplyChainError(f"dependency license denied for {package}: {blocked}")
     allowed = set(policy["allowed_spdx_licenses"])
     unknown = sorted(
-        token
-        for token in tokens
-        if not token.startswith("LicenseRef-") and token not in allowed
+        token for token in tokens if not token.startswith("LicenseRef-") and token not in allowed
     )
     if unknown:
         raise SupplyChainError(f"dependency license is not allowlisted for {package}: {unknown}")
@@ -262,7 +261,9 @@ def _closure(root_name: str) -> tuple[list[dict[str, str]], list[tuple[str, str]
             try:
                 requirement = Requirement(raw)
             except InvalidRequirement as exc:
-                raise SupplyChainError(f"invalid installed requirement for {name}: {raw!r}") from exc
+                raise SupplyChainError(
+                    f"invalid installed requirement for {name}: {raw!r}"
+                ) from exc
             if requirement.marker is not None and not requirement.marker.evaluate(env):
                 continue
             dependency = _canonical_name(requirement.name)
@@ -338,9 +339,7 @@ def _sbom(
             for parent, child in edges
         ],
     ]
-    created = datetime.fromtimestamp(
-        source_date_epoch, tz=UTC
-    ).strftime("%Y-%m-%dT%H:%M:%SZ")
+    created = datetime.fromtimestamp(source_date_epoch, tz=UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
     return {
         "spdxVersion": SPDX_VERSION,
         "dataLicense": "CC0-1.0",
@@ -533,9 +532,7 @@ def verify(
     spdx_packages = sbom["packages"]
     if type(spdx_packages) is not list or len(spdx_packages) != len(packages):
         raise SupplyChainError("SPDX package set does not match runtime closure")
-    expected_identity = {
-        item["name"]: (item["version"], item["license"]) for item in packages
-    }
+    expected_identity = {item["name"]: (item["version"], item["license"]) for item in packages}
     actual_identity: dict[str, tuple[str, str]] = {}
     root = _canonical_name(PROJECT_NAME)
     for item in spdx_packages:
@@ -628,7 +625,9 @@ def main() -> int:
                 run_attempt=args.run_attempt,
                 source_date_epoch=args.source_date_epoch,
             )
-            print(f"created {args.evidence_dir / SBOM_NAME} and {args.evidence_dir / EVIDENCE_NAME}")
+            print(
+                f"created {args.evidence_dir / SBOM_NAME} and {args.evidence_dir / EVIDENCE_NAME}"
+            )
         else:
             verify(
                 args.package_dir,
