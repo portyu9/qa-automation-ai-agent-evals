@@ -26,6 +26,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
+from agent_evals._strict_json import StrictJsonError, strict_json_loads
 from agent_evals.evidence.models import TrialEvidence
 
 _MANIFEST_SCHEMA: Literal["agent-evals-evidence-manifest/v1"] = "agent-evals-evidence-manifest/v1"
@@ -187,7 +188,14 @@ class LocalEvidenceStore:
         payload = _safe_read_regular_file(paths.payload, self._max_payload_bytes)
 
         try:
-            manifest = ArtifactManifest.model_validate_json(manifest_bytes)
+            manifest_raw = strict_json_loads(
+                manifest_bytes,
+                label="evidence manifest",
+                require_object=True,
+            )
+            manifest = ArtifactManifest.model_validate(manifest_raw)
+        except StrictJsonError as exc:
+            raise EvidenceIntegrityError("evidence manifest failed strict JSON decoding") from exc
         except ValidationError as exc:
             raise EvidenceIntegrityError("evidence manifest failed schema validation") from exc
 
@@ -208,7 +216,16 @@ class LocalEvidenceStore:
             raise EvidenceIntegrityError("stored evidence payload hash does not match manifest")
 
         try:
-            evidence = TrialEvidence.model_validate_json(payload)
+            evidence_raw = strict_json_loads(
+                payload,
+                label="stored evidence payload",
+                require_object=True,
+            )
+            evidence = TrialEvidence.model_validate(evidence_raw)
+        except StrictJsonError as exc:
+            raise EvidenceIntegrityError(
+                "stored evidence payload failed strict JSON decoding"
+            ) from exc
         except ValidationError as exc:
             raise EvidenceIntegrityError(
                 "stored evidence payload failed schema validation"

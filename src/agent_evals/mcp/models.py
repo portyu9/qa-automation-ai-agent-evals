@@ -9,6 +9,8 @@ from typing import Any, Literal, Self
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from agent_evals._strict_json import StrictJsonError, strict_json_loads
+
 _FAULT_SCHEMA: Literal["agent-evals/mcp-fault/v1"] = "agent-evals/mcp-fault/v1"
 _RECEIPT_SCHEMA: Literal["agent-evals/mcp-fault-receipt/v1"] = "agent-evals/mcp-fault-receipt/v1"
 _PROTOCOL_VERSION = "2026-07-28"
@@ -324,18 +326,20 @@ class MCPToolIdentityDriftProbeResult(BaseModel):
 
 
 def _parse_payload_json(value: str) -> Any:
-    def reject_duplicate_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
-        result: dict[str, Any] = {}
-        for key, item in pairs:
-            if key in result:
-                raise ValueError("MCP fault payload_json must not contain duplicate object keys")
-            result[key] = item
-        return result
-
     try:
-        return json.loads(value, object_pairs_hook=reject_duplicate_keys)
-    except json.JSONDecodeError as exc:
-        raise ValueError("MCP fault payload_json must contain valid JSON") from exc
+        return strict_json_loads(
+            value,
+            label="MCP fault payload_json",
+            max_depth=32,
+        )
+    except StrictJsonError as exc:
+        if "duplicate object key" in str(exc):
+            raise ValueError(
+                "MCP fault payload_json must not contain duplicate object keys"
+            ) from exc
+        raise ValueError(
+            "MCP fault payload_json must contain valid JSON under strict bounded decoding"
+        ) from exc
 
 
 def _object_payload(payload: Any, label: str) -> dict[str, Any]:

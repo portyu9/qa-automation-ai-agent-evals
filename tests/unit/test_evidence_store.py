@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 
@@ -134,6 +135,41 @@ def test_malformed_manifest_is_not_treated_as_evidence(tmp_path: Path) -> None:
     path.write_text("{}", encoding="utf-8")
 
     with pytest.raises(EvidenceIntegrityError, match="manifest failed schema validation"):
+        store.read(manifest.record_key)
+
+
+def test_duplicate_manifest_key_is_rejected_as_ambiguous_json(tmp_path: Path) -> None:
+    store = LocalEvidenceStore(tmp_path / "evidence")
+    manifest = store.write(evidence())
+    path = next(store.root.rglob("*.manifest.json"))
+    raw = path.read_text(encoding="utf-8")
+    duplicate = raw[:-1] + ',"trial_id":"trial-1"}'
+    path.write_text(duplicate, encoding="utf-8")
+
+    with pytest.raises(EvidenceIntegrityError, match="strict JSON decoding"):
+        store.read(manifest.record_key)
+
+
+def test_duplicate_payload_key_fails_even_when_manifest_hash_matches(tmp_path: Path) -> None:
+    store = LocalEvidenceStore(tmp_path / "evidence")
+    manifest = store.write(evidence())
+    payload_path = next(store.root.rglob("*.evidence.json"))
+    manifest_path = next(store.root.rglob("*.manifest.json"))
+
+    raw = payload_path.read_text(encoding="utf-8")
+    duplicate = raw[:-1] + ',"trial_id":"trial-1"}'
+    duplicate_bytes = duplicate.encode()
+    payload_path.write_bytes(duplicate_bytes)
+
+    manifest_data = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest_data["payload_bytes"] = len(duplicate_bytes)
+    manifest_data["payload_sha256"] = hashlib.sha256(duplicate_bytes).hexdigest()
+    manifest_path.write_text(
+        json.dumps(manifest_data, sort_keys=True, separators=(",", ":")),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(EvidenceIntegrityError, match="strict JSON decoding"):
         store.read(manifest.record_key)
 
 

@@ -1,0 +1,87 @@
+name: Deep fuzz assurance
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "47 7 * * 3"
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/deep-fuzz.yml"
+      - ".github/scripts/validate_runtime_policy.py"
+      - "pyproject.toml"
+      - "src/agent_evals/_strict_json.py"
+      - "src/agent_evals/evidence/limits.py"
+      - "src/agent_evals/evidence/models.py"
+      - "src/agent_evals/evidence/store.py"
+      - "src/agent_evals/evidence/legacy_v2.py"
+      - "src/agent_evals/mcp/models.py"
+      - "src/agent_evals/mcp/lab.py"
+      - "src/agent_evals/mcp/oauth_flow.py"
+      - "tests/fuzz/**"
+      - "tests/unit/test_strict_json.py"
+      - "tests/unit/test_evidence_store.py"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deep-fuzz-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  deep-fuzz:
+    name: Deep fuzz / trust boundaries
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      EXACT_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
+      FUZZ_SEED: ${{ github.run_id }}
+    steps:
+      - name: Checkout exact subject commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ env.EXACT_COMMIT }}
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install deep fuzz dependencies
+        run: python -m pip install --disable-pip-version-check -e '.[dev,mcp]'
+
+      - name: Dependency consistency
+        run: python -m pip check
+
+      - name: Bind fuzz evidence to exact commit and seed
+        shell: bash
+        run: |
+          set -euo pipefail
+          observed="$(git rev-parse HEAD)"
+          test "$observed" = "$EXACT_COMMIT"
+          printf '%s\n' "$observed" > deep-fuzz-commit.txt
+          printf '%s\n' "$FUZZ_SEED" > deep-fuzz-seed.txt
+
+      - name: Run deep fuzz campaigns
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pytest             -o addopts="--strict-markers"             -q             -m fuzz             tests/fuzz             --hypothesis-seed="$FUZZ_SEED"             --junitxml=deep-fuzz-junit.xml             2>&1 | tee deep-fuzz.log
+
+      - name: Upload exact-commit fuzz evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: deep-fuzz-${{ env.EXACT_COMMIT }}
+          path: |
+            deep-fuzz-commit.txt
+            deep-fuzz-seed.txt
+            deep-fuzz.log
+            deep-fuzz-junit.xml
+            .hypothesis/
+          if-no-files-found: error
+          include-hidden-files: true
+          retention-days: 21

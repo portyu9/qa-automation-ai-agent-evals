@@ -11,6 +11,8 @@ import math
 from dataclasses import dataclass
 from typing import Any
 
+from agent_evals._strict_json import MAX_JSON_INTEGER_DECIMAL_DIGITS
+
 
 @dataclass(frozen=True, slots=True)
 class JsonMaterialBudget:
@@ -36,7 +38,6 @@ RECEIPT_MATERIAL_BUDGET = JsonMaterialBudget(
 )
 MAX_TRIAL_EVENTS = 4_096
 MAX_FINAL_OUTPUT_UTF8_BYTES = 1024 * 1024
-MAX_JSON_INTEGER_DECIMAL_DIGITS = 4_096
 _MAX_JSON_INTEGER_BITS = math.ceil(MAX_JSON_INTEGER_DECIMAL_DIGITS * math.log2(10))
 
 
