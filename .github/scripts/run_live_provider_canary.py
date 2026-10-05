@@ -3,7 +3,6 @@ from __future__ import annotations
 import json
 import os
 import socket
-import sys
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -117,7 +116,10 @@ def main() -> int:
                 raw = response.read(1_000_001)
                 if len(raw) > 1_000_000:
                     return ProviderCanaryResponse(status_code=502)
-                data = json.loads(raw)
+                try:
+                    data = json.loads(raw)
+                except (json.JSONDecodeError, UnicodeDecodeError):
+                    return ProviderCanaryResponse(status_code=502)
                 if type(data) is not dict:
                     return ProviderCanaryResponse(status_code=502)
                 request_id = response.headers.get("x-request-id")
