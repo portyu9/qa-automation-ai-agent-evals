@@ -27,9 +27,7 @@ def _require_generator_environment() -> None:
         except metadata.PackageNotFoundError as exc:
             raise SystemExit(f"lock generator requires {distribution}=={expected}") from exc
         if actual != expected:
-            raise SystemExit(
-                f"lock generator requires {distribution}=={expected}; found {actual}"
-            )
+            raise SystemExit(f"lock generator requires {distribution}=={expected}; found {actual}")
 
 
 def _normalize_header(path: Path, *, profile: str) -> None:
