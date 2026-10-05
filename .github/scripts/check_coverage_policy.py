@@ -115,7 +115,11 @@ def _load_manifest(path: Path, *, repository_root: Path) -> dict[str, Any]:
             label=f"profile {profile_id}",
         )
         description = profile["description"]
-        if type(description) is not str or not description.strip() or description != description.strip():
+        if (
+            type(description) is not str
+            or not description.strip()
+            or description != description.strip()
+        ):
             raise CoveragePolicyError(f"profile {profile_id}.description must be trimmed text")
         require_mutation = profile["require_mutation"]
         if type(require_mutation) is not bool:
@@ -131,7 +135,9 @@ def _load_manifest(path: Path, *, repository_root: Path) -> dict[str, Any]:
             raise CoveragePolicyError(
                 f"profile {profile_id}.minimum_mutation_score must be null when mutation is not required"
             )
-        _number(profile["minimum_group_percent"], label=f"profile {profile_id}.minimum_group_percent")
+        _number(
+            profile["minimum_group_percent"], label=f"profile {profile_id}.minimum_group_percent"
+        )
         files = profile["files"]
         if type(files) is not dict or not files:
             raise CoveragePolicyError(f"profile {profile_id}.files must be non-empty")
@@ -158,9 +164,7 @@ def _coverage_units(summary: dict[str, Any], *, label: str) -> tuple[int, int, s
     if missing:
         raise CoveragePolicyError(f"{label} coverage summary missing fields: {sorted(missing)}")
     num_branches = _positive_int(summary["num_branches"], label=f"{label}.num_branches")
-    covered_branches = _positive_int(
-        summary["covered_branches"], label=f"{label}.covered_branches"
-    )
+    covered_branches = _positive_int(summary["covered_branches"], label=f"{label}.covered_branches")
     if covered_branches > num_branches:
         raise CoveragePolicyError(f"{label}.covered_branches exceeds num_branches")
     if num_branches > 0:
@@ -249,9 +253,7 @@ def evaluate(
             )
         group_covered += covered
         group_total += total
-        messages.append(
-            f"{profile_id}: {source} {metric}={percent:.2f}% minimum={threshold:.2f}%"
-        )
+        messages.append(f"{profile_id}: {source} {metric}={percent:.2f}% minimum={threshold:.2f}%")
 
     group_percent = _percentage(group_covered, group_total)
     group_minimum = float(profile["minimum_group_percent"])
