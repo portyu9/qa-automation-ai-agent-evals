@@ -76,16 +76,17 @@ def test_operational_gate_rejects_resolved_tail_violation() -> None:
 
 
 def test_resolved_only_operational_gate_keeps_excluded_uncertainty_visible() -> None:
-    observations = tuple(
-        OperationalObservation(
-            verdict=TrialVerdict.PASS,
-            latency_ms=1.0,
-            cost_usd=0.001,
-            tool_calls=1,
-            retries=0,
-        )
-        for _ in range(20)
-    ) + (
+    observations = (
+        *(
+            OperationalObservation(
+                verdict=TrialVerdict.PASS,
+                latency_ms=1.0,
+                cost_usd=0.001,
+                tool_calls=1,
+                retries=0,
+            )
+            for _ in range(20)
+        ),
         OperationalObservation(
             verdict=TrialVerdict.BLOCKED,
             latency_ms=20.0,
