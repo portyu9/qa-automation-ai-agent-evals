@@ -268,7 +268,7 @@ def verify_dsse_envelope(
             try:
                 valid = verifier(message, signature_bytes)
             except Exception:
-                continue
+                valid = False
             if valid is True:
                 if trusted_key_id not in verified_key_ids:
                     verified_key_ids.append(trusted_key_id)
