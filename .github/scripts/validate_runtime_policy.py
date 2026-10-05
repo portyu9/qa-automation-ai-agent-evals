@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import re
+import subprocess
 import sys
 import tomllib
 from pathlib import Path
@@ -117,6 +118,17 @@ if (
 if set(allowed_licenses) & set(denied_licenses):
     fail("dependency license allowlist and denylist must not overlap")
 validate_action_pins(workflows)
+lock_validator = Path(".github/scripts/validate_ci_locks.py")
+if not lock_validator.is_file():
+    fail("repository must contain .github/scripts/validate_ci_locks.py")
+lock_result = subprocess.run(
+    [sys.executable, str(lock_validator)],
+    check=False,
+    capture_output=True,
+    text=True,
+)
+if lock_result.returncode != 0:
+    fail(f"CI lock contract failed: {lock_result.stderr.strip() or lock_result.stdout.strip()}")
 project = pyproject["project"]
 pytest_options = pyproject.get("tool", {}).get("pytest", {}).get("ini_options", {})
 pytest_addopts = pytest_options.get("addopts")
@@ -142,7 +154,9 @@ for required in (
     "EXACT_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}",
     "FUZZ_SEED: ${{ github.run_id }}",
     "persist-credentials: false",
-    ".[dev,mcp]",
+    "--require-hashes",
+    "requirements/locks/mcp-py311.txt",
+    "--no-deps --no-build-isolation -e .",
     "-m fuzz",
     "tests/fuzz",
     "src/agent_evals/mcp/remote_auth.py",
@@ -155,6 +169,26 @@ for required in (
         fail(f"deep-fuzz workflow is missing required contract text: {required}")
 if "\npush:" in deep_fuzz or "\n  push:" in deep_fuzz:
     fail("deep-fuzz workflow must not run on every push")
+
+deep_mutation_path = Path(".github/workflows/deep-mutation.yml")
+deep_mutation = workflows.get(deep_mutation_path)
+if deep_mutation is None:
+    fail("repository must contain .github/workflows/deep-mutation.yml")
+for required in (
+    "name: Deep mutation assurance",
+    "workflow_dispatch:",
+    "schedule:",
+    "pull_request:",
+    "runs-on: ubuntu-24.04",
+    "persist-credentials: false",
+    "--require-hashes",
+    "requirements/locks/core-py311.txt",
+    "--no-deps --no-build-isolation -e .",
+):
+    if required not in deep_mutation:
+        fail(f"deep-mutation workflow is missing required contract text: {required}")
+if "\npush:" in deep_mutation or "\n  push:" in deep_mutation:
+    fail("deep-mutation workflow must not run on every push")
 
 if project.get("requires-python") != REQUIRES_PYTHON:
     fail(f"project.requires-python must be exactly {REQUIRES_PYTHON!r}")
@@ -215,6 +249,8 @@ if "python .github/scripts/release_candidate.py self-test" not in policy:
     fail("policy job must self-test retained release candidate validation")
 if "python .github/scripts/check_coverage_policy.py --self-test" not in policy:
     fail("policy job must self-test the module-specific coverage policy")
+if "python .github/scripts/validate_ci_locks.py" not in policy:
+    fail("policy job must execute the repository-owned CI lock validator")
 
 coverage_manifest_path = Path(".github/coverage/thresholds.json")
 try:
@@ -292,6 +328,10 @@ for required in (
     "run-id: ${{ steps.candidate.outputs.ci_run_id }}",
     "github-token: ${{ secrets.GITHUB_TOKEN }}",
     "package_artifact_manifest.py verify",
+    "--require-hashes",
+    "requirements/locks/core-py311.txt",
+    "--no-deps retained-dist/*.whl",
+    "--no-deps --no-build-isolation retained-dist/*.tar.gz",
     "release-supply-chain-${{ steps.candidate.outputs.ci_run_id }}",
     "release_supply_chain.py verify",
     ".github/dependency-license-policy.json",
@@ -340,6 +380,34 @@ for job, next_job, coverage_profile, coverage_report in (
             if required not in block:
                 fail(f"{job} is missing optional-module coverage contract text: {required}")
 
+locked_job_contracts = {
+    "quality": "requirements/locks/core-py${lock_suffix}.txt",
+    "mutation": "requirements/locks/core-py311.txt",
+    "openai-adapter": "requirements/locks/openai-mcp-py311.txt",
+    "mcp-lab": "requirements/locks/mcp-py311.txt",
+    "mcp-remote-auth": "requirements/locks/mcp-py311.txt",
+    "mcp-oauth-flow": "requirements/locks/mcp-py311.txt",
+}
+locked_job_next = {
+    "quality": "mutation",
+    "mutation": "openai-adapter",
+    "openai-adapter": "mcp-lab",
+    "mcp-lab": "mcp-remote-auth",
+    "mcp-remote-auth": "mcp-oauth-flow",
+    "mcp-oauth-flow": "package",
+}
+for job, lock_path in locked_job_contracts.items():
+    block = job_block(workflow, job, locked_job_next[job])
+    for required in ("--require-hashes", lock_path, "--no-deps --no-build-isolation -e ."):
+        if required not in block:
+            fail(f"{job} must install the exact repository lock before the local project: {required}")
+
+for workflow_path, source in workflows.items():
+    if "pip install --disable-pip-version-check -e '.[" in source:
+        fail(f"{workflow_path.as_posix()} bypasses the hashed lock contract with extras install")
+    if "pip install --disable-pip-version-check -r requirements-dev-ci-build.txt" in source:
+        fail(f"{workflow_path.as_posix()} bypasses the hashed lock contract with build manifest")
+
 package = job_block(workflow, "package", "package-reverify")
 if "name: Package build and inspection" not in package:
     fail("package job must use the non-protected Package build and inspection check name")
@@ -359,6 +427,15 @@ if 'SOURCE_DATE_EPOCH="$(git show -s --format=%ct "$GITHUB_SHA")"' not in packag
     fail("package build must derive SOURCE_DATE_EPOCH from the exact source commit")
 if "export PYTHONHASHSEED=0" not in package:
     fail("package build must pin PYTHONHASHSEED for reproducible package bytes")
+for required in (
+    "--require-hashes",
+    "requirements/locks/core-py311.txt",
+    "python -m build --no-isolation",
+    "--no-deps dist/*.whl",
+    "--no-deps --no-build-isolation dist/*.tar.gz",
+):
+    if required not in package:
+        fail(f"package build must use the locked non-isolated build contract: {required}")
 
 package_reverify = job_block(workflow, "package-reverify", "package-reproduce")
 if not re.search(r"^\s+needs:\s*package\s*$", package_reverify, flags=re.MULTILINE):
@@ -379,6 +456,14 @@ if (
     or "retained-dist/*.tar.gz" not in package_reverify
 ):
     fail("package-reverify must exercise the downloaded wheel and sdist")
+for required in (
+    "--require-hashes",
+    "requirements/locks/core-py311.txt",
+    "--no-deps retained-dist/*.whl",
+    "--no-deps --no-build-isolation retained-dist/*.tar.gz",
+):
+    if required not in package_reverify:
+        fail(f"package-reverify must consume the locked dependency environment: {required}")
 
 
 package_reproduce = job_block(workflow, "package-reproduce", "release-supply-chain")
@@ -399,14 +484,17 @@ if "export PYTHONHASHSEED=0" not in package_reproduce:
     fail("package-reproduce must pin PYTHONHASHSEED")
 if "path: ${{ runner.temp }}/retained-dist" not in package_reproduce:
     fail("package-reproduce must keep retained reference bytes outside the source checkout")
-if 'python -m build --outdir "$RUNNER_TEMP/reproduced-dist"' not in package_reproduce:
-    fail("package-reproduce must independently rebuild outside the source checkout")
+if 'python -m build --no-isolation --outdir "$RUNNER_TEMP/reproduced-dist"' not in package_reproduce:
+    fail("package-reproduce must independently rebuild without build isolation")
 if "package_artifact_manifest.py compare" not in package_reproduce:
     fail("package-reproduce must compare rebuilt bytes against the retained manifest")
 if '--reference-dir "$RUNNER_TEMP/retained-dist"' not in package_reproduce:
     fail("package-reproduce comparison must bind the isolated retained reference directory")
 if '--dist-dir "$RUNNER_TEMP/reproduced-dist"' not in package_reproduce:
     fail("package-reproduce comparison must bind the isolated fresh rebuilt directory")
+for required in ("--require-hashes", "requirements/locks/core-py311.txt"):
+    if required not in package_reproduce:
+        fail(f"package-reproduce must use the exact hashed build environment: {required}")
 
 if "release_supply_chain.py self-test" not in workflow:
     fail("CI policy job must self-test the release supply-chain verifier")
@@ -428,6 +516,9 @@ for required in (
     "release-supply-chain-${{ github.run_id }}",
     "supply-chain/release-sbom.spdx.json",
     "supply-chain/release-supply-chain-evidence.json",
+    "--require-hashes",
+    "requirements/locks/core-py311.txt",
+    "--no-deps retained-dist/*.whl",
 ):
     if required not in release_supply_chain:
         fail(f"release-supply-chain is missing required contract text: {required}")
@@ -449,6 +540,9 @@ for required in (
     "release_supply_chain.py verify",
     ".github/dependency-license-policy.json",
     "retained-supply-chain",
+    "--require-hashes",
+    "requirements/locks/core-py311.txt",
+    "--no-deps retained-dist/*.whl",
 ):
     if required not in release_supply_chain_reverify:
         fail(f"release-supply-chain-reverify is missing required contract text: {required}")
@@ -509,6 +603,6 @@ print(
     "runtime policy validated: "
     f"python={','.join(SUPPORTED_PYTHONS)}; requires-python={REQUIRES_PYTHON}; "
     f"runner={RUNNER}; workflows={len(workflows)}; gate=ci-gate+protected-codeql; "
-    "package-artifacts=retained-reverified-reproduced-with-spdx-license-evidence-and-default-branch-published"
+    "package-artifacts=hashed-locks+retained-reverified-reproduced-with-spdx-license-evidence-and-default-branch-published"
 )
 sys.exit(0)
