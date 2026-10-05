@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import os
-import socket
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -147,10 +146,10 @@ def main() -> int:
                 request_id=exc.headers.get("x-request-id"),
                 retry_after_seconds=retry_after,
             )
-        except (TimeoutError, socket.timeout) as exc:
+        except TimeoutError as exc:
             raise TimeoutError("provider request timed out") from exc
         except urllib.error.URLError as exc:
-            if isinstance(exc.reason, (TimeoutError, socket.timeout)):
+            if isinstance(exc.reason, TimeoutError):
                 raise TimeoutError("provider request timed out") from exc
             return ProviderCanaryResponse(status_code=503)
 
