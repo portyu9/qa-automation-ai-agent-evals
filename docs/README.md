@@ -103,6 +103,7 @@ Stored hash                   ≠ authenticated publisher
 Evidence replay               ≠ fresh execution or fresh injection
 Serialized gate result        ≠ trusted without recomputation
 Assurance report root         ≠ signed attestation
+DSSE key ID                   ≠ trusted key unless verifier policy says so
 ```
 
 For native handoffs, the distinction is deliberately scenario-owned rather than receipt-owned:
@@ -201,6 +202,7 @@ For stale-cache and both drift bridges, refresh is deliberately **host-owned**: 
 | [MCP_REMOTE_AUTH.md](MCP_REMOTE_AUTH.md) | How is the isolated loopback Streamable HTTP resource-server bearer/scope/verifier boundary tested over real TCP? |
 | [MCP_OAUTH_FLOW.md](MCP_OAUTH_FLOW.md) | How does the separated two-origin loopback OAuth flow verify discovery, compatibility DCR, PKCE, exact issuer/resource binding, exchange, introspection, and protected MCP use? |
 | [EVIDENCE_AND_REPLAY.md](EVIDENCE_AND_REPLAY.md) | How are local evidence records committed, reverified, and replayed without overstating provenance, including typed metadata/result/error/stale-cache/schema/identity `PROTOCOL_DELIVERY` revalidation? |
+| [DSSE_ENVELOPES.md](DSSE_ENVELOPES.md) | How can exact assurance reports and evidence manifests be optionally authenticated with verifier-owned DSSE trust without changing their historical integrity roots? |
 | [CONFORMANCE_CORPUS.md](CONFORMANCE_CORPUS.md) | Which canonical digest/root algorithms have language-neutral golden vectors, and which corrupted-evidence cases must fail closed without turning hashes into authentication? |
 | [ASSURANCE_REPORTS.md](ASSURANCE_REPORTS.md) | How does AssuranceReport current revision rederive resolved grading, reliability, and release-gate claims while preserving explicit policy facts from `BLOCKED` evidence as digest-bound, non-compensatory release-critical snapshots? |
 | [ASSURANCE_BLOCKED_HISTORY.md](ASSURANCE_BLOCKED_HISTORY.md) | How are terminal `BLOCKED` histories bound to evaluator/runtime blocking evidence, and how does current revision preserve explicit blocked policy facts without pretending the unresolved trial was fully graded? |
