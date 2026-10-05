@@ -203,6 +203,7 @@ def test_policy_rejects_lock_hash_algorithm_tampering(tmp_path: Path) -> None:
     assert result.returncode != 0
     assert "CI lock contract failed" in result.stderr
 
+
 def test_policy_rejects_provenance_signing_outside_trusted_main_push(tmp_path: Path) -> None:
     workspace = _policy_workspace(tmp_path)
     workflow = workspace / ".github/workflows/ci.yml"
@@ -275,4 +276,3 @@ def test_policy_rejects_publish_workflow_minting_fresh_attestation(tmp_path: Pat
 
     assert result.returncode != 0
     assert "verify retained provenance without minting new attestations" in result.stderr
-
