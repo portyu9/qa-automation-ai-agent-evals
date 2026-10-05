@@ -49,9 +49,7 @@ class OperationalSummary:
         if type(self.observations) is not tuple:
             raise ValueError("observations must be an exact tuple")
         if not 1 <= len(self.observations) <= MAX_STATISTICAL_TRIALS:
-            raise ValueError(
-                f"observation count must be in 1..{MAX_STATISTICAL_TRIALS}"
-            )
+            raise ValueError(f"observation count must be in 1..{MAX_STATISTICAL_TRIALS}")
         if type(self.inclusion) is not OperationalInclusion:
             raise ValueError("inclusion must be an exact OperationalInclusion")
         for observation in self.observations:
@@ -82,17 +80,14 @@ class OperationalSummary:
     def excluded_blocked(self) -> int:
         if self.inclusion is OperationalInclusion.ALL_ATTEMPTS:
             return 0
-        return sum(
-            observation.verdict is TrialVerdict.BLOCKED for observation in self.observations
-        )
+        return sum(observation.verdict is TrialVerdict.BLOCKED for observation in self.observations)
 
     @property
     def excluded_inconclusive(self) -> int:
         if self.inclusion is OperationalInclusion.ALL_ATTEMPTS:
             return 0
         return sum(
-            observation.verdict is TrialVerdict.INCONCLUSIVE
-            for observation in self.observations
+            observation.verdict is TrialVerdict.INCONCLUSIVE for observation in self.observations
         )
 
     @property
