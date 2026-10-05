@@ -14,7 +14,8 @@ from typing import Any
 
 from pydantic import ValidationError
 
-from agent_evals.evidence.models import _validate_historical_v2_evidence_json
+from agent_evals._strict_json import StrictJsonError, strict_json_loads
+from agent_evals.evidence.models import _validate_historical_v2_evidence
 from agent_evals.evidence.store import (
     ArtifactManifest,
     EvidenceIntegrityError,
@@ -55,9 +56,14 @@ def verify_historical_v2_record(
     payload = _safe_read_regular_file(paths.payload, store._max_payload_bytes)
 
     try:
-        manifest = ArtifactManifest.model_validate_json(manifest_bytes)
-    except ValidationError as exc:
-        raise EvidenceIntegrityError("evidence manifest failed schema validation") from exc
+        manifest_raw = strict_json_loads(
+            manifest_bytes,
+            label="historical evidence manifest",
+            require_object=True,
+        )
+        manifest = ArtifactManifest.model_validate(manifest_raw)
+    except (StrictJsonError, ValidationError) as exc:
+        raise EvidenceIntegrityError("evidence manifest failed strict JSON/schema validation") from exc
 
     if manifest.record_key != record_key:
         raise EvidenceIntegrityError("manifest record key does not match requested record")
@@ -74,10 +80,15 @@ def verify_historical_v2_record(
         raise EvidenceIntegrityError("stored evidence payload hash does not match manifest")
 
     try:
-        evidence = _validate_historical_v2_evidence_json(payload)
-    except ValidationError as exc:
+        raw = strict_json_loads(
+            payload,
+            label="historical v2 evidence payload",
+            require_object=True,
+        )
+        evidence = _validate_historical_v2_evidence(raw)
+    except (StrictJsonError, ValidationError) as exc:
         raise EvidenceIntegrityError(
-            "historical v2 evidence payload failed schema validation"
+            "historical v2 evidence payload failed strict JSON/schema validation"
         ) from exc
 
     if (
@@ -88,7 +99,6 @@ def verify_historical_v2_record(
         raise EvidenceIntegrityError("stored evidence identity does not match manifest")
 
     try:
-        raw = json.loads(payload)
         historical_root = _historical_v2_root(raw)
     except (KeyError, TypeError, ValueError) as exc:
         raise EvidenceIntegrityError("historical v2 evidence root material is malformed") from exc
