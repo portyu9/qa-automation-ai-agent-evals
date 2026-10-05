@@ -25,6 +25,10 @@ def _policy_workspace(tmp_path: Path) -> Path:
         workspace / ".github/workflows/publish-release.yml",
     )
     shutil.copy2(
+        _PROJECT_ROOT / ".github/workflows/deep-fuzz.yml",
+        workspace / ".github/workflows/deep-fuzz.yml",
+    )
+    shutil.copy2(
         _PROJECT_ROOT / ".github/coverage/thresholds.json",
         workspace / ".github/coverage/thresholds.json",
     )
@@ -70,4 +74,4 @@ def test_policy_accepts_pinned_action_in_second_workflow(tmp_path: Path) -> None
     result = _run_policy(workspace)
 
     assert result.returncode == 0, result.stderr
-    assert "workflows=3" in result.stdout
+    assert "workflows=4" in result.stdout
