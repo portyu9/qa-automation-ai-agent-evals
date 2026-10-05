@@ -48,6 +48,7 @@
       "name": "domain-null-json-utf8-sha256",
       "canonicalization": "SHA-256(domain UTF-8 || 0x00 || json-utf8 canonical bytes)",
       "uses": [
+        "semantic calibration case commitments and receipts",
         "semantic judgment receipt"
       ]
     },
@@ -82,12 +83,6 @@
       "expected_sha256": "4d5d88d95c7e8f7f829ef619ebee54eb9497280ce55539f41bf12264f2bcb5bb"
     },
     {
-      "name": "attack-delivery-v1",
-      "domain": "agent-evals/attack-delivery/v1",
-      "canonical_mode": "ascii",
-      "expected_sha256": "cc3ed6610dc6ad89ad634ecd817426ffa4c168ccb8965b25ecea859f0a787b78"
-    },
-    {
       "name": "assurance-report-v6",
       "domain": "agent-evals/assurance-report/v6",
       "canonical_mode": "ascii",
@@ -100,10 +95,10 @@
       "expected_sha256": "e564ce17fabf06293e79dbc74cd78821d0274a8ae640760ecaad553de23ce8d2"
     },
     {
-      "name": "mcp-agent-tool-result-receipt-v1",
-      "domain": "agent-evals/mcp-agent-tool-result-receipt/v1",
+      "name": "attack-delivery-v1",
+      "domain": "agent-evals/attack-delivery/v1",
       "canonical_mode": "ascii",
-      "expected_sha256": "78b1dca21c80681759d7c304c48eafcca9bac01ca56d813a6fc39def6e06a6c5"
+      "expected_sha256": "cc3ed6610dc6ad89ad634ecd817426ffa4c168ccb8965b25ecea859f0a787b78"
     },
     {
       "name": "mcp-agent-tool-error-recovery-receipt-v1",
@@ -122,6 +117,12 @@
       "domain": "agent-evals/mcp-agent-tool-metadata-receipt/v1",
       "canonical_mode": "ascii",
       "expected_sha256": "a7028c91076de2fa00b9b63fa343c57ab12a1a880a056016438929b98913a6dc"
+    },
+    {
+      "name": "mcp-agent-tool-result-receipt-v1",
+      "domain": "agent-evals/mcp-agent-tool-result-receipt/v1",
+      "canonical_mode": "ascii",
+      "expected_sha256": "78b1dca21c80681759d7c304c48eafcca9bac01ca56d813a6fc39def6e06a6c5"
     },
     {
       "name": "mcp-agent-tool-schema-drift-receipt-v3",
@@ -164,6 +165,18 @@
       "domain": "agent-evals/runtime-metric-provenance/v1",
       "canonical_mode": "ascii",
       "expected_sha256": "897b1ad682293c53a417b3403612f00af8640e544c42afc45de3fe19d8a1e957"
+    },
+    {
+      "name": "semantic-calibration-case-commitment-v1",
+      "domain": "agent-evals/semantic-calibration-case-commitment/v1",
+      "canonical_mode": "utf8",
+      "expected_sha256": "61e3f65a8629ffa24a31eed5cbc17734f96aee4ac61b6c2ba670fb562a4fb5b1"
+    },
+    {
+      "name": "semantic-calibration-receipt-v2",
+      "domain": "agent-evals/semantic-calibration-receipt/v2",
+      "canonical_mode": "utf8",
+      "expected_sha256": "ffd2b731a2e740cda729ea006fd9fb9c708024a96d05383add63ca7e4d9e95d9"
     },
     {
       "name": "semantic-judgment-receipt-v1",
