@@ -132,9 +132,6 @@ def _validate_id(value: object) -> None:
 def _validate_unit_float(value: object, *, name: str, allow_zero: bool) -> None:
     if isinstance(value, bool) or not isinstance(value, float) or not isfinite(value):
         raise ValueError(f"{name} must be a finite float")
-    if allow_zero:
-        valid = 0.0 <= value <= 1.0
-    else:
-        valid = 0.0 < value < 1.0
+    valid = 0.0 <= value <= 1.0 if allow_zero else 0.0 < value < 1.0
     if not valid:
         raise ValueError(f"{name} is outside the permitted probability interval")
