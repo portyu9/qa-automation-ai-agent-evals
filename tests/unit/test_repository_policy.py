@@ -91,7 +91,10 @@ def test_policy_rejects_missing_reproducible_package_comparison(tmp_path: Path) 
     result = _run_policy(workspace)
 
     assert result.returncode != 0
-    assert "package-reproduce must compare rebuilt bytes against the retained manifest" in result.stderr
+    assert (
+        "package-reproduce must compare rebuilt bytes against the retained manifest"
+        in result.stderr
+    )
 
 
 def test_policy_rejects_package_build_without_source_bound_epoch(tmp_path: Path) -> None:
@@ -105,5 +108,6 @@ def test_policy_rejects_package_build_without_source_bound_epoch(tmp_path: Path)
     result = _run_policy(workspace)
 
     assert result.returncode != 0
-    assert "package build must derive SOURCE_DATE_EPOCH from the exact source commit" in result.stderr
-
+    assert (
+        "package build must derive SOURCE_DATE_EPOCH from the exact source commit" in result.stderr
+    )
