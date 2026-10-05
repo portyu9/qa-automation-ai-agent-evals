@@ -11,6 +11,7 @@ RUNNER = "ubuntu-24.04"
 REQUIRED_JOBS = (
     "policy",
     "quality",
+    "mutation",
     "openai-adapter",
     "mcp-lab",
     "mcp-remote-auth",
@@ -77,6 +78,10 @@ ci_path = Path(".github/workflows/ci.yml")
 workflow = workflows.get(ci_path)
 if workflow is None:
     fail("repository must contain .github/workflows/ci.yml")
+publish_release_path = Path(".github/workflows/publish-release.yml")
+publish_release = workflows.get(publish_release_path)
+if publish_release is None:
+    fail("repository must contain .github/workflows/publish-release.yml")
 validate_action_pins(workflows)
 project = pyproject["project"]
 
@@ -126,6 +131,62 @@ if qualified != SUPPORTED_PYTHONS:
 policy = job_block(workflow, "policy", "quality")
 if "python .github/scripts/validate_runtime_policy.py" not in policy:
     fail("policy job must execute validate_runtime_policy.py")
+if "python .github/scripts/release_candidate.py self-test" not in policy:
+    fail("policy job must self-test retained release candidate validation")
+
+if "name: Publish retained release" not in publish_release:
+    fail("publish-release workflow must use the canonical workflow name")
+if (
+    "repository_dispatch:" not in publish_release
+    or "types: [release-request]" not in publish_release
+):
+    fail("publish-release must use the default-branch-bound release-request repository_dispatch")
+if "workflow_dispatch:" in publish_release or "workflow_run:" in publish_release:
+    fail("publish-release must not expose selectable-ref or upstream-workflow execution surfaces")
+if "permissions:\n  actions: read\n  contents: write" not in publish_release:
+    fail("publish-release must grant only actions-read/contents-write authority")
+if (
+    "group: retained-release-publication" not in publish_release
+    or "cancel-in-progress: false" not in publish_release
+):
+    fail("publish-release must serialize release publication attempts without cancellation")
+if "if: github.ref == 'refs/heads/main'" not in publish_release:
+    fail("publish-release job must fail closed unless the dispatch ref is main")
+if not any(
+    action.startswith("actions/checkout@") for action in _WORKFLOW_USES_RE.findall(publish_release)
+):
+    fail("publish-release must checkout exact dispatch-time default-branch release logic")
+if "ref: ${{ github.sha }}" not in publish_release:
+    fail("publish-release checkout must bind to the repository_dispatch default-branch SHA")
+if "persist-credentials: false" not in publish_release:
+    fail("publish-release checkout must not persist repository credentials")
+if "github.event.client_payload" in publish_release:
+    fail(
+        "publish-release must parse client payload as event-file data, not interpolate it into shell"
+    )
+for required in (
+    "release_candidate.py self-test",
+    "release_candidate.py validate",
+    '--workflow-ref "$GITHUB_REF"',
+    '--workflow-sha "$GITHUB_SHA"',
+    "package-artifacts-${{ steps.candidate.outputs.ci_run_id }}",
+    "run-id: ${{ steps.candidate.outputs.ci_run_id }}",
+    "github-token: ${{ secrets.GITHUB_TOKEN }}",
+    "package_artifact_manifest.py verify",
+    '--workflow "CI"',
+    "retained-dist/*.whl",
+    "retained-dist/*.tar.gz",
+    "retained-dist/artifact-manifest.json",
+    "gh release create",
+    "--verify-tag",
+):
+    if required not in publish_release:
+        fail(f"publish-release workflow is missing required contract text: {required}")
+if publish_release.count("release_candidate.py validate") < 2:
+    fail("publish-release must revalidate tag/release state immediately before publication")
+for forbidden in ("python -m build", "twine upload", "uv publish", "pypi.org"):
+    if forbidden in publish_release.lower():
+        fail(f"publish-release workflow contains forbidden release behavior: {forbidden}")
 
 for job, next_job in (
     ("quality", "openai-adapter"),
@@ -227,6 +288,6 @@ print(
     "runtime policy validated: "
     f"python={','.join(SUPPORTED_PYTHONS)}; requires-python={REQUIRES_PYTHON}; "
     f"runner={RUNNER}; workflows={len(workflows)}; gate=ci-gate+protected-codeql; "
-    "package-artifacts=retained-and-reverified"
+    "package-artifacts=retained-reverified-and-default-branch-published"
 )
 sys.exit(0)

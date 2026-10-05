@@ -19,6 +19,10 @@ def _policy_workspace(tmp_path: Path) -> Path:
         _PROJECT_ROOT / ".github/workflows/ci.yml",
         workspace / ".github/workflows/ci.yml",
     )
+    shutil.copy2(
+        _PROJECT_ROOT / ".github/workflows/publish-release.yml",
+        workspace / ".github/workflows/publish-release.yml",
+    )
     shutil.copy2(_PROJECT_ROOT / "src/agent_evals/py.typed", workspace / "src/agent_evals/py.typed")
     return workspace
 
@@ -61,4 +65,4 @@ def test_policy_accepts_pinned_action_in_second_workflow(tmp_path: Path) -> None
     result = _run_policy(workspace)
 
     assert result.returncode == 0, result.stderr
-    assert "workflows=2" in result.stdout
+    assert "workflows=3" in result.stdout
