@@ -34,6 +34,8 @@ EVIDENCE_MANIFEST_V1_PAYLOAD_TYPE = "application/vnd.agent-evals.evidence-manife
 MAX_DSSE_PAYLOAD_BYTES = 16 * 1024 * 1024
 MAX_DSSE_SIGNATURE_BYTES = 16 * 1024
 MAX_DSSE_SIGNATURES = 16
+MAX_DSSE_TRUSTED_VERIFIERS = 256
+MAX_DSSE_ENVELOPE_BYTES = 24 * 1024 * 1024
 MAX_DSSE_PAYLOAD_TYPE_UTF8_BYTES = 512
 MAX_DSSE_KEY_ID_UTF8_BYTES = 1_024
 
@@ -132,6 +134,35 @@ class VerifiedDSSEPayload:
     verified_key_ids: tuple[str, ...]
 
 
+def parse_dsse_envelope(value: bytes | str) -> DSSEEnvelope:
+    """Strictly decode the repository's bounded DSSE JSON envelope profile."""
+
+    if type(value) is bytes:
+        raw_bytes = value
+    elif type(value) is str:
+        try:
+            raw_bytes = value.encode("utf-8")
+        except UnicodeEncodeError as exc:
+            raise DSSEVerificationError(
+                "DSSE envelope JSON must contain only Unicode scalar values"
+            ) from exc
+    else:
+        raise DSSEVerificationError("DSSE envelope JSON must be exact bytes or text")
+    if len(raw_bytes) > MAX_DSSE_ENVELOPE_BYTES:
+        raise DSSEVerificationError(
+            f"DSSE envelope exceeds maximum bytes {MAX_DSSE_ENVELOPE_BYTES}"
+        )
+    try:
+        raw = strict_json_loads(
+            raw_bytes,
+            label="DSSE envelope",
+            require_object=True,
+        )
+        return DSSEEnvelope.model_validate(raw)
+    except (StrictJsonError, ValidationError) as exc:
+        raise DSSEVerificationError("DSSE envelope failed strict validation") from exc
+
+
 def pre_authentication_encode(payload_type: str, payload: bytes) -> bytes:
     """Return DSSE v1 pre-authentication encoding for one payload.
 
@@ -200,10 +231,9 @@ def verify_dsse_envelope(
 ) -> VerifiedDSSEPayload:
     """Verify an envelope against caller-owned trust policy.
 
-    Unknown key IDs are ignored because they carry no authority. At least one envelope signature
-    must select a trusted verifier and validate. If an envelope signature names a trusted key but
-    that signature is invalid, or the trusted verifier errors, verification fails closed even if
-    another signature could validate.
+    DSSE key IDs are unauthenticated hints. They influence verifier ordering but never establish
+    signer identity. The authoritative key IDs returned on success are the caller-trusted keys
+    whose verifier actually accepted a signature.
     """
 
     payload = _decode_canonical_base64(
@@ -220,28 +250,32 @@ def verify_dsse_envelope(
         if not hmac.compare_digest(payload, expected_payload):
             raise DSSEVerificationError("DSSE payload does not match expected bytes")
 
+    trusted_items = _trusted_verifier_items(trusted_verifiers)
     message = pre_authentication_encode(envelope.payloadType, payload)
     verified_key_ids: list[str] = []
     for signature in envelope.signatures:
-        verifier = trusted_verifiers.get(signature.keyid)
-        if verifier is None:
-            continue
         signature_bytes = _decode_canonical_base64(
             signature.sig,
             label="DSSE signature",
             max_decoded_bytes=MAX_DSSE_SIGNATURE_BYTES,
         )
-        try:
-            valid = verifier(message, signature_bytes)
-        except Exception as exc:
-            raise DSSEVerificationError(
-                f"trusted DSSE verifier for key {signature.keyid!r} raised an error"
-            ) from exc
-        if valid is not True:
-            raise DSSEVerificationError(
-                f"DSSE signature for trusted key {signature.keyid!r} is invalid"
-            )
-        verified_key_ids.append(signature.keyid)
+        candidates = trusted_items
+        if signature.keyid:
+            hinted = tuple(item for item in trusted_items if item[0] == signature.keyid)
+            if hinted:
+                candidates = hinted + tuple(
+                    item for item in trusted_items if item[0] != signature.keyid
+                )
+
+        for trusted_key_id, verifier in candidates:
+            try:
+                valid = verifier(message, signature_bytes)
+            except Exception:
+                continue
+            if valid is True:
+                if trusted_key_id not in verified_key_ids:
+                    verified_key_ids.append(trusted_key_id)
+                break
 
     if not verified_key_ids:
         raise DSSEVerificationError("DSSE envelope has no valid signature from a trusted key")
@@ -367,6 +401,29 @@ def _canonical_model_json(model: BaseModel) -> bytes:
         separators=(",", ":"),
         allow_nan=False,
     ).encode("utf-8")
+
+
+def _trusted_verifier_items(
+    trusted_verifiers: Mapping[str, SignatureVerifier],
+) -> tuple[tuple[str, SignatureVerifier], ...]:
+    items = tuple(trusted_verifiers.items())
+    if not items:
+        raise DSSEVerificationError("DSSE verification requires at least one trusted verifier")
+    if len(items) > MAX_DSSE_TRUSTED_VERIFIERS:
+        raise DSSEVerificationError(
+            "DSSE trusted verifier registry exceeds maximum entries "
+            f"{MAX_DSSE_TRUSTED_VERIFIERS}"
+        )
+    for key_id, verifier in items:
+        if type(key_id) is not str or not key_id:
+            raise DSSEVerificationError(
+                "DSSE trusted verifier key IDs must be non-empty exact strings"
+            )
+        if not callable(verifier):
+            raise DSSEVerificationError(
+                f"DSSE trusted verifier for key {key_id!r} is not callable"
+            )
+    return items
 
 
 def _payload_type_bytes(payload_type: str) -> bytes:
