@@ -17,6 +17,11 @@ on:
       - '.github/workflows/dependency-governance.yml'
       - '.github/workflows/ci.yml'
       - '.github/workflows/codeql.yml'
+      - '.github/scripts/generate_ci_lock.py'
+      - '.github/scripts/validate_ci_locks.py'
+      - 'requirements-dev-ci-build.txt'
+      - 'requirements/locks/**'
+      - 'pyproject.toml'
   pull_request_target:
     types: [opened, reopened, synchronize, ready_for_review, labeled, unlabeled]
   workflow_run:
