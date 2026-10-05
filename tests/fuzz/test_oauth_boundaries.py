@@ -340,7 +340,6 @@ def test_oauth_introspection_raw_bytes_fail_closed(payload: bytes) -> None:
 )
 @settings(max_examples=1200, deadline=None)
 def test_introspection_claim_types_and_bindings_fail_closed(
-    monkeypatch: pytest.MonkeyPatch,
     active: object,
     issuer: object,
     resource: object,
@@ -349,7 +348,6 @@ def test_introspection_claim_types_and_bindings_fail_closed(
     expires_at: object,
     subject: object,
 ) -> None:
-    monkeypatch.setattr("agent_evals.mcp.oauth_flow.time.time", lambda: float(_FIXED_NOW))
     data = {
         "active": active,
         "iss": issuer,
@@ -378,7 +376,7 @@ def test_introspection_claim_types_and_bindings_fail_closed(
         and bool(client_id)
         and (
             expires_at is None
-            or (type(expires_at) is int and expires_at > _FIXED_NOW)
+            or (type(expires_at) is int and expires_at > int(time.time()))
         )
         and (subject is None or type(subject) is str)
     )
