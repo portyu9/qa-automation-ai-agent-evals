@@ -90,7 +90,9 @@ def validate_dispatch_event(
         raise ReleaseCandidateError("repository_dispatch action must be release-request")
     repo = event.get("repository")
     if type(repo) is not dict or repo.get("full_name") != repository:
-        raise ReleaseCandidateError(\n            "repository_dispatch repository does not match expected repository"\n        )
+        raise ReleaseCandidateError(
+            "repository_dispatch repository does not match expected repository"
+        )
     if workflow_ref != f"refs/heads/{DEFAULT_BRANCH}":
         raise ReleaseCandidateError("release publisher must execute on the default branch ref")
     require_sha(workflow_sha, "publisher workflow SHA")
@@ -104,7 +106,9 @@ def validate_dispatch_event(
     return version_tag, ci_run_id
 
 
-def validate_ci_run(\n    run: dict[str, Any], *, repository: str, expected_run_id: int\n) -> tuple[str, int]:
+def validate_ci_run(
+    run: dict[str, Any], *, repository: str, expected_run_id: int
+) -> tuple[str, int]:
     if require_positive_int(run.get("id"), "CI run id") != expected_run_id:
         raise ReleaseCandidateError("CI run id does not match requested run")
     repo = run.get("repository")
@@ -232,7 +236,9 @@ def fetch_pyproject(api_url: str, repository: str, commit_sha: str, token: str) 
     )
     assert payload is not None
     if payload.get("type") != "file" or payload.get("path") != "pyproject.toml":
-        raise ReleaseCandidateError(\n            "candidate pyproject.toml API response is not the expected file"\n        )
+        raise ReleaseCandidateError(
+            "candidate pyproject.toml API response is not the expected file"
+        )
     if payload.get("encoding") != "base64" or type(payload.get("content")) is not str:
         raise ReleaseCandidateError("candidate pyproject.toml content is not base64 encoded")
     try:
@@ -305,7 +311,9 @@ def validate_candidate(
         raw = event_path.read_bytes()
         event = json.loads(raw.decode("utf-8"), object_pairs_hook=_strict_object)
     except (OSError, UnicodeError, json.JSONDecodeError) as exc:
-        raise ReleaseCandidateError(\n            "repository_dispatch event file is not valid UTF-8 JSON"\n        ) from exc
+        raise ReleaseCandidateError(
+            "repository_dispatch event file is not valid UTF-8 JSON"
+        ) from exc
     if type(event) is not dict:
         raise ReleaseCandidateError("repository_dispatch event root must be an object")
     version_tag, ci_run_id = validate_dispatch_event(
