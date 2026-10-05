@@ -276,4 +276,3 @@ def test_reproduction_comparison_rejects_symlink_material(tmp_path: Path) -> Non
 
     assert result.returncode != 0
     assert "reproduced artifact directory must contain regular files only" in result.stderr
-
