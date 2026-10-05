@@ -35,19 +35,20 @@
         "approval intent",
         "attack delivery",
         "assurance report v6/v7",
-        "MCP agent bridge receipts",
         "population frame",
         "randomness/reset receipts",
         "retrieval receipt",
         "runtime metric provenance",
         "session sampling v2",
-        "side-effect receipt and logical operation"
+        "side-effect receipt and logical operation",
+        "MCP agent bridge receipts except tool-metadata"
       ]
     },
     {
       "name": "domain-null-json-utf8-sha256",
       "canonicalization": "SHA-256(domain UTF-8 || 0x00 || json-utf8 canonical bytes)",
       "uses": [
+        "MCP tool-metadata bridge receipts",
         "semantic calibration case commitments and receipts",
         "semantic judgment receipt"
       ]
@@ -115,8 +116,8 @@
     {
       "name": "mcp-agent-tool-metadata-receipt-v1",
       "domain": "agent-evals/mcp-agent-tool-metadata-receipt/v1",
-      "canonical_mode": "ascii",
-      "expected_sha256": "a7028c91076de2fa00b9b63fa343c57ab12a1a880a056016438929b98913a6dc"
+      "canonical_mode": "utf8",
+      "expected_sha256": "2c0f8ee9aacf80a54cb25a8b78ff1e2e7db205d0a313aee98c601df2ce298ac4"
     },
     {
       "name": "mcp-agent-tool-result-receipt-v1",
