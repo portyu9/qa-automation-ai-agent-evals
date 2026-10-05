@@ -35,6 +35,10 @@ from agent_evals.runtime.sampling import _receipt_root as randomness_control_roo
 from agent_evals.runtime.sampling_v2 import _metadata_root as session_sampling_v2_root
 from agent_evals.security.taxonomy import ThreatClass
 from agent_evals.semantic import models as semantic_models
+from agent_evals.semantic.calibration import (
+    _case_commitment_root as semantic_calibration_case_root,
+    _receipt_root as semantic_calibration_receipt_root,
+)
 from agent_evals.semantic.receipt import _receipt_root as semantic_receipt_root
 from agent_evals.side_effect.models import SideEffectIdempotencySpec, canonical_json_sha256
 from agent_evals.side_effect.receipt import _receipt_root as side_effect_receipt_root
@@ -160,6 +164,8 @@ def test_every_domain_root_vector_matches_reference_and_current_production_helpe
         "reset-isolation-receipt-v1": reset_isolation_root,
         "retrieval-delivery-receipt-v1": retrieval_receipt_root,
         "runtime-metric-provenance-v1": metric_provenance_root,
+        "semantic-calibration-case-commitment-v1": semantic_calibration_case_root,
+        "semantic-calibration-receipt-v2": semantic_calibration_receipt_root,
         "semantic-judgment-receipt-v1": semantic_receipt_root,
         "session-sampling-v2": session_sampling_v2_root,
         "side-effect-idempotency-receipt-v1": side_effect_receipt_root,
