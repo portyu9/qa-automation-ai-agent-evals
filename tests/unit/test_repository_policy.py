@@ -15,8 +15,20 @@ def _policy_workspace(tmp_path: Path) -> Path:
     workspace = tmp_path / "repo"
     (workspace / ".github/workflows").mkdir(parents=True)
     (workspace / ".github/coverage").mkdir(parents=True)
+    (workspace / ".github/scripts").mkdir(parents=True)
+    (workspace / "requirements/locks").mkdir(parents=True)
     (workspace / "src/agent_evals").mkdir(parents=True)
     shutil.copy2(_PROJECT_ROOT / "pyproject.toml", workspace / "pyproject.toml")
+    shutil.copy2(
+        _PROJECT_ROOT / "requirements-dev-ci-build.txt",
+        workspace / "requirements-dev-ci-build.txt",
+    )
+    shutil.copy2(
+        _PROJECT_ROOT / ".github/scripts/validate_ci_locks.py",
+        workspace / ".github/scripts/validate_ci_locks.py",
+    )
+    for lock in (_PROJECT_ROOT / "requirements/locks").glob("*.txt"):
+        shutil.copy2(lock, workspace / "requirements/locks" / lock.name)
     shutil.copy2(
         _PROJECT_ROOT / ".github/workflows/ci.yml",
         workspace / ".github/workflows/ci.yml",
@@ -32,6 +44,10 @@ def _policy_workspace(tmp_path: Path) -> Path:
     shutil.copy2(
         _PROJECT_ROOT / ".github/workflows/deep-fuzz.yml",
         workspace / ".github/workflows/deep-fuzz.yml",
+    )
+    shutil.copy2(
+        _PROJECT_ROOT / ".github/workflows/deep-mutation.yml",
+        workspace / ".github/workflows/deep-mutation.yml",
     )
     shutil.copy2(
         _PROJECT_ROOT / ".github/coverage/thresholds.json",
@@ -79,7 +95,7 @@ def test_policy_accepts_pinned_action_in_second_workflow(tmp_path: Path) -> None
     result = _run_policy(workspace)
 
     assert result.returncode == 0, result.stderr
-    assert "workflows=4" in result.stdout
+    assert "workflows=5" in result.stdout
 
 
 def test_policy_rejects_missing_reproducible_package_comparison(tmp_path: Path) -> None:
@@ -146,3 +162,43 @@ def test_policy_rejects_license_refs_becoming_self_authorized(tmp_path: Path) ->
 
     assert result.returncode != 0
     assert "fail closed on LicenseRef values" in result.stderr
+
+
+def test_policy_rejects_unhashed_quality_dependency_install(tmp_path: Path) -> None:
+    workspace = _policy_workspace(tmp_path)
+    workflow = workspace / ".github/workflows/ci.yml"
+    source = workflow.read_text(encoding="utf-8")
+    assert "--require-hashes" in source
+    workflow.write_text(source.replace("--require-hashes", "", 1), encoding="utf-8")
+
+    result = _run_policy(workspace)
+
+    assert result.returncode != 0
+    assert "quality must install the exact repository lock" in result.stderr
+
+
+def test_policy_rejects_package_build_isolation(tmp_path: Path) -> None:
+    workspace = _policy_workspace(tmp_path)
+    workflow = workspace / ".github/workflows/ci.yml"
+    source = workflow.read_text(encoding="utf-8")
+    required = "python -m build --no-isolation"
+    assert required in source
+    workflow.write_text(source.replace(required, "python -m build", 1), encoding="utf-8")
+
+    result = _run_policy(workspace)
+
+    assert result.returncode != 0
+    assert "package build must use the locked non-isolated build contract" in result.stderr
+
+
+def test_policy_rejects_lock_hash_algorithm_tampering(tmp_path: Path) -> None:
+    workspace = _policy_workspace(tmp_path)
+    lock = workspace / "requirements/locks/core-py311.txt"
+    source = lock.read_text(encoding="utf-8")
+    assert "--hash=sha256:" in source
+    lock.write_text(source.replace("--hash=sha256:", "--hash=sha512:"), encoding="utf-8")
+
+    result = _run_policy(workspace)
+
+    assert result.returncode != 0
+    assert "CI lock contract failed" in result.stderr
