@@ -66,9 +66,7 @@ class SliceGateResult:
             if family.risk_family in seen:
                 raise ValueError("family_results risk families must be unique")
             seen.add(family.risk_family)
-        if type(self.reasons) is not tuple or any(
-            type(item) is not str for item in self.reasons
-        ):
+        if type(self.reasons) is not tuple or any(type(item) is not str for item in self.reasons):
             raise ValueError("reasons must be an exact tuple of strings")
 
 
@@ -255,13 +253,11 @@ class OperationalReleaseGate:
             )
         if p.max_latency_p95_ms is not None and summary.latency_p95_ms > p.max_latency_p95_ms:
             failures.append(
-                f"latency p95 {summary.latency_p95_ms:.4f} ms exceeds "
-                f"{p.max_latency_p95_ms:.4f} ms"
+                f"latency p95 {summary.latency_p95_ms:.4f} ms exceeds {p.max_latency_p95_ms:.4f} ms"
             )
         if p.max_cost_p95_usd is not None and summary.cost_p95_usd > p.max_cost_p95_usd:
             failures.append(
-                f"cost p95 {summary.cost_p95_usd:.8f} USD exceeds "
-                f"{p.max_cost_p95_usd:.8f} USD"
+                f"cost p95 {summary.cost_p95_usd:.8f} USD exceeds {p.max_cost_p95_usd:.8f} USD"
             )
         if p.max_tool_calls_p99 is not None and summary.tool_calls_p99 > p.max_tool_calls_p99:
             failures.append(
@@ -286,6 +282,4 @@ def _validate_label(value: object, *, name: str) -> None:
         or value.strip() != value
         or any(ord(character) < 32 or ord(character) == 127 for character in value)
     ):
-        raise ValueError(
-            f"{name} must contain 1..{_MAX_LABEL} trimmed characters without controls"
-        )
+        raise ValueError(f"{name} must contain 1..{_MAX_LABEL} trimmed characters without controls")
