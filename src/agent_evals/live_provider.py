@@ -38,7 +38,10 @@ class ProviderCanaryLimits:
     def __post_init__(self) -> None:
         if type(self.max_attempts) is not int or not 1 <= self.max_attempts <= 5:
             raise ValueError("max_attempts must be an exact integer in 1..5")
-        if type(self.max_requests_per_minute) is not int or not 1 <= self.max_requests_per_minute <= 60:
+        if (
+            type(self.max_requests_per_minute) is not int
+            or not 1 <= self.max_requests_per_minute <= 60
+        ):
             raise ValueError("max_requests_per_minute must be an exact integer in 1..60")
         for name in ("max_input_tokens", "max_output_tokens"):
             value = getattr(self, name)
@@ -137,7 +140,11 @@ def run_provider_canary(
 ) -> ProviderCanaryObservation:
     """Run one bounded live canary with deterministic retry classification."""
 
-    if type(expected_substring) is not str or not expected_substring or len(expected_substring) > 256:
+    if (
+        type(expected_substring) is not str
+        or not expected_substring
+        or len(expected_substring) > 256
+    ):
         raise ValueError("expected_substring must contain 1..256 characters")
 
     started = clock()
@@ -161,7 +168,11 @@ def run_provider_canary(
             continue
 
         if type(response) is not ProviderCanaryResponse:
-            return _uncertain(attempt, last_response, "provider transport returned invalid response")
+            return _uncertain(
+                attempt,
+                last_response,
+                "provider transport returned invalid response",
+            )
         last_response = response
 
         validation_error = _validate_response(response, limits)
@@ -170,7 +181,11 @@ def run_provider_canary(
 
         if response.status_code in _RETRYABLE_STATUS:
             if attempt == limits.max_attempts:
-                return _uncertain(attempt, response, "retryable provider failure exhausted attempts")
+                return _uncertain(
+                    attempt,
+                    response,
+                    "retryable provider failure exhausted attempts",
+                )
             delay = limits.min_request_interval_seconds
             if response.retry_after_seconds is not None:
                 delay = max(delay, response.retry_after_seconds)
