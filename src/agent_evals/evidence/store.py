@@ -195,7 +195,9 @@ class LocalEvidenceStore:
             )
             manifest = ArtifactManifest.model_validate(manifest_raw)
         except (StrictJsonError, ValidationError) as exc:
-            raise EvidenceIntegrityError("evidence manifest failed schema validation or strict JSON decoding") from exc
+            raise EvidenceIntegrityError(
+                "evidence manifest failed schema validation or strict JSON decoding"
+            ) from exc
 
         if manifest.record_key != record_key:
             raise EvidenceIntegrityError("manifest record key does not match requested record")
