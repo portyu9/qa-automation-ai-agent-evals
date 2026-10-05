@@ -156,6 +156,14 @@ Evidence replay and report loading remain distinct operations:
 
 An explicit future migration tool may convert a predecessor artifact only if it can supply the new provenance honestly. Mere presence of old reliability scalars is never sufficient.
 
+## Optional authenticated envelope
+
+The report root remains an integrity identity and is still not a signature. Deployments that need publisher authentication can wrap an exact current report in the separate verifier-owned DSSE layer documented in [Authenticated DSSE Artifact Envelopes](DSSE_ENVELOPES.md).
+
+That outer layer signs canonical report JSON under an explicitly supplied signing primitive and verifies it only against caller-owned trusted key policy. Verification then re-runs this report model's normal strict schema, derivation, release-gate, and report-root checks before accepting the artifact. A valid DSSE signature therefore cannot rescue an internally invalid assurance report, and an envelope key ID cannot declare itself trusted.
+
+Adding an envelope does not change v6 or v7 report roots and does not retroactively authenticate historical unsigned reports.
+
 ## Integrity boundary
 
 `report_root`, reset receipt roots, randomness receipt roots, evidence roots, and seed/control identities are domain-separated or content-addressed integrity values within their respective contracts. They are **not**:
