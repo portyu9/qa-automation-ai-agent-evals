@@ -590,7 +590,10 @@ if "python -m build" in release_supply_chain_reverify:
 qualification_evidence = job_block(workflow, "qualification-evidence", "release-provenance")
 if "name: Retain CI qualification evidence" not in qualification_evidence:
     fail("qualification-evidence must use the canonical qualification job name")
-if "if: github.event_name == 'push' && github.ref == 'refs/heads/main'" not in qualification_evidence:
+if (
+    "if: github.event_name == 'push' && github.ref == 'refs/heads/main'"
+    not in qualification_evidence
+):
     fail("qualification-evidence must be restricted to trusted main pushes")
 for dependency in (*REQUIRED_JOBS, "ci-gate", "protected-gate"):
     if f"      - {dependency}\n" not in qualification_evidence:
