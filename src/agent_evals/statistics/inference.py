@@ -121,7 +121,9 @@ class PowerPlan:
                 raise ValueError(f"{name} must be positive")
         expected_gap = _alternative_gap(self.contract, self.anticipated_delta)
         if self.alternative_gap != expected_gap:
-            raise ValueError("alternative_gap does not recompute from contract and anticipated_delta")
+            raise ValueError(
+                "alternative_gap does not recompute from contract and anticipated_delta"
+            )
         expected_confidence = _paired_hoeffding_radius(
             self.minimum_pairs,
             self.contract.alpha,
