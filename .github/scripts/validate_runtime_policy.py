@@ -625,9 +625,7 @@ for workflow_path, source in workflows.items():
         or "attestations: write" in source
         or "actions/attest@" in source
     ):
-        fail(
-            f"{workflow_path.as_posix()} introduces signing authority outside trusted-main CI"
-        )
+        fail(f"{workflow_path.as_posix()} introduces signing authority outside trusted-main CI")
 
 ci_gate = job_block(workflow, "ci-gate", "protected-gate")
 if not re.search(r"^\s+if:\s*always\(\)\s*$", ci_gate, flags=re.MULTILINE):
