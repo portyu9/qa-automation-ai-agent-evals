@@ -802,6 +802,7 @@ jobs:
               --repo "$GITHUB_REPOSITORY" \
               --bundle release-provenance/release-provenance.sigstore.json \
               --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/ci.yml" \
+              --signer-digest "$GITHUB_SHA" \
               --source-digest "$GITHUB_SHA" \
               --source-ref "$GITHUB_REF" \
               --predicate-type "https://slsa.dev/provenance/v1" \
