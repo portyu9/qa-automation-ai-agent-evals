@@ -4,7 +4,7 @@ import argparse
 import hashlib
 import json
 import re
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from importlib import metadata
 from pathlib import Path
 from typing import Any
@@ -339,7 +339,7 @@ def _sbom(
         ],
     ]
     created = datetime.fromtimestamp(
-        source_date_epoch, tz=timezone.utc
+        source_date_epoch, tz=UTC
     ).strftime("%Y-%m-%dT%H:%M:%SZ")
     return {
         "spdxVersion": SPDX_VERSION,
