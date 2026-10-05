@@ -695,6 +695,9 @@ class TrialRunner:
         adapter: AgentAdapter,
         evidence: TrialEvidence,
     ) -> tuple[str, str, str] | None:
+        from agent_evals.adapters.conformance import authority_adapter
+
+        adapter = authority_adapter(adapter)
         if type(adapter) is EvidenceReplayAdapter:
             return None
 
