@@ -22,17 +22,18 @@ class ConfidenceSequencePoint:
     allocated_alpha: float
 
     def __post_init__(self) -> None:
-        for name in (
-            "attempt_index",
-            "resolved_index",
-            "passes",
-            "failures",
-            "blocked",
-            "inconclusive",
-        ):
+        if type(self.attempt_index) is not int or self.attempt_index < 1:
+            raise ValueError("attempt_index must be a positive exact integer")
+        for name in ("resolved_index", "passes", "failures", "blocked", "inconclusive"):
             value = getattr(self, name)
             if type(value) is not int or value < 0:
                 raise ValueError(f"{name} must be a non-negative exact integer")
+        if self.resolved_index != self.passes + self.failures:
+            raise ValueError("resolved_index must equal passes + failures")
+        if self.attempt_index != self.resolved_index + self.blocked + self.inconclusive:
+            raise ValueError(
+                "attempt_index must equal passes + failures + blocked + inconclusive"
+            )
         for name in ("lower", "upper", "allocated_alpha"):
             value = getattr(self, name)
             if isinstance(value, bool) or not isinstance(value, float) or not isfinite(value):
@@ -83,11 +84,13 @@ def bernoulli_confidence_sequence(
         if resolved == 0:
             lower, upper = 0.0, 1.0
         else:
-            allocated_alpha = alpha * 6.0 / (pi * pi * resolved * resolved)
-            radius = sqrt(log(2.0 / allocated_alpha) / (2.0 * resolved))
+            resolved_alpha = alpha * 6.0 / (pi * pi * resolved * resolved)
+            radius = sqrt(log(2.0 / resolved_alpha) / (2.0 * resolved))
             mean = passes / resolved
             lower = max(0.0, mean - radius)
             upper = min(1.0, mean + radius)
+            if verdict in (TrialVerdict.PASS, TrialVerdict.FAIL):
+                allocated_alpha = resolved_alpha
 
         points.append(
             ConfidenceSequencePoint(
