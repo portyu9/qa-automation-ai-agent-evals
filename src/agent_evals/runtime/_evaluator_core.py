@@ -11,6 +11,7 @@ from typing import Any
 from pydantic import ValidationError
 
 from agent_evals.adapters.base import AdapterPreconditionError, AdapterResult, AgentAdapter
+from agent_evals.adapters.conformance import conformance_checked
 from agent_evals.adapters.replay import EvidenceReplayAdapter
 from agent_evals.contracts.models import EvaluationScenario, SubjectFingerprint
 from agent_evals.evidence.models import EvidenceEvent, EvidenceKind, TrialEvidence, TrialVerdict
@@ -126,6 +127,7 @@ class TrialRunner:
         trial_id: str,
         started: float,
     ) -> EvaluatedTrial:
+        adapter = conformance_checked(adapter)
         subject = subject.snapshot()
         scenario = scenario.snapshot()
         execution_scenario = scenario.snapshot()
