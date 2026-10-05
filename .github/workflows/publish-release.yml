@@ -117,6 +117,7 @@ jobs:
               --repo "$GITHUB_REPOSITORY" \
               --bundle "$bundle" \
               --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/ci.yml" \
+              --signer-digest "$CI_COMMIT_SHA" \
               --source-digest "$CI_COMMIT_SHA" \
               --source-ref "refs/heads/main" \
               --predicate-type "https://slsa.dev/provenance/v1" \
