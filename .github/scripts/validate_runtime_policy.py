@@ -19,6 +19,7 @@ REQUIRED_JOBS = (
     "mcp-oauth-flow",
     "package",
     "package-reverify",
+    "package-reproduce",
 )
 _WORKFLOW_USES_RE = re.compile(r"^\s*(?:-\s*)?uses:\s*([^\s#]+)", flags=re.MULTILINE)
 
@@ -317,8 +318,12 @@ if "overwrite: true" not in package:
     fail("package upload must explicitly replace a prior artifact on a rerun")
 if "dist/artifact-manifest.json" not in package:
     fail("package upload must include artifact-manifest.json")
+if 'SOURCE_DATE_EPOCH="$(git show -s --format=%ct "$GITHUB_SHA")"' not in package:
+    fail("package build must derive SOURCE_DATE_EPOCH from the exact source commit")
+if "export PYTHONHASHSEED=0" not in package:
+    fail("package build must pin PYTHONHASHSEED for reproducible package bytes")
 
-package_reverify = job_block(workflow, "package-reverify", "ci-gate")
+package_reverify = job_block(workflow, "package-reverify", "package-reproduce")
 if not re.search(r"^\s+needs:\s*package\s*$", package_reverify, flags=re.MULTILINE):
     fail("package-reverify must depend on the package job")
 if not any(
@@ -337,6 +342,32 @@ if (
     or "retained-dist/*.tar.gz" not in package_reverify
 ):
     fail("package-reverify must exercise the downloaded wheel and sdist")
+
+
+package_reproduce = job_block(workflow, "package-reproduce", "ci-gate")
+if not re.search(r"^\s+needs:\s*package\s*$", package_reproduce, flags=re.MULTILINE):
+    fail("package-reproduce must depend on the package job")
+if not any(
+    action.startswith("actions/download-artifact@")
+    for action in _WORKFLOW_USES_RE.findall(package_reproduce)
+):
+    fail("package-reproduce must download the retained package artifact set")
+if "package-artifacts-${{ github.run_id }}" not in package_reproduce:
+    fail("package-reproduce must download the run-bound retained artifact")
+if "package_artifact_manifest.py verify" not in package_reproduce:
+    fail("package-reproduce must first verify the retained reference manifest")
+if 'SOURCE_DATE_EPOCH="$(git show -s --format=%ct "$GITHUB_SHA")"' not in package_reproduce:
+    fail("package-reproduce must derive SOURCE_DATE_EPOCH from the exact source commit")
+if "export PYTHONHASHSEED=0" not in package_reproduce:
+    fail("package-reproduce must pin PYTHONHASHSEED")
+if "python -m build --outdir reproduced-dist" not in package_reproduce:
+    fail("package-reproduce must independently rebuild package distributions")
+if "package_artifact_manifest.py compare" not in package_reproduce:
+    fail("package-reproduce must compare rebuilt bytes against the retained manifest")
+if "--reference-dir retained-dist" not in package_reproduce:
+    fail("package-reproduce comparison must bind the retained reference directory")
+if "--dist-dir reproduced-dist" not in package_reproduce:
+    fail("package-reproduce comparison must bind the fresh rebuilt directory")
 
 ci_gate = job_block(workflow, "ci-gate", "protected-gate")
 if not re.search(r"^\s+if:\s*always\(\)\s*$", ci_gate, flags=re.MULTILINE):
@@ -390,6 +421,6 @@ print(
     "runtime policy validated: "
     f"python={','.join(SUPPORTED_PYTHONS)}; requires-python={REQUIRES_PYTHON}; "
     f"runner={RUNNER}; workflows={len(workflows)}; gate=ci-gate+protected-codeql; "
-    "package-artifacts=retained-reverified-and-default-branch-published"
+    "package-artifacts=retained-reverified-reproduced-and-default-branch-published"
 )
 sys.exit(0)
