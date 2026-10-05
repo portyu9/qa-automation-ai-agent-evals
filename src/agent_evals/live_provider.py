@@ -460,6 +460,4 @@ def _validate_optional_metadata(value: object, field_name: str) -> None:
         or value.strip() != value
         or any(ord(character) < 32 or ord(character) == 127 for character in value)
     ):
-        raise ValueError(
-            f"{field_name} must contain 1..256 trimmed characters without controls"
-        )
+        raise ValueError(f"{field_name} must contain 1..256 trimmed characters without controls")
