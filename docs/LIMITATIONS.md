@@ -4,15 +4,17 @@ This document is intentionally strict. Repository claims must never become stron
 
 ## Current non-claims
 
-### No credentialed live-provider assurance yet
+### Credentialed live-provider assurance is a bounded historical canary
 
-The OpenAI integration is pinned to `openai-agents`. CI exercises the real SDK runner/tool/handoff/approval/context loop deterministically with `agents.testing.ScriptedModel` and no provider API call.
+The OpenAI integration is pinned to `openai-agents`. Ordinary CI continues to exercise the real SDK runner/tool/handoff/approval/context loop deterministically with `agents.testing.ScriptedModel` and no provider API call.
 
 The SDK tier covers all seven generic adversarial channel categories at scoped local/SDK boundaries. A separate `OpenAIAgentsRetrievalAdapter` closes one evaluator-owned deterministic retrieval-delivery relation. A separate `OpenAIAgentsHandoffAuthorityAdapter` exercises run-local native handoff authority attenuation. `OpenAIAgentsHITLApprovalAdapter` exercises one exact native `ToolApprovalItem` → evaluator decision → same-`RunState` continuation relation. `OpenAIAgentsSideEffectIdempotencyAdapter` separately exercises two exact local `FunctionTool` attempts while independently sampling effect state around the real callback. Six additional adapters exercise exact official-MCP-stdio/OpenAI SDK paths: one `TOOL_METADATA_POISON` discovery → model-visible target-definition bridge, one `TOOL_RESULT_POISON` same-call bridge, one causal `TOOL_ERROR` → same-argument retry → benign recovery bridge, one host-refreshed `TOOL_LIST_STALE_CACHE` removal/rejection/target-absence delivery bridge, one host-refreshed `TOOL_SCHEMA_DRIFT` adaptation bridge, and one host-refreshed `TOOL_IDENTITY_DRIFT` old-name rejection → replacement-name adaptation bridge. `OpenAIAgentsSemanticJudge` separately exercises one concrete public SDK `Model` through a no-tools, one-turn evaluator boundary under deterministic `ScriptedModel` integration.
 
-None of this establishes live-model quality, production-provider availability, provider-side delivery attestation, authenticated human approval, production IAM, or credentialed end-to-end assurance.
+A separate scheduled/manual live-provider canary can now make one credentialed, resource-bounded historical observation. It has explicit request, rate, wall-clock, token, and operator-priced estimated-cost ceilings; it retains request/model labels where the public API exposes them; and it keeps retryable provider failures/timeouts distinct from a resolved subject assertion failure. The retained artifact explicitly states `historical_observation=true` and `provider_attestation=false`.
 
-Terminal application state remains independently observed; provider output is not the state oracle.
+That canary still does **not** establish general live-model quality, production-provider availability, authenticated provider/model identity, provider-side delivery attestation, trusted pricing/billing, authenticated human approval, production IAM, or credentialed end-to-end assurance. It is not an ordinary-PR gate or release authority.
+
+Terminal application state remains independently observed; provider output is not the state oracle. See [Live Provider Assurance and Adapter Conformance](LIVE_PROVIDER_ASSURANCE.md).
 
 ### Semantic judging is calibrated subordinate evidence, not deterministic truth
 
