@@ -83,4 +83,5 @@ jobs:
             deep-fuzz-junit.xml
             .hypothesis/
           if-no-files-found: error
+          include-hidden-files: true
           retention-days: 21
