@@ -24,7 +24,7 @@ _SAFE_TEXT = st.text(
 _JSON_SCALARS = st.one_of(
     st.none(),
     st.booleans(),
-    st.integers(min_value=-10**40, max_value=10**40),
+    st.integers(min_value=-(10**40), max_value=10**40),
     st.floats(allow_nan=False, allow_infinity=False, width=64),
     _SAFE_TEXT,
 )
