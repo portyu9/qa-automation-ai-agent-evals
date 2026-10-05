@@ -145,9 +145,7 @@ def validate_reproducibility_job(
         (REPRODUCIBILITY_JOB_NAME, "reproducibility"),
         (SUPPLY_CHAIN_JOB_NAME, "supply-chain evidence"),
     ):
-        matches = [
-            job for job in jobs if type(job) is dict and job.get("name") == job_name
-        ]
+        matches = [job for job in jobs if type(job) is dict and job.get("name") == job_name]
         if len(matches) != 1:
             raise ReleaseCandidateError(
                 f"release CI run must contain exactly one {label} qualification job"
@@ -163,9 +161,7 @@ def validate_reproducibility_job(
             require_positive_int(job.get("run_attempt"), f"{label} job run attempt")
             != ci_run_attempt
         ):
-            raise ReleaseCandidateError(
-                f"{label} qualification job does not match CI run attempt"
-            )
+            raise ReleaseCandidateError(f"{label} qualification job does not match CI run attempt")
 
 
 def validate_version_binding(
@@ -528,9 +524,7 @@ def self_test() -> None:
         except ReleaseCandidateError:
             pass
         else:
-            raise ReleaseCandidateError(
-                "self-test accepted invalid release qualification jobs"
-            )
+            raise ReleaseCandidateError("self-test accepted invalid release qualification jobs")
 
     pyproject = b'[project]\nname = "qa-automation-ai-agent-evals"\nversion = "1.2.3"\n'
     assert (
