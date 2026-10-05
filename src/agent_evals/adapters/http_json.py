@@ -74,14 +74,17 @@ class JsonHttpRuntimeAdapter:
             "max_turns": scenario.authority.max_turns,
         }
         raw = self._transport(request)
+        resolved: object
         if inspect.isawaitable(raw):
-            raw = await raw
-        if type(raw) is not JsonRuntimeResponse:
+            resolved = await raw
+        else:
+            resolved = raw
+        if type(resolved) is not JsonRuntimeResponse:
             raise AdapterPreconditionError(
                 code="runtime_response_invalid",
                 reason="JSON runtime transport returned an invalid response object",
             )
-        response = raw
+        response = resolved
         if type(response.status_code) is not int or not 200 <= response.status_code < 300:
             raise AdapterPreconditionError(
                 code="runtime_unavailable",
