@@ -31,9 +31,7 @@ class ConfidenceSequencePoint:
         if self.resolved_index != self.passes + self.failures:
             raise ValueError("resolved_index must equal passes + failures")
         if self.attempt_index != self.resolved_index + self.blocked + self.inconclusive:
-            raise ValueError(
-                "attempt_index must equal passes + failures + blocked + inconclusive"
-            )
+            raise ValueError("attempt_index must equal passes + failures + blocked + inconclusive")
         for name in ("lower", "upper", "allocated_alpha"):
             value = getattr(self, name)
             if isinstance(value, bool) or not isinstance(value, float) or not isfinite(value):
