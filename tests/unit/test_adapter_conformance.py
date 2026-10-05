@@ -60,6 +60,12 @@ class _InvalidNameAdapter(_Adapter):
     name = "Self Declared TRUST"
 
 
+class _ExplodingNameAdapter(_Adapter):
+    @property
+    def name(self) -> str:
+        raise RuntimeError("hostile adapter property")
+
+
 def test_adapter_name_contract_is_bounded_and_canonical() -> None:
     assert validate_adapter_name("json-http-runtime:v1") == "json-http-runtime:v1"
     with pytest.raises(AdapterConformanceError, match="adapter name"):
@@ -135,6 +141,23 @@ async def test_invalid_adapter_name_fails_closed_without_using_raw_name_as_sourc
     error = evaluated.evidence.events[0]
     assert error.source == "adapter:adapter-conformance-rejected"
     assert error.payload["code"] == "adapter_conformance_failed"
+    assert evaluated.metric_provenance is not None
+    assert evaluated.metric_provenance.runtime_adapter_name == "adapter-conformance-rejected"
+
+
+@pytest.mark.asyncio
+async def test_hostile_adapter_name_property_cannot_escape_conformance_boundary() -> None:
+    evaluated = await TrialRunner().run(
+        _ExplodingNameAdapter(AdapterResult(final_state={"status": "ok"})),
+        subject=_subject(),
+        scenario=_scenario(),
+        trial_id="conformance-hostile-name",
+    )
+
+    assert evaluated.verdict is TrialVerdict.BLOCKED
+    assert evaluated.evidence.events[0].payload["code"] == "invalid_metric_provenance"
+    assert evaluated.metric_provenance is not None
+    assert evaluated.metric_provenance.runtime_adapter_name == "metric-provenance-rejected"
 
 
 @pytest.mark.asyncio
