@@ -12,6 +12,7 @@ from agent_evals.adapters.conformance import (
 )
 from agent_evals.contracts.models import EvaluationScenario, ScenarioKind, SubjectFingerprint
 from agent_evals.evidence.models import EvidenceEvent, EvidenceKind, TrialVerdict
+from agent_evals.runtime._evaluator_core import TrialRunner as CoreTrialRunner
 from agent_evals.runtime.evaluator import TrialRunner
 
 
@@ -99,6 +100,31 @@ def test_exact_framework_wrapper_is_the_only_authority_unwrap_boundary() -> None
 
     lookalike = _Lookalike()
     assert authority_adapter(lookalike) is lookalike  # type: ignore[arg-type]
+
+
+@pytest.mark.asyncio
+async def test_core_evaluator_cannot_bypass_conformance_boundary() -> None:
+    result = AdapterResult(
+        events=(
+            EvidenceEvent(
+                sequence=4,
+                kind=EvidenceKind.OUTPUT,
+                source="third-party:test",
+                payload={"output": "ok"},
+            ),
+        ),
+        final_state={"status": "ok"},
+    )
+
+    evaluated = await CoreTrialRunner().run(
+        _Adapter(result),
+        subject=_subject(),
+        scenario=_scenario(),
+        trial_id="conformance-core-invalid-sequence",
+    )
+
+    assert evaluated.verdict is TrialVerdict.BLOCKED
+    assert evaluated.evidence.events[0].payload["code"] == "adapter_conformance_failed"
 
 
 @pytest.mark.asyncio
