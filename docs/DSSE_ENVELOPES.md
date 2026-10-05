@@ -45,11 +45,14 @@ Envelope parsing is bounded and fail-closed. The implementation requires:
 - non-empty bounded payload type;
 - canonical base64 for payload and signatures;
 - at least one and at most the configured maximum number of signatures;
-- unique non-empty bounded key IDs;
+- unique non-empty bounded key IDs in the repository's strict application profile;
 - non-empty bounded decoded signatures;
-- a bounded decoded payload.
+- a bounded decoded payload;
+- strict JSON decoding for callers using `parse_dsse_envelope(...)`, including duplicate-key rejection.
 
 Alternate base64 spellings that decode to the same bytes are rejected rather than normalized.
+
+The DSSE base protocol defines `keyid` as optional. This repository's bounded JSON application profile requires a non-empty `keyid` for auditability, but verification does not treat that hint as signer identity.
 
 ## Verifier-owned trust
 
@@ -57,15 +60,15 @@ The envelope does not contain a trusted public key, certificate authority decisi
 
 Verification requires a caller-supplied mapping from trusted key IDs to verification functions. The verifier applies these rules:
 
-1. an unknown key ID has no authority and is ignored;
-2. a signature naming a trusted key must verify successfully;
-3. an exception or invalid signature from a trusted verifier fails closed;
-4. at least one trusted signature must verify;
-5. a valid signature from an unknown/untrusted key does not satisfy the policy.
+1. the envelope `keyid` is only an unauthenticated ordering hint;
+2. verification tries caller-trusted cryptographic verifiers and records the trusted key that actually validates the signature;
+3. a forged, stale, or unknown hint cannot create trust and does not prevent another trusted key from being tried;
+4. an invalid signature or verifier error is not accepted and is skipped;
+5. at least one signature must actually verify under a caller-trusted key, otherwise the envelope fails closed.
 
-This prevents extensibility from becoming self-declared trust. An attacker cannot add a key to the envelope and thereby make that key trusted.
+This prevents extensibility from becoming self-declared trust while also preventing an attacker from poisoning an otherwise valid multi-signature envelope merely by appending a bad signature with a trusted-looking hint. The authoritative signer identifier exposed after verification is the trusted registry key whose verifier succeeded, not the envelope-controlled `keyid`.
 
-The caller remains responsible for deciding which verification functions and key IDs are trusted in a given deployment.
+The caller remains responsible for deciding which verification functions and key IDs are trusted in a given deployment. Verification callables should be total Boolean functions for ordinary invalid signatures; an exception is treated as a failed candidate rather than as successful evidence.
 
 ## Assurance-report verification
 
