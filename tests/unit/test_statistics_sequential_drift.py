@@ -82,9 +82,9 @@ def test_change_point_does_not_claim_stationary_noise_shift() -> None:
 
 def test_change_point_refuses_unresolved_attempts() -> None:
     verdicts = (
-        tuple(TrialVerdict.PASS for _ in range(20))
-        + (TrialVerdict.BLOCKED,)
-        + tuple(TrialVerdict.FAIL for _ in range(20))
+        *(TrialVerdict.PASS for _ in range(20)),
+        TrialVerdict.BLOCKED,
+        *(TrialVerdict.FAIL for _ in range(20)),
     )
 
     with pytest.raises(ValueError, match="BLOCKED and INCONCLUSIVE"):
