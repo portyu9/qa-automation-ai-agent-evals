@@ -64,8 +64,10 @@ def generate(root: Path, profile: str, output: Path) -> None:
     text = output.read_text(encoding="utf-8")
     if "--hash=sha256:" not in text:
         raise SystemExit("generated lock does not contain SHA-256 hashes")
-    if "-e " in text or "file:" in text:
-        raise SystemExit("generated lock unexpectedly contains local/editable material")
+    for line in text.splitlines():
+        requirement = line.strip()
+        if requirement.startswith("-e ") or " @ file:" in requirement:
+            raise SystemExit("generated lock unexpectedly contains local/editable material")
     print(f"generated {output} for {profile} under Python {sys.version.split()[0]}")
 
 
