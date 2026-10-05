@@ -13,6 +13,7 @@ _PINNED_CHECKOUT = "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1"
 def _policy_workspace(tmp_path: Path) -> Path:
     workspace = tmp_path / "repo"
     (workspace / ".github/workflows").mkdir(parents=True)
+    (workspace / ".github/coverage").mkdir(parents=True)
     (workspace / "src/agent_evals").mkdir(parents=True)
     shutil.copy2(_PROJECT_ROOT / "pyproject.toml", workspace / "pyproject.toml")
     shutil.copy2(
@@ -22,6 +23,10 @@ def _policy_workspace(tmp_path: Path) -> Path:
     shutil.copy2(
         _PROJECT_ROOT / ".github/workflows/publish-release.yml",
         workspace / ".github/workflows/publish-release.yml",
+    )
+    shutil.copy2(
+        _PROJECT_ROOT / ".github/coverage/thresholds.json",
+        workspace / ".github/coverage/thresholds.json",
     )
     shutil.copy2(_PROJECT_ROOT / "src/agent_evals/py.typed", workspace / "src/agent_evals/py.typed")
     return workspace

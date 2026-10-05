@@ -1,0 +1,8 @@
+[run]
+branch = True
+source = agent_evals
+relative_files = True
+
+[report]
+show_missing = True
+skip_covered = True
