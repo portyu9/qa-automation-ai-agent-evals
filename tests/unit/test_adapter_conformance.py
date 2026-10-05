@@ -58,7 +58,7 @@ class _Adapter:
 
 
 class _InvalidNameAdapter(_Adapter):
-    name = "Self Declared TRUST"
+    name = "self-declared\ntrust"
 
 
 class _ExplodingNameAdapter(_Adapter):
@@ -68,9 +68,9 @@ class _ExplodingNameAdapter(_Adapter):
 
 
 def test_adapter_name_contract_is_bounded_and_canonical() -> None:
-    assert validate_adapter_name("json-http-runtime:v1") == "json-http-runtime:v1"
+    assert validate_adapter_name("Provider Runtime v1") == "Provider Runtime v1"
     with pytest.raises(AdapterConformanceError, match="adapter name"):
-        validate_adapter_name("Provider Runtime")
+        validate_adapter_name("provider\nruntime")
 
 
 def test_adapter_result_requires_exact_contiguous_events() -> None:
