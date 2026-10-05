@@ -10,7 +10,7 @@ Ordinary pull requests and deterministic CI prove repository-owned contracts wit
 
 `TrialRunner` inserts the exact framework-owned `ConformanceCheckedAdapter` around every subject adapter before normalized evidence reaches the grading engine. The wrapper validates:
 
-- a bounded canonical adapter name;
+- a bounded, trimmed adapter identity with no control characters;
 - an exact `AdapterResult`;
 - exact `EvidenceEvent` instances with contiguous zero-based sequence values;
 - an exact terminal-state object;
