@@ -333,7 +333,13 @@ def _parse_payload_json(value: str) -> Any:
             max_depth=32,
         )
     except StrictJsonError as exc:
-        raise ValueError("MCP fault payload_json must contain strict bounded JSON") from exc
+        if "duplicate object key" in str(exc):
+            raise ValueError(
+                "MCP fault payload_json must not contain duplicate object keys"
+            ) from exc
+        raise ValueError(
+            "MCP fault payload_json must contain valid JSON under strict bounded decoding"
+        ) from exc
 
 
 def _object_payload(payload: Any, label: str) -> dict[str, Any]:
