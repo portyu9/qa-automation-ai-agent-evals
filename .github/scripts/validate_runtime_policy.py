@@ -85,6 +85,41 @@ if publish_release is None:
     fail("repository must contain .github/workflows/publish-release.yml")
 validate_action_pins(workflows)
 project = pyproject["project"]
+pytest_options = pyproject.get("tool", {}).get("pytest", {}).get("ini_options", {})
+pytest_addopts = pytest_options.get("addopts")
+if not isinstance(pytest_addopts, str) or "not fuzz" not in pytest_addopts:
+    fail("ordinary pytest addopts must exclude the deep fuzz marker")
+pytest_markers = pytest_options.get("markers")
+if not isinstance(pytest_markers, list) or not any(
+    isinstance(marker, str) and marker.startswith("fuzz:") for marker in pytest_markers
+):
+    fail("pyproject.toml must register the fuzz marker")
+
+deep_fuzz_path = Path(".github/workflows/deep-fuzz.yml")
+deep_fuzz = workflows.get(deep_fuzz_path)
+if deep_fuzz is None:
+    fail("repository must contain .github/workflows/deep-fuzz.yml")
+for required in (
+    "name: Deep fuzz assurance",
+    "workflow_dispatch:",
+    "schedule:",
+    "pull_request:",
+    "runs-on: ubuntu-24.04",
+    "timeout-minutes: 90",
+    "EXACT_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}",
+    "FUZZ_SEED: ${{ github.run_id }}",
+    "persist-credentials: false",
+    ".[dev,mcp]",
+    "-m fuzz",
+    "tests/fuzz",
+    "--hypothesis-seed=\"$FUZZ_SEED\"",
+    "if: always()",
+    "retention-days: 21",
+):
+    if required not in deep_fuzz:
+        fail(f"deep-fuzz workflow is missing required contract text: {required}")
+if "\npush:" in deep_fuzz or "\n  push:" in deep_fuzz:
+    fail("deep-fuzz workflow must not run on every push")
 
 if project.get("requires-python") != REQUIRES_PYTHON:
     fail(f"project.requires-python must be exactly {REQUIRES_PYTHON!r}")
