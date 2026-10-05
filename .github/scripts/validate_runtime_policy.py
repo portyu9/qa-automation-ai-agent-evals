@@ -112,7 +112,7 @@ for required in (
     ".[dev,mcp]",
     "-m fuzz",
     "tests/fuzz",
-    "--hypothesis-seed=\"$FUZZ_SEED\"",
+    '--hypothesis-seed="$FUZZ_SEED"',
     "if: always()",
     "retention-days: 21",
 ):
