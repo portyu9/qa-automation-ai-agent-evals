@@ -344,6 +344,7 @@ for required in (
     '--signer-workflow "$GITHUB_REPOSITORY/.github/workflows/ci.yml"',
     '--source-digest "$CI_COMMIT_SHA"',
     '--source-ref "refs/heads/main"',
+    '--predicate-type "https://slsa.dev/provenance/v1"',
     "--deny-self-hosted-runners",
     ".github/dependency-license-policy.json",
     "retained-supply-chain/release-sbom.spdx.json",
@@ -609,6 +610,7 @@ for required in (
     '--signer-workflow "$GITHUB_REPOSITORY/.github/workflows/ci.yml"',
     '--source-digest "$GITHUB_SHA"',
     '--source-ref "$GITHUB_REF"',
+    '--predicate-type "https://slsa.dev/provenance/v1"',
     "--deny-self-hosted-runners",
     "release-provenance-${{ github.run_id }}",
 ):
