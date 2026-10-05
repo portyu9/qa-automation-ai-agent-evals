@@ -386,8 +386,6 @@ class _IntrospectionTokenVerifier:
 
     async def verify_token(self, token: str) -> Any | None:
         import httpx2
-        from mcp.server.auth.provider import AccessToken
-
         async with httpx2.AsyncClient(timeout=5.0) as client:
             try:
                 response = await client.post(
