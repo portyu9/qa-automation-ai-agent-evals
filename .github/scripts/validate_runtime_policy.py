@@ -360,7 +360,7 @@ if 'SOURCE_DATE_EPOCH="$(git show -s --format=%ct "$GITHUB_SHA")"' not in packag
     fail("package-reproduce must derive SOURCE_DATE_EPOCH from the exact source commit")
 if "export PYTHONHASHSEED=0" not in package_reproduce:
     fail("package-reproduce must pin PYTHONHASHSEED")
-if 'path: ${{ runner.temp }}/retained-dist' not in package_reproduce:
+if "path: ${{ runner.temp }}/retained-dist" not in package_reproduce:
     fail("package-reproduce must keep retained reference bytes outside the source checkout")
 if 'python -m build --outdir "$RUNNER_TEMP/reproduced-dist"' not in package_reproduce:
     fail("package-reproduce must independently rebuild outside the source checkout")
