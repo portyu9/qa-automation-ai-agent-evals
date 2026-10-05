@@ -1,10 +1,16 @@
 from __future__ import annotations
 
+import base64
 import json
+import sys
+from pathlib import Path
 
 import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
+from mcp.client.stdio import StdioServerParameters, stdio_client
+from mcp.shared.message import SessionMessage
+from mcp_types import JSONRPCNotification, JSONRPCRequest, JSONRPCResponse
 
 from agent_evals._strict_json import strict_json_loads
 from agent_evals.mcp.lab import (
@@ -41,6 +47,104 @@ _CONTENT_KINDS = (
     MCPFaultKind.TOOL_RESULT_POISON,
     MCPFaultKind.TOOL_ERROR,
 )
+
+
+_FRAMING_SERVER = Path(__file__).with_name("mcp_framing_server.py")
+_REQUEST_ID = st.one_of(
+    st.integers(min_value=-100_000, max_value=100_000),
+    st.text(
+        alphabet=st.characters(blacklist_categories=("Cs",)),
+        max_size=24,
+    ),
+)
+
+
+@st.composite
+def _framing_cases(
+    draw: st.DrawFn,
+) -> tuple[list[int | str], tuple[int, ...], list[int]]:
+    count = draw(st.integers(min_value=1, max_value=5))
+    request_ids = draw(st.lists(_REQUEST_ID, min_size=count, max_size=count, unique=True))
+    order = draw(st.permutations(range(count)))
+    chunk_sizes = draw(
+        st.lists(
+            st.integers(min_value=1, max_value=16),
+            min_size=1,
+            max_size=8,
+        )
+    )
+    return request_ids, order, chunk_sizes
+
+
+def _encode_framing_plan(
+    *,
+    count: int,
+    order: tuple[int, ...],
+    chunk_sizes: list[int],
+) -> str:
+    raw = json.dumps(
+        {
+            "count": count,
+            "order": list(order),
+            "chunk_sizes": chunk_sizes,
+        },
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode()
+    return base64.urlsafe_b64encode(raw).decode().rstrip("=")
+
+
+@given(case=_framing_cases())
+@settings(max_examples=50, deadline=None)
+async def test_stdio_jsonrpc_ids_notifications_order_and_fragmentation(
+    case: tuple[list[int | str], tuple[int, ...], list[int]],
+) -> None:
+    request_ids, order, chunk_sizes = case
+    parameters = StdioServerParameters(
+        command=sys.executable,
+        args=[str(_FRAMING_SERVER)],
+        env={
+            "AGENT_EVALS_MCP_FUZZ_PLAN": _encode_framing_plan(
+                count=len(request_ids),
+                order=order,
+                chunk_sizes=chunk_sizes,
+            )
+        },
+    )
+
+    async with stdio_client(parameters) as (read_stream, write_stream):
+        for request_index, request_id in enumerate(request_ids):
+            await write_stream.send(
+                SessionMessage(
+                    JSONRPCRequest(
+                        jsonrpc="2.0",
+                        id=request_id,
+                        method="fuzz/request",
+                        params={"request_index": request_index},
+                    )
+                )
+            )
+
+        for response_index in order:
+            notification_item = await read_stream.receive()
+            assert not isinstance(notification_item, Exception)
+            notification = notification_item.message
+            assert isinstance(notification, JSONRPCNotification)
+            assert notification.method == "notifications/fuzz"
+            assert notification.params == {
+                "request_id": request_ids[response_index],
+                "request_index": response_index,
+            }
+
+            response_item = await read_stream.receive()
+            assert not isinstance(response_item, Exception)
+            response = response_item.message
+            assert isinstance(response, JSONRPCResponse)
+            assert response.id == request_ids[response_index]
+            assert response.result == {
+                "request_id": request_ids[response_index],
+                "request_index": response_index,
+            }
 
 
 @given(kind=st.sampled_from(_CONTENT_KINDS), payload=_JSON_VALUES)
