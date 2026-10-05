@@ -386,6 +386,7 @@ class _IntrospectionTokenVerifier:
 
     async def verify_token(self, token: str) -> Any | None:
         import httpx2
+
         async with httpx2.AsyncClient(timeout=5.0) as client:
             try:
                 response = await client.post(
@@ -439,9 +440,7 @@ class _HeadlessOAuth:
             raise RuntimeError(
                 f"MCP OAuth-flow authorization endpoint returned {response.status_code}"
             )
-        code, state, issuer = _parse_authorization_redirect(
-            response.headers.get("location", "")
-        )
+        code, state, issuer = _parse_authorization_redirect(response.headers.get("location", ""))
         self.authorization_response = {"iss": issuer or ""}
         self._result = AuthorizationCodeResult(
             code=code,
@@ -894,9 +893,7 @@ def _access_token_from_introspection(
     if not client_id:
         return None
     expires_at = data.get("exp")
-    if expires_at is not None and (
-        type(expires_at) is not int or expires_at <= int(time.time())
-    ):
+    if expires_at is not None and (type(expires_at) is not int or expires_at <= int(time.time())):
         return None
     subject = data.get("sub")
     if subject is not None and type(subject) is not str:
