@@ -17,6 +17,7 @@ from agent_evals.dsse import (
     DSSESignature,
     DSSEVerificationError,
     create_dsse_envelope,
+    parse_dsse_envelope,
     pre_authentication_encode,
     sign_assurance_report,
     sign_evidence_manifest,
@@ -39,7 +40,10 @@ from agent_evals.runtime.session import EvaluationSessionResult
 from agent_evals.statistics.reliability import ReliabilityReport
 
 _TEST_KEY = b"deterministic-test-only-dsse-key"
+_UNTRUSTED_KEY = b"untrusted-deterministic-test-key"
+_SECOND_TEST_KEY = b"second-deterministic-test-key"
 _KEY_ID = "test-key-1"
+_SECOND_KEY_ID = "test-key-2"
 _SUBJECT = "a" * 64
 _CAMPAIGN = "dsse-test-campaign"
 _SCENARIO = EvaluationScenario(
@@ -57,6 +61,18 @@ def _sign(message: bytes) -> bytes:
 
 def _verify(message: bytes, signature: bytes) -> bool:
     return hmac.compare_digest(_sign(message), signature)
+
+
+def _sign_untrusted(message: bytes) -> bytes:
+    return hmac.new(_UNTRUSTED_KEY, message, hashlib.sha256).digest()
+
+
+def _sign_second(message: bytes) -> bytes:
+    return hmac.new(_SECOND_TEST_KEY, message, hashlib.sha256).digest()
+
+
+def _verify_second(message: bytes, signature: bytes) -> bool:
+    return hmac.compare_digest(_sign_second(message), signature)
 
 
 def _report() -> AssuranceReport:
@@ -131,6 +147,43 @@ def test_dsse_pae_counts_utf8_bytes_not_code_points() -> None:
     assert pae == b"DSSEv1 " + str(len(encoded)).encode() + b" " + encoded + b" 1 x"
 
 
+def test_strict_envelope_parser_round_trips_valid_json() -> None:
+    envelope = create_dsse_envelope(
+        "application/test",
+        b"payload",
+        key_id=_KEY_ID,
+        sign=_sign,
+    )
+
+    assert parse_dsse_envelope(envelope.model_dump_json()) == envelope
+
+
+def test_strict_envelope_parser_rejects_duplicate_json_keys() -> None:
+    envelope = create_dsse_envelope(
+        "application/test",
+        b"payload",
+        key_id=_KEY_ID,
+        sign=_sign,
+    )
+    raw = envelope.model_dump_json()
+    duplicate = raw[:-1] + ',"payload":"cGF5bG9hZA=="}'
+
+    with pytest.raises(DSSEVerificationError, match="strict validation"):
+        parse_dsse_envelope(duplicate)
+
+
+def test_verification_requires_nonempty_trusted_registry() -> None:
+    envelope = create_dsse_envelope(
+        "application/test",
+        b"payload",
+        key_id=_KEY_ID,
+        sign=_sign,
+    )
+
+    with pytest.raises(DSSEVerificationError, match="at least one trusted verifier"):
+        verify_dsse_envelope(envelope, trusted_verifiers={})
+
+
 def test_generic_envelope_round_trip_requires_caller_trust() -> None:
     envelope = create_dsse_envelope(
         "application/test",
@@ -151,16 +204,29 @@ def test_generic_envelope_round_trip_requires_caller_trust() -> None:
     assert verified.verified_key_ids == (_KEY_ID,)
 
 
-def test_unknown_key_id_has_no_authority() -> None:
+def test_unknown_key_id_has_no_authority_without_trusted_cryptographic_match() -> None:
     envelope = create_dsse_envelope(
         "application/test",
         b"payload",
         key_id="untrusted-key",
-        sign=_sign,
+        sign=_sign_untrusted,
     )
 
     with pytest.raises(DSSEVerificationError, match="no valid signature from a trusted key"):
         verify_dsse_envelope(envelope, trusted_verifiers={_KEY_ID: _verify})
+
+
+def test_key_id_is_only_a_hint_and_actual_verifying_key_is_authoritative() -> None:
+    envelope = create_dsse_envelope(
+        "application/test",
+        b"payload",
+        key_id="forged-or-stale-hint",
+        sign=_sign,
+    )
+
+    verified = verify_dsse_envelope(envelope, trusted_verifiers={_KEY_ID: _verify})
+
+    assert verified.verified_key_ids == (_KEY_ID,)
 
 
 def test_unknown_signature_can_coexist_with_valid_trusted_signature() -> None:
@@ -205,7 +271,7 @@ def test_invalid_signature_for_trusted_key_fails_closed() -> None:
         }
     )
 
-    with pytest.raises(DSSEVerificationError, match="trusted key.*invalid"):
+    with pytest.raises(DSSEVerificationError, match="no valid signature from a trusted key"):
         verify_dsse_envelope(tampered, trusted_verifiers={_KEY_ID: _verify})
 
 
@@ -221,8 +287,38 @@ def test_trusted_verifier_exception_fails_closed() -> None:
         del message, signature
         raise RuntimeError("verifier unavailable")
 
-    with pytest.raises(DSSEVerificationError, match="raised an error"):
+    with pytest.raises(DSSEVerificationError, match="no valid signature from a trusted key"):
         verify_dsse_envelope(envelope, trusted_verifiers={_KEY_ID: broken_verifier})
+
+
+def test_invalid_extra_signature_cannot_poison_valid_trusted_signature() -> None:
+    payload = b"payload"
+    payload_type = "application/test"
+    message = pre_authentication_encode(payload_type, payload)
+    envelope = DSSEEnvelope(
+        payloadType=payload_type,
+        payload=base64.b64encode(payload).decode(),
+        signatures=(
+            DSSESignature(
+                keyid=_SECOND_KEY_ID,
+                sig=base64.b64encode(b"0" * 32).decode(),
+            ),
+            DSSESignature(
+                keyid=_KEY_ID,
+                sig=base64.b64encode(_sign(message)).decode(),
+            ),
+        ),
+    )
+
+    verified = verify_dsse_envelope(
+        envelope,
+        trusted_verifiers={
+            _KEY_ID: _verify,
+            _SECOND_KEY_ID: _verify_second,
+        },
+    )
+
+    assert verified.verified_key_ids == (_KEY_ID,)
 
 
 def test_payload_tampering_invalidates_signature() -> None:
@@ -236,7 +332,7 @@ def test_payload_tampering_invalidates_signature() -> None:
         update={"payload": base64.b64encode(b"tampered").decode()}
     )
 
-    with pytest.raises(DSSEVerificationError, match="trusted key.*invalid"):
+    with pytest.raises(DSSEVerificationError, match="no valid signature from a trusted key"):
         verify_dsse_envelope(tampered, trusted_verifiers={_KEY_ID: _verify})
 
 
