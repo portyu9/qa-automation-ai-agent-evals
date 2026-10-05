@@ -18,6 +18,7 @@ CI_WORKFLOW_NAME = "CI"
 CI_WORKFLOW_PATH = ".github/workflows/ci.yml"
 REPRODUCIBILITY_JOB_NAME = "Reproduce package artifacts independently"
 SUPPLY_CHAIN_JOB_NAME = "Reverify release supply-chain evidence"
+PROVENANCE_JOB_NAME = "Attest retained release artifacts"
 DEFAULT_BRANCH = "main"
 PROJECT_NAME = "qa-automation-ai-agent-evals"
 
@@ -129,7 +130,7 @@ def validate_ci_run(
     return sha, attempt
 
 
-def validate_reproducibility_job(
+def validate_release_qualification_jobs(
     payload: dict[str, Any], *, ci_sha: str, ci_run_attempt: int
 ) -> None:
     ci_sha = require_sha(ci_sha, "CI head_sha")
@@ -144,6 +145,7 @@ def validate_reproducibility_job(
     for job_name, label in (
         (REPRODUCIBILITY_JOB_NAME, "reproducibility"),
         (SUPPLY_CHAIN_JOB_NAME, "supply-chain evidence"),
+        (PROVENANCE_JOB_NAME, "provenance attestation"),
     ):
         matches = [job for job in jobs if type(job) is dict and job.get("name") == job_name]
         if len(matches) != 1:
@@ -377,7 +379,7 @@ def validate_candidate(
         ci_run, repository=repository, expected_run_id=ci_run_id
     )
     ci_jobs = fetch_ci_jobs(api_url, repository, ci_run_id, token)
-    validate_reproducibility_job(
+    validate_release_qualification_jobs(
         ci_jobs,
         ci_sha=commit_sha,
         ci_run_attempt=ci_run_attempt,
@@ -492,35 +494,58 @@ def self_test() -> None:
         "head_sha": sha,
         "run_attempt": 3,
     }
-    qualification_jobs = {
-        "total_count": 2,
-        "jobs": [repro_job, supply_chain_job],
+    provenance_job = {
+        "name": PROVENANCE_JOB_NAME,
+        "status": "completed",
+        "conclusion": "success",
+        "head_sha": sha,
+        "run_attempt": 3,
     }
-    validate_reproducibility_job(qualification_jobs, ci_sha=sha, ci_run_attempt=3)
+    qualification_jobs = {
+        "total_count": 3,
+        "jobs": [repro_job, supply_chain_job, provenance_job],
+    }
+    validate_release_qualification_jobs(qualification_jobs, ci_sha=sha, ci_run_attempt=3)
     invalid_job_sets = (
         {"total_count": 0, "jobs": []},
-        {"total_count": 1, "jobs": [repro_job]},
+        {"total_count": 2, "jobs": [repro_job, supply_chain_job]},
         {
-            "total_count": 2,
-            "jobs": [dict(repro_job, conclusion="failure"), supply_chain_job],
+            "total_count": 3,
+            "jobs": [
+                dict(repro_job, conclusion="failure"),
+                supply_chain_job,
+                provenance_job,
+            ],
         },
         {
-            "total_count": 2,
-            "jobs": [repro_job, dict(supply_chain_job, conclusion="failure")],
+            "total_count": 3,
+            "jobs": [
+                repro_job,
+                dict(supply_chain_job, conclusion="failure"),
+                provenance_job,
+            ],
         },
         {
-            "total_count": 2,
-            "jobs": [repro_job, dict(supply_chain_job, head_sha="b" * 40)],
+            "total_count": 3,
+            "jobs": [
+                repro_job,
+                supply_chain_job,
+                dict(provenance_job, conclusion="failure"),
+            ],
         },
         {
-            "total_count": 2,
-            "jobs": [repro_job, dict(supply_chain_job, run_attempt=2)],
+            "total_count": 3,
+            "jobs": [repro_job, supply_chain_job, dict(provenance_job, head_sha="b" * 40)],
         },
-        {"total_count": 3, "jobs": [repro_job, supply_chain_job]},
+        {
+            "total_count": 3,
+            "jobs": [repro_job, supply_chain_job, dict(provenance_job, run_attempt=2)],
+        },
+        {"total_count": 4, "jobs": [repro_job, supply_chain_job, provenance_job]},
     )
     for mutated in invalid_job_sets:
         try:
-            validate_reproducibility_job(mutated, ci_sha=sha, ci_run_attempt=3)
+            validate_release_qualification_jobs(mutated, ci_sha=sha, ci_run_attempt=3)
         except ReleaseCandidateError:
             pass
         else:

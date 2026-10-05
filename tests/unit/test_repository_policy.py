@@ -202,3 +202,77 @@ def test_policy_rejects_lock_hash_algorithm_tampering(tmp_path: Path) -> None:
 
     assert result.returncode != 0
     assert "CI lock contract failed" in result.stderr
+
+
+def test_policy_rejects_provenance_signing_outside_trusted_main_push(tmp_path: Path) -> None:
+    workspace = _policy_workspace(tmp_path)
+    workflow = workspace / ".github/workflows/ci.yml"
+    source = workflow.read_text(encoding="utf-8")
+    required = "if: github.event_name == 'push' && github.ref == 'refs/heads/main'"
+    assert required in source
+    workflow.write_text(source.replace(required, "if: always()", 1), encoding="utf-8")
+
+    result = _run_policy(workspace)
+
+    assert result.returncode != 0
+    assert "signing authority must be restricted to trusted main pushes" in result.stderr
+
+
+def test_policy_rejects_provenance_without_oidc_permission(tmp_path: Path) -> None:
+    workspace = _policy_workspace(tmp_path)
+    workflow = workspace / ".github/workflows/ci.yml"
+    source = workflow.read_text(encoding="utf-8")
+    required = "      id-token: write\n"
+    assert required in source
+    workflow.write_text(source.replace(required, "", 1), encoding="utf-8")
+
+    result = _run_policy(workspace)
+
+    assert result.returncode != 0
+    assert "missing least-privilege signing permission: id-token: write" in result.stderr
+
+
+def test_policy_rejects_floating_attestation_action(tmp_path: Path) -> None:
+    workspace = _policy_workspace(tmp_path)
+    workflow = workspace / ".github/workflows/ci.yml"
+    source = workflow.read_text(encoding="utf-8")
+    pinned = "actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6"
+    assert pinned in source
+    workflow.write_text(source.replace(pinned, "actions/attest@v4", 1), encoding="utf-8")
+
+    result = _run_policy(workspace)
+
+    assert result.returncode != 0
+    assert "pinned to a full commit SHA" in result.stderr
+    assert "actions/attest@v4" in result.stderr
+
+
+def test_policy_rejects_publish_without_provenance_verification(tmp_path: Path) -> None:
+    workspace = _policy_workspace(tmp_path)
+    workflow = workspace / ".github/workflows/publish-release.yml"
+    source = workflow.read_text(encoding="utf-8")
+    required = "gh attestation verify"
+    assert required in source
+    workflow.write_text(source.replace(required, "echo provenance-skipped", 1), encoding="utf-8")
+
+    result = _run_policy(workspace)
+
+    assert result.returncode != 0
+    assert "publish-release workflow is missing required contract text" in result.stderr
+
+
+def test_policy_rejects_publish_workflow_minting_fresh_attestation(tmp_path: Path) -> None:
+    workspace = _policy_workspace(tmp_path)
+    workflow = workspace / ".github/workflows/publish-release.yml"
+    source = workflow.read_text(encoding="utf-8")
+    anchor = "permissions:\n  actions: read\n  contents: write\n"
+    assert anchor in source
+    workflow.write_text(
+        source.replace(anchor, anchor + "  id-token: write\n", 1),
+        encoding="utf-8",
+    )
+
+    result = _run_policy(workspace)
+
+    assert result.returncode != 0
+    assert "verify retained provenance without minting new attestations" in result.stderr

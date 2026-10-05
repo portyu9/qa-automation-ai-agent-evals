@@ -65,6 +65,13 @@ jobs:
           path: retained-supply-chain
           github-token: ${{ secrets.GITHUB_TOKEN }}
           run-id: ${{ steps.candidate.outputs.ci_run_id }}
+      - name: Download retained release provenance
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: release-provenance-${{ steps.candidate.outputs.ci_run_id }}
+          path: retained-provenance
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: ${{ steps.candidate.outputs.ci_run_id }}
       - name: Exercise retained wheel in exact hash-checked environment
         run: |
           python -m pip install --disable-pip-version-check --require-hashes \
@@ -83,6 +90,40 @@ jobs:
             --workflow "CI" \
             --run-id "${{ steps.candidate.outputs.ci_run_id }}" \
             --run-attempt "${{ steps.candidate.outputs.ci_run_attempt }}"
+      - name: Reverify retained OIDC provenance
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CI_COMMIT_SHA: ${{ steps.candidate.outputs.commit_sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          bundle="retained-provenance/release-provenance.sigstore.json"
+          test -f "$bundle"
+          (
+            cd retained-provenance
+            sha256sum -c bundle-checksum.sha256
+          )
+          sha256sum -c retained-provenance/subject-checksums.sha256
+          subjects=(
+            retained-dist/*.whl
+            retained-dist/*.tar.gz
+            retained-dist/artifact-manifest.json
+            retained-supply-chain/release-sbom.spdx.json
+            retained-supply-chain/release-supply-chain-evidence.json
+          )
+          test "${#subjects[@]}" -eq 5
+          for subject in "${subjects[@]}"; do
+            gh attestation verify "$subject" \
+              --repo "$GITHUB_REPOSITORY" \
+              --bundle "$bundle" \
+              --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/ci.yml" \
+              --signer-digest "$CI_COMMIT_SHA" \
+              --source-digest "$CI_COMMIT_SHA" \
+              --source-ref "refs/heads/main" \
+              --predicate-type "https://slsa.dev/provenance/v1" \
+              --deny-self-hosted-runners \
+              --format json >/dev/null
+          done
       - name: Exercise retained source distribution
         run: |
           python -m pip uninstall -y qa-automation-ai-agent-evals
@@ -113,7 +154,11 @@ jobs:
             retained-dist/artifact-manifest.json \
             retained-supply-chain/release-sbom.spdx.json \
             retained-supply-chain/release-supply-chain-evidence.json \
+            retained-provenance/release-provenance.sigstore.json \
+            retained-provenance/subject-checksums.sha256 \
+            retained-provenance/bundle-checksum.sha256 \
+            retained-provenance/verification/*.json \
             --repo "$GITHUB_REPOSITORY" \
             --verify-tag \
             --title "$VERSION_TAG" \
-            --notes "Published from exact retained CI-tested package bytes with a retained SPDX 2.3 runtime SBOM and fail-closed dependency-license evidence. These unsigned files provide integrity and policy evidence only; they are not a cryptographic signature, OIDC provenance/attestation, publisher authentication, or non-repudiation proof."
+            --notes "Published from exact retained CI-tested package bytes with retained SPDX 2.3/license evidence and a reverified GitHub Actions OIDC/Sigstore SLSA provenance bundle for the exact release artifact subjects. The provenance authenticates the GitHub workflow/source identity for those attested files; it does not itself sign the GitHub Release entity, authenticate a human maintainer, retroactively authenticate older unsigned evidence, or establish PyPI Trusted Publishing."
