@@ -9,7 +9,8 @@ without treating the Python implementation as the definition of its own hashes.
 
 The corpus freezes both ASCII-escaped and direct-UTF-8 canonical JSON vectors,
 plain canonical SHA-256 identities, every current domain-separated receipt/report
-root family, the chained `TrialEvidence/v2` evidence root, the side-effect
+root family (including semantic calibration commitments/receipts), the chained
+`TrialEvidence/v2` evidence root, the side-effect
 logical-operation identity, and the historical `SubjectFingerprint` vector
 salvaged from superseded PR #265.
 
