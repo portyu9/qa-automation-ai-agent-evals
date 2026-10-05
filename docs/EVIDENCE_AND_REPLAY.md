@@ -284,13 +284,21 @@ assert regraded.evidence.evidence_root == evaluated.evidence.evidence_root
 
 The example deliberately uses the original trial ID. Rewrapping old observations under a new trial identity would destroy the provenance property the evidence root is designed to preserve.
 
+## Optional manifest authentication
+
+Local evidence-store integrity remains unchanged: payload and manifest hashes bind exact content but do not authenticate the writer. A deployment can separately sign the exact canonical `ArtifactManifest` with the verifier-owned DSSE layer described in [Authenticated DSSE Artifact Envelopes](DSSE_ENVELOPES.md).
+
+A verified manifest signature authenticates the manifest claims only under the caller's configured trusted-verifier policy. It does not replace `LocalEvidenceStore.read()`: the actual persisted payload must still match the manifest's byte length, payload SHA-256, trial/subject/scenario identities, strict `TrialEvidence` schema, and recomputed evidence root. A valid signed manifest paired with missing or tampered payload bytes is therefore not valid stored evidence.
+
+The optional envelope does not alter `TrialEvidence/v2`, evidence roots, record keys, or historical manifests, and it does not retroactively authenticate unsigned evidence.
+
 ## Threat model and non-claims
 
 The local store protects against accidental corruption and several classes of local path/race misuse. It is not a hostile-host attestation system.
 
-It currently does **not** provide:
+The local store itself currently does **not** provide:
 
-- digital signatures or MACs;
+- automatic digital signatures or MACs (optional external DSSE manifest authentication is a separate layer);
 - authenticated writer identity;
 - authenticated approver identity;
 - trusted timestamps;
