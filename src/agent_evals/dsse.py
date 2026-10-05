@@ -61,9 +61,7 @@ class DSSESignature(BaseModel):
     def validate_keyid(cls, value: str) -> str:
         encoded = value.encode("utf-8")
         if len(encoded) > MAX_DSSE_KEY_ID_UTF8_BYTES:
-            raise ValueError(
-                f"DSSE keyid exceeds maximum UTF-8 bytes {MAX_DSSE_KEY_ID_UTF8_BYTES}"
-            )
+            raise ValueError(f"DSSE keyid exceeds maximum UTF-8 bytes {MAX_DSSE_KEY_ID_UTF8_BYTES}")
         return value
 
     @field_validator("sig")
@@ -102,8 +100,7 @@ class DSSEEnvelope(BaseModel):
         encoded = value.encode("utf-8")
         if len(encoded) > MAX_DSSE_PAYLOAD_TYPE_UTF8_BYTES:
             raise ValueError(
-                "DSSE payload type exceeds maximum UTF-8 bytes "
-                f"{MAX_DSSE_PAYLOAD_TYPE_UTF8_BYTES}"
+                f"DSSE payload type exceeds maximum UTF-8 bytes {MAX_DSSE_PAYLOAD_TYPE_UTF8_BYTES}"
             )
         return value
 
@@ -411,8 +408,7 @@ def _trusted_verifier_items(
         raise DSSEVerificationError("DSSE verification requires at least one trusted verifier")
     if len(items) > MAX_DSSE_TRUSTED_VERIFIERS:
         raise DSSEVerificationError(
-            "DSSE trusted verifier registry exceeds maximum entries "
-            f"{MAX_DSSE_TRUSTED_VERIFIERS}"
+            f"DSSE trusted verifier registry exceeds maximum entries {MAX_DSSE_TRUSTED_VERIFIERS}"
         )
     for key_id, verifier in items:
         if type(key_id) is not str or not key_id:
@@ -420,9 +416,7 @@ def _trusted_verifier_items(
                 "DSSE trusted verifier key IDs must be non-empty exact strings"
             )
         if not callable(verifier):
-            raise DSSEVerificationError(
-                f"DSSE trusted verifier for key {key_id!r} is not callable"
-            )
+            raise DSSEVerificationError(f"DSSE trusted verifier for key {key_id!r} is not callable")
     return items
 
 
@@ -435,8 +429,7 @@ def _payload_type_bytes(payload_type: str) -> bytes:
         raise ValueError("DSSE payload type must contain only Unicode scalar values") from exc
     if len(encoded) > MAX_DSSE_PAYLOAD_TYPE_UTF8_BYTES:
         raise ValueError(
-            "DSSE payload type exceeds maximum UTF-8 bytes "
-            f"{MAX_DSSE_PAYLOAD_TYPE_UTF8_BYTES}"
+            f"DSSE payload type exceeds maximum UTF-8 bytes {MAX_DSSE_PAYLOAD_TYPE_UTF8_BYTES}"
         )
     return encoded
 
