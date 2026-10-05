@@ -209,8 +209,14 @@ def test_policy_rejects_provenance_signing_outside_trusted_main_push(tmp_path: P
     workflow = workspace / ".github/workflows/ci.yml"
     source = workflow.read_text(encoding="utf-8")
     required = "if: github.event_name == 'push' && github.ref == 'refs/heads/main'"
-    assert required in source
-    workflow.write_text(source.replace(required, "if: always()", 1), encoding="utf-8")
+    signer_marker = "  release-provenance:\n"
+    assert signer_marker in source
+    prefix, signer = source.split(signer_marker, 1)
+    assert required in signer
+    workflow.write_text(
+        prefix + signer_marker + signer.replace(required, "if: always()", 1),
+        encoding="utf-8",
+    )
 
     result = _run_policy(workspace)
 
