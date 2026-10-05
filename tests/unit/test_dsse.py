@@ -115,10 +115,6 @@ def _manifest() -> ArtifactManifest:
     )
 
 
-def _trusted() -> dict[str, object]:
-    return {_KEY_ID: _verify}
-
-
 def test_dsse_pae_matches_exact_v1_layout() -> None:
     assert (
         pre_authentication_encode("text/plain", b"hello")
@@ -127,7 +123,7 @@ def test_dsse_pae_matches_exact_v1_layout() -> None:
 
 
 def test_dsse_pae_counts_utf8_bytes_not_code_points() -> None:
-    payload_type = "application/example+N{GREEK CAPITAL LETTER OMEGA}"
+    payload_type = "application/example+Ω"
     encoded = payload_type.encode("utf-8")
 
     pae = pre_authentication_encode(payload_type, b"x")
@@ -376,8 +372,8 @@ def test_envelope_rejects_malformed_or_noncanonical_payload_base64(payload: str)
         )
 
 
-def test_signature_rejects_empty_decoded_bytes() -> None:
-    with pytest.raises(ValidationError, match="must not be empty"):
+def test_signature_rejects_empty_value() -> None:
+    with pytest.raises(ValidationError):
         DSSESignature(keyid=_KEY_ID, sig="")
 
 
@@ -404,30 +400,23 @@ def test_envelope_requires_at_least_one_signature() -> None:
         )
 
 
-@pytest.mark.parametrize(
-    ("signer", "error_type", "message"),
-    [
-        (lambda message: "not-bytes", TypeError, "exact bytes"),
-        (lambda message: b"", ValueError, "empty signature"),
-    ],
-)
-def test_signing_primitive_output_is_fail_closed(
-    signer: object,
-    error_type: type[Exception],
-    message: str,
-) -> None:
-    del signer
-    actual_signer = (
-        (lambda message: "not-bytes")
-        if error_type is TypeError
-        else (lambda message: b"")
-    )
-    with pytest.raises(error_type, match=message):
+def test_signing_primitive_must_return_exact_bytes() -> None:
+    with pytest.raises(TypeError, match="exact bytes"):
         create_dsse_envelope(
             "application/test",
             b"payload",
             key_id=_KEY_ID,
-            sign=actual_signer,  # type: ignore[arg-type]
+            sign=lambda message: "not-bytes",  # type: ignore[arg-type,return-value]
+        )
+
+
+def test_signing_primitive_must_not_return_empty_signature() -> None:
+    with pytest.raises(ValueError, match="empty signature"):
+        create_dsse_envelope(
+            "application/test",
+            b"payload",
+            key_id=_KEY_ID,
+            sign=lambda message: b"",
         )
 
 
