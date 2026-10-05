@@ -114,6 +114,7 @@ for required in (
     "tests/fuzz",
     '--hypothesis-seed="$FUZZ_SEED"',
     "if: always()",
+    "include-hidden-files: true",
     "retention-days: 21",
 ):
     if required not in deep_fuzz:
