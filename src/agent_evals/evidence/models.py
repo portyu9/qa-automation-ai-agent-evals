@@ -10,6 +10,7 @@ from typing import Any, Self
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, field_validator, model_validator
 
+from agent_evals._strict_json import strict_json_loads
 from agent_evals.evidence.limits import (
     EVENT_PAYLOAD_BUDGET,
     FINAL_STATE_BUDGET,
@@ -209,20 +210,29 @@ class TrialEvidence(BaseModel):
         return type(self).model_validate_json(self.model_dump_json())
 
 
+def _validate_historical_v2_evidence(value: Any) -> TrialEvidence:
+    """Validate parsed historical v2 material only for integrity verification."""
+    return TrialEvidence.model_validate(
+        value,
+        context={_HISTORICAL_V2_TIMESTAMP_CONTEXT: True},
+    )
+
+
 def _validate_historical_v2_evidence_json(payload: bytes | str) -> TrialEvidence:
-    """Parse historical v2 bytes only for integrity verification of their original root.
+    """Strictly decode historical v2 bytes only for integrity verification of their original root.
 
     Before UTC normalization became a current-evidence invariant, TrialEvidence/v2 accepted aware
     non-UTC offsets and naive datetimes and hashed their serialized representation into event
     digests. This compatibility parser preserves only that timestamp representation so an existing
-    v2 root can be rederived. It still applies all current structural/resource validation and must
-    not be used to create gradeable current evidence, replay input, or new persisted records.
+    v2 root can be rederived. Duplicate keys and malformed/non-finite JSON remain invalid.
     """
 
-    return TrialEvidence.model_validate_json(
+    raw = strict_json_loads(
         payload,
-        context={_HISTORICAL_V2_TIMESTAMP_CONTEXT: True},
+        label="historical v2 evidence payload",
+        require_object=True,
     )
+    return _validate_historical_v2_evidence(raw)
 
 
 def _detached_json(
