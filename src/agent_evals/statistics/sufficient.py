@@ -154,10 +154,7 @@ class PairedSufficientStatistics:
                 f"pairs exceeds maximum statistical trial count {MAX_STATISTICAL_TRIALS}"
             )
         if self.pairs != (
-            self.both_pass
-            + self.baseline_only_pass
-            + self.candidate_only_pass
-            + self.both_fail
+            self.both_pass + self.baseline_only_pass + self.candidate_only_pass + self.both_fail
         ):
             raise ValueError("paired sufficient-statistics counts must sum to pairs")
 
