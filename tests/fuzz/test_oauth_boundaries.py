@@ -47,14 +47,12 @@ _NONEMPTY_TEXT = st.text(
     min_size=1,
     max_size=30,
 )
-_AUTHORIZATION_CASING = st.tuples(*[
-    st.sampled_from((character.lower(), character.upper()))
-    for character in "Authorization"
-]).map("".join)
-_BEARER_CASING = st.tuples(*[
-    st.sampled_from((character.lower(), character.upper()))
-    for character in "Bearer"
-]).map("".join)
+_AUTHORIZATION_CASING = st.tuples(
+    *[st.sampled_from((character.lower(), character.upper())) for character in "Authorization"]
+).map("".join)
+_BEARER_CASING = st.tuples(
+    *[st.sampled_from((character.lower(), character.upper())) for character in "Bearer"]
+).map("".join)
 
 _JSON_VALUES = st.recursive(
     _JSON_SCALARS,
@@ -275,9 +273,7 @@ async def test_token_verifier_requires_exact_issuer_and_resource(
 
     result = await verifier.verify_token(_BEARER_TOKEN)
 
-    assert (result is not None) is (
-        issuer == _BEARER_ISSUER and resource == _BEARER_RESOURCE
-    )
+    assert (result is not None) is (issuer == _BEARER_ISSUER and resource == _BEARER_RESOURCE)
 
 
 @given(
@@ -374,10 +370,7 @@ def test_introspection_claim_types_and_bindings_fail_closed(
         and type(scope) is str
         and type(client_id) is str
         and bool(client_id)
-        and (
-            expires_at is None
-            or (type(expires_at) is int and expires_at > int(time.time()))
-        )
+        and (expires_at is None or (type(expires_at) is int and expires_at > int(time.time())))
         and (subject is None or type(subject) is str)
     )
     assert (result is not None) is expected
