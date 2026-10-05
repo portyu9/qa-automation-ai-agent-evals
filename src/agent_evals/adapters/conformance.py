@@ -77,7 +77,7 @@ class ConformanceCheckedAdapter:
     def name(self) -> str:
         try:
             return validate_adapter_name(self._adapter.name)
-        except (AdapterConformanceError, AttributeError, TypeError):
+        except Exception:
             return _REJECTED_NAME
 
     async def execute(
@@ -87,7 +87,11 @@ class ConformanceCheckedAdapter:
         scenario: EvaluationScenario,
         trial_id: str,
     ) -> AdapterResult:
-        validate_adapter_name(self._adapter.name)
+        try:
+            raw_name = self._adapter.name
+        except Exception as exc:
+            raise AdapterConformanceError("adapter name could not be read safely") from exc
+        validate_adapter_name(raw_name)
         result = await self._adapter.execute(
             subject=subject,
             scenario=scenario,
