@@ -11,6 +11,7 @@ RUNNER = "ubuntu-24.04"
 REQUIRED_JOBS = (
     "policy",
     "quality",
+    "mutation",
     "openai-adapter",
     "mcp-lab",
     "mcp-remote-auth",
@@ -77,6 +78,14 @@ ci_path = Path(".github/workflows/ci.yml")
 workflow = workflows.get(ci_path)
 if workflow is None:
     fail("repository must contain .github/workflows/ci.yml")
+release_request_path = Path(".github/workflows/release-request.yml")
+release_request = workflows.get(release_request_path)
+if release_request is None:
+    fail("repository must contain .github/workflows/release-request.yml")
+publish_release_path = Path(".github/workflows/publish-release.yml")
+publish_release = workflows.get(publish_release_path)
+if publish_release is None:
+    fail("repository must contain .github/workflows/publish-release.yml")
 validate_action_pins(workflows)
 project = pyproject["project"]
 
@@ -126,6 +135,76 @@ if qualified != SUPPORTED_PYTHONS:
 policy = job_block(workflow, "policy", "quality")
 if "python .github/scripts/validate_runtime_policy.py" not in policy:
     fail("policy job must execute validate_runtime_policy.py")
+if "python .github/scripts/release_candidate.py self-test" not in policy:
+    fail("policy job must self-test retained release candidate validation")
+
+if "name: Release request" not in release_request or "workflow_dispatch:" not in release_request:
+    fail("release-request workflow must be an explicit manual request surface")
+if "version_tag:" not in release_request or "ci_run_id:" not in release_request:
+    fail("release-request workflow must require explicit version tag and CI run ID inputs")
+if "permissions:\n  contents: read" not in release_request:
+    fail("release-request workflow must be repository-read-only")
+if "contents: write" in release_request or "actions: write" in release_request:
+    fail("release-request workflow must never receive write privileges")
+if any(
+    action.startswith("actions/checkout@") for action in _WORKFLOW_USES_RE.findall(release_request)
+):
+    fail("release-request workflow must not checkout selectable-ref repository code")
+if not any(
+    action.startswith("actions/upload-artifact@")
+    for action in _WORKFLOW_USES_RE.findall(release_request)
+):
+    fail("release-request workflow must upload the canonical request artifact")
+for required in (
+    "agent-evals/release-request/v1",
+    "release-request-${{ github.run_id }}",
+    "path: release-request.json",
+    "overwrite: true",
+):
+    if required not in release_request:
+        fail(f"release-request workflow is missing required contract text: {required}")
+
+if "name: Publish retained release" not in publish_release:
+    fail("publish-release workflow must use the canonical workflow name")
+if "workflow_run:" not in publish_release or 'workflows: ["Release request"]' not in publish_release:
+    fail("publish-release must be triggered only by the Release request workflow")
+if "types: [completed]" not in publish_release:
+    fail("publish-release workflow_run must trigger only on completion")
+if "workflow_dispatch:" in publish_release:
+    fail("privileged publish-release workflow must not be directly dispatchable")
+if "actions: read" not in publish_release or "contents: write" not in publish_release:
+    fail("publish-release job must have only the required actions-read/contents-write authority")
+if not any(
+    action.startswith("actions/checkout@") for action in _WORKFLOW_USES_RE.findall(publish_release)
+):
+    fail("publish-release must checkout trusted default-branch release logic")
+if "ref: ${{ github.event.repository.default_branch }}" not in publish_release:
+    fail("publish-release checkout must explicitly source code from the default branch")
+if "persist-credentials: false" not in publish_release:
+    fail("publish-release checkout must not persist repository credentials")
+if "github.event.workflow_run.head_sha" in publish_release:
+    fail("publish-release must not execute code from the triggering request ref")
+for required in (
+    "release-request-${{ github.event.workflow_run.id }}",
+    "run-id: ${{ github.event.workflow_run.id }}",
+    "github-token: ${{ secrets.GITHUB_TOKEN }}",
+    "release_candidate.py self-test",
+    "release_candidate.py validate",
+    "package-artifacts-${{ steps.candidate.outputs.ci_run_id }}",
+    "run-id: ${{ steps.candidate.outputs.ci_run_id }}",
+    "package_artifact_manifest.py verify",
+    '--workflow "CI"',
+    "retained-dist/*.whl",
+    "retained-dist/*.tar.gz",
+    "retained-dist/artifact-manifest.json",
+    "gh release create",
+    "--verify-tag",
+):
+    if required not in publish_release:
+        fail(f"publish-release workflow is missing required contract text: {required}")
+for forbidden in ("python -m build", "twine upload", "uv publish", "pypi.org"):
+    if forbidden in publish_release.lower():
+        fail(f"publish-release workflow contains forbidden release behavior: {forbidden}")
 
 for job, next_job in (
     ("quality", "openai-adapter"),
@@ -227,6 +306,6 @@ print(
     "runtime policy validated: "
     f"python={','.join(SUPPORTED_PYTHONS)}; requires-python={REQUIRES_PYTHON}; "
     f"runner={RUNNER}; workflows={len(workflows)}; gate=ci-gate+protected-codeql; "
-    "package-artifacts=retained-and-reverified"
+    "package-artifacts=retained-reverified-and-default-branch-published"
 )
 sys.exit(0)
