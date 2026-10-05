@@ -53,6 +53,24 @@ class SliceGateResult:
     family_results: tuple[RiskFamilyResult, ...]
     reasons: tuple[str, ...]
 
+    def __post_init__(self) -> None:
+        if type(self.decision) is not GateDecision:
+            raise ValueError("decision must be an exact GateDecision")
+        _validate_label(self.worst_slice, name="worst_slice")
+        if type(self.family_results) is not tuple:
+            raise ValueError("family_results must be an exact tuple")
+        seen: set[str] = set()
+        for family in self.family_results:
+            if type(family) is not RiskFamilyResult:
+                raise ValueError("family_results must contain exact RiskFamilyResult values")
+            if family.risk_family in seen:
+                raise ValueError("family_results risk families must be unique")
+            seen.add(family.risk_family)
+        if type(self.reasons) is not tuple or any(
+            type(item) is not str for item in self.reasons
+        ):
+            raise ValueError("reasons must be an exact tuple of strings")
+
 
 class SliceReleaseGate:
     """Require every slice and every required risk family to close independently."""
