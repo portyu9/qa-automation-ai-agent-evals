@@ -58,11 +58,30 @@ jobs:
             --workflow "CI" \
             --run-id "${{ steps.candidate.outputs.ci_run_id }}" \
             --run-attempt "${{ steps.candidate.outputs.ci_run_attempt }}"
+      - name: Download retained release supply-chain evidence
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: release-supply-chain-${{ steps.candidate.outputs.ci_run_id }}
+          path: retained-supply-chain
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: ${{ steps.candidate.outputs.ci_run_id }}
       - name: Exercise retained wheel
         run: |
+          python -m pip install --disable-pip-version-check -r requirements-dev-ci-build.txt
           python -m pip install --disable-pip-version-check retained-dist/*.whl
           python -c "import agent_evals; print(agent_evals.__name__)"
           agent-evals --help >/dev/null
+      - name: Reverify retained SPDX SBOM and dependency license evidence
+        run: |
+          python .github/scripts/release_supply_chain.py verify \
+            --package-dir retained-dist \
+            --evidence-dir retained-supply-chain \
+            --policy .github/dependency-license-policy.json \
+            --repository "$GITHUB_REPOSITORY" \
+            --commit-sha "${{ steps.candidate.outputs.commit_sha }}" \
+            --workflow "CI" \
+            --run-id "${{ steps.candidate.outputs.ci_run_id }}" \
+            --run-attempt "${{ steps.candidate.outputs.ci_run_attempt }}"
       - name: Exercise retained source distribution
         run: |
           python -m pip uninstall -y qa-automation-ai-agent-evals
@@ -91,7 +110,9 @@ jobs:
             retained-dist/*.whl \
             retained-dist/*.tar.gz \
             retained-dist/artifact-manifest.json \
+            retained-supply-chain/release-sbom.spdx.json \
+            retained-supply-chain/release-supply-chain-evidence.json \
             --repo "$GITHUB_REPOSITORY" \
             --verify-tag \
             --title "$VERSION_TAG" \
-            --notes "Published from exact retained CI-tested package bytes. This GitHub Release is distribution integrity, not a cryptographic signature, OIDC provenance/attestation, SBOM, non-repudiation proof, or reproducible-build proof."
+            --notes "Published from exact retained CI-tested package bytes with a retained SPDX 2.3 runtime SBOM and fail-closed dependency-license evidence. These unsigned files provide integrity and policy evidence only; they are not a cryptographic signature, OIDC provenance/attestation, publisher authentication, or non-repudiation proof."

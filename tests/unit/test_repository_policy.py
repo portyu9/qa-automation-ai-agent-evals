@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import shutil
 import subprocess
 import sys
@@ -23,6 +24,10 @@ def _policy_workspace(tmp_path: Path) -> Path:
     shutil.copy2(
         _PROJECT_ROOT / ".github/workflows/publish-release.yml",
         workspace / ".github/workflows/publish-release.yml",
+    )
+    shutil.copy2(
+        _PROJECT_ROOT / ".github/dependency-license-policy.json",
+        workspace / ".github/dependency-license-policy.json",
     )
     shutil.copy2(
         _PROJECT_ROOT / ".github/workflows/deep-fuzz.yml",
@@ -111,3 +116,33 @@ def test_policy_rejects_package_build_without_source_bound_epoch(tmp_path: Path)
     assert (
         "package build must derive SOURCE_DATE_EPOCH from the exact source commit" in result.stderr
     )
+
+
+def test_policy_rejects_publish_without_retained_spdx_sbom(tmp_path: Path) -> None:
+    workspace = _policy_workspace(tmp_path)
+    workflow = workspace / ".github/workflows/publish-release.yml"
+    source = workflow.read_text(encoding="utf-8")
+    required = "retained-supply-chain/release-sbom.spdx.json"
+    assert required in source
+    workflow.write_text(
+        source.replace(required, "retained-supply-chain/missing-sbom.json", 1),
+        encoding="utf-8",
+    )
+
+    result = _run_policy(workspace)
+
+    assert result.returncode != 0
+    assert "publish-release workflow is missing required contract text" in result.stderr
+
+
+def test_policy_rejects_license_refs_becoming_self_authorized(tmp_path: Path) -> None:
+    workspace = _policy_workspace(tmp_path)
+    policy_path = workspace / ".github/dependency-license-policy.json"
+    policy = json.loads(policy_path.read_text(encoding="utf-8"))
+    policy["allow_license_refs"] = True
+    policy_path.write_text(json.dumps(policy), encoding="utf-8")
+
+    result = _run_policy(workspace)
+
+    assert result.returncode != 0
+    assert "fail closed on LicenseRef values" in result.stderr

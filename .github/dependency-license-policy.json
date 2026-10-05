@@ -1,0 +1,1 @@
+{"allow_license_refs":false,"allowed_spdx_licenses":["Apache-2.0","BSD-2-Clause","BSD-3-Clause","ISC","MIT","MPL-2.0","PSF-2.0","Python-2.0"],"denied_spdx_licenses":["AGPL-3.0-only","AGPL-3.0-or-later","GPL-2.0-only","GPL-2.0-or-later","GPL-3.0-only","GPL-3.0-or-later","SSPL-1.0"],"schema_version":"agent-evals/dependency-license-policy/v1"}
