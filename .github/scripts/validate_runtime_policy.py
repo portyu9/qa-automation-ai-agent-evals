@@ -156,7 +156,7 @@ for required in (
     "persist-credentials: false",
     "--require-hashes",
     "requirements/locks/mcp-py311.txt",
-    "--no-deps --no-build-isolation -e .",
+    "--no-deps --no-build-isolation .",
     "-m fuzz",
     "tests/fuzz",
     "src/agent_evals/mcp/remote_auth.py",
@@ -183,7 +183,7 @@ for required in (
     "persist-credentials: false",
     "--require-hashes",
     "requirements/locks/core-py311.txt",
-    "--no-deps --no-build-isolation -e .",
+    "--no-deps --no-build-isolation .",
 ):
     if required not in deep_mutation:
         fail(f"deep-mutation workflow is missing required contract text: {required}")
@@ -398,7 +398,7 @@ locked_job_next = {
 }
 for job, lock_path in locked_job_contracts.items():
     block = job_block(workflow, job, locked_job_next[job])
-    for required in ("--require-hashes", lock_path, "--no-deps --no-build-isolation -e ."):
+    for required in ("--require-hashes", lock_path, "--no-deps --no-build-isolation ."):
         if required not in block:
             fail(f"{job} must install the exact repository lock before the local project: {required}")
 
