@@ -194,10 +194,10 @@ class LocalEvidenceStore:
                 require_object=True,
             )
             manifest = ArtifactManifest.model_validate(manifest_raw)
-        except (StrictJsonError, ValidationError) as exc:
-            raise EvidenceIntegrityError(
-                "evidence manifest failed schema validation or strict JSON decoding"
-            ) from exc
+        except StrictJsonError as exc:
+            raise EvidenceIntegrityError("evidence manifest failed strict JSON decoding") from exc
+        except ValidationError as exc:
+            raise EvidenceIntegrityError("evidence manifest failed schema validation") from exc
 
         if manifest.record_key != record_key:
             raise EvidenceIntegrityError("manifest record key does not match requested record")
@@ -222,9 +222,13 @@ class LocalEvidenceStore:
                 require_object=True,
             )
             evidence = TrialEvidence.model_validate(evidence_raw)
-        except (StrictJsonError, ValidationError) as exc:
+        except StrictJsonError as exc:
             raise EvidenceIntegrityError(
-                "stored evidence payload failed schema validation or strict JSON decoding"
+                "stored evidence payload failed strict JSON decoding"
+            ) from exc
+        except ValidationError as exc:
+            raise EvidenceIntegrityError(
+                "stored evidence payload failed schema validation"
             ) from exc
 
         if (
