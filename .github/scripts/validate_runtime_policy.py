@@ -572,10 +572,8 @@ for dependency in ("package", "release-supply-chain"):
 for required in (
     "package-artifacts-${{ github.run_id }}",
     "release-supply-chain-${{ github.run_id }}",
-    "ci-qualification-${{ github.run_id }}",
     "package_artifact_manifest.py verify",
     "release_supply_chain.py verify",
-    "ci_qualification_evidence.py verify",
     ".github/dependency-license-policy.json",
     "retained-supply-chain",
     "--require-hashes",
@@ -654,8 +652,10 @@ if workflow.count("actions/attest@") != 1:
 for required in (
     "package-artifacts-${{ github.run_id }}",
     "release-supply-chain-${{ github.run_id }}",
+    "ci-qualification-${{ github.run_id }}",
     "package_artifact_manifest.py verify",
     "release_supply_chain.py verify",
+    "ci_qualification_evidence.py verify",
     "retained-dist/*.whl",
     "retained-dist/*.tar.gz",
     "retained-dist/artifact-manifest.json",
