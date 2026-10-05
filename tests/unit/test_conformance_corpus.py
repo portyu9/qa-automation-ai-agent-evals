@@ -47,9 +47,7 @@ from agent_evals.semantic.receipt import _receipt_root as semantic_receipt_root
 from agent_evals.side_effect.models import SideEffectIdempotencySpec, canonical_json_sha256
 from agent_evals.side_effect.receipt import _receipt_root as side_effect_receipt_root
 
-_CORPUS_PATH = (
-    Path(__file__).parents[1] / "fixtures" / "conformance" / "v1" / "corpus.json"
-)
+_CORPUS_PATH = Path(__file__).parents[1] / "fixtures" / "conformance" / "v1" / "corpus.json"
 _EVIDENCE_DOMAIN = b"agent-evals/trial-evidence/v2\x00"
 
 
@@ -117,7 +115,8 @@ def test_corpus_has_explicit_scope_and_all_current_integrity_families() -> None:
 
     assert corpus["schema_version"] == "agent-evals/conformance-corpus/v1"
     families = {
-        family["name"] for family in corpus["format_families"]  # type: ignore[index]
+        family["name"]
+        for family in corpus["format_families"]  # type: ignore[index]
     }
     assert families == {
         "json-ascii-sha256",
@@ -194,17 +193,29 @@ def test_salvaged_subject_fingerprint_golden_vector_is_preserved() -> None:
     material = vector["material"]  # type: ignore[index]
     fingerprint = SubjectFingerprint.from_material(**material)
 
-    assert hashlib.sha256(material["instructions"].encode("utf-8")).hexdigest() == (  # type: ignore[index,union-attr]
-        vector["component_sha256"]["instructions"]  # type: ignore[index]
+    assert (
+        hashlib.sha256(material["instructions"].encode("utf-8")).hexdigest()
+        == (  # type: ignore[index,union-attr]
+            vector["component_sha256"]["instructions"]  # type: ignore[index]
+        )
     )
-    assert contract_models._sha256_json(material["tool_schema"]) == (  # type: ignore[attr-defined,index]
-        vector["component_sha256"]["tool_schema"]  # type: ignore[index]
+    assert (
+        contract_models._sha256_json(material["tool_schema"])
+        == (  # type: ignore[attr-defined,index]
+            vector["component_sha256"]["tool_schema"]  # type: ignore[index]
+        )
     )
-    assert contract_models._sha256_json(material["policy"]) == (  # type: ignore[attr-defined,index]
-        vector["component_sha256"]["policy"]  # type: ignore[index]
+    assert (
+        contract_models._sha256_json(material["policy"])
+        == (  # type: ignore[attr-defined,index]
+            vector["component_sha256"]["policy"]  # type: ignore[index]
+        )
     )
-    assert contract_models._sha256_json(material["memory_policy"]) == (  # type: ignore[attr-defined,index]
-        vector["component_sha256"]["memory_policy"]  # type: ignore[index]
+    assert (
+        contract_models._sha256_json(material["memory_policy"])
+        == (  # type: ignore[attr-defined,index]
+            vector["component_sha256"]["memory_policy"]  # type: ignore[index]
+        )
     )
     assert fingerprint.identity == vector["expected_identity"]  # type: ignore[index]
 
