@@ -38,13 +38,6 @@ def test_dependency_license_policy_is_canonical_and_fail_closed() -> None:
     ).encode("utf-8")
     assert payload["schema_version"] == "agent-evals/dependency-license-policy/v1"
     assert payload["allow_license_refs"] is False
-    assert payload["allowed_spdx_licenses"] == sorted(
-        set(payload["allowed_spdx_licenses"])
-    )
-    assert payload["denied_spdx_licenses"] == sorted(
-        set(payload["denied_spdx_licenses"])
-    )
-    assert not (
-        set(payload["allowed_spdx_licenses"])
-        & set(payload["denied_spdx_licenses"])
-    )
+    assert payload["allowed_spdx_licenses"] == sorted(set(payload["allowed_spdx_licenses"]))
+    assert payload["denied_spdx_licenses"] == sorted(set(payload["denied_spdx_licenses"]))
+    assert not (set(payload["allowed_spdx_licenses"]) & set(payload["denied_spdx_licenses"]))
