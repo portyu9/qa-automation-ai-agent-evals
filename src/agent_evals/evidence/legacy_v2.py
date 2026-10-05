@@ -62,10 +62,10 @@ def verify_historical_v2_record(
             require_object=True,
         )
         manifest = ArtifactManifest.model_validate(manifest_raw)
-    except (StrictJsonError, ValidationError) as exc:
-        raise EvidenceIntegrityError(
-            "evidence manifest failed schema validation or strict JSON decoding"
-        ) from exc
+    except StrictJsonError as exc:
+        raise EvidenceIntegrityError("evidence manifest failed strict JSON decoding") from exc
+    except ValidationError as exc:
+        raise EvidenceIntegrityError("evidence manifest failed schema validation") from exc
 
     if manifest.record_key != record_key:
         raise EvidenceIntegrityError("manifest record key does not match requested record")
@@ -88,9 +88,13 @@ def verify_historical_v2_record(
             require_object=True,
         )
         evidence = _validate_historical_v2_evidence(raw)
-    except (StrictJsonError, ValidationError) as exc:
+    except StrictJsonError as exc:
         raise EvidenceIntegrityError(
-            "historical v2 evidence payload failed schema validation or strict JSON decoding"
+            "historical v2 evidence payload failed strict JSON decoding"
+        ) from exc
+    except ValidationError as exc:
+        raise EvidenceIntegrityError(
+            "historical v2 evidence payload failed schema validation"
         ) from exc
 
     if (
