@@ -33,9 +33,9 @@ are not claims of universal protocol conformance.
 
 For the common JSON vectors, object keys are sorted lexicographically, separators
 are exactly `,` and `:`, non-finite numbers are forbidden, and UTF-8 is the byte
-encoding. Most repository formats use JSON's ASCII escaping. Semantic
-rubric/judge material and the semantic-judgment receipt deliberately preserve
-their existing `ensure_ascii=false` UTF-8 behavior.
+encoding. Most repository formats use JSON's ASCII escaping. MCP tool-metadata bridge
+receipts, semantic calibration/judge material, and the semantic-judgment receipt
+deliberately preserve their existing `ensure_ascii=false` UTF-8 behavior.
 
 A domain-separated root is:
 
