@@ -37,6 +37,14 @@ The publisher then:
 
 Repository policy requires full-SHA action pins and rejects drift that reintroduces `workflow_dispatch`/`workflow_run`, interpolates `client_payload` into shell, drops default-branch SHA binding, omits exact run/artifact bindings, rebuilds packages, or drops tag verification. Ordinary CI also executes the release-candidate validator's deterministic self-test.
 
+## Locked executable dependency environment
+
+Trust-bearing CI now installs third-party Python dependencies only from repository-owned exact lock profiles with pip `--require-hashes`. Core Python 3.11–3.14, MCP Python 3.11, and OpenAI+MCP Python 3.11 are separate profiles so optional integration dependencies do not become implicit provider-neutral prerequisites.
+
+The locks include the exact build frontend/backend. Package and reproducibility jobs therefore run `python -m build --no-isolation` after installing the matching hash-checked profile; retained wheels use `--no-deps`, and retained source distributions additionally use `--no-build-isolation`. Publication reuses the same core Python 3.11 dependency snapshot when exercising and reverifying retained release evidence.
+
+These SHA-256 entries are package-file integrity constraints only. They do not authenticate the package publisher, establish signing identity, or create OIDC/DSSE/in-toto provenance. Public supported dependency ranges remain in `pyproject.toml`; the CI locks are executable assurance snapshots, not a narrowing of the package compatibility contract. See [CI dependency locks](CI_DEPENDENCY_LOCKS.md).
+
 ## Retained manifest binding
 
 The manifest binds:
@@ -60,6 +68,7 @@ This stage therefore does not claim:
 - a digital signature, MAC, DSSE/in-toto envelope, or non-repudiation;
 - authenticated human, maintainer, runner, or publisher identity outside the GitHub execution boundary;
 - GitHub OIDC/keyless build provenance;
+- publisher authentication merely because a dependency archive matches a committed SHA-256 lock entry;
 - reproducibility across arbitrary operating systems, Python implementations, builders, or dependency graphs beyond the explicitly exercised clean-runner contract;
 - a cryptographically authenticated or signed SBOM/license attestation;
 - a signed GitHub Release;
