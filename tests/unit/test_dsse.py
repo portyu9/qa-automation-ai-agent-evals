@@ -132,10 +132,7 @@ def _manifest() -> ArtifactManifest:
 
 
 def test_dsse_pae_matches_exact_v1_layout() -> None:
-    assert (
-        pre_authentication_encode("text/plain", b"hello")
-        == b"DSSEv1 10 text/plain 5 hello"
-    )
+    assert pre_authentication_encode("text/plain", b"hello") == b"DSSEv1 10 text/plain 5 hello"
 
 
 def test_dsse_pae_counts_utf8_bytes_not_code_points() -> None:
@@ -328,9 +325,7 @@ def test_payload_tampering_invalidates_signature() -> None:
         key_id=_KEY_ID,
         sign=_sign,
     )
-    tampered = envelope.model_copy(
-        update={"payload": base64.b64encode(b"tampered").decode()}
-    )
+    tampered = envelope.model_copy(update={"payload": base64.b64encode(b"tampered").decode()})
 
     with pytest.raises(DSSEVerificationError, match="no valid signature from a trusted key"):
         verify_dsse_envelope(tampered, trusted_verifiers={_KEY_ID: _verify})
