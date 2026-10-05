@@ -23,7 +23,9 @@ class ClusterCounts:
             raise ValueError("statistics must be exact BinarySufficientStatistics")
         self.statistics.validate()
         if self.statistics.resolved == 0:
-            raise ValueError("every modeled cluster requires at least one resolved PASS/FAIL outcome")
+            raise ValueError(
+                "every modeled cluster requires at least one resolved PASS/FAIL outcome"
+            )
 
     @property
     def success_rate(self) -> float:
