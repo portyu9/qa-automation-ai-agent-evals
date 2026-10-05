@@ -6,6 +6,8 @@ import sys
 from pathlib import Path
 
 import pytest
+
+pytest.importorskip("mcp", reason="deep MCP fuzz tests require the optional mcp dependency")
 from hypothesis import given, settings
 from hypothesis import strategies as st
 from mcp.client.stdio import StdioServerParameters, stdio_client
