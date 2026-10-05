@@ -140,9 +140,7 @@ def validate_reproducibility_job(
     if total_count != len(jobs):
         raise ReleaseCandidateError("CI jobs response is incomplete")
     matches = [
-        job
-        for job in jobs
-        if type(job) is dict and job.get("name") == REPRODUCIBILITY_JOB_NAME
+        job for job in jobs if type(job) is dict and job.get("name") == REPRODUCIBILITY_JOB_NAME
     ]
     if len(matches) != 1:
         raise ReleaseCandidateError(
