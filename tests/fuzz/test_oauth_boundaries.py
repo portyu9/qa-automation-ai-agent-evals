@@ -4,6 +4,8 @@ import time
 from urllib.parse import urlencode
 
 import pytest
+
+pytest.importorskip("mcp", reason="deep MCP fuzz tests require the optional mcp dependency")
 from hypothesis import given, settings
 from hypothesis import strategies as st
 from mcp.server.auth.middleware.bearer_auth import BearerAuthBackend
