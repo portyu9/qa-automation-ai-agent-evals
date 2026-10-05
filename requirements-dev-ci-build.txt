@@ -1,3 +1,4 @@
-# Required package-build frontend for the Package integrity CI job.
-# Kept in a pip manifest so Dependabot owns this executable CI dependency.
+# Direct package-build frontend input for CI lock generation.
+# Executable workflows install requirements/locks/* with --require-hashes instead of this file.
+# Kept as a pip manifest so Dependabot owns the build frontend version declaration.
 build==1.6.1
