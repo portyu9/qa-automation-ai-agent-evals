@@ -67,10 +67,12 @@ def _extract_output(data: dict[str, object]) -> str | None:
 
 def _usage_int(data: dict[str, object], key: str) -> int:
     usage = data.get("usage")
-    if type(usage) is not dict:
+    if usage is None:
         return 0
+    if type(usage) is not dict:
+        return -1
     value = usage.get(key, 0)
-    return value if type(value) is int and value >= 0 else 0
+    return value if type(value) is int and value >= 0 else -1
 
 
 def main() -> int:
