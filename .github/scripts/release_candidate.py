@@ -12,10 +12,8 @@ import urllib.request
 from pathlib import Path
 from typing import Any
 
-REQUEST_SCHEMA = "agent-evals/release-request/v1"
 CANDIDATE_SCHEMA = "agent-evals/release-candidate/v1"
-REQUEST_WORKFLOW_NAME = "Release request"
-REQUEST_WORKFLOW_PATH = ".github/workflows/release-request.yml"
+DISPATCH_TYPE = "release-request"
 CI_WORKFLOW_NAME = "CI"
 CI_WORKFLOW_PATH = ".github/workflows/ci.yml"
 DEFAULT_BRANCH = "main"
@@ -52,19 +50,6 @@ def _canonical_bytes(value: object) -> bytes:
     ).encode("utf-8")
 
 
-def _load_canonical_json(path: Path) -> dict[str, Any]:
-    try:
-        raw = path.read_bytes()
-        value = json.loads(raw.decode("utf-8"), object_pairs_hook=_strict_object)
-    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
-        raise ReleaseCandidateError(f"{path} is not valid UTF-8 JSON") from exc
-    if type(value) is not dict:
-        raise ReleaseCandidateError(f"{path} root must be an object")
-    if raw != _canonical_bytes(value):
-        raise ReleaseCandidateError(f"{path} JSON must be canonical")
-    return value
-
-
 def _require_exact_keys(value: dict[str, Any], expected: set[str], label: str) -> None:
     actual = set(value)
     if actual != expected:
@@ -98,59 +83,25 @@ def require_tag(value: object) -> str:
     return value
 
 
-def validate_request_workflow_event(event: dict[str, Any], *, repository: str) -> tuple[int, int]:
-    if event.get("action") != "completed":
-        raise ReleaseCandidateError("workflow_run event action must be completed")
+def validate_dispatch_event(
+    event: dict[str, Any], *, repository: str, workflow_ref: str, workflow_sha: str
+) -> tuple[str, int]:
+    if event.get("action") != DISPATCH_TYPE:
+        raise ReleaseCandidateError("repository_dispatch action must be release-request")
     repo = event.get("repository")
     if type(repo) is not dict or repo.get("full_name") != repository:
-        raise ReleaseCandidateError("workflow_run repository does not match expected repository")
-    run = event.get("workflow_run")
-    if type(run) is not dict:
-        raise ReleaseCandidateError("workflow_run event is missing workflow_run object")
-    if run.get("name") != REQUEST_WORKFLOW_NAME or run.get("path") != REQUEST_WORKFLOW_PATH:
-        raise ReleaseCandidateError("triggering workflow is not the canonical Release request workflow")
-    if run.get("event") != "workflow_dispatch":
-        raise ReleaseCandidateError("Release request must originate from workflow_dispatch")
-    if run.get("status") != "completed" or run.get("conclusion") != "success":
-        raise ReleaseCandidateError("Release request workflow must be completed successfully")
-    run_id = require_positive_int(run.get("id"), "request workflow run id")
-    run_attempt = require_positive_int(run.get("run_attempt"), "request workflow run attempt")
-    return run_id, run_attempt
+        raise ReleaseCandidateError("repository_dispatch repository does not match expected repository")
+    if workflow_ref != f"refs/heads/{DEFAULT_BRANCH}":
+        raise ReleaseCandidateError("release publisher must execute on the default branch ref")
+    require_sha(workflow_sha, "publisher workflow SHA")
 
-
-def validate_request_payload(
-    payload: dict[str, Any],
-    *,
-    repository: str,
-    request_run_id: int,
-    request_run_attempt: int,
-) -> tuple[str, int]:
-    _require_exact_keys(
-        payload,
-        {
-            "schema_version",
-            "repository",
-            "version_tag",
-            "ci_run_id",
-            "request_run_id",
-            "request_run_attempt",
-        },
-        "release request",
-    )
-    if payload["schema_version"] != REQUEST_SCHEMA:
-        raise ReleaseCandidateError("unsupported release request schema_version")
-    if require_repository(payload["repository"]) != repository:
-        raise ReleaseCandidateError("release request repository does not match workflow repository")
-    tag = require_tag(payload["version_tag"])
+    payload = event.get("client_payload")
+    if type(payload) is not dict:
+        raise ReleaseCandidateError("repository_dispatch client_payload must be an object")
+    _require_exact_keys(payload, {"version_tag", "ci_run_id"}, "release request payload")
+    version_tag = require_tag(payload["version_tag"])
     ci_run_id = require_positive_int(payload["ci_run_id"], "ci_run_id")
-    if require_positive_int(payload["request_run_id"], "request_run_id") != request_run_id:
-        raise ReleaseCandidateError("release request run id does not match triggering workflow")
-    if (
-        require_positive_int(payload["request_run_attempt"], "request_run_attempt")
-        != request_run_attempt
-    ):
-        raise ReleaseCandidateError("release request run attempt does not match triggering workflow")
-    return tag, ci_run_id
+    return version_tag, ci_run_id
 
 
 def validate_ci_run(run: dict[str, Any], *, repository: str, expected_run_id: int) -> tuple[str, int]:
@@ -212,13 +163,17 @@ def _request_json(url: str, token: str, *, not_found_ok: bool = False) -> dict[s
     )
     try:
         with urllib.request.urlopen(request, timeout=20) as response:
-            payload = json.loads(response.read().decode("utf-8"), object_pairs_hook=_strict_object)
+            raw = response.read(2 * 1024 * 1024 + 1)
     except urllib.error.HTTPError as exc:
         if exc.code == 404 and not_found_ok:
             return None
         raise ReleaseCandidateError(f"GitHub API request failed with HTTP {exc.code}") from exc
     except urllib.error.URLError as exc:
         raise ReleaseCandidateError(f"GitHub API transport failure: {exc.reason}") from exc
+    if len(raw) > 2 * 1024 * 1024:
+        raise ReleaseCandidateError("GitHub API response exceeds 2 MiB")
+    try:
+        payload = json.loads(raw.decode("utf-8"), object_pairs_hook=_strict_object)
     except (UnicodeError, json.JSONDecodeError) as exc:
         raise ReleaseCandidateError("GitHub API returned malformed JSON") from exc
     if type(payload) is not dict:
@@ -228,8 +183,8 @@ def _request_json(url: str, token: str, *, not_found_ok: bool = False) -> dict[s
 
 def _api_url(api_url: str, repository: str, suffix: str) -> str:
     api_url = api_url.rstrip("/")
-    if not api_url.startswith("https://"):
-        raise ReleaseCandidateError("GitHub API URL must use HTTPS")
+    if api_url != "https://api.github.com":
+        raise ReleaseCandidateError("release publication requires canonical https://api.github.com")
     repository = require_repository(repository)
     return f"{api_url}/repos/{repository}/{suffix.lstrip('/')}"
 
@@ -307,6 +262,7 @@ def write_outputs(
     ci_run_id: int,
     ci_run_attempt: int,
     commit_sha: str,
+    workflow_sha: str,
     output_path: Path,
 ) -> None:
     values = {
@@ -314,6 +270,7 @@ def write_outputs(
         "ci_run_id": str(require_positive_int(ci_run_id, "ci_run_id")),
         "ci_run_attempt": str(require_positive_int(ci_run_attempt, "ci_run_attempt")),
         "commit_sha": require_sha(commit_sha, "commit_sha"),
+        "publisher_workflow_sha": require_sha(workflow_sha, "publisher workflow SHA"),
     }
     github_output = os.environ.get("GITHUB_OUTPUT")
     if github_output:
@@ -326,15 +283,17 @@ def write_outputs(
         "ci_run_id": int(values["ci_run_id"]),
         "ci_run_attempt": int(values["ci_run_attempt"]),
         "commit_sha": values["commit_sha"],
+        "publisher_workflow_sha": values["publisher_workflow_sha"],
     }
     output_path.write_bytes(_canonical_bytes(candidate))
 
 
 def validate_candidate(
     *,
-    request_path: Path,
     event_path: Path,
     repository: str,
+    workflow_ref: str,
+    workflow_sha: str,
     api_url: str,
     token: str,
     output_path: Path,
@@ -342,37 +301,18 @@ def validate_candidate(
     repository = require_repository(repository)
     if not token:
         raise ReleaseCandidateError("GITHUB_TOKEN is required for release candidate validation")
-    if not request_path.is_file() or request_path.is_symlink():
-        raise ReleaseCandidateError("release request artifact must be a regular file")
     try:
-        siblings = list(request_path.parent.iterdir())
-    except OSError as exc:
-        raise ReleaseCandidateError("cannot inspect release request artifact directory") from exc
-    if (
-        len(siblings) != 1
-        or siblings[0].name != request_path.name
-        or not siblings[0].is_file()
-        or siblings[0].is_symlink()
-    ):
-        raise ReleaseCandidateError(
-            "release request artifact must contain exactly one regular JSON file"
-        )
-    try:
-        event_raw = event_path.read_bytes()
-        event_value = json.loads(event_raw.decode("utf-8"), object_pairs_hook=_strict_object)
+        raw = event_path.read_bytes()
+        event = json.loads(raw.decode("utf-8"), object_pairs_hook=_strict_object)
     except (OSError, UnicodeError, json.JSONDecodeError) as exc:
-        raise ReleaseCandidateError("workflow event file is not valid UTF-8 JSON") from exc
-    if type(event_value) is not dict:
-        raise ReleaseCandidateError("workflow event root must be an object")
-    request_run_id, request_run_attempt = validate_request_workflow_event(
-        event_value, repository=repository
-    )
-    payload = _load_canonical_json(request_path)
-    version_tag, ci_run_id = validate_request_payload(
-        payload,
+        raise ReleaseCandidateError("repository_dispatch event file is not valid UTF-8 JSON") from exc
+    if type(event) is not dict:
+        raise ReleaseCandidateError("repository_dispatch event root must be an object")
+    version_tag, ci_run_id = validate_dispatch_event(
+        event,
         repository=repository,
-        request_run_id=request_run_id,
-        request_run_attempt=request_run_attempt,
+        workflow_ref=workflow_ref,
+        workflow_sha=workflow_sha,
     )
     ci_run = fetch_ci_run(api_url, repository, ci_run_id, token)
     commit_sha, ci_run_attempt = validate_ci_run(
@@ -392,6 +332,7 @@ def validate_candidate(
         ci_run_id=ci_run_id,
         ci_run_attempt=ci_run_attempt,
         commit_sha=commit_sha,
+        workflow_sha=workflow_sha,
         output_path=output_path,
     )
 
@@ -400,63 +341,47 @@ def self_test() -> None:
     repo = "owner/repo"
     sha = "a" * 40
     event = {
-        "action": "completed",
+        "action": DISPATCH_TYPE,
         "repository": {"full_name": repo},
-        "workflow_run": {
-            "id": 11,
-            "run_attempt": 2,
-            "name": REQUEST_WORKFLOW_NAME,
-            "path": REQUEST_WORKFLOW_PATH,
-            "event": "workflow_dispatch",
-            "status": "completed",
-            "conclusion": "success",
-        },
+        "client_payload": {"version_tag": "v1.2.3", "ci_run_id": 22},
     }
-    assert validate_request_workflow_event(event, repository=repo) == (11, 2)
-    for field, bad in (
-        ("name", "Other"),
-        ("path", ".github/workflows/other.yml"),
-        ("event", "push"),
-        ("status", "in_progress"),
-        ("conclusion", "failure"),
-    ):
-        mutated = json.loads(json.dumps(event))
-        mutated["workflow_run"][field] = bad
-        try:
-            validate_request_workflow_event(mutated, repository=repo)
-        except ReleaseCandidateError:
-            pass
-        else:
-            raise ReleaseCandidateError(f"self-test accepted invalid request workflow {field}")
-
-    request = {
-        "schema_version": REQUEST_SCHEMA,
-        "repository": repo,
-        "version_tag": "v1.2.3",
-        "ci_run_id": 22,
-        "request_run_id": 11,
-        "request_run_attempt": 2,
-    }
-    assert validate_request_payload(
-        request, repository=repo, request_run_id=11, request_run_attempt=2
+    assert validate_dispatch_event(
+        event,
+        repository=repo,
+        workflow_ref="refs/heads/main",
+        workflow_sha=sha,
     ) == ("v1.2.3", 22)
-    for field, bad in (
-        ("schema_version", "wrong"),
-        ("repository", "other/repo"),
-        ("version_tag", "1.2.3"),
-        ("ci_run_id", 0),
-        ("request_run_id", 12),
-        ("request_run_attempt", 3),
-    ):
-        mutated = dict(request, **{field: bad})
+    invalid_events = (
+        dict(event, action="other"),
+        dict(event, repository={"full_name": "other/repo"}),
+        dict(event, client_payload={"version_tag": "1.2.3", "ci_run_id": 22}),
+        dict(event, client_payload={"version_tag": "v1.2.3", "ci_run_id": 0}),
+        dict(event, client_payload={"version_tag": "v1.2.3", "ci_run_id": 22, "extra": 1}),
+    )
+    for mutated in invalid_events:
         try:
-            validate_request_payload(
-                mutated, repository=repo, request_run_id=11, request_run_attempt=2
+            validate_dispatch_event(
+                mutated,
+                repository=repo,
+                workflow_ref="refs/heads/main",
+                workflow_sha=sha,
             )
         except ReleaseCandidateError:
             pass
         else:
-            raise ReleaseCandidateError(f"self-test accepted invalid request field {field}")
+            raise ReleaseCandidateError("self-test accepted invalid repository_dispatch event")
+    for bad_ref, bad_sha in (("refs/heads/feature", sha), ("refs/heads/main", "bad")):
+        try:
+            validate_dispatch_event(
+                event,
+                repository=repo,
+                workflow_ref=bad_ref,
+                workflow_sha=bad_sha,
+            )
+        except ReleaseCandidateError:
+            pass
+        else:
+            raise ReleaseCandidateError("self-test accepted invalid publisher workflow binding")
 
     ci = {
         "id": 22,
@@ -521,9 +446,10 @@ def _parser() -> argparse.ArgumentParser:
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser("self-test")
     validate = sub.add_parser("validate")
-    validate.add_argument("--request", type=Path, required=True)
     validate.add_argument("--event", type=Path, required=True)
     validate.add_argument("--repository", required=True)
+    validate.add_argument("--workflow-ref", required=True)
+    validate.add_argument("--workflow-sha", required=True)
     validate.add_argument(
         "--api-url", default=os.environ.get("GITHUB_API_URL", "https://api.github.com")
     )
@@ -538,9 +464,10 @@ def main() -> int:
             self_test()
         else:
             validate_candidate(
-                request_path=args.request,
                 event_path=args.event,
                 repository=args.repository,
+                workflow_ref=args.workflow_ref,
+                workflow_sha=args.workflow_sha,
                 api_url=args.api_url,
                 token=os.environ.get("GITHUB_TOKEN", ""),
                 output_path=args.output,
