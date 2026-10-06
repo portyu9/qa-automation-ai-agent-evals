@@ -43,6 +43,9 @@ _REMOTE_RECEIPT_SCHEMA: Literal["agent-evals/mcp-remote-receipt/v1"] = (
 _CAPABILITY_SCHEMA: Literal["agent-evals/mcp-capability-snapshot/v1"] = (
     "agent-evals/mcp-capability-snapshot/v1"
 )
+_CAPABILITY_EXERCISE_SCHEMA: Literal["agent-evals/mcp-capability-exercise-receipt/v1"] = (
+    "agent-evals/mcp-capability-exercise-receipt/v1"
+)
 _LIST_CHANGED_SCHEMA: Literal["agent-evals/mcp-list-changed-receipt/v1"] = (
     "agent-evals/mcp-list-changed-receipt/v1"
 )
@@ -56,6 +59,7 @@ _HOSTILE_SCHEMA: Literal["agent-evals/mcp-hostile-server-receipt/v1"] = (
     "agent-evals/mcp-hostile-server-receipt/v1"
 )
 _REMOTE_RECEIPT_DOMAIN = b"agent-evals/mcp-remote-receipt/v1\0"
+_CAPABILITY_EXERCISE_DOMAIN = b"agent-evals/mcp-capability-exercise-receipt/v1\0"
 _LIST_CHANGED_DOMAIN = b"agent-evals/mcp-list-changed-receipt/v1\0"
 _CONCURRENCY_DOMAIN = b"agent-evals/mcp-concurrency-receipt/v1\0"
 _MULTI_SERVER_DOMAIN = b"agent-evals/mcp-multi-server-receipt/v1\0"
@@ -312,6 +316,102 @@ class MCPCapabilitySnapshot(BaseModel):
             b"agent-evals/mcp-capability-snapshot/v1\0",
             self.model_dump(mode="json"),
         )
+
+
+class MCPCapabilityOperationObservation(BaseModel):
+    """One bounded request/response observation exercising an advanced MCP capability."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    capability: MCPCapability
+    operation_id: str = Field(pattern=r"^[a-z0-9][a-z0-9._-]{2,127}$")
+    request_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    response_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    response_bytes: int = Field(ge=0, le=64 * 1024 * 1024, strict=True)
+    succeeded: bool = Field(strict=True)
+
+
+class MCPCapabilityExerciseReceipt(BaseModel):
+    """Require real bounded observations for every declared advanced MCP capability."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    schema_version: Literal["agent-evals/mcp-capability-exercise-receipt/v1"] = (
+        _CAPABILITY_EXERCISE_SCHEMA
+    )
+    snapshot: MCPCapabilitySnapshot
+    observations: tuple[MCPCapabilityOperationObservation, ...] = Field(
+        min_length=1,
+        max_length=10_000,
+    )
+    exercised_capabilities: tuple[MCPCapability, ...]
+    accepted: bool = Field(strict=True)
+    receipt_root: str = Field(pattern=r"^[0-9a-f]{64}$")
+
+    @classmethod
+    def create(
+        cls,
+        *,
+        snapshot: MCPCapabilitySnapshot,
+        observations: tuple[MCPCapabilityOperationObservation, ...],
+    ) -> Self:
+        _require_exact(snapshot, MCPCapabilitySnapshot, "MCP capability snapshot")
+        checked_snapshot = MCPCapabilitySnapshot.model_validate_json(snapshot.model_dump_json())
+        checked: list[MCPCapabilityOperationObservation] = []
+        for item in observations:
+            _require_exact(
+                item,
+                MCPCapabilityOperationObservation,
+                "MCP capability operation observation",
+            )
+            checked.append(
+                MCPCapabilityOperationObservation.model_validate_json(item.model_dump_json())
+            )
+        ids = [item.operation_id for item in checked]
+        if len(set(ids)) != len(ids):
+            raise ValueError("MCP capability operation IDs must be unique")
+        observed = {item.capability for item in checked}
+        if not observed <= checked_snapshot.capabilities:
+            raise ValueError("MCP exercise observes capability absent from bound snapshot")
+        exercised = tuple(
+            sorted(
+                {
+                    item.capability
+                    for item in checked
+                    if item.succeeded
+                },
+                key=lambda item: item.value,
+            )
+        )
+        accepted = checked_snapshot.capabilities <= set(exercised)
+        material = {
+            "schema_version": _CAPABILITY_EXERCISE_SCHEMA,
+            "snapshot": checked_snapshot.model_dump(mode="json"),
+            "observations": [item.model_dump(mode="json") for item in checked],
+            "exercised_capabilities": [item.value for item in exercised],
+            "accepted": accepted,
+        }
+        return validate_receipt_construction(
+            cls,
+            snapshot=checked_snapshot,
+            observations=tuple(checked),
+            exercised_capabilities=exercised,
+            accepted=accepted,
+            receipt_root=_domain_root(_CAPABILITY_EXERCISE_DOMAIN, material),
+        )
+
+    @model_validator(mode="after")
+    def verify_receipt(self, info: ValidationInfo) -> Self:
+        if is_receipt_construction(info):
+            return self
+        rebuilt = type(self).create(snapshot=self.snapshot, observations=self.observations)
+        if (
+            self.exercised_capabilities != rebuilt.exercised_capabilities
+            or self.accepted != rebuilt.accepted
+            or not _constant_equal(self.receipt_root, rebuilt.receipt_root)
+        ):
+            raise ValueError("MCP capability exercise receipt does not recompute")
+        return self
 
 
 class MCPToolsListChangedReceipt(BaseModel):
@@ -940,6 +1040,8 @@ def _constant_equal(left: str, right: str) -> bool:
 
 __all__ = [
     "MCPCapability",
+    "MCPCapabilityExerciseReceipt",
+    "MCPCapabilityOperationObservation",
     "MCPCapabilitySnapshot",
     "MCPConcurrencyReceipt",
     "MCPConcurrentOperation",
