@@ -199,14 +199,18 @@ class ApprovalGovernanceReceipt(BaseModel):
         checked_approvals: list[HumanApprovalEvidence] = []
         for item in approvals:
             _require_exact(item, HumanApprovalEvidence, "human approval evidence")
-            checked_approvals.append(HumanApprovalEvidence.model_validate_json(item.model_dump_json()))
+            checked_approvals.append(
+                HumanApprovalEvidence.model_validate_json(item.model_dump_json())
+            )
         if not checked_approvals:
             raise ValueError("approval governance requires at least one approval")
 
         checked_delegations: list[ApprovalDelegation] = []
         for item in delegations:
             _require_exact(item, ApprovalDelegation, "approval delegation")
-            checked_delegations.append(ApprovalDelegation.model_validate_json(item.model_dump_json()))
+            checked_delegations.append(
+                ApprovalDelegation.model_validate_json(item.model_dump_json())
+            )
 
         ids = [item.approval_id for item in checked_approvals]
         if len(set(ids)) != len(ids):
@@ -253,9 +257,8 @@ class ApprovalGovernanceReceipt(BaseModel):
         distinct_sessions_met = (
             not checked_policy.require_distinct_sessions or len(sessions) >= checked_policy.quorum
         )
-        escalation_met = (
-            not checked_policy.require_escalation_approver
-            or any(item.role is ApprovalRole.ESCALATION_APPROVER for item in valid)
+        escalation_met = not checked_policy.require_escalation_approver or any(
+            item.role is ApprovalRole.ESCALATION_APPROVER for item in valid
         )
         accepted = quorum_met and distinct_sessions_met and escalation_met
 
@@ -270,7 +273,8 @@ class ApprovalGovernanceReceipt(BaseModel):
             "effective_signers": list(signers),
             "accepted": accepted,
         }
-        return validate_receipt_construction(cls,
+        return validate_receipt_construction(
+            cls,
             policy=checked_policy,
             requester_id=requester_id,
             evaluated_at_unix_ms=evaluated_at_unix_ms,
@@ -403,12 +407,9 @@ class HITLResumeReceipt(BaseModel):
         duplicate_rejections = sum(
             item.outcome is HITLResumeOutcome.DUPLICATE_REJECTED for item in checked
         )
-        accepted = (
-            len(completed) == 1
-            and all(
-                item.outcome in {HITLResumeOutcome.COMPLETED, HITLResumeOutcome.DUPLICATE_REJECTED}
-                for item in checked
-            )
+        accepted = len(completed) == 1 and all(
+            item.outcome in {HITLResumeOutcome.COMPLETED, HITLResumeOutcome.DUPLICATE_REJECTED}
+            for item in checked
         )
         completed_id = completed[0].resume_id if len(completed) == 1 else None
         material = {
@@ -419,7 +420,8 @@ class HITLResumeReceipt(BaseModel):
             "duplicate_rejections": duplicate_rejections,
             "accepted": accepted,
         }
-        return validate_receipt_construction(cls,
+        return validate_receipt_construction(
+            cls,
             checkpoint=checked_checkpoint,
             attempts=tuple(checked),
             completed_resume_id=completed_id,
