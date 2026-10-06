@@ -38,9 +38,7 @@ _WorkflowLoader.yaml_implicit_resolvers = {
 }
 for first, resolvers in list(_WorkflowLoader.yaml_implicit_resolvers.items()):
     _WorkflowLoader.yaml_implicit_resolvers[first] = [
-        (tag, regexp)
-        for tag, regexp in resolvers
-        if tag != "tag:yaml.org,2002:bool"
+        (tag, regexp) for tag, regexp in resolvers if tag != "tag:yaml.org,2002:bool"
     ]
 _WorkflowLoader.add_implicit_resolver(
     "tag:yaml.org,2002:bool",
@@ -114,9 +112,7 @@ def _validate_uses(value: Any, *, path: Path, location: str) -> None:
 def _validate_runner(value: Any, *, path: Path, job_id: str) -> None:
     def reject_floating(item: str) -> None:
         if item.endswith("-latest"):
-            raise WorkflowPolicyError(
-                f"{path}: job {job_id!r} uses floating runner label {item!r}"
-            )
+            raise WorkflowPolicyError(f"{path}: job {job_id!r} uses floating runner label {item!r}")
 
     if isinstance(value, str):
         reject_floating(value)
@@ -165,9 +161,7 @@ def validate_workflow(path: Path) -> None:
             raise WorkflowPolicyError(f"{path}: job {job_id!r} steps must be a list")
         for index, step in enumerate(steps):
             if not isinstance(step, dict):
-                raise WorkflowPolicyError(
-                    f"{path}: job {job_id!r} step {index} must be a mapping"
-                )
+                raise WorkflowPolicyError(f"{path}: job {job_id!r} step {index} must be a mapping")
             if "uses" in step:
                 _validate_uses(
                     step["uses"],
@@ -182,7 +176,9 @@ def validate_workflow(path: Path) -> None:
         if job_id in visited:
             return
         if job_id in visiting:
-            raise WorkflowPolicyError(f"{path}: job dependency graph contains a cycle at {job_id!r}")
+            raise WorkflowPolicyError(
+                f"{path}: job dependency graph contains a cycle at {job_id!r}"
+            )
         visiting.add(job_id)
         for dependency in graph[job_id]:
             visit(dependency)
