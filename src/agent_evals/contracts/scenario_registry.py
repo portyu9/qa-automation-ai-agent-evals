@@ -141,11 +141,13 @@ class ScenarioProvenance(BaseModel):
         if self.parent_scenario_identity is None:
             raise ValueError("derived scenarios require an exact parent scenario identity")
 
-        if self.origin in {ScenarioOrigin.COUNTEREXAMPLE, ScenarioOrigin.MINIMIZED_FAILURE}:
-            if not has_trial:
-                raise ValueError(
-                    "counterexample/minimized promotion requires source trial and evidence root"
-                )
+        if (
+            self.origin in {ScenarioOrigin.COUNTEREXAMPLE, ScenarioOrigin.MINIMIZED_FAILURE}
+            and not has_trial
+        ):
+            raise ValueError(
+                "counterexample/minimized promotion requires source trial and evidence root"
+            )
         return self
 
 
