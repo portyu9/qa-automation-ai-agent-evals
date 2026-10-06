@@ -59,7 +59,16 @@ class EvaluatorTimingProvenance(BaseModel):
             "elapsed_ms": elapsed_ms,
         }
         root = hashlib.sha256(_DOMAIN + _canonical_bytes(unsigned)).hexdigest()
-        return cls(**unsigned, timing_root=root)
+        return cls(
+            schema_version=_SCHEMA,
+            trial_id=evidence.trial_id,
+            evidence_root=evidence.evidence_root,
+            clock_source=_CLOCK,
+            monotonic=True,
+            includes_metric_provenance_resolution=True,
+            elapsed_ms=elapsed_ms,
+            timing_root=root,
+        )
 
     @model_validator(mode="after")
     def verify_timing_root(self) -> Self:
