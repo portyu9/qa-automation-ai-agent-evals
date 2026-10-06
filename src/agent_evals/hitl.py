@@ -13,7 +13,7 @@ import json
 from enum import StrEnum
 from typing import Literal, Self
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from agent_evals.contracts.models import ApprovalDecision
 
