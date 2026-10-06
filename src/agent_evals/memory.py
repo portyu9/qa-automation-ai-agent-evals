@@ -149,10 +149,7 @@ class MemoryAssuranceReceipt(BaseModel):
                 for item in reads
             )
         )
-        cross_user = any(
-            not item.same_principal and not item.allowed
-            for item in reads
-        )
+        cross_user = any(not item.same_principal and not item.allowed for item in reads)
 
         delete_events = [
             item
@@ -221,7 +218,8 @@ class MemoryAssuranceReceipt(BaseModel):
             "poison_rejected": poison_rejected,
             "accepted": accepted,
         }
-        return validate_receipt_construction(cls,
+        return validate_receipt_construction(
+            cls,
             policy=checked_policy,
             observations=tuple(checked),
             persistence_observed=persistence,
