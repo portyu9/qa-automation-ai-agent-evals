@@ -307,10 +307,10 @@ def test_policy_rejects_publish_without_exact_candidate_source_binding(tmp_path:
     workspace = _policy_workspace(tmp_path)
     workflow = workspace / ".github/workflows/publish-release.yml"
     source = workflow.read_text(encoding="utf-8")
-    required = "path: candidate-source"
+    required = "CI_COMMIT_SHA: ${{ steps.candidate.outputs.commit_sha }}"
     assert required in source
     workflow.write_text(
-        source.replace(required, "path: moving-source", 1),
+        source.replace(required, "CI_COMMIT_SHA: ${{ github.sha }}", 1),
         encoding="utf-8",
     )
 
@@ -318,6 +318,30 @@ def test_policy_rejects_publish_without_exact_candidate_source_binding(tmp_path:
 
     assert result.returncode != 0
     assert "publish-release workflow is missing required contract text" in result.stderr
+
+
+def test_policy_rejects_dynamic_candidate_checkout(tmp_path: Path) -> None:
+    workspace = _policy_workspace(tmp_path)
+    workflow = workspace / ".github/workflows/publish-release.yml"
+    source = workflow.read_text(encoding="utf-8")
+    anchor = "      - name: Download exact CI-tested package artifact\n"
+    assert anchor in source
+    dynamic_checkout = (
+        "      - name: Forbidden dynamic candidate checkout\n"
+        "        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1\n"
+        "        with:\n"
+        "          ref: ${{ steps.candidate.outputs.commit_sha }}\n"
+        "          persist-credentials: false\n"
+    )
+    workflow.write_text(
+        source.replace(anchor, dynamic_checkout + anchor, 1),
+        encoding="utf-8",
+    )
+
+    result = _run_policy(workspace)
+
+    assert result.returncode != 0
+    assert "exactly one trusted default-branch checkout" in result.stderr
 
 
 def test_policy_rejects_pypi_publication_without_trusted_publishing_contract(
