@@ -16,6 +16,7 @@ PASS_VERDICT = "PASS"
 REQUIRED_JOB_IDS = (
     "policy",
     "quality",
+    "compatibility",
     "mutation",
     "openai-adapter",
     "mcp-lab",
