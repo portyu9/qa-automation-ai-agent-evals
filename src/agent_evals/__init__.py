@@ -21,6 +21,7 @@ from agent_evals.oracles.failures import (
     structured_oracle_failures,
 )
 from agent_evals.receipts import ReceiptEnvelopeV1
+from agent_evals.runtime.release_verification import verify_session_release_criticality
 from agent_evals.runtime.timing_provenance import EvaluatorTimingProvenance
 from agent_evals.statistics.reliability import ReliabilityReport
 from agent_evals.verification import (
@@ -70,4 +71,5 @@ __all__ = [
     "project_typed_event",
     "structured_oracle_failures",
     "verify_fact_claim",
+    "verify_session_release_criticality",
 ]
