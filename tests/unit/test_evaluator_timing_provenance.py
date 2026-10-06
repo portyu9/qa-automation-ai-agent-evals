@@ -60,7 +60,6 @@ def test_timing_provenance_rejects_root_and_elapsed_drift() -> None:
         )
 
 
-
 @pytest.mark.asyncio
 async def test_public_trial_runner_attaches_monotonic_timing_provenance() -> None:
     subject = SubjectFingerprint.from_material(
