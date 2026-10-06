@@ -128,9 +128,9 @@ class StratifiedCalibrationObservation(BaseModel):
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    schema_version: Literal[
-        "agent-evals/semantic-stratified-calibration-observation/v1"
-    ] = _OBSERVATION_SCHEMA
+    schema_version: Literal["agent-evals/semantic-stratified-calibration-observation/v1"] = (
+        _OBSERVATION_SCHEMA
+    )
     split: CalibrationSplit
     observation: SemanticCalibrationObservation
 
@@ -169,9 +169,9 @@ class StratifiedCalibrationReceipt(BaseModel):
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    schema_version: Literal[
-        "agent-evals/semantic-stratified-calibration-receipt/v1"
-    ] = _RECEIPT_SCHEMA
+    schema_version: Literal["agent-evals/semantic-stratified-calibration-receipt/v1"] = (
+        _RECEIPT_SCHEMA
+    )
     judge_profile: SemanticJudgeProfile
     policy: StratifiedCalibrationPolicy
     observations: tuple[StratifiedCalibrationObservation, ...] = Field(
@@ -223,9 +223,7 @@ class StratifiedCalibrationReceipt(BaseModel):
             observations=canonical,
             validation_receipt=derived["validation_receipt"],
             holdout_receipt=derived["holdout_receipt"],
-            validation_false_pass_upper_bound=derived[
-                "validation_false_pass_upper_bound"
-            ],
+            validation_false_pass_upper_bound=derived["validation_false_pass_upper_bound"],
             holdout_false_pass_upper_bound=derived["holdout_false_pass_upper_bound"],
             validation_risk_support=derived["validation_risk_support"],
             holdout_risk_support=derived["holdout_risk_support"],
@@ -258,15 +256,9 @@ class StratifiedCalibrationReceipt(BaseModel):
             raise ValueError("stratified validation receipt does not recompute")
         if self.holdout_receipt != derived["holdout_receipt"]:
             raise ValueError("stratified holdout receipt does not recompute")
-        if (
-            self.validation_false_pass_upper_bound
-            != derived["validation_false_pass_upper_bound"]
-        ):
+        if self.validation_false_pass_upper_bound != derived["validation_false_pass_upper_bound"]:
             raise ValueError("stratified validation false-pass bound does not recompute")
-        if (
-            self.holdout_false_pass_upper_bound
-            != derived["holdout_false_pass_upper_bound"]
-        ):
+        if self.holdout_false_pass_upper_bound != derived["holdout_false_pass_upper_bound"]:
             raise ValueError("stratified holdout false-pass bound does not recompute")
         if self.validation_risk_support != derived["validation_risk_support"]:
             raise ValueError("stratified validation risk support does not recompute")
@@ -301,9 +293,7 @@ def _derive_stratified_metrics(
     observations: tuple[StratifiedCalibrationObservation, ...],
 ) -> _DerivedStratifiedMetrics:
     development = tuple(
-        item.observation
-        for item in observations
-        if item.split is CalibrationSplit.DEVELOPMENT
+        item.observation for item in observations if item.split is CalibrationSplit.DEVELOPMENT
     )
     validation = tuple(
         item.observation for item in observations if item.split is CalibrationSplit.VALIDATION
@@ -400,10 +390,7 @@ def _false_pass_upper_bound(*, false_passes: int, fail_cases: int, z: float) -> 
     center = (proportion + z_squared / (2.0 * fail_cases)) / denominator
     radius = (
         z
-        * sqrt(
-            (proportion * (1.0 - proportion) + z_squared / (4.0 * fail_cases))
-            / fail_cases
-        )
+        * sqrt((proportion * (1.0 - proportion) + z_squared / (4.0 * fail_cases)) / fail_cases)
         / denominator
     )
     return min(1.0, center + radius)
@@ -423,9 +410,7 @@ def _unsigned_receipt_material(
         "observations": [item.model_dump(mode="json") for item in observations],
         "validation_receipt": derived["validation_receipt"].model_dump(mode="json"),
         "holdout_receipt": derived["holdout_receipt"].model_dump(mode="json"),
-        "validation_false_pass_upper_bound": derived[
-            "validation_false_pass_upper_bound"
-        ],
+        "validation_false_pass_upper_bound": derived["validation_false_pass_upper_bound"],
         "holdout_false_pass_upper_bound": derived["holdout_false_pass_upper_bound"],
         "validation_risk_support": [
             support.model_dump(mode="json") for support in derived["validation_risk_support"]
