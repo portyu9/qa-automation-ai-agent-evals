@@ -146,20 +146,17 @@ class DistributedSideEffectReceipt(BaseModel):
             SideEffectAttemptCause.MULTI_WORKER_RACE,
         }
         duplicate_attempts = [item for item in checked if item.cause in duplicate_causes]
-        duplicates_safe = (
-            not checked_policy.require_duplicate_rejection
-            or all(
-                item.outcome
-                in {
-                    SideEffectAttemptOutcome.DUPLICATE_REJECTED,
-                    SideEffectAttemptOutcome.TIMED_OUT,
-                    SideEffectAttemptOutcome.CANCELLED,
-                    SideEffectAttemptOutcome.CRASHED,
-                    SideEffectAttemptOutcome.ROLLED_BACK,
-                }
-                for item in duplicate_attempts
-                if item.outcome is not SideEffectAttemptOutcome.COMMITTED
-            )
+        duplicates_safe = not checked_policy.require_duplicate_rejection or all(
+            item.outcome
+            in {
+                SideEffectAttemptOutcome.DUPLICATE_REJECTED,
+                SideEffectAttemptOutcome.TIMED_OUT,
+                SideEffectAttemptOutcome.CANCELLED,
+                SideEffectAttemptOutcome.CRASHED,
+                SideEffectAttemptOutcome.ROLLED_BACK,
+            }
+            for item in duplicate_attempts
+            if item.outcome is not SideEffectAttemptOutcome.COMMITTED
         )
         accepted = len(committed) <= checked_policy.max_committed_mutations and duplicates_safe
         material = {
@@ -170,7 +167,8 @@ class DistributedSideEffectReceipt(BaseModel):
             "covered_causes": [item.value for item in covered],
             "accepted": accepted,
         }
-        return validate_receipt_construction(cls,
+        return validate_receipt_construction(
+            cls,
             policy=checked_policy,
             attempts=tuple(checked),
             committed_mutations=len(committed),
@@ -265,7 +263,9 @@ def verify_target_acknowledgement(
     if not checked_ack.cryptographically_verified:
         raise ValueError("target acknowledgement lacks external cryptographic verification")
     committed = [
-        item for item in checked_receipt.attempts if item.outcome is SideEffectAttemptOutcome.COMMITTED
+        item
+        for item in checked_receipt.attempts
+        if item.outcome is SideEffectAttemptOutcome.COMMITTED
     ]
     if len(committed) != 1:
         raise ValueError("target acknowledgement requires exactly one committed side effect")
@@ -296,7 +296,9 @@ def _canonical_json_bytes(value: object) -> bytes:
             allow_nan=False,
         ).encode("utf-8")
     except (TypeError, ValueError) as exc:
-        raise ValueError("side-effect assurance material must be finite JSON-compatible data") from exc
+        raise ValueError(
+            "side-effect assurance material must be finite JSON-compatible data"
+        ) from exc
 
 
 __all__ = [
