@@ -13,7 +13,12 @@ import json
 from enum import StrEnum
 from typing import Literal, Self
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, model_validator
+
+from agent_evals._receipt_validation import (
+    is_receipt_construction,
+    validate_receipt_construction,
+)
 
 from agent_evals.contracts.models import ApprovalDecision
 
@@ -266,7 +271,7 @@ class ApprovalGovernanceReceipt(BaseModel):
             "effective_signers": list(signers),
             "accepted": accepted,
         }
-        return cls.model_construct(
+        return validate_receipt_construction(cls,
             policy=checked_policy,
             requester_id=requester_id,
             evaluated_at_unix_ms=evaluated_at_unix_ms,
@@ -279,7 +284,9 @@ class ApprovalGovernanceReceipt(BaseModel):
         )
 
     @model_validator(mode="after")
-    def verify_receipt(self) -> Self:
+    def verify_receipt(self, info: ValidationInfo) -> Self:
+        if is_receipt_construction(info):
+            return self
         rebuilt = type(self).create(
             policy=self.policy,
             requester_id=self.requester_id,
@@ -413,7 +420,7 @@ class HITLResumeReceipt(BaseModel):
             "duplicate_rejections": duplicate_rejections,
             "accepted": accepted,
         }
-        return cls.model_construct(
+        return validate_receipt_construction(cls,
             checkpoint=checked_checkpoint,
             attempts=tuple(checked),
             completed_resume_id=completed_id,
@@ -423,7 +430,9 @@ class HITLResumeReceipt(BaseModel):
         )
 
     @model_validator(mode="after")
-    def verify_receipt(self) -> Self:
+    def verify_receipt(self, info: ValidationInfo) -> Self:
+        if is_receipt_construction(info):
+            return self
         rebuilt = type(self).create(checkpoint=self.checkpoint, attempts=self.attempts)
         if (
             self.completed_resume_id != rebuilt.completed_resume_id
