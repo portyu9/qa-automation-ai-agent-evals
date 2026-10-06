@@ -17,6 +17,7 @@ from agent_evals.evidence.payloads import project_typed_event
 from agent_evals.gates.release import GateDecision, ReleaseGate, ReleasePolicy
 from agent_evals.oracles.failures import OracleFailure, OracleFailureCode, structured_oracle_failures
 from agent_evals.receipts import ReceiptEnvelopeV1
+from agent_evals.runtime.timing_provenance import EvaluatorTimingProvenance
 from agent_evals.statistics.reliability import ReliabilityReport
 from agent_evals.verification import (
     EvidenceChain,
@@ -39,6 +40,7 @@ __all__ = [
     "EvaluationScenario",
     "EvidenceEvent",
     "EvidenceKind",
+    "EvaluatorTimingProvenance",
     "FactKind",
     "FactProducerRole",
     "GateDecision",
