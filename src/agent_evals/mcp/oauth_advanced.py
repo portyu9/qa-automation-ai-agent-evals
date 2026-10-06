@@ -221,7 +221,7 @@ class OAuthAdvancedReceipt(BaseModel):
             "sender_constraint_observed": sender_constraint,
             "accepted": accepted,
         }
-        return cls(
+        return cls.model_construct(
             policy=checked_policy,
             keysets=checked_keysets,
             events=checked_events,
@@ -311,7 +311,7 @@ class OAuthAuthorizationDriftReceipt(BaseModel):
             "post_contraction_denial_observed": denial,
             "accepted": accepted,
         }
-        return cls(
+        return cls.model_construct(
             observations=tuple(checked),
             contraction_observed=contraction,
             post_contraction_denial_observed=denial,
