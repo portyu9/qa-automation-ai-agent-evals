@@ -7,13 +7,15 @@ existing domain-specific verifiers; this module only requires the common schema/
 
 from __future__ import annotations
 
-from typing import Any, Literal, TypeAlias
+from typing import Any, Literal, TypeAlias, cast
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from agent_evals.evidence.models import EvidenceEvent, EvidenceKind
 
-_PAYLOAD_SCHEMA: Literal["agent-evals/event-payload/v1"] = "agent-evals/event-payload/v1"
+_PAYLOAD_SCHEMA: Literal["agent-evals/event-payload/v1"] = (
+    "agent-evals/event-payload/v1"
+)
 
 
 class _AllowExtraPayload(BaseModel):
@@ -23,7 +25,12 @@ class _AllowExtraPayload(BaseModel):
 class EvaluationErrorPayloadV1(_AllowExtraPayload):
     code: str = Field(min_length=1, max_length=256)
     reason: str = Field(min_length=1, max_length=4000)
-    deadline_seconds: float | None = Field(default=None, gt=0.0, allow_inf_nan=False, strict=True)
+    deadline_seconds: float | None = Field(
+        default=None,
+        gt=0.0,
+        allow_inf_nan=False,
+        strict=True,
+    )
 
 
 class RuntimeErrorPayloadV1(_AllowExtraPayload):
@@ -254,4 +261,4 @@ def project_typed_event(event: EvidenceEvent) -> TypedEvidenceEventV1:
             "payload": event.payload,
         }
     )
-    return projected  # type: ignore[return-value]
+    return cast(TypedEvidenceEventV1, projected)
