@@ -438,7 +438,7 @@ def lint_scenario_registry(registry: ScenarioRegistry) -> tuple[ScenarioRegistry
             findings.append(
                 ScenarioRegistryFinding(
                     code=RegistryFindingCode.UNKNOWN_LEAKAGE_RISK,
-                    severity=RegistryFindingSeverity.WARNING,
+                    severity=RegistryFindingSeverity.ERROR,
                     scenario_identity=entry.scenario_identity,
                     detail="benchmark contamination or memorization risk remains unknown",
                 )
