@@ -20,7 +20,12 @@ from enum import StrEnum
 from typing import Literal, Self
 from urllib.parse import urlsplit
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, field_validator, model_validator
+
+from agent_evals._receipt_validation import (
+    is_receipt_construction,
+    validate_receipt_construction,
+)
 
 _PROTOCOL_VERSION = "2026-07-28"
 _ENDPOINT_SCHEMA: Literal["agent-evals/mcp-hosted-endpoint/v1"] = (
@@ -263,7 +268,7 @@ class MCPRemoteAssuranceReceipt(BaseModel):
             "covered_conditions": [item.value for item in covered],
             "accepted": accepted,
         }
-        return cls.model_construct(
+        return validate_receipt_construction(cls,
             endpoint=checked_endpoint,
             policy=checked_policy,
             observations=tuple(checked),
@@ -273,7 +278,9 @@ class MCPRemoteAssuranceReceipt(BaseModel):
         )
 
     @model_validator(mode="after")
-    def verify_receipt(self) -> Self:
+    def verify_receipt(self, info: ValidationInfo) -> Self:
+        if is_receipt_construction(info):
+            return self
         rebuilt = type(self).create(
             endpoint=self.endpoint,
             policy=self.policy,
@@ -417,7 +424,7 @@ class MCPConcurrencyReceipt(BaseModel):
             "minimum_parallelism": minimum_parallelism,
             "accepted": accepted,
         }
-        return cls.model_construct(
+        return validate_receipt_construction(cls,
             operations=tuple(checked),
             peak_parallelism=peak,
             minimum_parallelism=minimum_parallelism,
@@ -426,7 +433,9 @@ class MCPConcurrencyReceipt(BaseModel):
         )
 
     @model_validator(mode="after")
-    def verify_receipt(self) -> Self:
+    def verify_receipt(self, info: ValidationInfo) -> Self:
+        if is_receipt_construction(info):
+            return self
         rebuilt = type(self).create(
             operations=self.operations,
             minimum_parallelism=self.minimum_parallelism,
@@ -486,7 +495,7 @@ class MCPMultiServerReceipt(BaseModel):
             "collision_names": list(collisions),
             "accepted": accepted,
         }
-        return cls.model_construct(
+        return validate_receipt_construction(cls,
             servers=tuple(checked),
             collision_names=collisions,
             accepted=accepted,
@@ -494,7 +503,9 @@ class MCPMultiServerReceipt(BaseModel):
         )
 
     @model_validator(mode="after")
-    def verify_receipt(self) -> Self:
+    def verify_receipt(self, info: ValidationInfo) -> Self:
+        if is_receipt_construction(info):
+            return self
         rebuilt = type(self).create(self.servers)
         if (
             self.collision_names != rebuilt.collision_names
@@ -593,7 +604,7 @@ class MCPHostileServerReceipt(BaseModel):
             "covered_conditions": [item.value for item in covered],
             "accepted": accepted,
         }
-        return cls.model_construct(
+        return validate_receipt_construction(cls,
             budget=checked_budget,
             observations=tuple(checked),
             covered_conditions=covered,
@@ -602,7 +613,9 @@ class MCPHostileServerReceipt(BaseModel):
         )
 
     @model_validator(mode="after")
-    def verify_receipt(self) -> Self:
+    def verify_receipt(self, info: ValidationInfo) -> Self:
+        if is_receipt_construction(info):
+            return self
         rebuilt = type(self).create(budget=self.budget, observations=self.observations)
         if (
             self.covered_conditions != rebuilt.covered_conditions
