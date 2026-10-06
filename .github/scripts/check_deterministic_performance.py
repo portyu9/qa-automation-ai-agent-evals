@@ -60,7 +60,7 @@ def _measure() -> dict[str, float]:
 
     def digest_work() -> None:
         for _ in range(5_000):
-            event.digest
+            _ = event.digest
 
     return {
         "event_digest_5000": _median_runtime(digest_work),
