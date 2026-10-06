@@ -162,6 +162,18 @@ _PRIVILEGED_EVENT_ROLES: dict[EvidenceKind, PrivilegedProducerRole] = {
 }
 
 
+_PRODUCER_AUTHORITY_REJECTION_CODES = frozenset(
+    {
+        "attack_delivery_live_injection",
+        "protocol_delivery_live_injection",
+        "approval_decision_live_injection",
+        "retrieval_delivery_live_injection",
+        "side_effect_observation_live_injection",
+        "semantic_judgment_live_injection",
+    }
+)
+
+
 def _issue_verified_producer_capabilities(
     adapter: AgentAdapter,
     evidence: TrialEvidence,
@@ -169,6 +181,14 @@ def _issue_verified_producer_capabilities(
     """Issue run-local capabilities only after core exact-type authority checks succeeded."""
 
     if type(adapter) is EvidenceReplayAdapter:
+        return None, ()
+
+    rejected_producer_authority = any(
+        event.kind is EvidenceKind.EVALUATION_ERROR
+        and event.payload.get("code") in _PRODUCER_AUTHORITY_REJECTION_CODES
+        for event in evidence.events
+    )
+    if rejected_producer_authority:
         return None, ()
 
     privileged_events = tuple(
