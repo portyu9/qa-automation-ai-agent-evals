@@ -8,6 +8,7 @@ receipts remain protocol/control-plane evidence only. They never become agent be
 from __future__ import annotations
 
 import hashlib
+import hmac
 import http.client
 import json
 import socket
@@ -921,7 +922,7 @@ def _canonical_json_bytes(value: object) -> bytes:
 
 
 def _constant_equal(left: str, right: str) -> bool:
-    return __import__("hmac").compare_digest(left, right)
+    return hmac.compare_digest(left, right)
 
 
 __all__ = [
