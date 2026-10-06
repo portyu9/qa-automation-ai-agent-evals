@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+from typing import cast
+
 import pytest
 
 from agent_evals.adapters.base import AdapterResult
 from agent_evals.adapters.scripted import ScriptedAdapter
 from agent_evals.contracts.models import EvaluationScenario, ScenarioKind, SubjectFingerprint
 from agent_evals.evidence.models import EvidenceEvent, EvidenceKind, TrialVerdict
+from agent_evals.gates import release as release_gate_module
 from agent_evals.gates.release import GateDecision, ReleaseGate, ReleasePolicy
 from agent_evals.runtime.release_verification import verify_session_release_criticality
 from agent_evals.runtime.session import EvaluationSession
@@ -147,4 +150,20 @@ def test_verified_criticality_cannot_be_caller_issued() -> None:
             reliability_sha256="4" * 64,
             critical_violations=0,
             _issuer=object(),
+        )
+
+
+def test_verified_release_exact_type_guards_fail_closed() -> None:
+    report = ReliabilityReport.from_verdicts((TrialVerdict.PASS,))
+    gate = ReleaseGate(_policy())
+
+    with pytest.raises(ValueError, match="exact VerifiedCriticalityRecord"):
+        gate.decide_verified(
+            report,
+            criticality=cast(VerifiedCriticalityRecord, object()),
+        )
+
+    with pytest.raises(ValueError, match="exact ReliabilityReport"):
+        release_gate_module._reliability_report_sha256(
+            cast(ReliabilityReport, object())
         )
