@@ -143,6 +143,7 @@ def parse_header(raw: str, *, filename: str) -> dict[str, str]:
         "Profile",
         "Boundary",
         "Python",
+        "Artifact-Selection",
         "Input-SHA256",
         "Compiler",
         "Regeneration contract",
@@ -254,6 +255,7 @@ def validate_profile(
         "Profile": profile,
         "Boundary": boundary,
         "Python": python_version,
+        "Artifact-Selection": "linux-x86_64",
         "Compiler": "pip==25.3; pip-tools==7.5.2",
         "Regeneration contract": "CI_DEPENDENCY_LOCKS.md",
     }
