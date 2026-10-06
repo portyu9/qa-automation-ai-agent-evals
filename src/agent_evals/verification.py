@@ -443,42 +443,71 @@ def _verification_graph_root(facts: tuple[VerifiedFact, ...]) -> str:
     return hashlib.sha256(_GRAPH_DOMAIN + _canonical_json_bytes(material)).hexdigest()
 
 
-@dataclass(frozen=True, slots=True)
+_VERIFIED_CRITICALITY_ISSUER = object()
+
+
+@dataclass(frozen=True, slots=True, init=False)
 class VerifiedCriticalityRecord:
-    """Release-gate criticality derived from exact verified criticality facts."""
+    """Evaluator-issued criticality summary bound to finalized session/reliability material."""
 
-    facts: tuple[VerifiedFact, ...]
+    subject_identity: str
+    scenario_identity: str
+    trial_evidence_roots: tuple[str, ...]
+    reliability_sha256: str
+    critical_violations: int
 
-    def __post_init__(self) -> None:
-        roots: set[str] = set()
-        for fact in self.facts:
-            if type(fact) is not VerifiedFact:
-                raise ValueError("criticality record accepts only exact VerifiedFact values")
-            if fact.claim.fact_kind is not FactKind.CRITICALITY:
-                raise ValueError("criticality record accepts only criticality facts")
-            if fact.fact_root in roots:
-                raise ValueError("criticality record contains duplicate fact roots")
-            roots.add(fact.fact_root)
-
-    @classmethod
-    def from_verified(cls, facts: tuple[VerifiedFact, ...]) -> Self:
-        return cls(facts=facts)
-
-    @classmethod
-    def from_graph(cls, graph: VerificationGraph) -> Self:
-        if type(graph) is not VerificationGraph:
-            raise ValueError("criticality derivation requires an exact VerificationGraph")
-        return cls(
-            facts=tuple(
-                fact
-                for fact in graph.facts
-                if fact.claim.fact_kind is FactKind.CRITICALITY
+    def __init__(
+        self,
+        *,
+        subject_identity: str,
+        scenario_identity: str,
+        trial_evidence_roots: tuple[str, ...],
+        reliability_sha256: str,
+        critical_violations: int,
+        _issuer: object,
+    ) -> None:
+        if _issuer is not _VERIFIED_CRITICALITY_ISSUER:
+            raise TypeError(
+                "VerifiedCriticalityRecord can only be issued by evaluator release verification"
             )
-        )
+        _require_sha256(subject_identity, "criticality subject_identity")
+        _require_sha256(scenario_identity, "criticality scenario_identity")
+        if not trial_evidence_roots:
+            raise ValueError("criticality record requires finalized trial evidence roots")
+        for root in trial_evidence_roots:
+            _require_sha256(root, "criticality trial evidence root")
+        if len(set(trial_evidence_roots)) != len(trial_evidence_roots):
+            raise ValueError("criticality record trial evidence roots must be unique")
+        _require_sha256(reliability_sha256, "criticality reliability_sha256")
+        if (
+            isinstance(critical_violations, bool)
+            or not isinstance(critical_violations, int)
+            or critical_violations < 0
+        ):
+            raise ValueError("critical_violations must be a non-negative integer")
+        object.__setattr__(self, "subject_identity", subject_identity)
+        object.__setattr__(self, "scenario_identity", scenario_identity)
+        object.__setattr__(self, "trial_evidence_roots", trial_evidence_roots)
+        object.__setattr__(self, "reliability_sha256", reliability_sha256)
+        object.__setattr__(self, "critical_violations", critical_violations)
 
-    @property
-    def count(self) -> int:
-        return len(self.facts)
+
+def _issue_verified_criticality_record(
+    *,
+    subject_identity: str,
+    scenario_identity: str,
+    trial_evidence_roots: tuple[str, ...],
+    reliability_sha256: str,
+    critical_violations: int,
+) -> VerifiedCriticalityRecord:
+    return VerifiedCriticalityRecord(
+        subject_identity=subject_identity,
+        scenario_identity=scenario_identity,
+        trial_evidence_roots=trial_evidence_roots,
+        reliability_sha256=reliability_sha256,
+        critical_violations=critical_violations,
+        _issuer=_VERIFIED_CRITICALITY_ISSUER,
+    )
 
 
 class EvidenceChainLink(BaseModel):
