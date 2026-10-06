@@ -261,6 +261,8 @@ if qualified != QUALITY_PYTHONS:
 policy = job_block(workflow, "policy", "quality")
 if "python .github/scripts/validate_runtime_policy.py" not in policy:
     fail("policy job must execute validate_runtime_policy.py")
+if "python .github/scripts/validate_security_stack.py" not in policy:
+    fail("policy job must execute the mandatory security scanner-stack validator")
 if "python .github/scripts/validate_workflow_graph.py --self-test" not in policy:
     fail("policy job must self-test the semantic workflow graph validator")
 if "python .github/scripts/validate_workflow_graph.py" not in policy:
