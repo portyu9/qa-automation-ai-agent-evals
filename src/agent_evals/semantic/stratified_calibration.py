@@ -208,8 +208,7 @@ class StratifiedCalibrationReceipt(BaseModel):
         validated_profile = _revalidate_profile(judge_profile)
         validated_policy = _revalidate_policy(policy)
         validated_observations = tuple(
-            _revalidate_stratified_observation(observation)
-            for observation in observations
+            _revalidate_stratified_observation(observation) for observation in observations
         )
         canonical = _canonical_partition(validated_observations)
         derived = _derive_stratified_metrics(
@@ -244,9 +243,7 @@ class StratifiedCalibrationReceipt(BaseModel):
     def require_accepted_holdout(self) -> SemanticCalibrationReceipt:
         """Return the exact v2 holdout receipt only after stratified qualification succeeds."""
 
-        validated = StratifiedCalibrationReceipt.model_validate_json(
-            self.model_dump_json()
-        )
+        validated = StratifiedCalibrationReceipt.model_validate_json(self.model_dump_json())
         if not validated.accepted:
             raise ValueError("stratified semantic calibration is not accepted")
         return validated.holdout_receipt
