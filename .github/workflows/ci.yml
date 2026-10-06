@@ -77,6 +77,41 @@ jobs:
       - name: Self-test coverage policy
         run: python .github/scripts/check_coverage_policy.py --self-test
 
+  actions-security:
+    name: Actions security / actionlint + zizmor
+    needs: policy
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout exact workflow subject
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install hash-verified actionlint
+        shell: bash
+        run: |
+          set -euo pipefail
+          archive="$RUNNER_TEMP/actionlint.tar.gz"
+          install_dir="$RUNNER_TEMP/actionlint"
+          curl --fail --silent --show-error --location             --output "$archive"             https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_linux_amd64.tar.gz
+          printf '%s  %s\n'             '8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8'             "$archive" | sha256sum --check --strict
+          mkdir -p "$install_dir"
+          tar -xzf "$archive" -C "$install_dir"
+          "$install_dir/actionlint" -version
+          "$install_dir/actionlint" -color
+      - name: Audit GitHub Actions with pinned zizmor
+        uses: zizmorcore/zizmor-action@cc914d7f3750a2d13d75c7f184a1060aa0e9d482 # v0.6.4
+        with:
+          version: "1.30.1"
+          online-audits: "false"
+          advanced-security: "false"
+          annotations: "true"
+          persona: "regular"
+          min-severity: "medium"
+          min-confidence: "medium"
+
   quality:
     name: Quality / Python ${{ matrix.python-version }}
     needs: policy
@@ -807,6 +842,7 @@ jobs:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs:
       - policy
+      - actions-security
       - quality
       - compatibility
       - mutation
@@ -843,6 +879,7 @@ jobs:
             --run-attempt "$GITHUB_RUN_ATTEMPT" \
             --event "$GITHUB_EVENT_NAME" \
             --job-result "policy=${{ needs.policy.result }}" \
+            --job-result "actions-security=${{ needs['actions-security'].result }}" \
             --job-result "quality=${{ needs.quality.result }}" \
             --job-result "compatibility=${{ needs.compatibility.result }}" \
             --job-result "mutation=${{ needs.mutation.result }}" \
@@ -1121,6 +1158,7 @@ jobs:
     if: always()
     needs:
       - policy
+      - actions-security
       - quality
       - compatibility
       - mutation
@@ -1139,6 +1177,7 @@ jobs:
       - name: Evaluate required CI jobs
         env:
           POLICY: ${{ needs.policy.result }}
+          ACTIONS_SECURITY: ${{ needs['actions-security'].result }}
           QUALITY: ${{ needs.quality.result }}
           COMPATIBILITY: ${{ needs.compatibility.result }}
           MUTATION: ${{ needs.mutation.result }}
@@ -1153,7 +1192,7 @@ jobs:
           RELEASE_SUPPLY_CHAIN_REVERIFY: ${{ needs['release-supply-chain-reverify'].result }}
         run: |
           set -euo pipefail
-          for result in "$POLICY" "$QUALITY" "$COMPATIBILITY" "$MUTATION" "$OPENAI_ADAPTER" "$MCP_LAB" "$MCP_REMOTE_AUTH" "$MCP_OAUTH_FLOW" "$PACKAGE" "$PACKAGE_REVERIFY" "$PACKAGE_REPRODUCE" "$RELEASE_SUPPLY_CHAIN" "$RELEASE_SUPPLY_CHAIN_REVERIFY"; do
+          for result in "$POLICY" "$ACTIONS_SECURITY" "$QUALITY" "$COMPATIBILITY" "$MUTATION" "$OPENAI_ADAPTER" "$MCP_LAB" "$MCP_REMOTE_AUTH" "$MCP_OAUTH_FLOW" "$PACKAGE" "$PACKAGE_REVERIFY" "$PACKAGE_REPRODUCE" "$RELEASE_SUPPLY_CHAIN" "$RELEASE_SUPPLY_CHAIN_REVERIFY"; do
             [[ "$result" == "success" ]] || { echo "required job result=$result"; exit 1; }
           done
 
