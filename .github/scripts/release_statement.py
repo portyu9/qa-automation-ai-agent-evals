@@ -381,16 +381,16 @@ def self_test() -> None:
             path.mkdir(parents=True, exist_ok=True)
         (repo_root / "pyproject.toml").write_text(
             (
-                '[project]\n'
+                "[project]\n"
                 'name = "qa-automation-ai-agent-evals"\n'
                 'version = "1.2.3"\n'
                 'requires-python = ">=3.11,<3.15"\n'
                 'dependencies = ["pydantic>=2,<3"]\n'
-                'classifiers = [\n'
+                "classifiers = [\n"
                 '  "Programming Language :: Python :: 3.11",\n'
                 '  "Programming Language :: Python :: 3.14",\n'
-                ']\n'
-                '[project.optional-dependencies]\n'
+                "]\n"
+                "[project.optional-dependencies]\n"
                 'openai = ["openai-agents==0.22.3"]\n'
                 'dev = ["pytest>=9,<10"]\n'
             ),
