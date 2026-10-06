@@ -58,11 +58,11 @@ jobs:
           files=(
             pyproject.toml
             requirements/compatibility/core-minimum-py311.txt
-            requirements/compatibility/core-latest-py311.txt
+            requirements/compatibility/core-latest-py314.txt
             requirements/compatibility/mcp-minimum-py311.txt
-            requirements/compatibility/mcp-latest-py311.txt
+            requirements/compatibility/mcp-latest-py314.txt
             requirements/compatibility/openai-mcp-minimum-py311.txt
-            requirements/compatibility/openai-mcp-latest-py311.txt
+            requirements/compatibility/openai-mcp-latest-py314.txt
           )
           mkdir -p candidate-source
           for path in "${files[@]}"; do
