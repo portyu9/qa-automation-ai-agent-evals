@@ -11,6 +11,7 @@ from typing import Any
 from pydantic import ValidationError
 
 from agent_evals.adapters.base import AdapterPreconditionError, AdapterResult, AgentAdapter
+from agent_evals.adapters.conformance import AdapterConformanceError, validate_adapter_result
 from agent_evals.adapters.replay import EvidenceReplayAdapter
 from agent_evals.contracts.models import EvaluationScenario, SubjectFingerprint
 from agent_evals.evidence.models import EvidenceEvent, EvidenceKind, TrialEvidence, TrialVerdict
@@ -256,7 +257,9 @@ class TrialRunner:
                 elapsed_ms=(perf_counter() - started) * 1000.0,
             )
 
-        if not isinstance(result, AdapterResult):
+        try:
+            result = validate_adapter_result(result)
+        except AdapterConformanceError:
             return self._invalid_adapter_result(
                 adapter=adapter,
                 subject=subject,
