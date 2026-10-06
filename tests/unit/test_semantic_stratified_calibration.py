@@ -5,6 +5,8 @@ import json
 import pytest
 from pydantic import ValidationError
 
+import agent_evals.semantic as semantic
+
 from agent_evals.semantic.calibration import (
     SemanticCalibrationCase,
     SemanticCalibrationObservation,
@@ -389,3 +391,32 @@ def test_risk_requirements_must_be_unique_and_canonical() -> None:
                 CalibrationRiskTagRequirement(tag="risk-a"),
             )
         )
+
+
+def test_development_support_minimum_is_noncompensatory() -> None:
+    policy = _stratified_policy()
+    policy = policy.model_copy(update={"min_development_cases": 2})
+    receipt = StratifiedCalibrationReceipt.create(
+        judge_profile=_profile(),
+        policy=policy,
+        observations=_passing_partition(),
+    )
+
+    assert receipt.validation_receipt.accepted is True
+    assert receipt.holdout_receipt.accepted is True
+    assert receipt.accepted is False
+
+
+def test_stratified_calibration_contracts_are_public_semantic_api() -> None:
+    expected = {
+        "CalibrationRiskSupport",
+        "CalibrationRiskTagRequirement",
+        "CalibrationSplit",
+        "StratifiedCalibrationObservation",
+        "StratifiedCalibrationPolicy",
+        "StratifiedCalibrationReceipt",
+    }
+
+    assert expected <= set(semantic.__all__)
+    for name in expected:
+        assert getattr(semantic, name) is not None
