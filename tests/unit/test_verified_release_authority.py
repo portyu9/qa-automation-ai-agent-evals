@@ -61,8 +61,7 @@ def test_producer_capabilities_are_bound_to_exact_authority_instance() -> None:
         )
 
 
-def test_release_gate_can_derive_noncompensatory_criticality_from_verified_records(
-) -> None:
+def test_release_gate_derives_criticality_from_verified_graph() -> None:
     report = ReliabilityReport.from_verdicts((TrialVerdict.PASS,))
     policy = ReleasePolicy(
         min_resolved_trials=1,
