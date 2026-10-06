@@ -3,9 +3,10 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
 from typer.testing import CliRunner
 
-from agent_evals import cli
+from agent_evals import cli, operator
 from agent_evals.contracts.models import (
     AuthorityPolicy,
     EvaluationScenario,
@@ -66,7 +67,9 @@ def test_help_exposes_operator_surface_and_completion() -> None:
         "ci",
     ):
         assert command in help_text
-    assert "--install-completion" in help_text
+    completion = runner.invoke(cli.app, ["--show-completion", "bash"])
+    assert completion.exit_code == 0
+    assert completion.stdout.strip()
 
 
 def test_scenario_validate_and_jsonl_explain(tmp_path: Path) -> None:
@@ -219,3 +222,187 @@ def test_invalid_config_schema_fails_as_usage_error(tmp_path: Path) -> None:
     result = runner.invoke(cli.app, ["--config", str(config), "doctor"])
     assert result.exit_code == cli.EXIT_USAGE
     assert "operator config schema_version" in result.stderr
+
+def test_config_environment_and_validation_branches(tmp_path: Path) -> None:
+    valid = _write(
+        tmp_path / "valid-config.json",
+        {"schema_version": "agent-evals/operator-config/v1", "output_format": "json"},
+    )
+    env_result = runner.invoke(
+        cli.app,
+        ["doctor"],
+        env={"AGENT_EVALS_CONFIG": str(valid)},
+    )
+    assert env_result.exit_code == 0
+
+    not_object = _write(tmp_path / "list-config.json", ["not", "an", "object"])
+    rejected_object = runner.invoke(cli.app, ["--config", str(not_object), "doctor"])
+    assert rejected_object.exit_code == cli.EXIT_USAGE
+    assert "must be a JSON object" in rejected_object.stderr
+
+    unknown = _write(
+        tmp_path / "unknown-config.json",
+        {"schema_version": "agent-evals/operator-config/v1", "unexpected": True},
+    )
+    rejected_unknown = runner.invoke(cli.app, ["--config", str(unknown), "doctor"])
+    assert rejected_unknown.exit_code == cli.EXIT_USAGE
+    assert "unknown keys" in rejected_unknown.stderr
+
+    rejected_format = runner.invoke(cli.app, ["--format", "xml", "doctor"])
+    assert rejected_format.exit_code == cli.EXIT_USAGE
+    assert "--format must be json or jsonl" in rejected_format.stderr
+
+
+def test_explain_errors_include_non_authoritative_proof_chain(tmp_path: Path) -> None:
+    baseline = _write(tmp_path / "baseline.json", ["pass", "fail"])
+    invalid = _write(tmp_path / "invalid.json", ["pass", "not-a-verdict"])
+
+    result = runner.invoke(
+        cli.app,
+        ["--explain", "compare", str(baseline), str(invalid)],
+    )
+
+    assert result.exit_code == cli.EXIT_VALIDATION
+    payload = json.loads(result.stderr)
+    assert payload["status"] == "error"
+    assert payload["proof_chain"] == [
+        "the requested operation failed before an authoritative result"
+    ]
+
+
+def test_repository_policy_operator_pass_fail_and_missing(tmp_path: Path) -> None:
+    root = tmp_path / "repo"
+    scripts = (
+        ".github/scripts/validate_runtime_policy.py",
+        ".github/scripts/validate_security_stack.py",
+        ".github/scripts/validate_workflow_graph.py",
+    )
+    for relative in scripts:
+        path = root / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("print('ok')\n", encoding="utf-8")
+
+    passed = operator.check_repository_policy(root)
+    assert passed["status"] == "pass"
+    assert [item["status"] for item in passed["checks"]] == ["pass", "pass", "pass"]
+
+    failing_script = root / scripts[0]
+    failing_script.write_text(
+        "import sys\nprint('policy failed', file=sys.stderr)\nraise SystemExit(7)\n",
+        encoding="utf-8",
+    )
+    failed = operator.check_repository_policy(root)
+    assert failed["status"] == "fail"
+    assert failed["_exit_code"] == cli.EXIT_POLICY
+    assert failed["checks"][0]["returncode"] == 7
+    assert "policy failed" in failed["checks"][0]["stderr_tail"]
+
+    (root / scripts[1]).unlink()
+    missing = operator.check_repository_policy(root)
+    assert missing["status"] == "fail"
+    assert missing["checks"][1] == {
+        "script": scripts[1],
+        "status": "missing",
+    }
+
+    cli_result = runner.invoke(cli.app, ["ci", "check-policy", "--root", str(root)])
+    assert cli_result.exit_code == cli.EXIT_POLICY
+    assert json.loads(cli_result.stdout)["status"] == "fail"
+
+
+def test_operator_rejects_unsupported_report_and_verdict_shapes(tmp_path: Path) -> None:
+    unsupported = _write(
+        tmp_path / "unsupported-report.json",
+        {"schema_version": "agent-evals/assurance-report/v999"},
+    )
+    report = runner.invoke(cli.app, ["report", "verify", str(unsupported)])
+    assert report.exit_code == cli.EXIT_VALIDATION
+    assert "unsupported assurance report schema" in report.stderr
+
+    object_vector = _write(tmp_path / "object-vector.json", {"verdicts": ["pass", "fail"]})
+    assert tuple(
+        verdict.value
+        for verdict in operator._load_verdict_vector(object_vector, label="object vector")
+    ) == ("pass", "fail")
+
+    invalid_shape = _write(tmp_path / "invalid-shape.json", {"values": ["pass"]})
+    with pytest.raises(ValueError, match="must be a JSON verdict array"):
+        operator._load_verdict_vector(invalid_shape, label="invalid shape")
+
+    invalid_value = _write(tmp_path / "invalid-value.json", ["pass", "bogus"])
+    with pytest.raises(ValueError, match="contains an invalid trial verdict"):
+        operator._load_verdict_vector(invalid_value, label="invalid value")
+
+
+def test_deep_doctor_reports_unusable_configured_store(tmp_path: Path) -> None:
+    occupied = tmp_path / "not-a-directory"
+    occupied.write_text("occupied", encoding="utf-8")
+
+    payload = operator.deep_doctor(configured_store_root=occupied)
+
+    assert payload["status"] == "pass"
+    assert payload["checks"]["evidence_store"]["usable"] is False
+    assert "reason" in payload["checks"]["evidence_store"]
+
+
+def test_minimize_rejects_pass_and_replay_rejects_identity_drift(tmp_path: Path) -> None:
+    scenario = _scenario()
+    subject = _subject()
+    scenario_path = _write(tmp_path / "scenario.json", scenario.model_dump(mode="json"))
+    subject_path = _write(tmp_path / "subject.json", subject.model_dump(mode="json"))
+    passing = TrialEvidence(
+        trial_id="operator-passing-trial",
+        subject_identity=subject.identity,
+        scenario_identity=scenario.identity,
+        final_state={"status": "ok"},
+    )
+    evidence_path = _write(tmp_path / "passing.json", passing.model_dump(mode="json"))
+
+    minimized = runner.invoke(
+        cli.app,
+        ["minimize", str(evidence_path), str(scenario_path), str(subject_path)],
+    )
+    assert minimized.exit_code == cli.EXIT_VALIDATION
+    assert "minimize requires a non-PASS source trial" in minimized.stderr
+
+    other_subject = SubjectFingerprint.from_material(
+        provider="local",
+        model="fixture",
+        application_revision="different",
+        instructions="fixture",
+        tool_schema={},
+        policy={},
+        memory_policy={},
+        adapter="operator-scripted",
+        adapter_version="1",
+    )
+    other_subject_path = _write(
+        tmp_path / "other-subject.json",
+        other_subject.model_dump(mode="json"),
+    )
+    subject_mismatch = runner.invoke(
+        cli.app,
+        ["replay", str(evidence_path), str(scenario_path), str(other_subject_path)],
+    )
+    assert subject_mismatch.exit_code == cli.EXIT_VALIDATION
+    assert "subject identity does not match" in subject_mismatch.stderr
+
+    other_scenario = EvaluationScenario(
+        scenario_id="operator.smoke",
+        revision="2",
+        kind=ScenarioKind.REGRESSION,
+        objective="Reach the expected state.",
+        authority=AuthorityPolicy(),
+        required_outcomes={"status": "ok"},
+    )
+    other_scenario_path = _write(
+        tmp_path / "other-scenario.json",
+        other_scenario.model_dump(mode="json"),
+    )
+    scenario_mismatch = runner.invoke(
+        cli.app,
+        ["replay", str(evidence_path), str(other_scenario_path), str(subject_path)],
+    )
+    assert scenario_mismatch.exit_code == cli.EXIT_VALIDATION
+    assert "scenario identity does not match" in scenario_mismatch.stderr
+
