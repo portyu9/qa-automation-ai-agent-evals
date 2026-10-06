@@ -10,6 +10,8 @@ from agent_evals.oracles.codes import (
 )
 from agent_evals.oracles.deterministic import OracleResult
 
+__all__ = ["OracleFailure", "OracleFailureCode", "structured_oracle_failures"]
+
 
 @dataclass(frozen=True, slots=True)
 class OracleFailure:
