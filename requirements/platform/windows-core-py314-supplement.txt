@@ -1,0 +1,6 @@
+# Windows-only transitive supplement for platform smoke qualification.
+# The authoritative release/CI core lock remains requirements/locks/core-py314.txt.
+# colorama is selected only on Windows by Bandit's dependency metadata and is absent from
+# the repository's linux-x86_64 generated lock. Its wheel hash is pinned explicitly.
+colorama==0.4.6 ; sys_platform == "win32" \
+    --hash=sha256:4f1d9991f5acc0ca119f9d443620b77f9d6b33703e51011c16baf57afb285fc6
