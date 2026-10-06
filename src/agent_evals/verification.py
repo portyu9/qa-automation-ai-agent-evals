@@ -429,7 +429,9 @@ def _verification_graph_root(facts: tuple[VerifiedFact, ...]) -> str:
         root = fact.fact_root
         if root in seen:
             raise ValueError("verification graph contains duplicate fact roots")
-        missing = [dependency for dependency in fact.claim.dependencies if dependency not in seen]
+        missing = [
+            dependency for dependency in fact.claim.dependencies if dependency not in seen
+        ]
         if missing:
             raise ValueError(
                 "verification fact dependency is missing or not topologically prior: "
@@ -461,6 +463,18 @@ class VerifiedCriticalityRecord:
     @classmethod
     def from_verified(cls, facts: tuple[VerifiedFact, ...]) -> Self:
         return cls(facts=facts)
+
+    @classmethod
+    def from_graph(cls, graph: VerificationGraph) -> Self:
+        if type(graph) is not VerificationGraph:
+            raise ValueError("criticality derivation requires an exact VerificationGraph")
+        return cls(
+            facts=tuple(
+                fact
+                for fact in graph.facts
+                if fact.claim.fact_kind is FactKind.CRITICALITY
+            )
+        )
 
     @property
     def count(self) -> int:
