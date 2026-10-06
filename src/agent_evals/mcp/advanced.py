@@ -193,7 +193,9 @@ class MCPRemoteProbeObservation(BaseModel):
     def validate_condition_shape(self) -> Self:
         if self.condition is MCPRemoteCondition.HEALTHY:
             if not self.complete or not self.protocol_valid or not self.connected:
-                raise ValueError("healthy hosted MCP observation must complete a valid protocol response")
+                raise ValueError(
+                    "healthy hosted MCP observation must complete a valid protocol response"
+                )
             if self.http_status is None or not 200 <= self.http_status < 300:
                 raise ValueError("healthy hosted MCP observation requires a 2xx HTTP status")
             if self.observed_server_identity is None:
@@ -272,7 +274,8 @@ class MCPRemoteAssuranceReceipt(BaseModel):
             "covered_conditions": [item.value for item in covered],
             "accepted": accepted,
         }
-        return validate_receipt_construction(cls,
+        return validate_receipt_construction(
+            cls,
             endpoint=checked_endpoint,
             policy=checked_policy,
             observations=tuple(checked),
@@ -524,7 +527,8 @@ class MCPConcurrencyReceipt(BaseModel):
             "minimum_parallelism": minimum_parallelism,
             "accepted": accepted,
         }
-        return validate_receipt_construction(cls,
+        return validate_receipt_construction(
+            cls,
             operations=tuple(checked),
             peak_parallelism=peak,
             minimum_parallelism=minimum_parallelism,
@@ -595,7 +599,8 @@ class MCPMultiServerReceipt(BaseModel):
             "collision_names": list(collisions),
             "accepted": accepted,
         }
-        return validate_receipt_construction(cls,
+        return validate_receipt_construction(
+            cls,
             servers=tuple(checked),
             collision_names=collisions,
             accepted=accepted,
@@ -704,7 +709,8 @@ class MCPHostileServerReceipt(BaseModel):
             "covered_conditions": [item.value for item in covered],
             "accepted": accepted,
         }
-        return validate_receipt_construction(cls,
+        return validate_receipt_construction(
+            cls,
             budget=checked_budget,
             observations=tuple(checked),
             covered_conditions=covered,
@@ -975,7 +981,9 @@ def _remote_fault(
 
 
 def _peak_parallelism(operations: tuple[MCPConcurrentOperation, ...]) -> int:
-    ticks = sorted({item.started_tick for item in operations} | {item.completed_tick for item in operations})
+    ticks = sorted(
+        {item.started_tick for item in operations} | {item.completed_tick for item in operations}
+    )
     return max(
         sum(item.started_tick <= tick <= item.completed_tick for item in operations)
         for tick in ticks
@@ -1031,7 +1039,9 @@ def _canonical_json_bytes(value: object) -> bytes:
             allow_nan=False,
         ).encode("utf-8")
     except (TypeError, ValueError) as exc:
-        raise ValueError("MCP advanced assurance material must be finite JSON-compatible data") from exc
+        raise ValueError(
+            "MCP advanced assurance material must be finite JSON-compatible data"
+        ) from exc
 
 
 def _constant_equal(left: str, right: str) -> bool:
