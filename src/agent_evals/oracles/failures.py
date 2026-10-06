@@ -36,7 +36,10 @@ def structured_oracle_failures(result: OracleResult) -> tuple[OracleFailure, ...
 
     if type(result) is not OracleResult:
         raise ValueError("structured failure projection requires an exact OracleResult")
-    return tuple(OracleFailure(code=_classify(result.name, reason), reason=reason) for reason in result.reasons)
+    return tuple(
+        OracleFailure(code=_classify(result.name, reason), reason=reason)
+        for reason in result.reasons
+    )
 
 
 def _classify(name: str, reason: str) -> OracleFailureCode:
@@ -59,7 +62,11 @@ def _classify(name: str, reason: str) -> OracleFailureCode:
             return OracleFailureCode.POLICY_HANDOFF
         if "budget exceeded" in lowered or "tool-call budget" in lowered:
             return OracleFailureCode.POLICY_BUDGET
-        if "unauthorized" in lowered or "non-active agent" in lowered or "generating-agent" in lowered:
+        if (
+            "unauthorized" in lowered
+            or "non-active agent" in lowered
+            or "generating-agent" in lowered
+        ):
             return OracleFailureCode.POLICY_AUTHORITY
         return OracleFailureCode.POLICY_EXPLICIT
 
