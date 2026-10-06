@@ -10,6 +10,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 CODEQL_WORKFLOW = ROOT / ".github" / "workflows" / "codeql.yml"
 CI_WORKFLOW = ROOT / ".github" / "workflows" / "ci.yml"
+SCORECARD_WORKFLOW = ROOT / ".github" / "workflows" / "security-scorecard.yml"
 SCANNER_POLICY = ROOT / ".github" / "security-scanners.json"
 
 CODEQL_BY_SUFFIX = {
@@ -63,6 +64,7 @@ def main() -> int:
     files = tracked_files()
     workflow_text = CODEQL_WORKFLOW.read_text(encoding="utf-8")
     ci_workflow_text = CI_WORKFLOW.read_text(encoding="utf-8")
+    scorecard_workflow_text = SCORECARD_WORKFLOW.read_text(encoding="utf-8")
     discovered_codeql: set[str] = set()
 
     try:
@@ -76,6 +78,8 @@ def main() -> int:
         "pip-audit": ("installed-dependency-graph", "ci-gate"),
         "actionlint": ("github-actions-syntax-semantics", "ci-gate"),
         "zizmor": ("github-actions-security", "ci-gate"),
+        "dependency-review": ("pull-request-dependency-delta", "ci-gate"),
+        "scorecard": ("repository-security-posture", "scheduled-monitor"),
         "codeql": ("python-and-actions-sast", "protected-gate"),
     }
     if scanner_policy.get("schema_version") != "agent-evals/security-scanners/v1":
@@ -125,10 +129,21 @@ def main() -> int:
         "zizmor": "zizmorcore/zizmor-action@cc914d7f3750a2d13d75c7f184a1060aa0e9d482",
         "zizmor version": 'version: "1.30.1"',
         "Actions security gate": "- actions-security",
+        "dependency review": "actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294",
+        "dependency review gate": "- dependency-review",
     }
     for name, needle in ci_scanner_contracts.items():
         if needle not in ci_workflow_text:
             errors.append(f"CI workflow is missing mandatory {name} scanner contract")
+
+    scorecard_contracts = {
+        "pinned Scorecard action": "ossf/scorecard-action@2d1146689b8cda280b9bc96326124645441f03bc",
+        "scheduled Scorecard trigger": 'cron: "41 8 * * 2"',
+        "Scorecard SARIF upload": "github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2",
+    }
+    for name, needle in scorecard_contracts.items():
+        if needle not in scorecard_workflow_text:
+            errors.append(f"Scorecard workflow is missing {name}")
 
     for path in files:
         suffix = path.suffix.lower()
@@ -193,7 +208,8 @@ def main() -> int:
     ]
     suffix = f"; admin verification outstanding={sorted(unverified)}" if unverified else ""
     print(
-        "Security stack coverage contract: mandatory Bandit/pip-audit/actionlint/zizmor/CodeQL "
+        "Security stack coverage contract: mandatory Bandit/pip-audit/actionlint/zizmor/dependency-review/CodeQL "
+        "gates plus scheduled Scorecard monitoring "
         f"gates are declared and bound{suffix}"
     )
     return 0
