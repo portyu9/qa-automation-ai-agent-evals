@@ -1,4 +1,4 @@
-"""Deterministic retrieval provenance, ranking, poisoning, and delivery contracts."""
+"""Deterministic and production retrieval assurance contracts."""
 
 from agent_evals.retrieval.models import (
     RetrievalChunkSpec,
@@ -8,6 +8,14 @@ from agent_evals.retrieval.models import (
     RetrievalPoisonSpec,
     RetrievalQuerySpec,
     RetrievalRankerProfile,
+)
+from agent_evals.retrieval.production import (
+    RetrievalDocumentLifecycle,
+    RetrievalMode,
+    RetrievalPipelinePolicy,
+    RetrievalPipelineReceipt,
+    RetrievalPipelineViolation,
+    RetrievedDocumentObservation,
 )
 from agent_evals.retrieval.ranker import RetrievalHit, RetrievalResult, rank_corpus
 from agent_evals.retrieval.receipt import (
@@ -21,13 +29,19 @@ __all__ = [
     "RetrievalContractSpec",
     "RetrievalCorpusSpec",
     "RetrievalDeliveryReceipt",
+    "RetrievalDocumentLifecycle",
     "RetrievalHit",
     "RetrievalHitDigest",
+    "RetrievalMode",
+    "RetrievalPipelinePolicy",
+    "RetrievalPipelineReceipt",
+    "RetrievalPipelineViolation",
     "RetrievalPoisonRelation",
     "RetrievalPoisonSpec",
     "RetrievalQuerySpec",
     "RetrievalRankerProfile",
     "RetrievalReceiptError",
     "RetrievalResult",
+    "RetrievedDocumentObservation",
     "rank_corpus",
 ]
