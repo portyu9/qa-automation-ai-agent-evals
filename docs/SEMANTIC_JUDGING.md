@@ -198,6 +198,8 @@ The policy itself is content-addressed and embedded in the receipt. Changing acc
 
 For stricter empirical qualification, `StratifiedCalibrationReceipt` is an additive layer above the existing v2 calibration receipt. It does **not** reinterpret or replace `SemanticCalibrationReceipt/v2`; instead it partitions existing durable observations into explicit `development`, `validation`, and `holdout` strata and derives independent v2 receipts for validation and holdout.
 
+The stratified contract revalidates detached copies of the judge profile, policy, and every split observation before deriving acceptance. The holdout-release helper revalidates the complete stratified receipt again before returning the embedded v2 holdout receipt, so an in-process unchecked model copy cannot self-assert acceptance.
+
 The stratified contract enforces:
 
 - one exact calibration case identity may appear in only one split;
