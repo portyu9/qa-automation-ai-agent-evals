@@ -113,8 +113,10 @@ def generate_metamorphic_mutant(
 
     if type(base) is not EvaluationScenario:
         raise ValueError("metamorphic mutation requires an exact EvaluationScenario")
-    checked_base = EvaluationScenario.model_validate(base.model_dump(mode="json"))
-    checked_spec = MetamorphicMutationSpec.model_validate(spec.model_dump(mode="json"))
+    if type(spec) is not MetamorphicMutationSpec:
+        raise ValueError("metamorphic mutation requires an exact MetamorphicMutationSpec")
+    checked_base = EvaluationScenario.model_validate_json(base.model_dump_json())
+    checked_spec = MetamorphicMutationSpec.model_validate_json(spec.model_dump_json())
 
     state = dict(checked_base.initial_state)
     for key in checked_spec.drop_initial_state_keys:
@@ -156,6 +158,12 @@ class MetamorphicMutantOutcome(BaseModel):
 
     mutation: MetamorphicMutationRecord
     result: MetamorphicMutantResult
+
+    @model_validator(mode="after")
+    def require_exact_record(self) -> Self:
+        if type(self.mutation) is not MetamorphicMutationRecord:
+            raise ValueError("mutant outcome requires exact MetamorphicMutationRecord")
+        return self
 
 
 class MetamorphicEffectivenessPolicy(BaseModel):
@@ -211,11 +219,15 @@ class MetamorphicEffectivenessReport(BaseModel):
         policy: MetamorphicEffectivenessPolicy,
         outcomes: tuple[MetamorphicMutantOutcome, ...],
     ) -> Self:
-        checked_policy = MetamorphicEffectivenessPolicy.model_validate(policy.model_dump(mode="json"))
-        checked = tuple(
-            MetamorphicMutantOutcome.model_validate(item.model_dump(mode="json"))
-            for item in outcomes
-        )
+        if type(policy) is not MetamorphicEffectivenessPolicy:
+            raise ValueError("metamorphic effectiveness requires exact policy type")
+        checked_policy = MetamorphicEffectivenessPolicy.model_validate_json(policy.model_dump_json())
+        checked_list: list[MetamorphicMutantOutcome] = []
+        for item in outcomes:
+            if type(item) is not MetamorphicMutantOutcome:
+                raise ValueError("metamorphic effectiveness requires exact outcome values")
+            checked_list.append(MetamorphicMutantOutcome.model_validate_json(item.model_dump_json()))
+        checked = tuple(checked_list)
         parents = {item.mutation.parent_scenario_identity for item in checked}
         if len(parents) != 1:
             raise ValueError("metamorphic effectiveness report requires exactly one parent scenario")
