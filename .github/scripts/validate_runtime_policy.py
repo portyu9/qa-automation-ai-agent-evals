@@ -353,7 +353,9 @@ materialize_marker = "      - name: Materialize exact CI-qualified source contra
 materialize_start = publish_release.find(materialize_marker)
 if materialize_start < 0:
     fail("publish-release must materialize exact CI-qualified source contract data")
-materialize_end = publish_release.find("\n      - name:", materialize_start + len(materialize_marker))
+materialize_end = publish_release.find(
+    "\n      - name:", materialize_start + len(materialize_marker)
+)
 candidate_materialization = (
     publish_release[materialize_start:]
     if materialize_end < 0
