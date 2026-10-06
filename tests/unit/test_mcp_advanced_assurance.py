@@ -73,7 +73,8 @@ def _remote_observation(
         "endpoint_identity": endpoint.identity,
         "condition": condition,
         "dns_resolved": condition is not MCPRemoteCondition.DNS_FAILURE,
-        "tls_verified": condition not in {
+        "tls_verified": condition
+        not in {
             MCPRemoteCondition.TLS_FAILURE,
             MCPRemoteCondition.DNS_FAILURE,
             MCPRemoteCondition.PROXY_FAILURE,
@@ -276,8 +277,7 @@ def test_hostile_server_resource_limits_preserve_fault_classes() -> None:
     escaped = list(observations)
     escaped[0] = escaped[0].model_copy(update={"escaped_budget": True})
     assert (
-        MCPHostileServerReceipt.create(budget=budget, observations=tuple(escaped)).accepted
-        is False
+        MCPHostileServerReceipt.create(budget=budget, observations=tuple(escaped)).accepted is False
     )
 
 
