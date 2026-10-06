@@ -99,7 +99,7 @@ def test_registry_entry_binds_scenario_without_embedding_raw_body() -> None:
     assert "required_outcomes" not in serialized
 
     drifted = scenario.model_copy(update={"objective": "drifted objective"})
-    with pytest.raises(ValueError, match="identity|fingerprint"):
+    with pytest.raises(ValueError, match=r"identity|fingerprint"):
         entry.verify_scenario(drifted)
 
 
