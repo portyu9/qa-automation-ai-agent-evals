@@ -239,7 +239,7 @@ def test_config_environment_and_validation_branches(tmp_path: Path) -> None:
     not_object = _write(tmp_path / "list-config.json", ["not", "an", "object"])
     rejected_object = runner.invoke(cli.app, ["--config", str(not_object), "doctor"])
     assert rejected_object.exit_code == cli.EXIT_USAGE
-    assert "must be a JSON object" in rejected_object.stderr
+    assert "operator config JSON root must be an object" in rejected_object.stderr
 
     unknown = _write(
         tmp_path / "unknown-config.json",
