@@ -62,6 +62,10 @@ jobs:
         run: python .github/scripts/ci_qualification_evidence.py self-test
       - name: Validate repository-owned CI locks
         run: python .github/scripts/validate_ci_locks.py
+      - name: Self-test dependency compatibility policy
+        run: python .github/scripts/validate_dependency_compatibility.py --self-test
+      - name: Validate committed dependency compatibility locks
+        run: python .github/scripts/validate_dependency_compatibility.py
       - name: Self-test coverage policy
         run: python .github/scripts/check_coverage_policy.py --self-test
 
@@ -109,6 +113,79 @@ jobs:
         run: bandit -q -r src
       - name: Dependency audit
         run: pip-audit
+
+  compatibility:
+    name: Compatibility / ${{ matrix.profile }} / ${{ matrix.boundary }} / Python ${{ matrix.python-version }}
+    needs: policy
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - profile: core
+            boundary: minimum
+            python-version: "3.11"
+            lock: requirements/compatibility/core-minimum-py311.txt
+          - profile: core
+            boundary: latest
+            python-version: "3.11"
+            lock: requirements/compatibility/core-latest-py311.txt
+          - profile: mcp
+            boundary: minimum
+            python-version: "3.11"
+            lock: requirements/compatibility/mcp-minimum-py311.txt
+          - profile: mcp
+            boundary: latest
+            python-version: "3.11"
+            lock: requirements/compatibility/mcp-latest-py311.txt
+          - profile: openai-mcp
+            boundary: minimum
+            python-version: "3.11"
+            lock: requirements/compatibility/openai-mcp-minimum-py311.txt
+          - profile: openai-mcp
+            boundary: latest
+            python-version: "3.11"
+            lock: requirements/compatibility/openai-mcp-latest-py311.txt
+    steps:
+      - name: Checkout exact compatibility subject
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up boundary Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+      - name: Install exact hash-checked compatibility profile
+        run: |
+          python -m pip install --disable-pip-version-check --require-hashes -r "${{ matrix.lock }}"
+          python -m pip install --disable-pip-version-check --no-deps --no-build-isolation .
+      - name: Require a consistent installed dependency graph
+        run: python -m pip check
+      - name: Exercise deterministic boundary contract
+        env:
+          PROFILE: ${{ matrix.profile }}
+          OPENAI_AGENTS_DISABLE_TRACING: "1"
+          OPENAI_AGENTS_TRACE_INCLUDE_SENSITIVE_DATA: "0"
+        shell: bash
+        run: |
+          set -euo pipefail
+          case "$PROFILE" in
+            core)
+              pytest
+              ;;
+            mcp)
+              pytest -m "mcp or mcp_remote or mcp_oauth" tests/integration/test_mcp_*.py
+              ;;
+            openai-mcp)
+              pytest -m openai tests/integration/test_openai_*.py
+              ;;
+            *)
+              echo "::error::unsupported compatibility profile: $PROFILE"
+              exit 1
+              ;;
+          esac
 
   mutation:
     name: Mutation assurance / trust kernels
@@ -717,6 +794,7 @@ jobs:
     needs:
       - policy
       - quality
+      - compatibility
       - mutation
       - openai-adapter
       - mcp-lab
@@ -752,6 +830,7 @@ jobs:
             --event "$GITHUB_EVENT_NAME" \
             --job-result "policy=${{ needs.policy.result }}" \
             --job-result "quality=${{ needs.quality.result }}" \
+            --job-result "compatibility=${{ needs.compatibility.result }}" \
             --job-result "mutation=${{ needs.mutation.result }}" \
             --job-result "openai-adapter=${{ needs['openai-adapter'].result }}" \
             --job-result "mcp-lab=${{ needs['mcp-lab'].result }}" \
@@ -936,6 +1015,7 @@ jobs:
     needs:
       - policy
       - quality
+      - compatibility
       - mutation
       - openai-adapter
       - mcp-lab
@@ -953,6 +1033,7 @@ jobs:
         env:
           POLICY: ${{ needs.policy.result }}
           QUALITY: ${{ needs.quality.result }}
+          COMPATIBILITY: ${{ needs.compatibility.result }}
           MUTATION: ${{ needs.mutation.result }}
           OPENAI_ADAPTER: ${{ needs['openai-adapter'].result }}
           MCP_LAB: ${{ needs['mcp-lab'].result }}
@@ -965,7 +1046,7 @@ jobs:
           RELEASE_SUPPLY_CHAIN_REVERIFY: ${{ needs['release-supply-chain-reverify'].result }}
         run: |
           set -euo pipefail
-          for result in "$POLICY" "$QUALITY" "$MUTATION" "$OPENAI_ADAPTER" "$MCP_LAB" "$MCP_REMOTE_AUTH" "$MCP_OAUTH_FLOW" "$PACKAGE" "$PACKAGE_REVERIFY" "$PACKAGE_REPRODUCE" "$RELEASE_SUPPLY_CHAIN" "$RELEASE_SUPPLY_CHAIN_REVERIFY"; do
+          for result in "$POLICY" "$QUALITY" "$COMPATIBILITY" "$MUTATION" "$OPENAI_ADAPTER" "$MCP_LAB" "$MCP_REMOTE_AUTH" "$MCP_OAUTH_FLOW" "$PACKAGE" "$PACKAGE_REVERIFY" "$PACKAGE_REPRODUCE" "$RELEASE_SUPPLY_CHAIN" "$RELEASE_SUPPLY_CHAIN_REVERIFY"; do
             [[ "$result" == "success" ]] || { echo "required job result=$result"; exit 1; }
           done
 
