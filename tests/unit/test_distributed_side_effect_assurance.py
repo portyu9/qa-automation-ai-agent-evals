@@ -135,6 +135,15 @@ def test_target_system_acknowledgement_requires_external_crypto_verification_and
     with pytest.raises(ValueError, match="external cryptographic verification"):
         verify_target_acknowledgement(receipt=receipt, acknowledgement=unverified)
 
-    wrong_effect = acknowledgement.model_copy(update={"effect_sha256": "d" * 64})
+    wrong_effect = TargetEffectAcknowledgement.create(
+        target_system_identity="ledger-primary",
+        operation_identity="a" * 64,
+        effect_sha256="d" * 64,
+        acknowledgement_id="ack-9",
+        verification_key_sha256=_sha("target-key"),
+        algorithm="ed25519",
+        cryptographically_verified=True,
+        observed_at_unix_ms=1_000,
+    )
     with pytest.raises(ValueError, match="does not bind"):
         verify_target_acknowledgement(receipt=receipt, acknowledgement=wrong_effect)
