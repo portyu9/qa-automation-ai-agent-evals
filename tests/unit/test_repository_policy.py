@@ -17,6 +17,7 @@ def _policy_workspace(tmp_path: Path) -> Path:
     (workspace / ".github/coverage").mkdir(parents=True)
     (workspace / ".github/scripts").mkdir(parents=True)
     (workspace / "requirements/locks").mkdir(parents=True)
+    (workspace / "requirements/compatibility").mkdir(parents=True)
     (workspace / "src/agent_evals").mkdir(parents=True)
     shutil.copy2(_PROJECT_ROOT / "pyproject.toml", workspace / "pyproject.toml")
     shutil.copy2(
@@ -27,8 +28,14 @@ def _policy_workspace(tmp_path: Path) -> Path:
         _PROJECT_ROOT / ".github/scripts/validate_ci_locks.py",
         workspace / ".github/scripts/validate_ci_locks.py",
     )
+    shutil.copy2(
+        _PROJECT_ROOT / ".github/scripts/validate_dependency_compatibility.py",
+        workspace / ".github/scripts/validate_dependency_compatibility.py",
+    )
     for lock in (_PROJECT_ROOT / "requirements/locks").glob("*.txt"):
         shutil.copy2(lock, workspace / "requirements/locks" / lock.name)
+    for lock in (_PROJECT_ROOT / "requirements/compatibility").glob("*.txt"):
+        shutil.copy2(lock, workspace / "requirements/compatibility" / lock.name)
     shutil.copy2(
         _PROJECT_ROOT / ".github/workflows/ci.yml",
         workspace / ".github/workflows/ci.yml",
