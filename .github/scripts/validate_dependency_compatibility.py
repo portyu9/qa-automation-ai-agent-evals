@@ -9,21 +9,22 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 LOCK_DIR = ROOT / "requirements" / "compatibility"
 CONTRACT = "agent-evals/dependency-compatibility-lock/v1"
+BOUNDARY_PYTHONS = {"minimum": "3.11", "latest": "3.14"}
 EXPECTED = {
     "core-minimum-py311.txt": ("core", "minimum", "3.11", ()),
-    "core-latest-py311.txt": ("core", "latest", "3.11", ()),
+    "core-latest-py314.txt": ("core", "latest", "3.14", ()),
     "mcp-minimum-py311.txt": ("mcp", "minimum", "3.11", ("mcp",)),
-    "mcp-latest-py311.txt": ("mcp", "latest", "3.11", ("mcp",)),
+    "mcp-latest-py314.txt": ("mcp", "latest", "3.14", ("mcp",)),
     "openai-mcp-minimum-py311.txt": (
         "openai-mcp",
         "minimum",
         "3.11",
         ("openai", "mcp"),
     ),
-    "openai-mcp-latest-py311.txt": (
+    "openai-mcp-latest-py314.txt": (
         "openai-mcp",
         "latest",
-        "3.11",
+        "3.14",
         ("openai", "mcp"),
     ),
 }
@@ -329,15 +330,16 @@ def validate() -> None:
         )
 
     forbidden_core = {"mcp", "httpx2", "openai", "openai-agents", "starlette", "uvicorn"}
-    for boundary in ("minimum", "latest"):
-        core = parsed[f"core-{boundary}-py311.txt"]
+    for boundary, python_version in BOUNDARY_PYTHONS.items():
+        suffix = python_version.replace(".", "")
+        core = parsed[f"core-{boundary}-py{suffix}.txt"]
         contaminated = sorted(forbidden_core & set(core))
         if contaminated:
             raise CompatibilityPolicyError(
                 f"core {boundary} compatibility lock contains optional packages: {contaminated}"
             )
 
-        mcp = parsed[f"mcp-{boundary}-py311.txt"]
+        mcp = parsed[f"mcp-{boundary}-py{suffix}.txt"]
         if {"openai", "openai-agents"} & set(mcp):
             raise CompatibilityPolicyError(
                 f"MCP {boundary} compatibility lock is contaminated by OpenAI packages"
@@ -348,7 +350,7 @@ def validate() -> None:
                     f"MCP {boundary} compatibility lock is missing {required}"
                 )
 
-        combined = parsed[f"openai-mcp-{boundary}-py311.txt"]
+        combined = parsed[f"openai-mcp-{boundary}-py{suffix}.txt"]
         for required in ("mcp", "httpx2", "starlette", "uvicorn", "openai-agents"):
             if required not in combined:
                 raise CompatibilityPolicyError(
@@ -357,7 +359,8 @@ def validate() -> None:
 
     print(
         "dependency compatibility policy validated: "
-        "profiles=core,mcp,openai-mcp; boundaries=minimum,latest; python=3.11; "
+        "profiles=core,mcp,openai-mcp; "
+        "python-boundaries=minimum:3.11,latest:3.14; "
         "execution=committed-sha256-locks"
     )
 

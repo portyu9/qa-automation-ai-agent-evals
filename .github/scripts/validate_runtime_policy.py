@@ -8,6 +8,7 @@ import tomllib
 from pathlib import Path
 
 SUPPORTED_PYTHONS = ("3.11", "3.12", "3.13", "3.14")
+QUALITY_PYTHONS = (SUPPORTED_PYTHONS[0], SUPPORTED_PYTHONS[-1])
 REQUIRES_PYTHON = ">=3.11,<3.15"
 RUNNER = "ubuntu-24.04"
 REQUIRED_JOBS = (
@@ -254,8 +255,8 @@ matrix_match = re.search(r"python-version:\s*\[([^\]]+)\]", quality)
 if matrix_match is None:
     fail("quality job must declare an explicit python-version matrix")
 qualified = tuple(re.findall(r'"(3\.\d+)"', matrix_match.group(1)))
-if qualified != SUPPORTED_PYTHONS:
-    fail(f"quality matrix must qualify {SUPPORTED_PYTHONS}; found {qualified}")
+if qualified != QUALITY_PYTHONS:
+    fail(f"quality matrix must qualify endpoint interpreters {QUALITY_PYTHONS}; found {qualified}")
 
 policy = job_block(workflow, "policy", "quality")
 if "python .github/scripts/validate_runtime_policy.py" not in policy:
@@ -366,11 +367,11 @@ for required in (
     "application/vnd.github.raw+json",
     "pyproject.toml",
     "requirements/compatibility/core-minimum-py311.txt",
-    "requirements/compatibility/core-latest-py311.txt",
+    "requirements/compatibility/core-latest-py314.txt",
     "requirements/compatibility/mcp-minimum-py311.txt",
-    "requirements/compatibility/mcp-latest-py311.txt",
+    "requirements/compatibility/mcp-latest-py314.txt",
     "requirements/compatibility/openai-mcp-minimum-py311.txt",
-    "requirements/compatibility/openai-mcp-latest-py311.txt",
+    "requirements/compatibility/openai-mcp-latest-py314.txt",
 ):
     if required not in candidate_materialization:
         fail(f"publish-release candidate source materialization is missing: {required}")
@@ -382,11 +383,11 @@ for required in (
     "CI_COMMIT_SHA: ${{ steps.candidate.outputs.commit_sha }}",
     "application/vnd.github.raw+json",
     "requirements/compatibility/core-minimum-py311.txt",
-    "requirements/compatibility/core-latest-py311.txt",
+    "requirements/compatibility/core-latest-py314.txt",
     "requirements/compatibility/mcp-minimum-py311.txt",
-    "requirements/compatibility/mcp-latest-py311.txt",
+    "requirements/compatibility/mcp-latest-py314.txt",
     "requirements/compatibility/openai-mcp-minimum-py311.txt",
-    "requirements/compatibility/openai-mcp-latest-py311.txt",
+    "requirements/compatibility/openai-mcp-latest-py314.txt",
     "package-artifacts-${{ steps.candidate.outputs.ci_run_id }}",
     "run-id: ${{ steps.candidate.outputs.ci_run_id }}",
     "github-token: ${{ secrets.GITHUB_TOKEN }}",
@@ -502,14 +503,45 @@ for job, lock_path in locked_job_contracts.items():
 compatibility = job_block(workflow, "compatibility", "mutation")
 if not re.search(r"^\s+needs:\s*policy\s*$", compatibility, flags=re.MULTILINE):
     fail("compatibility must depend on the repository policy job")
+expected_compatibility_rows = (
+    """          - profile: core
+            boundary: minimum
+            python-version: "3.11"
+            lock: requirements/compatibility/core-minimum-py311.txt""",
+    """          - profile: core
+            boundary: latest
+            python-version: "3.14"
+            lock: requirements/compatibility/core-latest-py314.txt""",
+    """          - profile: mcp
+            boundary: minimum
+            python-version: "3.11"
+            lock: requirements/compatibility/mcp-minimum-py311.txt""",
+    """          - profile: mcp
+            boundary: latest
+            python-version: "3.14"
+            lock: requirements/compatibility/mcp-latest-py314.txt""",
+    """          - profile: openai-mcp
+            boundary: minimum
+            python-version: "3.11"
+            lock: requirements/compatibility/openai-mcp-minimum-py311.txt""",
+    """          - profile: openai-mcp
+            boundary: latest
+            python-version: "3.14"
+            lock: requirements/compatibility/openai-mcp-latest-py314.txt""",
+)
+for row in expected_compatibility_rows:
+    if row not in compatibility:
+        fail(f"compatibility matrix is missing exact endpoint row: {row!r}")
+if compatibility.count("          - profile: ") != len(expected_compatibility_rows):
+    fail("compatibility matrix must contain exactly the six governed endpoint rows")
 for required in (
     "name: Compatibility / ${{ matrix.profile }} / ${{ matrix.boundary }} / Python ${{ matrix.python-version }}",
     "core-minimum-py311.txt",
-    "core-latest-py311.txt",
+    "core-latest-py314.txt",
     "mcp-minimum-py311.txt",
-    "mcp-latest-py311.txt",
+    "mcp-latest-py314.txt",
     "openai-mcp-minimum-py311.txt",
-    "openai-mcp-latest-py311.txt",
+    "openai-mcp-latest-py314.txt",
     "--require-hashes",
     '"${{ matrix.lock }}"',
     "--no-deps --no-build-isolation .",
@@ -906,7 +938,7 @@ if not any(action.startswith("actions/download-artifact@") for action in ci_acti
 
 print(
     "runtime policy validated: "
-    f"python={','.join(SUPPORTED_PYTHONS)}; requires-python={REQUIRES_PYTHON}; "
+    f"python={','.join(SUPPORTED_PYTHONS)}; quality-endpoints={','.join(QUALITY_PYTHONS)}; requires-python={REQUIRES_PYTHON}; "
     f"runner={RUNNER}; workflows={len(workflows)}; gate=ci-gate+protected-codeql; "
     "package-artifacts=hashed-locks+minimum-latest-compatibility+retained-reverified-reproduced-with-spdx-license-evidence+signed-ci-qualification+attested-release-statement+trusted-main-oidc-provenance+default-branch-published"
 )
