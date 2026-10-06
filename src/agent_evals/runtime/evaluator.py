@@ -13,7 +13,9 @@ from dataclasses import dataclass, field
 from time import perf_counter
 
 from agent_evals.adapters.base import AdapterPreconditionError, AdapterResult, AgentAdapter
+from agent_evals.adapters.replay import EvidenceReplayAdapter
 from agent_evals.contracts.models import EvaluationScenario, SubjectFingerprint
+from agent_evals.evidence.models import EvidenceKind, TrialEvidence
 from agent_evals.runtime._evaluator_core import (
     EvaluatedTrial as _CoreEvaluatedTrial,
 )
@@ -24,6 +26,12 @@ from agent_evals.runtime.metric_provenance import (
     RuntimeMetricProvenance,
     resolve_metric_provenance,
 )
+from agent_evals.runtime.timing_provenance import EvaluatorTimingProvenance
+from agent_evals.verification import (
+    PrivilegedProducerRole,
+    ProducerCapability,
+    ProducerCapabilityAuthority,
+)
 
 _REJECTED_ADAPTER_NAME = "metric-provenance-rejected"
 
@@ -33,11 +41,39 @@ class EvaluatedTrial(_CoreEvaluatedTrial):
     """Core evaluated trial plus optional evaluator-owned metric provenance."""
 
     metric_provenance: RuntimeMetricProvenance | None = field(default=None, kw_only=True)
+    timing_provenance: EvaluatorTimingProvenance | None = field(default=None, kw_only=True)
+    producer_capability_authority: ProducerCapabilityAuthority | None = field(
+        default=None,
+        kw_only=True,
+        repr=False,
+        compare=False,
+    )
+    producer_capabilities: tuple[ProducerCapability, ...] = field(
+        default=(),
+        kw_only=True,
+        compare=False,
+    )
 
     def __post_init__(self) -> None:
         _CoreEvaluatedTrial.__post_init__(self)
         if self.metric_provenance is not None:
             self.metric_provenance.validate_against_evidence(self.evidence)
+        if self.timing_provenance is not None:
+            self.timing_provenance.validate_against_evidence(self.evidence)
+            if self.evaluator_elapsed_ms != self.timing_provenance.elapsed_ms:
+                raise ValueError(
+                    "evaluator timing provenance elapsed_ms does not match finalized trial timing"
+                )
+        if self.producer_capabilities:
+            authority = self.producer_capability_authority
+            if authority is None:
+                raise ValueError("producer capabilities require their run-local issuing authority")
+            for capability in self.producer_capabilities:
+                authority.require(
+                    capability,
+                    role=capability.role,
+                    producer_id=capability.producer_id,
+                )
 
 
 class _RejectedMetricProvenanceAdapter:
@@ -94,6 +130,14 @@ class TrialRunner(_CoreTrialRunner):
             origin=origin,
             assertion=assertion,
         )
+        timing_provenance = EvaluatorTimingProvenance.create(
+            evaluated.evidence,
+            elapsed_ms=evaluator_elapsed_ms,
+        )
+        producer_authority, producer_capabilities = _issue_verified_producer_capabilities(
+            execution_adapter,
+            evaluated.evidence,
+        )
         return EvaluatedTrial(
             evidence=evaluated.evidence,
             oracle_results=evaluated.oracle_results,
@@ -101,4 +145,65 @@ class TrialRunner(_CoreTrialRunner):
             semantic_judgment=evaluated.semantic_judgment,
             evaluator_elapsed_ms=evaluator_elapsed_ms,
             metric_provenance=metric_provenance,
+            timing_provenance=timing_provenance,
+            producer_capability_authority=producer_authority,
+            producer_capabilities=producer_capabilities,
         )
+
+
+_PRIVILEGED_EVENT_ROLES: dict[EvidenceKind, PrivilegedProducerRole] = {
+    EvidenceKind.ATTACK_DELIVERY: PrivilegedProducerRole.ATTACK_INJECTOR,
+    EvidenceKind.PROTOCOL_DELIVERY: PrivilegedProducerRole.PROTOCOL_BRIDGE,
+    EvidenceKind.APPROVAL_DECISION: PrivilegedProducerRole.APPROVAL_CONTROLLER,
+    EvidenceKind.RETRIEVAL_DELIVERY: PrivilegedProducerRole.RETRIEVAL_BRIDGE,
+    EvidenceKind.SIDE_EFFECT_OBSERVATION: PrivilegedProducerRole.SIDE_EFFECT_OBSERVER,
+    EvidenceKind.SEMANTIC_JUDGMENT: PrivilegedProducerRole.SEMANTIC_VERIFIER,
+}
+
+
+_PRODUCER_AUTHORITY_REJECTION_CODES = frozenset(
+    {
+        "attack_delivery_live_injection",
+        "protocol_delivery_live_injection",
+        "approval_decision_live_injection",
+        "retrieval_delivery_live_injection",
+        "side_effect_observation_live_injection",
+        "semantic_judgment_live_injection",
+    }
+)
+
+
+def _issue_verified_producer_capabilities(
+    adapter: AgentAdapter,
+    evidence: TrialEvidence,
+) -> tuple[ProducerCapabilityAuthority | None, tuple[ProducerCapability, ...]]:
+    """Issue run-local capabilities only after core exact-type authority checks succeeded."""
+
+    if type(adapter) is EvidenceReplayAdapter:
+        return None, ()
+
+    rejected_producer_authority = any(
+        event.kind is EvidenceKind.EVALUATION_ERROR
+        and event.payload.get("code") in _PRODUCER_AUTHORITY_REJECTION_CODES
+        for event in evidence.events
+    )
+    if rejected_producer_authority:
+        return None, ()
+
+    privileged_events = tuple(
+        event for event in evidence.events if event.kind in _PRIVILEGED_EVENT_ROLES
+    )
+    if not privileged_events:
+        return None, ()
+
+    authority = ProducerCapabilityAuthority()
+    seen: set[tuple[PrivilegedProducerRole, str]] = set()
+    capabilities: list[ProducerCapability] = []
+    for event in privileged_events:
+        role = _PRIVILEGED_EVENT_ROLES[event.kind]
+        identity = (role, event.source)
+        if identity in seen:
+            continue
+        seen.add(identity)
+        capabilities.append(authority.issue(role=role, producer_id=event.source))
+    return authority, tuple(capabilities)

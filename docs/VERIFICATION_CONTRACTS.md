@@ -1,0 +1,108 @@
+# Verification Contracts
+
+The verification layer is additive to the framework's historical evidence and assurance schemas. It
+exists to make new authority-bearing integrations explicit without changing what old hashes mean.
+
+## Historical contracts that do not change
+
+- Trial evidence remains agent-evals/trial-evidence/v2 with root domain
+  agent-evals/trial-evidence/v2\0.
+- Assurance Report v6 remains agent-evals/assurance-report/v6; its historical verifier and root
+  semantics are not widened by the new verification objects.
+- Existing attack, protocol, retrieval, side-effect, approval, and semantic receipt roots keep
+  their own domain-specific verifiers. A common receipt envelope never substitutes for them.
+- BLOCKED remains evaluator uncertainty/precondition failure, not subject FAIL.
+- Existing exact-type live-producer checks remain fail-closed authority while capability-backed
+  producer migration is introduced deliberately.
+
+## New additive schemas
+
+| Contract | Schema | Purpose |
+|---|---|---|
+| Verification fact | agent-evals/verification-fact/v1 | Bind one fact claim to exact material, context, dependencies, and a non-authorizing producer label. |
+| Verification graph | agent-evals/verification-graph/v1 | Commit to an ordered topological DAG of independently verified facts. |
+| Evidence chain | agent-evals/evidence-chain/v1 | Optional bounded previous-root chain over existing event digests for incremental verification. |
+| Evaluator timing | agent-evals/evaluator-timing/v1 | Bind evaluator-observed elapsed time to the explicit monotonic time.perf_counter clock. |
+| Typed event projection | agent-evals/event-payload/v1 | Validate historical event payloads into explicit kind-discriminated views without rewriting v2 evidence. |
+| Outcome selector | agent-evals/outcome-selector/v1 | Unambiguous JSON-pointer selectors for new contracts; historical dotted selectors remain legacy behavior. |
+| Receipt envelope | agent-evals/receipt-envelope/v1 | Common metadata/digest wrapper around domain-specific receipts without collapsing trust domains. |
+
+## Producer capabilities
+
+ProducerCapabilityAuthority issues run-local capabilities bound by object identity to one exact
+issuer. Cross-authority reuse, role substitution, and producer-ID substitution are rejected. This is
+an evaluator-process role-separation mechanism. It is not a cryptographic token, remote attestation,
+or sandbox against hostile Python already executing in the same interpreter.
+
+Serialized FactProducerRole values are also not authority. A VerificationFactClaim becomes a
+run-local VerifiedFact only when verify_fact_claim(...) independently recomputes the exact material
+digest and checks the caller-owned expected kind, name, producer role, dependencies, and context.
+
+The public TrialRunner issues producer-capability sidecars only after the core evaluator has already
+accepted the existing exact-type live-producer boundary. Exact replay receives no fresh live
+capability, and any trial containing a core *_live_injection producer-authority rejection receives
+no capability. The sidecar therefore records accepted run-local producer role; it does not replace
+the legacy exact-type gate or make a blocked forged event authoritative.
+
+## Release criticality
+
+The compatibility ReleaseGate.decide(..., critical_violations=...) API remains available so old
+callers are not silently reinterpreted. New hardened integrations first call
+verify_session_release_criticality(...) on an exact EvaluationSessionResult. That verifier
+revalidates finalized evidence roots, verdict-derived reliability, and session provenance, derives
+the existing non-compensatory criticality count, and issues a run-local VerifiedCriticalityRecord
+bound to the exact ReliabilityReport scalars and ordered final evidence roots. ReleaseGate
+decide_verified(...) accepts only that evaluator-issued record and rejects a different reliability
+report.
+
+Generic VerificationFact / VerificationGraph objects remain non-authorizing and cannot be promoted
+into release criticality merely because a caller selected a CRITICALITY label. The issued record is
+still process-local role separation rather than a signature, human identity assertion, provider
+attestation, or hostile same-process sandbox.
+
+## Typed event projections
+
+project_typed_event(...) validates an existing EvidenceEvent into a v1 kind-specific payload view.
+It does not alter the event digest or evidence root. Receipt-bearing event kinds require the common
+schema_version + receipt_root shape, while semantic correctness remains with the existing domain
+verifier.
+
+This separation is deliberate: schema discrimination improves machine handling; it does not confer
+producer authority.
+
+## Outcome selectors
+
+OutcomeSelectorV1 uses explicit JSON-pointer escaping (~0 for ~, ~1 for /). Therefore a flat key
+named a.b, a nested path a -> b, and a key containing / are distinct. Existing
+EvaluationScenario.required_outcomes / forbidden_outcomes retain their historical dotted-path
+semantics until a future explicitly versioned scenario migration elects the new selector contract.
+
+## Oracle failure codes
+
+Current deterministic OracleResult values emit stable failure_codes alongside their human-readable
+reasons. structured_oracle_failures(...) consumes those emitted codes and falls back to reason
+classification only for historical/manual OracleResult values that predate the field. The original
+oracle still owns verdict and criticality; codes do not recompute or override grading.
+
+Assurance Report v6 intentionally remains unchanged and does not retroactively persist the new
+runtime codes. Persisting them in a report requires a future explicitly versioned report schema.
+
+## Common receipt envelopes
+
+ReceiptEnvelopeV1 binds the existing receipt schema, existing receipt root, exact event digest, and
+payload digest. Verifying the envelope proves only envelope integrity. Consumers must still invoke
+the attack/MCP/retrieval/side-effect/semantic verifier appropriate to that receipt domain.
+
+## Non-claims
+
+These contracts intentionally do not claim:
+
+- hashes are authentication or signatures;
+- run-local capabilities resist hostile same-process introspection;
+- a producer label authenticates a producer;
+- a receipt envelope upgrades the trust of its embedded receipt;
+- the previous-root chain is a Merkle membership proof;
+- evaluator timing is provider latency, CPU time, cancellation proof, or a latency attestation;
+- a typed payload projection proves the payload was truthfully produced;
+- structured failure codes replace deterministic oracle authority;
+- old persisted evidence is reinterpreted under new schema labels.
