@@ -10,7 +10,9 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from agent_evals.evidence.models import EvidenceEvent, EvidenceKind
 
-_RECEIPT_PROTOCOL: Literal["agent-evals/receipt-envelope/v1"] = "agent-evals/receipt-envelope/v1"
+_RECEIPT_PROTOCOL: Literal["agent-evals/receipt-envelope/v1"] = (
+    "agent-evals/receipt-envelope/v1"
+)
 _RECEIPT_DOMAIN = b"agent-evals/receipt-envelope/v1\0"
 
 
