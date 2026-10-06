@@ -105,7 +105,6 @@ class ReleaseGate:
         return GateResult(GateDecision.ACCEPT, ())
 
 
-
 def _reliability_report_sha256(report: ReliabilityReport) -> str:
     if type(report) is not ReliabilityReport:
         raise ValueError("report must be an exact ReliabilityReport")
