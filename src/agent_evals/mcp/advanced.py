@@ -343,6 +343,7 @@ class MCPCapabilityExerciseReceipt(BaseModel):
         _CAPABILITY_EXERCISE_SCHEMA
     )
     snapshot: MCPCapabilitySnapshot
+    required_capabilities: frozenset[MCPCapability] = frozenset(MCPCapability)
     observations: tuple[MCPCapabilityOperationObservation, ...] = Field(
         min_length=1,
         max_length=10_000,
@@ -357,9 +358,13 @@ class MCPCapabilityExerciseReceipt(BaseModel):
         *,
         snapshot: MCPCapabilitySnapshot,
         observations: tuple[MCPCapabilityOperationObservation, ...],
+        required_capabilities: frozenset[MCPCapability] = frozenset(MCPCapability),
     ) -> Self:
         _require_exact(snapshot, MCPCapabilitySnapshot, "MCP capability snapshot")
         checked_snapshot = MCPCapabilitySnapshot.model_validate_json(snapshot.model_dump_json())
+        checked_required = frozenset(MCPCapability(item) for item in required_capabilities)
+        if not checked_required:
+            raise ValueError("MCP capability exercise requires evaluator-owned capability expectations")
         checked: list[MCPCapabilityOperationObservation] = []
         for item in observations:
             _require_exact(
@@ -386,10 +391,14 @@ class MCPCapabilityExerciseReceipt(BaseModel):
                 key=lambda item: item.value,
             )
         )
-        accepted = checked_snapshot.capabilities <= set(exercised)
+        accepted = (
+            checked_required <= checked_snapshot.capabilities
+            and checked_required <= set(exercised)
+        )
         material = {
             "schema_version": _CAPABILITY_EXERCISE_SCHEMA,
             "snapshot": checked_snapshot.model_dump(mode="json"),
+            "required_capabilities": sorted(item.value for item in checked_required),
             "observations": [item.model_dump(mode="json") for item in checked],
             "exercised_capabilities": [item.value for item in exercised],
             "accepted": accepted,
@@ -397,6 +406,7 @@ class MCPCapabilityExerciseReceipt(BaseModel):
         return validate_receipt_construction(
             cls,
             snapshot=checked_snapshot,
+            required_capabilities=checked_required,
             observations=tuple(checked),
             exercised_capabilities=exercised,
             accepted=accepted,
@@ -407,7 +417,11 @@ class MCPCapabilityExerciseReceipt(BaseModel):
     def verify_receipt(self, info: ValidationInfo) -> Self:
         if is_receipt_construction(info):
             return self
-        rebuilt = type(self).create(snapshot=self.snapshot, observations=self.observations)
+        rebuilt = type(self).create(
+            snapshot=self.snapshot,
+            observations=self.observations,
+            required_capabilities=self.required_capabilities,
+        )
         if (
             self.exercised_capabilities != rebuilt.exercised_capabilities
             or self.accepted != rebuilt.accepted
