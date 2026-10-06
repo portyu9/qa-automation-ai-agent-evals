@@ -46,7 +46,7 @@ class ApprovalAuthenticationMethod(StrEnum):
     OIDC = "oidc"
     WEBAUTHN = "webauthn"
     MTLS = "mtls"
-    SIGNED_TOKEN = "signed-token"
+    SIGNED_TOKEN = "signed-token"  # nosec B105 - protocol authentication method label
 
 
 class ApprovalRole(StrEnum):
