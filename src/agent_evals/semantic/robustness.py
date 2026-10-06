@@ -86,7 +86,9 @@ class SemanticDriftObservation(BaseModel):
     @model_validator(mode="after")
     def require_distinct_profiles(self) -> Self:
         if self.baseline_profile_identity == self.candidate_profile_identity:
-            raise ValueError(\n                "semantic drift observation requires distinct judge profile identities"\n            )
+            raise ValueError(
+                "semantic drift observation requires distinct judge profile identities"
+            )
         return self
 
     @property
@@ -116,9 +118,7 @@ class SemanticAgreementObservation(BaseModel):
     @model_validator(mode="after")
     def require_canonical_distinct_pair(self) -> Self:
         if self.left_profile_identity >= self.right_profile_identity:
-            raise ValueError(
-                "semantic agreement profile identities must be distinct and canonical"
-            )
+            raise ValueError("semantic agreement profile identities must be distinct and canonical")
         return self
 
     @property
@@ -243,17 +243,13 @@ class SemanticRobustnessSummary(BaseModel):
         return cls(
             stability_observations=len(stability_checked),
             stability_changes=sum(item.changed for item in stability_checked),
-            stability_with_abstention=sum(
-                item.contains_abstention for item in stability_checked
-            ),
+            stability_with_abstention=sum(item.contains_abstention for item in stability_checked),
             drift_observations=len(drift_checked),
             drift_changes=sum(item.changed for item in drift_checked),
             drift_with_abstention=sum(item.contains_abstention for item in drift_checked),
             agreement_observations=len(agreement_checked),
             agreement_disagreements=sum(not item.agrees for item in agreement_checked),
-            agreement_with_abstention=sum(
-                item.contains_abstention for item in agreement_checked
-            ),
+            agreement_with_abstention=sum(item.contains_abstention for item in agreement_checked),
             ensemble_observations=len(ensemble_checked),
             ensemble_disagreements=sum(
                 item.consensus is SemanticEnsembleConsensus.DISAGREEMENT
