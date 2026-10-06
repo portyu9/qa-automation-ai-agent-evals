@@ -41,6 +41,10 @@ class MemoryAssurancePolicy(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     schema_version: Literal["agent-evals/memory-assurance-policy/v1"] = _POLICY_SCHEMA
+    record_id: str = Field(min_length=1, max_length=512)
+    owner_tenant_id: str = Field(min_length=1, max_length=256)
+    owner_user_id: str = Field(min_length=1, max_length=256)
+    content_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     require_persistence: bool = Field(default=True, strict=True)
     require_cross_user_isolation: bool = Field(default=True, strict=True)
     require_delete_enforcement: bool = Field(default=True, strict=True)
@@ -124,11 +128,16 @@ class MemoryAssuranceReceipt(BaseModel):
             checked.append(MemoryObservation.model_validate_json(item.model_dump_json()))
         if not checked:
             raise ValueError("memory assurance requires observations")
-        record_ids = {item.record_id for item in checked}
-        contents = {item.content_sha256 for item in checked}
-        owners = {(item.owner_tenant_id, item.owner_user_id) for item in checked}
-        if len(record_ids) != 1 or len(contents) != 1 or len(owners) != 1:
-            raise ValueError("memory assurance receipt must bind one immutable logical record")
+        if any(item.record_id != checked_policy.record_id for item in checked):
+            raise ValueError("memory observation record identity differs from evaluator policy")
+        if any(item.content_sha256 != checked_policy.content_sha256 for item in checked):
+            raise ValueError("memory observation content identity differs from evaluator policy")
+        if any(
+            item.owner_tenant_id != checked_policy.owner_tenant_id
+            or item.owner_user_id != checked_policy.owner_user_id
+            for item in checked
+        ):
+            raise ValueError("memory observation owner identity differs from evaluator policy")
         ticks = [item.tick for item in checked]
         if ticks != sorted(ticks):
             raise ValueError("memory observations must be ordered by nondecreasing tick")
