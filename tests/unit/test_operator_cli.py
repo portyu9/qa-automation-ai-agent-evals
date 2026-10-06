@@ -223,6 +223,7 @@ def test_invalid_config_schema_fails_as_usage_error(tmp_path: Path) -> None:
     assert result.exit_code == cli.EXIT_USAGE
     assert "operator config schema_version" in result.stderr
 
+
 def test_config_environment_and_validation_branches(tmp_path: Path) -> None:
     valid = _write(
         tmp_path / "valid-config.json",
@@ -405,4 +406,3 @@ def test_minimize_rejects_pass_and_replay_rejects_identity_drift(tmp_path: Path)
     )
     assert scenario_mismatch.exit_code == cli.EXIT_VALIDATION
     assert "scenario identity does not match" in scenario_mismatch.stderr
-
