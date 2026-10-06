@@ -376,7 +376,6 @@ def require_no_semantic_duplicates(
         raise ValueError("scenario corpus contains reviewer-confirmed semantic duplicates")
 
 
-
 def _revalidate_registry(value: ScenarioRegistry) -> ScenarioRegistry:
     if type(value) is not ScenarioRegistry:
         raise ValueError("scenario quality requires exact ScenarioRegistry")
