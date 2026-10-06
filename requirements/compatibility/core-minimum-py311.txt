@@ -4,7 +4,7 @@
 # Boundary: minimum
 # Python: 3.11
 # Artifact-Selection: linux-x86_64
-# Input-SHA256: b562ee08e96fc75d0250151e88d30c74de50dc130b0f48af0221af869dc309a6
+# Input-SHA256: 521a2cecc7e4ea71fb910826e445a815ab659286c09be6a4c9ecf4a41121952e
 # Compiler: pip==25.3; pip-tools==7.5.2
 # Regeneration contract: CI_DEPENDENCY_LOCKS.md
 # The following packages are considered to be unsafe in a requirements file:
