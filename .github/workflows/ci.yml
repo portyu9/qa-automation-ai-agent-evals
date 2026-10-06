@@ -125,18 +125,77 @@ jobs:
     timeout-minutes: 10
     permissions:
       contents: read
+    outputs:
+      review_state: ${{ steps.classify.outputs.state }}
     steps:
-      - name: Review dependency changes
+      - name: Verify dependency-graph precondition
+        id: dependency-graph
         if: github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          MERGE_SHA: ${{ github.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          response="$RUNNER_TEMP/dependency-review-capability.json"
+          status="$(
+            curl --silent --show-error --location \
+              --output "$response" \
+              --write-out '%{http_code}' \
+              --header "Accept: application/vnd.github+json" \
+              --header "Authorization: Bearer $GH_TOKEN" \
+              --header "X-GitHub-Api-Version: 2026-03-10" \
+              "https://api.github.com/repos/$GITHUB_REPOSITORY/dependency-graph/compare/$BASE_SHA...$MERGE_SHA"
+          )"
+          case "$status" in
+            200)
+              echo "state=available" >> "$GITHUB_OUTPUT"
+              ;;
+            404)
+              echo "state=blocked-admin-prerequisite" >> "$GITHUB_OUTPUT"
+              echo "::warning::Dependency review BLOCKED: repository dependency graph is not enabled; tracked by #193."
+              ;;
+            *)
+              cat "$response" >&2 || true
+              echo "::error::dependency-review precondition probe returned HTTP $status"
+              exit 1
+              ;;
+          esac
+      - name: Review dependency changes
+        if: github.event_name == 'pull_request' && steps.dependency-graph.outputs.state == 'available'
         uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
         with:
           fail-on-severity: "moderate"
           vulnerability-check: "true"
           license-check: "false"
           warn-only: "false"
+      - name: Record blocked repository prerequisite
+        if: github.event_name == 'pull_request' && steps.dependency-graph.outputs.state == 'blocked-admin-prerequisite'
+        run: |
+          echo "Dependency review is BLOCKED, not PASS or FAIL: dependency graph requires repository-administrator enablement."
       - name: Record non-PR applicability
         if: github.event_name != 'pull_request'
         run: echo "Dependency review is PR-delta authority; no dependency delta exists for this event."
+      - name: Classify dependency review state
+        id: classify
+        if: always()
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          GRAPH_STATE: ${{ steps.dependency-graph.outputs.state }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "$EVENT_NAME" != "pull_request" ]]; then
+            echo "state=not-applicable" >> "$GITHUB_OUTPUT"
+          elif [[ "$GRAPH_STATE" == "available" ]]; then
+            echo "state=passed" >> "$GITHUB_OUTPUT"
+          elif [[ "$GRAPH_STATE" == "blocked-admin-prerequisite" ]]; then
+            echo "state=blocked-admin-prerequisite" >> "$GITHUB_OUTPUT"
+          else
+            echo "::error::dependency-review state cannot be classified safely"
+            exit 1
+          fi
 
   quality:
     name: Quality / Python ${{ matrix.python-version }}
@@ -1221,6 +1280,7 @@ jobs:
           POLICY: ${{ needs.policy.result }}
           ACTIONS_SECURITY: ${{ needs['actions-security'].result }}
           DEPENDENCY_REVIEW: ${{ needs['dependency-review'].result }}
+          DEPENDENCY_REVIEW_STATE: ${{ needs['dependency-review'].outputs.review_state }}
           QUALITY: ${{ needs.quality.result }}
           COMPATIBILITY: ${{ needs.compatibility.result }}
           MUTATION: ${{ needs.mutation.result }}
@@ -1238,6 +1298,17 @@ jobs:
           for result in "$POLICY" "$ACTIONS_SECURITY" "$DEPENDENCY_REVIEW" "$QUALITY" "$COMPATIBILITY" "$MUTATION" "$OPENAI_ADAPTER" "$MCP_LAB" "$MCP_REMOTE_AUTH" "$MCP_OAUTH_FLOW" "$PACKAGE" "$PACKAGE_REVERIFY" "$PACKAGE_REPRODUCE" "$RELEASE_SUPPLY_CHAIN" "$RELEASE_SUPPLY_CHAIN_REVERIFY"; do
             [[ "$result" == "success" ]] || { echo "required job result=$result"; exit 1; }
           done
+          case "$DEPENDENCY_REVIEW_STATE" in
+            passed|not-applicable)
+              ;;
+            blocked-admin-prerequisite)
+              echo "::warning::dependency-review state=BLOCKED because the repository dependency graph is disabled; see #193"
+              ;;
+            *)
+              echo "::error::unrecognized dependency-review state=$DEPENDENCY_REVIEW_STATE"
+              exit 1
+              ;;
+          esac
 
   protected-gate:
     name: Package integrity
