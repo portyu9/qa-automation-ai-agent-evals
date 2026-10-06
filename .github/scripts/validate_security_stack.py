@@ -78,7 +78,7 @@ def main() -> int:
         "pip-audit": ("installed-dependency-graph", "ci-gate"),
         "actionlint": ("github-actions-syntax-semantics", "ci-gate"),
         "zizmor": ("github-actions-security", "ci-gate"),
-        "dependency-review": ("pull-request-dependency-delta", "ci-gate"),
+        "dependency-review": ("pull-request-dependency-delta", "ci-gate-when-precondition-satisfied"),
         "scorecard": ("repository-security-posture", "scheduled-monitor"),
         "codeql": ("python-and-actions-sast", "protected-gate"),
     }
@@ -113,11 +113,15 @@ def main() -> int:
     if not isinstance(feature_policy, dict):
         errors.append("mandatory scanner policy must declare repository_security_features")
     else:
-        for feature in ("secret_scanning", "push_protection"):
+        for feature in ("dependency_graph", "secret_scanning", "push_protection"):
             entry = feature_policy.get(feature)
             if not isinstance(entry, dict) or entry.get("required") is not True:
                 errors.append(f"repository security feature {feature!r} must remain required")
-            elif entry.get("verification") not in {"verified-enabled", "unverified-admin-surface"}:
+            elif entry.get("verification") not in {
+                "verified-enabled",
+                "verified-disabled",
+                "unverified-admin-surface",
+            }:
                 errors.append(
                     f"repository security feature {feature!r} has unsupported verification state"
                 )
@@ -131,6 +135,8 @@ def main() -> int:
         "Actions security gate": "- actions-security",
         "dependency review": "actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294",
         "dependency review gate": "- dependency-review",
+        "dependency review BLOCKED classifier": "blocked-admin-prerequisite",
+        "dependency graph capability probe": "dependency-graph/compare/",
     }
     for name, needle in ci_scanner_contracts.items():
         if needle not in ci_workflow_text:
@@ -204,9 +210,9 @@ def main() -> int:
     unverified = [
         name
         for name, value in security_features.items()
-        if isinstance(value, dict) and value.get("verification") == "unverified-admin-surface"
+        if isinstance(value, dict) and value.get("verification") != "verified-enabled"
     ]
-    suffix = f"; admin verification outstanding={sorted(unverified)}" if unverified else ""
+    suffix = f"; admin prerequisites outstanding={sorted(unverified)}" if unverified else ""
     print(
         "Security stack coverage contract: mandatory Bandit/pip-audit/actionlint/zizmor/dependency-review/CodeQL "
         "gates plus scheduled Scorecard monitoring "
