@@ -61,7 +61,10 @@ def root(
         config_path = Path(os.environ["AGENT_EVALS_CONFIG"])
     settings: dict[str, Any] = {}
     if config_path is not None:
-        raw = operator.load_json(config_path, label="operator config")
+        try:
+            raw = operator.load_json(config_path, label="operator config")
+        except (OSError, ValueError) as exc:
+            raise typer.BadParameter(str(exc)) from None
         if not isinstance(raw, dict):
             raise typer.BadParameter("operator config must be a JSON object")
         if raw.get("schema_version") != "agent-evals/operator-config/v1":
