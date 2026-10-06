@@ -26,10 +26,7 @@ def validate_receipt_construction(
 def is_receipt_construction(info: ValidationInfo) -> bool:
     """Return whether validation is the trusted constructor's final validation pass."""
 
-    return bool(
-        info.context
-        and info.context.get(_RECEIPT_CONSTRUCTION_CONTEXT) is True
-    )
+    return bool(info.context and info.context.get(_RECEIPT_CONSTRUCTION_CONTEXT) is True)
 
 
 __all__ = ["is_receipt_construction", "validate_receipt_construction"]
