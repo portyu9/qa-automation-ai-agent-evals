@@ -23,6 +23,16 @@ from agent_evals.semantic.models import (
     derive_semantic_decision,
 )
 from agent_evals.semantic.receipt import SemanticJudgmentReceipt
+from agent_evals.semantic.robustness import (
+    SemanticAgreementObservation,
+    SemanticDriftObservation,
+    SemanticEnsembleConsensus,
+    SemanticEnsembleObservation,
+    SemanticEnsembleVote,
+    SemanticProbeKind,
+    SemanticRobustnessSummary,
+    SemanticStabilityObservation,
+)
 from agent_evals.semantic.stratified_calibration import (
     CalibrationRiskSupport,
     CalibrationRiskTagRequirement,
@@ -44,6 +54,7 @@ __all__ = [
     "CalibrationRiskSupport",
     "CalibrationRiskTagRequirement",
     "CalibrationSplit",
+    "SemanticAgreementObservation",
     "SemanticCalibrationCase",
     "SemanticCalibrationCaseCommitment",
     "SemanticCalibrationObservation",
@@ -52,6 +63,10 @@ __all__ = [
     "SemanticCriterionResult",
     "SemanticCriterionSpec",
     "SemanticDecision",
+    "SemanticDriftObservation",
+    "SemanticEnsembleConsensus",
+    "SemanticEnsembleObservation",
+    "SemanticEnsembleVote",
     "SemanticJudge",
     "SemanticJudgeConfigurationError",
     "SemanticJudgeInput",
@@ -59,7 +74,10 @@ __all__ = [
     "SemanticJudgeResponse",
     "SemanticJudgmentError",
     "SemanticJudgmentReceipt",
+    "SemanticProbeKind",
+    "SemanticRobustnessSummary",
     "SemanticRubricSpec",
+    "SemanticStabilityObservation",
     "StratifiedCalibrationObservation",
     "StratifiedCalibrationPolicy",
     "StratifiedCalibrationReceipt",
