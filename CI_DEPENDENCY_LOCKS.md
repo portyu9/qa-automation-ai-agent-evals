@@ -46,19 +46,19 @@ The generator intentionally derives direct inputs from `pyproject.toml`, the sel
 
 It is **not** publisher authentication, package-index authentication, a digital signature, OIDC provenance, DSSE/in-toto attestation, non-repudiation, or proof that the locked dependency itself is non-malicious. Hashes also do not replace dependency vulnerability, license, or source-review policy. Those remain separate assurance domains.
 
-The primary lock profiles are CI execution snapshots, not the package's public compatibility declaration. Supported ranges remain in `pyproject.toml`.
+The primary lock profiles are CI execution snapshots, not the package's public compatibility declaration. Supported ranges remain in `pyproject.toml`. Ordinary quality qualification intentionally exercises the supported interpreter endpoints—Python 3.11 and Python 3.14—rather than repeating the same full quality suite on every intermediate minor. The package metadata continues to declare Python 3.11 through 3.14 support; endpoint qualification is a CI-cost/coverage policy, not a claim that 3.12 or 3.13 were removed.
 
 ## Compatibility boundary snapshots
 
-Dependency compatibility is qualified separately through reviewed SHA-256 locks under `requirements/compatibility/` for Python 3.11:
+Dependency compatibility is qualified separately through reviewed SHA-256 locks under `requirements/compatibility/` at the supported interpreter endpoints:
 
-- core, MCP, and OpenAI+MCP profiles each have a `minimum` and a `latest` snapshot;
+- core, MCP, and OpenAI+MCP profiles each have a `minimum` snapshot bound to Python 3.11 and a `latest` snapshot bound to Python 3.14;
 - `minimum` pins every ranged **direct runtime** dependency to the inclusive lower bound declared in `pyproject.toml` and preserves exact direct pins exactly;
-- `latest` resolves the declared direct runtime ranges at snapshot-generation time, then freezes the complete compatible closure;
+- `latest` resolves the declared direct runtime ranges under Python 3.14 at snapshot-generation time, then freezes the complete compatible closure selected for that interpreter;
 - dev/build tooling remains exact in each generated closure but does not redefine the package's runtime compatibility claim;
 - optional MCP/OpenAI packages stay out of provider-neutral core profiles.
 
-Every compatibility file carries `agent-evals/dependency-compatibility-lock/v1`, profile/boundary/Python metadata, and a SHA-256 digest of the complete generator input set. `.github/scripts/validate_dependency_compatibility.py` fails closed if the committed profile set, source-input digest, direct floors/ranges, exact pins, hashes, interpreter binding, or optional-profile separation drifts.
+Every compatibility file carries `agent-evals/dependency-compatibility-lock/v1`, profile/boundary/Python metadata, and a SHA-256 digest of the complete generator input set. The validator requires the `minimum` files to identify Python 3.11 and the `latest` files to identify Python 3.14, so a lock cannot be relabeled across interpreter boundaries. `.github/scripts/validate_dependency_compatibility.py` fails closed if the committed profile set, source-input digest, direct floors/ranges, exact pins, hashes, interpreter binding, or optional-profile separation drifts.
 
 Ordinary qualification never resolves compatibility ranges from the network. It installs only these committed profiles with `--require-hashes`, then installs the local project with `--no-deps --no-build-isolation`. Network resolution belongs only to a maintenance step used to prepare a candidate lock for code review. A resolver-produced candidate has no qualification authority until its exact bytes are committed and pass repository policy plus exact-head CI/CodeQL.
 
