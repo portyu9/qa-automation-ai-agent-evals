@@ -1,0 +1,49 @@
+{
+  "schema_version": "agent-evals/security-scanners/v1",
+  "required_scanners": [
+    {
+      "id": "bandit",
+      "scope": "python-source",
+      "enforcement": "ci-gate",
+      "evidence": ".github/workflows/ci.yml#quality"
+    },
+    {
+      "id": "pip-audit",
+      "scope": "installed-dependency-graph",
+      "enforcement": "ci-gate",
+      "evidence": ".github/workflows/ci.yml#quality"
+    },
+    {
+      "id": "actionlint",
+      "scope": "github-actions-syntax-semantics",
+      "enforcement": "ci-gate",
+      "evidence": ".github/workflows/ci.yml#actions-security"
+    },
+    {
+      "id": "zizmor",
+      "scope": "github-actions-security",
+      "enforcement": "ci-gate",
+      "evidence": ".github/workflows/ci.yml#actions-security"
+    },
+    {
+      "id": "codeql",
+      "scope": "python-and-actions-sast",
+      "enforcement": "protected-gate",
+      "evidence": ".github/workflows/codeql.yml#codeql"
+    }
+  ],
+  "repository_security_features": {
+    "secret_scanning": {
+      "required": true,
+      "verification": "unverified-admin-surface"
+    },
+    "push_protection": {
+      "required": true,
+      "verification": "unverified-admin-surface"
+    }
+  },
+  "non_claims": [
+    "Scanner success is not evidence of absence of vulnerabilities.",
+    "Secret scanning and push protection are not claimed enabled until verified through an authorized repository-administration surface."
+  ]
+}
