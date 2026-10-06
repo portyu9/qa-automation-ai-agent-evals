@@ -6,7 +6,7 @@ import pytest
 from pydantic import ValidationError
 
 from agent_evals.contracts.outcome_selector import OutcomeSelectorV1
-from agent_evals.evidence.models import EvidenceEvent, EvidenceKind
+from agent_evals.evidence.models import EvidenceEvent, EvidenceKind, TrialVerdict
 from agent_evals.evidence.payloads import (
     EvaluationErrorEventV1,
     ReceiptEventV1,
@@ -17,7 +17,6 @@ from agent_evals.evidence.payloads import (
 from agent_evals.oracles.deterministic import OracleResult
 from agent_evals.oracles.failures import OracleFailureCode, structured_oracle_failures
 from agent_evals.receipts import ReceiptEnvelopeV1
-from agent_evals.evidence.models import TrialVerdict
 
 
 def test_outcome_selector_v1_is_unambiguous_and_canonical() -> None:
@@ -106,7 +105,6 @@ def test_receipt_projection_and_common_envelope_do_not_upgrade_authority() -> No
     tampered["payload_sha256"] = "c" * 64
     with pytest.raises(ValidationError, match="envelope root mismatch"):
         ReceiptEnvelopeV1.model_validate(tampered)
-
 
     ordinary = EvidenceEvent(
         sequence=1,
