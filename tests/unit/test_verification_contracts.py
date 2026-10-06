@@ -124,7 +124,6 @@ def test_verification_graph_requires_verified_topological_dependencies() -> None
     with pytest.raises(ValueError, match="duplicate fact roots"):
         VerificationGraph.from_verified((first, first))
 
-
     with pytest.raises(ValueError, match="graph root mismatch"):
         VerificationGraph(facts=(first, second), graph_root="0" * 64)
 
