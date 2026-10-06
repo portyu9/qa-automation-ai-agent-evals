@@ -114,6 +114,26 @@ jobs:
           min-severity: "medium"
           min-confidence: "medium"
 
+  dependency-review:
+    name: Dependency review
+    needs: policy
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Review dependency changes
+        if: github.event_name == 'pull_request'
+        uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
+        with:
+          fail-on-severity: "moderate"
+          vulnerability-check: "true"
+          license-check: "false"
+          warn-only: "false"
+      - name: Record non-PR applicability
+        if: github.event_name != 'pull_request'
+        run: echo "Dependency review is PR-delta authority; no dependency delta exists for this event."
+
   quality:
     name: Quality / Python ${{ matrix.python-version }}
     needs: policy
@@ -845,6 +865,7 @@ jobs:
     needs:
       - policy
       - actions-security
+      - dependency-review
       - quality
       - compatibility
       - mutation
@@ -882,6 +903,7 @@ jobs:
             --event "$GITHUB_EVENT_NAME" \
             --job-result "policy=${{ needs.policy.result }}" \
             --job-result "actions-security=${{ needs['actions-security'].result }}" \
+            --job-result "dependency-review=${{ needs['dependency-review'].result }}" \
             --job-result "quality=${{ needs.quality.result }}" \
             --job-result "compatibility=${{ needs.compatibility.result }}" \
             --job-result "mutation=${{ needs.mutation.result }}" \
@@ -1161,6 +1183,7 @@ jobs:
     needs:
       - policy
       - actions-security
+      - dependency-review
       - quality
       - compatibility
       - mutation
@@ -1180,6 +1203,7 @@ jobs:
         env:
           POLICY: ${{ needs.policy.result }}
           ACTIONS_SECURITY: ${{ needs['actions-security'].result }}
+          DEPENDENCY_REVIEW: ${{ needs['dependency-review'].result }}
           QUALITY: ${{ needs.quality.result }}
           COMPATIBILITY: ${{ needs.compatibility.result }}
           MUTATION: ${{ needs.mutation.result }}
@@ -1194,7 +1218,7 @@ jobs:
           RELEASE_SUPPLY_CHAIN_REVERIFY: ${{ needs['release-supply-chain-reverify'].result }}
         run: |
           set -euo pipefail
-          for result in "$POLICY" "$ACTIONS_SECURITY" "$QUALITY" "$COMPATIBILITY" "$MUTATION" "$OPENAI_ADAPTER" "$MCP_LAB" "$MCP_REMOTE_AUTH" "$MCP_OAUTH_FLOW" "$PACKAGE" "$PACKAGE_REVERIFY" "$PACKAGE_REPRODUCE" "$RELEASE_SUPPLY_CHAIN" "$RELEASE_SUPPLY_CHAIN_REVERIFY"; do
+          for result in "$POLICY" "$ACTIONS_SECURITY" "$DEPENDENCY_REVIEW" "$QUALITY" "$COMPATIBILITY" "$MUTATION" "$OPENAI_ADAPTER" "$MCP_LAB" "$MCP_REMOTE_AUTH" "$MCP_OAUTH_FLOW" "$PACKAGE" "$PACKAGE_REVERIFY" "$PACKAGE_REPRODUCE" "$RELEASE_SUPPLY_CHAIN" "$RELEASE_SUPPLY_CHAIN_REVERIFY"; do
             [[ "$result" == "success" ]] || { echo "required job result=$result"; exit 1; }
           done
 
