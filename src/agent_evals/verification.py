@@ -59,6 +59,92 @@ class FactProducerRole(StrEnum):
     HISTORICAL_REPLAY = "historical_replay"
 
 
+class PrivilegedProducerRole(StrEnum):
+    """Evaluator-local privileged producer roles.
+
+    These capabilities are intentionally run-local and are not serialized into historical evidence.
+    Existing exact-type producer checks remain authoritative during migration.
+    """
+
+    ATTACK_INJECTOR = "attack_injector"
+    PROTOCOL_BRIDGE = "protocol_bridge"
+    APPROVAL_CONTROLLER = "approval_controller"
+    RETRIEVAL_BRIDGE = "retrieval_bridge"
+    SIDE_EFFECT_OBSERVER = "side_effect_observer"
+    SEMANTIC_VERIFIER = "semantic_verifier"
+
+
+@dataclass(frozen=True, slots=True, init=False)
+class ProducerCapability:
+    """Capability issued by one exact ProducerCapabilityAuthority instance."""
+
+    role: PrivilegedProducerRole
+    producer_id: str
+    _authority_token: object
+
+    def __init__(
+        self,
+        *,
+        role: PrivilegedProducerRole,
+        producer_id: str,
+        _authority_token: object,
+        _issuer_token: object,
+    ) -> None:
+        if _issuer_token is not _PRODUCER_CAPABILITY_ISSUER:
+            raise TypeError("ProducerCapability can only be issued by ProducerCapabilityAuthority")
+        if type(role) is not PrivilegedProducerRole:
+            raise TypeError("producer capability role must be an exact PrivilegedProducerRole")
+        object.__setattr__(self, "role", role)
+        object.__setattr__(
+            self,
+            "producer_id",
+            canonical_identifier(producer_id, label="producer_id"),
+        )
+        object.__setattr__(self, "_authority_token", _authority_token)
+
+
+_PRODUCER_CAPABILITY_ISSUER = object()
+
+
+class ProducerCapabilityAuthority:
+    """Run-local issuer/verifier for privileged producer capabilities.
+
+    Authority is object-identity scoped. A capability from another authority instance is rejected
+    even when its role and producer_id strings are identical.
+    """
+
+    __slots__ = ("__token",)
+
+    def __init__(self) -> None:
+        self.__token = object()
+
+    def issue(self, *, role: PrivilegedProducerRole, producer_id: str) -> ProducerCapability:
+        return ProducerCapability(
+            role=role,
+            producer_id=producer_id,
+            _authority_token=self.__token,
+            _issuer_token=_PRODUCER_CAPABILITY_ISSUER,
+        )
+
+    def require(
+        self,
+        capability: ProducerCapability,
+        *,
+        role: PrivilegedProducerRole,
+        producer_id: str | None = None,
+    ) -> None:
+        if type(capability) is not ProducerCapability:
+            raise ValueError("privileged producer requires an exact ProducerCapability")
+        if capability._authority_token is not self.__token:
+            raise ValueError("producer capability was issued by a different authority")
+        if capability.role is not role:
+            raise ValueError("producer capability role mismatch")
+        if producer_id is not None:
+            expected = canonical_identifier(producer_id, label="producer_id")
+            if capability.producer_id != expected:
+                raise ValueError("producer capability identity mismatch")
+
+
 def canonical_identifier(value: str, *, label: str = "identifier") -> str:
     """Require the repository behavior-bearing identifier policy.
 
@@ -347,6 +433,30 @@ class VerificationGraph:
         material = {"schema_version": GRAPH_SCHEMA, "fact_roots": roots}
         graph_root = hashlib.sha256(_GRAPH_DOMAIN + _canonical_json_bytes(material)).hexdigest()
         return cls(facts=facts, graph_root=graph_root)
+
+
+@dataclass(frozen=True, slots=True)
+class VerifiedCriticalityRecord:
+    """Release-gate criticality derived from exact verified criticality facts."""
+
+    facts: tuple[VerifiedFact, ...]
+
+    @classmethod
+    def from_verified(cls, facts: tuple[VerifiedFact, ...]) -> Self:
+        roots: set[str] = set()
+        for fact in facts:
+            if type(fact) is not VerifiedFact:
+                raise ValueError("criticality record accepts only exact VerifiedFact values")
+            if fact.claim.fact_kind is not FactKind.CRITICALITY:
+                raise ValueError("criticality record accepts only criticality facts")
+            if fact.fact_root in roots:
+                raise ValueError("criticality record contains duplicate fact roots")
+            roots.add(fact.fact_root)
+        return cls(facts=facts)
+
+    @property
+    def count(self) -> int:
+        return len(self.facts)
 
 
 class EvidenceChainLink(BaseModel):
