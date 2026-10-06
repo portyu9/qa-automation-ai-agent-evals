@@ -248,9 +248,7 @@ def test_leakage_metadata_enforces_rotation_shape_and_surfaces_risk() -> None:
     assert RegistryFindingCode.UNKNOWN_LEAKAGE_RISK in codes
     assert RegistryFindingCode.PUBLIC_HIGH_MEMORIZATION_RISK in codes
     unknown = next(
-        finding
-        for finding in findings
-        if finding.code is RegistryFindingCode.UNKNOWN_LEAKAGE_RISK
+        finding for finding in findings if finding.code is RegistryFindingCode.UNKNOWN_LEAKAGE_RISK
     )
     assert unknown.severity is RegistryFindingSeverity.ERROR
     with pytest.raises(ValueError, match="unknown_leakage_risk"):
@@ -287,7 +285,9 @@ def test_counterexample_promotion_binds_parent_trial_and_evidence() -> None:
         revision="1",
         entries=(_entry(parent), child_entry),
     )
-    promoted = next(entry for entry in registry.entries if entry.scenario_identity == child.identity)
+    promoted = next(
+        entry for entry in registry.entries if entry.scenario_identity == child.identity
+    )
     assert promoted.provenance.source_trial_id == "trial-counterexample-1"
     assert promoted.provenance.source_evidence_root == "a" * 64
 
