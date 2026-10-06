@@ -102,9 +102,7 @@ async def test_release_gate_derives_criticality_from_finalized_session() -> None
         critical=True,
     )
     critical_session = await EvaluationSession().run(
-        ScriptedAdapter(
-            lambda _subject, _scenario, _trial: AdapterResult(events=(violation,))
-        ),
+        ScriptedAdapter(lambda _subject, _scenario, _trial: AdapterResult(events=(violation,))),
         subject=_subject(),
         scenario=_scenario(),
         trials=1,
@@ -131,9 +129,7 @@ async def test_verified_criticality_is_bound_to_exact_reliability_report() -> No
         campaign_id="release-binding",
     )
     criticality = verify_session_release_criticality(session)
-    different_report = ReliabilityReport.from_verdicts(
-        (TrialVerdict.PASS, TrialVerdict.PASS)
-    )
+    different_report = ReliabilityReport.from_verdicts((TrialVerdict.PASS, TrialVerdict.PASS))
 
     with pytest.raises(ValueError, match="does not bind"):
         ReleaseGate(_policy()).decide_verified(
