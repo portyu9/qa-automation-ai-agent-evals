@@ -5,8 +5,9 @@ import json
 import pytest
 from pydantic import ValidationError
 
+from agent_evals.contracts.models import EvaluationScenario, ScenarioKind
 from agent_evals.contracts.outcome_selector import OutcomeSelectorV1
-from agent_evals.evidence.models import EvidenceEvent, EvidenceKind, TrialVerdict
+from agent_evals.evidence.models import EvidenceEvent, EvidenceKind, TrialEvidence, TrialVerdict
 from agent_evals.evidence.payloads import (
     EvaluationErrorEventV1,
     ReceiptEventV1,
@@ -14,7 +15,7 @@ from agent_evals.evidence.payloads import (
     ToolRequestEventV1,
     project_typed_event,
 )
-from agent_evals.oracles.deterministic import OracleResult
+from agent_evals.oracles.deterministic import OracleResult, OutcomeOracle, PolicyOracle
 from agent_evals.oracles.failures import OracleFailureCode, structured_oracle_failures
 from agent_evals.receipts import ReceiptEnvelopeV1
 
@@ -140,3 +141,42 @@ def test_structured_oracle_failure_projection_preserves_original_reason() -> Non
     assert outcome_failure[0].reason == outcome.reasons[0]
     assert policy_failure[0].code is OracleFailureCode.POLICY_RESOURCE
     assert policy_failure[0].reason == policy.reasons[0]
+
+
+
+def test_current_deterministic_oracles_emit_failure_codes_directly() -> None:
+    scenario = EvaluationScenario(
+        scenario_id="failure.codes",
+        revision="1",
+        kind=ScenarioKind.REGRESSION,
+        objective="Emit stable deterministic failure codes",
+        required_outcomes={"state.ok": True},
+    )
+    outcome_evidence = TrialEvidence(
+        trial_id="outcome-failure",
+        subject_identity="1" * 64,
+        scenario_identity=scenario.identity,
+        final_state={},
+    )
+    outcome = OutcomeOracle().grade(scenario, outcome_evidence)
+
+    assert outcome.failure_codes == (OracleFailureCode.OUTCOME_REQUIRED_MISSING,)
+    assert structured_oracle_failures(outcome)[0].code is OracleFailureCode.OUTCOME_REQUIRED_MISSING
+
+    policy_event = EvidenceEvent(
+        sequence=0,
+        kind=EvidenceKind.POLICY_VIOLATION,
+        source="adapter:test",
+        payload={"reason": "explicit policy fact"},
+        critical=True,
+    )
+    policy_evidence = TrialEvidence(
+        trial_id="policy-failure",
+        subject_identity="1" * 64,
+        scenario_identity=scenario.identity,
+        events=(policy_event,),
+        final_state={"state": {"ok": True}},
+    )
+    policy = PolicyOracle().grade(scenario, policy_evidence)
+
+    assert policy.failure_codes == (OracleFailureCode.POLICY_EXPLICIT,)
