@@ -21,13 +21,14 @@ _SHA256 = re.compile(r"^[0-9a-f]{64}$")
 _REPOSITORY = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
 _PYTHON_CLASSIFIER = re.compile(r"^Programming Language :: Python :: (3\.\d+)$")
 
+_BOUNDARY_PYTHONS = {"minimum": "3.11", "latest": "3.14"}
 _COMPATIBILITY_LOCKS = (
     ("core", "minimum", "requirements/compatibility/core-minimum-py311.txt"),
-    ("core", "latest", "requirements/compatibility/core-latest-py311.txt"),
+    ("core", "latest", "requirements/compatibility/core-latest-py314.txt"),
     ("mcp", "minimum", "requirements/compatibility/mcp-minimum-py311.txt"),
-    ("mcp", "latest", "requirements/compatibility/mcp-latest-py311.txt"),
+    ("mcp", "latest", "requirements/compatibility/mcp-latest-py314.txt"),
     ("openai-mcp", "minimum", "requirements/compatibility/openai-mcp-minimum-py311.txt"),
-    ("openai-mcp", "latest", "requirements/compatibility/openai-mcp-latest-py311.txt"),
+    ("openai-mcp", "latest", "requirements/compatibility/openai-mcp-latest-py314.txt"),
 )
 
 
@@ -232,8 +233,12 @@ def _compatibility_records(repo_root: Path) -> list[dict[str, object]]:
         headers = _lock_headers(path)
         if headers["Profile"] != profile or headers["Boundary"] != boundary:
             raise ReleaseStatementError(f"compatibility lock identity mismatch: {relative}")
-        if headers["Python"] != "3.11":
-            raise ReleaseStatementError(f"compatibility lock Python boundary mismatch: {relative}")
+        expected_python = _BOUNDARY_PYTHONS[boundary]
+        if headers["Python"] != expected_python:
+            raise ReleaseStatementError(
+                f"compatibility lock Python boundary mismatch: "
+                f"{relative}: {headers['Python']} != {expected_python}"
+            )
         data = path.read_bytes()
         records.append(
             {
@@ -406,7 +411,7 @@ def self_test() -> None:
                         "# Lock-Contract: agent-evals/dependency-compatibility-lock/v1",
                         f"# Profile: {profile}",
                         f"# Boundary: {boundary}",
-                        "# Python: 3.11",
+                        f"# Python: {_BOUNDARY_PYTHONS[boundary]}",
                         "# Artifact-Selection: linux-x86_64",
                         f"# Input-SHA256: {'a' * 64}",
                         "example==1.0 --hash=sha256:" + "b" * 64,
