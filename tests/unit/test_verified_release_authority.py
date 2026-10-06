@@ -134,11 +134,12 @@ async def test_verified_criticality_is_bound_to_exact_reliability_report() -> No
     criticality = verify_session_release_criticality(session)
     different_report = ReliabilityReport.from_verdicts((TrialVerdict.PASS, TrialVerdict.PASS))
 
-    with pytest.raises(ValueError, match="does not bind"):
+    with pytest.raises(ValueError) as exc_info:
         ReleaseGate(_policy()).decide_verified(
             different_report,
             criticality=criticality,
         )
+    assert str(exc_info.value) == "verified criticality does not bind the supplied reliability report"
 
 
 def test_verified_criticality_cannot_be_caller_issued() -> None:
@@ -157,11 +158,30 @@ def test_verified_release_exact_type_guards_fail_closed() -> None:
     report = ReliabilityReport.from_verdicts((TrialVerdict.PASS,))
     gate = ReleaseGate(_policy())
 
-    with pytest.raises(ValueError, match="exact VerifiedCriticalityRecord"):
+    with pytest.raises(ValueError) as criticality_error:
         gate.decide_verified(
             report,
             criticality=cast(VerifiedCriticalityRecord, object()),
         )
+    assert str(criticality_error.value) == "criticality must be an exact VerifiedCriticalityRecord"
 
-    with pytest.raises(ValueError, match="exact ReliabilityReport"):
+    with pytest.raises(ValueError) as report_error:
         release_gate_module._reliability_report_sha256(cast(ReliabilityReport, object()))
+    assert str(report_error.value) == "report must be an exact ReliabilityReport"
+
+
+def test_reliability_report_binding_digest_has_stable_golden_vector() -> None:
+    report = ReliabilityReport.from_verdicts(
+        (
+            TrialVerdict.PASS,
+            TrialVerdict.FAIL,
+            TrialVerdict.BLOCKED,
+            TrialVerdict.INCONCLUSIVE,
+        ),
+        k=2,
+    )
+
+    assert (
+        release_gate_module._reliability_report_sha256(report)
+        == "f82fd1e2b955901006fee74cf63510c035492b38db21b2500964cbc2538c0810"
+    )
