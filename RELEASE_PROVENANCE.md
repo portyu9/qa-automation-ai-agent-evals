@@ -1,6 +1,6 @@
 # Release provenance
 
-## Current stage: retained release subjects carry trusted-main OIDC/Sigstore provenance
+## Current stage: retained release subjects and CI qualification evidence carry trusted-main OIDC/Sigstore provenance
 
 The release chain retains the exact wheel and source distribution that the CI package job builds, inspects, and smoke-tests. CI writes `artifact-manifest.json` using the versioned `agent-evals/package-artifact-manifest/v1` contract and uploads the wheel, sdist, and manifest as one run-bound GitHub Actions artifact.
 
@@ -12,9 +12,11 @@ A separate `release-supply-chain` job installs the retained wheel, resolves the 
 
 A fresh `release-supply-chain-reverify` job downloads the retained package and supply-chain artifacts, independently installs the retained wheel, recomputes the runtime closure, and requires it to match the retained SPDX package identities, dependency relationships, licenses, package-manifest binding, and checked-in license policy. The aggregate `ci-gate` requires both supply-chain jobs in addition to package reverification and exact-byte reproducibility.
 
-On trusted `push` executions of `refs/heads/main` only, a downstream `release-provenance` job receives GitHub OIDC/attestation write authority. Pull-request executions never enter this job and therefore never receive signing authority. The job re-verifies the retained package manifest and retained SPDX/license evidence, then uses the immutable-pinned `actions/attest` action to generate SLSA provenance for exactly five retained subjects: the wheel, sdist, package manifest, SPDX SBOM, and supply-chain evidence JSON. The resulting Sigstore bundle is retained as `release-provenance-<run_id>` together with subject/bundle checksums and per-subject verification output.
+After `ci-gate` succeeds, the ruleset-bound `Package integrity` job independently requires exact-subject CodeQL success. Only then, and only on a trusted `push` of `refs/heads/main`, `Retain CI qualification evidence` emits canonical `agent-evals/ci-qualification-evidence/v1`. The record binds the repository, exact commit SHA/ref, `CI` workflow name, run ID, run attempt, push event, and the exact logical result set for every required CI dependency plus `ci-gate` and `protected-gate`. Creation fails unless every bound result is `success`. The exact JSON is re-parsed with duplicate-key and canonical-serialization checks and retained as `ci-qualification-<run_id>`; pull-request runs never produce this trusted-main qualification artifact.
 
-The same trusted-main job immediately verifies each subject from the local Sigstore bundle with `gh attestation verify`, requiring this repository, `.github/workflows/ci.yml`, the exact source commit, `refs/heads/main`, the default SLSA provenance predicate, and a GitHub-hosted runner. This is a cryptographic provenance claim about those exact files and the GitHub workflow identity that signed them; it is not a signature over the GitHub Release object and it is not authenticated human identity.
+On trusted `push` executions of `refs/heads/main` only, a downstream `release-provenance` job receives GitHub OIDC/attestation write authority. Pull-request executions never enter this job and therefore never receive signing authority. The job re-verifies the retained package manifest and retained SPDX/license evidence, then independently reverifies the retained CI qualification JSON and uses the immutable-pinned `actions/attest` action to generate SLSA provenance for exactly six retained subjects: the wheel, sdist, package manifest, SPDX SBOM, supply-chain evidence JSON, and CI qualification evidence JSON. The resulting Sigstore bundle is retained as `release-provenance-<run_id>` together with subject/bundle checksums and per-subject verification output.
+
+The same trusted-main job immediately verifies each subject from the local Sigstore bundle with `gh attestation verify`, requiring this repository, `.github/workflows/ci.yml`, the exact source commit, `refs/heads/main`, the default SLSA provenance predicate, and a GitHub-hosted runner. For the qualification JSON, this authenticates the exact workflow-issued claim that the configured CI aggregate and protected CodeQL bridge succeeded for the bound run. It does not independently prove the semantic correctness of every test, authenticate an external target/model/provider, or authenticate a human maintainer.
 
 Publication uses a default-branch-bound `repository_dispatch` entrypoint rather than `workflow_dispatch`. This distinction is intentional: GitHub binds `repository_dispatch` to the default branch and its current event SHA, while a manual `workflow_dispatch` can select another branch or tag.
 
@@ -33,12 +35,12 @@ The publisher then:
 
 1. validates the dispatch action, repository identity, exact default-branch ref/SHA, and exact two-field request payload;
 2. fetches the explicitly requested Actions run and requires the canonical `CI` workflow, `push` event, `completed/success`, `main` head branch, exact `head_sha`, and positive run attempt;
-3. fetches that run's latest-attempt job graph and requires exactly one successful `Reproduce package artifacts independently` job, exactly one successful `Reverify release supply-chain evidence` job, and exactly one successful `Attest retained release artifacts` job, all bound to the same commit and run attempt, so historical CI runs without provenance qualification cannot publish;
+3. fetches that run's latest-attempt job graph and requires exactly one successful `Reproduce package artifacts independently` job, exactly one successful `Reverify release supply-chain evidence` job, exactly one successful `Retain CI qualification evidence` job, and exactly one successful `Attest retained release artifacts` job, all bound to the same commit and run attempt, so historical CI runs without the post-gate qualification/provenance chain cannot publish;
 4. resolves the already-existing tag, requires it to target the CI-qualified commit, and requires the tag to equal `v<project.version>` from `pyproject.toml` at that commit;
-5. downloads exactly `package-artifacts-<ci_run_id>`, `release-supply-chain-<ci_run_id>`, and `release-provenance-<ci_run_id>`;
-6. reverifies the package manifest and SPDX/license evidence, checks the retained subject/bundle checksums, and cryptographically re-verifies every retained subject from the Sigstore bundle against this repository, the CI signer workflow, the exact CI commit, `refs/heads/main`, and GitHub-hosted runner policy;
+5. downloads exactly `package-artifacts-<ci_run_id>`, `release-supply-chain-<ci_run_id>`, `ci-qualification-<ci_run_id>`, and `release-provenance-<ci_run_id>`;
+6. strictly reverifies the package manifest, SPDX/license evidence, and canonical CI qualification evidence, checks the retained subject/bundle checksums, and cryptographically re-verifies every retained subject from the Sigstore bundle against this repository, the CI signer workflow, the exact CI commit, `refs/heads/main`, and GitHub-hosted runner policy;
 7. exercises the retained sdist, revalidates the tag and release-absence state immediately before publication; and
-8. publishes the retained wheel, sdist, artifact manifest, SPDX SBOM, supply-chain evidence, Sigstore bundle, checksum inventories, and verification receipts to the existing tag with `gh release create --verify-tag`.
+8. publishes the retained wheel, sdist, artifact manifest, SPDX SBOM, supply-chain evidence, CI qualification evidence, Sigstore bundle, checksum inventories, and verification receipts to the existing tag with `gh release create --verify-tag`.
 
 Repository policy requires full-SHA action pins and rejects drift that reintroduces `workflow_dispatch`/`workflow_run`, interpolates `client_payload` into shell, drops default-branch SHA binding, omits exact run/artifact bindings, rebuilds packages, or drops tag verification. Ordinary CI also executes the release-candidate validator's deterministic self-test.
 
@@ -64,13 +66,13 @@ Manifest JSON is canonical and duplicate-key/extra-field sensitive. The artifact
 
 ## Integrity and authority boundary
 
-This stage establishes a controlled publication path from an explicitly selected successful main-branch CI run to the exact retained package bytes that run produced and downstream CI reverified. It also establishes exact-byte reproducibility for those wheel/sdist outputs in a separate clean `ubuntu-24.04` runner using the same pinned build frontend/backend contract and source-derived build epoch, plus a retained SPDX 2.3 runtime SBOM and fail-closed dependency-license verdict that a separate clean runner independently reverifies. On trusted main pushes, GitHub Actions OIDC/Sigstore provenance additionally binds the exact wheel, sdist, manifest, SBOM, and supply-chain evidence to the signing repository/workflow/source identity. Publication still consumes the original retained tested bytes and retained evidence; it never rebuilds or re-signs package bytes.
+This stage establishes a controlled publication path from an explicitly selected successful main-branch CI run to the exact retained package bytes that run produced and downstream CI reverified. It also establishes exact-byte reproducibility for those wheel/sdist outputs in a separate clean `ubuntu-24.04` runner using the same pinned build frontend/backend contract and source-derived build epoch, plus a retained SPDX 2.3 runtime SBOM and fail-closed dependency-license verdict that a separate clean runner independently reverifies. On trusted main pushes, GitHub Actions OIDC/Sigstore provenance additionally binds the exact wheel, sdist, manifest, SBOM, supply-chain evidence, and post-gate CI qualification evidence to the signing repository/workflow/source identity. Publication still consumes the original retained tested bytes and retained evidence; it never rebuilds or re-signs package bytes.
 
-SHA-256 values remain content-integrity identifiers rather than authentication by themselves. The retained Sigstore bundle adds cryptographic workflow provenance for the five attested subjects, but it does **not** authenticate a human maintainer, sign the GitHub Release entity itself, turn older unsigned evidence into signed evidence, or establish PyPI Trusted Publishing.
+SHA-256 values remain content-integrity identifiers rather than authentication by themselves. The retained Sigstore bundle adds cryptographic workflow provenance for the six attested subjects, including the canonical post-gate CI qualification record. It does **not** authenticate a human maintainer, prove that an external target behaved correctly beyond what the qualified tests observed, sign the GitHub Release entity itself, turn older unsigned CI runs/evidence into signed evidence, or establish PyPI Trusted Publishing.
 
 This stage therefore does not claim:
 
-- a general-purpose signed envelope over arbitrary assurance reports/evidence bundles, human-key signature, or non-repudiation guarantee beyond the GitHub/Sigstore workflow provenance described above;
+- human-key signatures or a non-repudiation guarantee beyond the GitHub/Sigstore workflow provenance described above (framework assurance reports/evidence manifests have their separate optional verifier-owned DSSE layer);
 - authenticated human, maintainer, runner, or publisher identity outside the GitHub execution boundary;
 - a signature over the GitHub Release entity itself (the retained release assets have provenance, but the Release object is not separately signed);
 - publisher authentication merely because a dependency archive matches a committed SHA-256 lock entry;
@@ -85,8 +87,8 @@ Those remain separate #207 slices. A later signing/attestation layer may bind th
 
 The target chain remains:
 
-`source commit -> tested build -> retained wheel/sdist -> SBOM -> assurance artifacts -> signed provenance/attestation -> signed GitHub Release -> optional PyPI Trusted Publishing`
+`source commit -> tested build -> retained wheel/sdist -> SBOM -> post-gate CI qualification evidence -> assurance artifacts -> signed provenance/attestation -> signed GitHub Release -> optional PyPI Trusted Publishing`
 
-The signed-provenance/attestation link is now implemented for the five retained release subjects on trusted main pushes. A separately signed GitHub Release entity and optional PyPI Trusted Publishing remain future #207 slices.
+The signed-provenance/attestation link is now implemented for the five retained release subjects plus canonical post-gate CI qualification evidence on trusted main pushes. A separately signed GitHub Release entity and optional PyPI Trusted Publishing remain future #207 slices.
 
 The invariant introduced here is still deliberately narrow: the CI run must retain/reverify the tested package bytes, independently reproduce those exact bytes from the same source in a fresh runner, generate a canonical SPDX/runtime-license evidence pair bound to the retained package manifest and checked-in license policy, and independently reverify that evidence in another clean job. Publication consumes only the original retained, qualified bytes, retained supply-chain evidence, and retained provenance bundle from the explicitly validated CI run and existing version tag; the publisher itself never rebuilds, regenerates, or re-signs release evidence.
