@@ -8,7 +8,7 @@ from typing import Any, Literal, Self
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from agent_evals.evidence.models import EvidenceEvent
+from agent_evals.evidence.models import EvidenceEvent, EvidenceKind
 
 _RECEIPT_PROTOCOL: Literal["agent-evals/receipt-envelope/v1"] = "agent-evals/receipt-envelope/v1"
 _RECEIPT_DOMAIN = b"agent-evals/receipt-envelope/v1\0"
@@ -44,6 +44,14 @@ class ReceiptEnvelopeV1(BaseModel):
     def from_event(cls, event: EvidenceEvent) -> Self:
         if type(event) is not EvidenceEvent:
             raise ValueError("receipt envelope requires an exact EvidenceEvent")
+        if event.kind not in {
+            EvidenceKind.ATTACK_DELIVERY,
+            EvidenceKind.PROTOCOL_DELIVERY,
+            EvidenceKind.RETRIEVAL_DELIVERY,
+            EvidenceKind.SIDE_EFFECT_OBSERVATION,
+            EvidenceKind.SEMANTIC_JUDGMENT,
+        }:
+            raise ValueError("receipt envelope requires a receipt-bearing evidence kind")
         schema = event.payload.get("schema_version")
         root = event.payload.get("receipt_root")
         if not isinstance(schema, str) or not isinstance(root, str):
