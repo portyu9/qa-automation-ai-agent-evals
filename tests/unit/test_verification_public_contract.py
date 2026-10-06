@@ -34,7 +34,10 @@ def test_schema_history_keeps_historical_domains_separate() -> None:
     assert VerificationFactClaim.model_fields["schema_version"].default == (
         "agent-evals/verification-fact/v1"
     )
-    assert EvidenceChain.model_fields["schema_version"].default == "agent-evals/evidence-chain/v1"
+    assert (
+        EvidenceChain.model_fields["schema_version"].default
+        == "agent-evals/evidence-chain/v1"
+    )
     assert ReceiptEnvelopeV1.model_fields["schema_version"].default == (
         "agent-evals/receipt-envelope/v1"
     )
