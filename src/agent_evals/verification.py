@@ -406,33 +406,39 @@ class VerificationGraph:
     facts: tuple[VerifiedFact, ...]
     graph_root: str
 
+    def __post_init__(self) -> None:
+        expected = _verification_graph_root(self.facts)
+        if not hmac.compare_digest(self.graph_root, expected):
+            raise ValueError("verification graph root mismatch")
+
     @classmethod
     def from_verified(cls, facts: tuple[VerifiedFact, ...]) -> Self:
-        if not facts:
-            raise ValueError("verification graph requires at least one fact")
-        if len(facts) > _MAX_GRAPH_FACTS:
-            raise ValueError("verification graph exceeds fact-count limit")
-        seen: set[str] = set()
-        roots: list[str] = []
-        for fact in facts:
-            if type(fact) is not VerifiedFact:
-                raise ValueError("verification graph accepts only exact VerifiedFact values")
-            root = fact.fact_root
-            if root in seen:
-                raise ValueError("verification graph contains duplicate fact roots")
-            missing = [
-                dependency for dependency in fact.claim.dependencies if dependency not in seen
-            ]
-            if missing:
-                raise ValueError(
-                    "verification fact dependency is missing or not topologically prior: "
-                    + ",".join(missing)
-                )
-            seen.add(root)
-            roots.append(root)
-        material = {"schema_version": GRAPH_SCHEMA, "fact_roots": roots}
-        graph_root = hashlib.sha256(_GRAPH_DOMAIN + _canonical_json_bytes(material)).hexdigest()
-        return cls(facts=facts, graph_root=graph_root)
+        return cls(facts=facts, graph_root=_verification_graph_root(facts))
+
+
+def _verification_graph_root(facts: tuple[VerifiedFact, ...]) -> str:
+    if not facts:
+        raise ValueError("verification graph requires at least one fact")
+    if len(facts) > _MAX_GRAPH_FACTS:
+        raise ValueError("verification graph exceeds fact-count limit")
+    seen: set[str] = set()
+    roots: list[str] = []
+    for fact in facts:
+        if type(fact) is not VerifiedFact:
+            raise ValueError("verification graph accepts only exact VerifiedFact values")
+        root = fact.fact_root
+        if root in seen:
+            raise ValueError("verification graph contains duplicate fact roots")
+        missing = [dependency for dependency in fact.claim.dependencies if dependency not in seen]
+        if missing:
+            raise ValueError(
+                "verification fact dependency is missing or not topologically prior: "
+                + ",".join(missing)
+            )
+        seen.add(root)
+        roots.append(root)
+    material = {"schema_version": GRAPH_SCHEMA, "fact_roots": roots}
+    return hashlib.sha256(_GRAPH_DOMAIN + _canonical_json_bytes(material)).hexdigest()
 
 
 @dataclass(frozen=True, slots=True)
@@ -441,10 +447,9 @@ class VerifiedCriticalityRecord:
 
     facts: tuple[VerifiedFact, ...]
 
-    @classmethod
-    def from_verified(cls, facts: tuple[VerifiedFact, ...]) -> Self:
+    def __post_init__(self) -> None:
         roots: set[str] = set()
-        for fact in facts:
+        for fact in self.facts:
             if type(fact) is not VerifiedFact:
                 raise ValueError("criticality record accepts only exact VerifiedFact values")
             if fact.claim.fact_kind is not FactKind.CRITICALITY:
@@ -452,6 +457,9 @@ class VerifiedCriticalityRecord:
             if fact.fact_root in roots:
                 raise ValueError("criticality record contains duplicate fact roots")
             roots.add(fact.fact_root)
+
+    @classmethod
+    def from_verified(cls, facts: tuple[VerifiedFact, ...]) -> Self:
         return cls(facts=facts)
 
     @property
