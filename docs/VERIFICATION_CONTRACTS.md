@@ -47,12 +47,18 @@ the legacy exact-type gate or make a blocked forged event authoritative.
 ## Release criticality
 
 The compatibility ReleaseGate.decide(..., critical_violations=...) API remains available so old
-callers are not silently reinterpreted. New hardened integrations can use decide_verified(...)
-with the complete VerificationGraph; the gate derives the non-compensatory count from every verified
-criticality fact in that topological graph rather than taking a caller-supplied integer.
+callers are not silently reinterpreted. New hardened integrations first call
+verify_session_release_criticality(...) on an exact EvaluationSessionResult. That verifier
+revalidates finalized evidence roots, verdict-derived reliability, and session provenance, derives
+the existing non-compensatory criticality count, and issues a run-local VerifiedCriticalityRecord
+bound to the exact ReliabilityReport scalars and ordered final evidence roots. ReleaseGate
+decide_verified(...) accepts only that evaluator-issued record and rejects a different reliability
+report.
 
-A verified criticality fact still proves only the relation its verifier checked. It is not a
-signature, human identity assertion, provider attestation, or permission to upgrade unrelated facts.
+Generic VerificationFact / VerificationGraph objects remain non-authorizing and cannot be promoted
+into release criticality merely because a caller selected a CRITICALITY label. The issued record is
+still process-local role separation rather than a signature, human identity assertion, provider
+attestation, or hostile same-process sandbox.
 
 ## Typed event projections
 
