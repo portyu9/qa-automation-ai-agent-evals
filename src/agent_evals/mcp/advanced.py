@@ -383,11 +383,7 @@ class MCPCapabilityExerciseReceipt(BaseModel):
             raise ValueError("MCP exercise observes capability absent from bound snapshot")
         exercised = tuple(
             sorted(
-                {
-                    item.capability
-                    for item in checked
-                    if item.succeeded
-                },
+                {item.capability for item in checked if item.succeeded},
                 key=lambda item: item.value,
             )
         )
