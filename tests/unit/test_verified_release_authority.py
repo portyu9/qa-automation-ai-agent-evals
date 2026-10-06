@@ -140,8 +140,7 @@ async def test_verified_criticality_is_bound_to_exact_reliability_report() -> No
             criticality=criticality,
         )
     assert (
-        str(exc_info.value)
-        == "verified criticality does not bind the supplied reliability report"
+        str(exc_info.value) == "verified criticality does not bind the supplied reliability report"
     )
 
 
