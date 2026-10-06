@@ -13,8 +13,7 @@ from __future__ import annotations
 
 import math
 
-from agent_evals.adapters.base import AdapterPreconditionError, AdapterResult, AgentAdapter
-from agent_evals.contracts.models import EvaluationScenario, SubjectFingerprint
+from agent_evals.adapters.base import AdapterPreconditionError, AdapterResult
 from agent_evals.evidence.models import EvidenceEvent
 
 _REJECTED_NAME = "adapter-conformance-rejected"
