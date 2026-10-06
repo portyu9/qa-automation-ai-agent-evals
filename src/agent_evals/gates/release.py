@@ -8,7 +8,7 @@ from enum import StrEnum
 from pydantic import BaseModel, ConfigDict, Field
 
 from agent_evals.statistics.reliability import ReliabilityReport
-from agent_evals.verification import VerifiedCriticalityRecord
+from agent_evals.verification import VerificationGraph, VerifiedCriticalityRecord
 
 
 class GateDecision(StrEnum):
@@ -48,12 +48,13 @@ class ReleaseGate:
         self,
         report: ReliabilityReport,
         *,
-        criticality: VerifiedCriticalityRecord,
+        verification: VerificationGraph,
     ) -> GateResult:
-        """Hardened release entry point deriving criticality from verified fact records."""
+        """Derive non-compensatory criticality from the complete verified fact graph."""
 
-        if type(criticality) is not VerifiedCriticalityRecord:
-            raise ValueError("criticality must be an exact VerifiedCriticalityRecord")
+        if type(verification) is not VerificationGraph:
+            raise ValueError("verification must be an exact VerificationGraph")
+        criticality = VerifiedCriticalityRecord.from_graph(verification)
         return self.decide(report, critical_violations=criticality.count)
 
     def decide(self, report: ReliabilityReport, *, critical_violations: int) -> GateResult:
