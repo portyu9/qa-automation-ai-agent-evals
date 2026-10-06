@@ -159,9 +159,7 @@ def test_advanced_capabilities_list_changed_concurrency_and_multi_server_collisi
                 response_bytes=128,
                 succeeded=True,
             )
-            for index, capability in enumerate(
-                sorted(MCPCapability, key=lambda item: item.value)
-            )
+            for index, capability in enumerate(sorted(MCPCapability, key=lambda item: item.value))
         ),
     )
     assert exercised.accepted is True
