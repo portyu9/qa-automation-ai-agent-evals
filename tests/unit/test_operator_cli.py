@@ -252,7 +252,7 @@ def test_config_environment_and_validation_branches(tmp_path: Path) -> None:
 
     rejected_format = runner.invoke(cli.app, ["--format", "xml", "doctor"], color=False)
     assert rejected_format.exit_code == cli.EXIT_USAGE
-    stderr_text = re.sub(r"\\x1b\\[[0-9;]*m", "", rejected_format.stderr)
+    stderr_text = re.sub(r"\x1b\[[0-9;]*m", "", rejected_format.stderr)
     assert "--format must be json or jsonl" in stderr_text
 
 
