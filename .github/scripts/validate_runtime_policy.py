@@ -503,6 +503,37 @@ for job, lock_path in locked_job_contracts.items():
 compatibility = job_block(workflow, "compatibility", "mutation")
 if not re.search(r"^\s+needs:\s*policy\s*$", compatibility, flags=re.MULTILINE):
     fail("compatibility must depend on the repository policy job")
+expected_compatibility_rows = (
+    """          - profile: core
+            boundary: minimum
+            python-version: "3.11"
+            lock: requirements/compatibility/core-minimum-py311.txt""",
+    """          - profile: core
+            boundary: latest
+            python-version: "3.14"
+            lock: requirements/compatibility/core-latest-py314.txt""",
+    """          - profile: mcp
+            boundary: minimum
+            python-version: "3.11"
+            lock: requirements/compatibility/mcp-minimum-py311.txt""",
+    """          - profile: mcp
+            boundary: latest
+            python-version: "3.14"
+            lock: requirements/compatibility/mcp-latest-py314.txt""",
+    """          - profile: openai-mcp
+            boundary: minimum
+            python-version: "3.11"
+            lock: requirements/compatibility/openai-mcp-minimum-py311.txt""",
+    """          - profile: openai-mcp
+            boundary: latest
+            python-version: "3.14"
+            lock: requirements/compatibility/openai-mcp-latest-py314.txt""",
+)
+for row in expected_compatibility_rows:
+    if row not in compatibility:
+        fail(f"compatibility matrix is missing exact endpoint row: {row!r}")
+if compatibility.count("          - profile: ") != len(expected_compatibility_rows):
+    fail("compatibility matrix must contain exactly the six governed endpoint rows")
 for required in (
     "name: Compatibility / ${{ matrix.profile }} / ${{ matrix.boundary }} / Python ${{ matrix.python-version }}",
     "core-minimum-py311.txt",
