@@ -109,7 +109,10 @@ def high_assurance_prompt_injection_requirements(
             min_validation_fail_cases=min_validation_fail_cases,
             min_holdout_fail_cases=min_holdout_fail_cases,
         )
-        for attack_class in PromptInjectionClass
+        for attack_class in sorted(
+            PromptInjectionClass,
+            key=lambda item: prompt_injection_risk_tag(item),
+        )
     )
 
 
