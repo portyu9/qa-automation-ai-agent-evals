@@ -61,6 +61,8 @@ Approval decision receipt     ≠ human identity or external authorization
 Duplicate-looking tool result ≠ proof of idempotent physical effect
 Legacy approval               ≠ stronger native HITL approval decision
 Provider availability         ≠ subject correctness
+Live canary observation       ≠ provider attestation or general availability proof
+Adapter conformance           ≠ evaluator-owned producer authority
 Model confidence              ≠ grading authority
 Semantic PASS                 ≠ external state, authorization, or safety proof
 Semantic calibration          ≠ universal judge correctness
@@ -195,6 +197,7 @@ For stale-cache and both drift bridges, refresh is deliberately **host-owned**: 
 | [ATTACK_DELIVERY_AUTHORITY.md](ATTACK_DELIVERY_AUTHORITY.md) | How are semantic attack receipts kept separate from fresh live producer authority, exact built-in injector types, historical replay, and fail-closed cross-feature composition? |
 | [RETRIEVAL_ASSURANCE.md](RETRIEVAL_ASSURANCE.md) | How are corpus/query/ranker/poison identity, deterministic ranking, exact model-visible retrieval delivery, replay, and production-RAG non-claims kept separate? |
 | [OPENAI_ADAPTER.md](OPENAI_ADAPTER.md) | How are OpenAI SDK events normalized and how do native handoff/HITL/idempotency plus metadata/result/ToolError/stale-cache/schema/identity MCP bridges and the calibrated semantic judge preserve exact trust boundaries? |
+| [LIVE_PROVIDER_ASSURANCE.md](LIVE_PROVIDER_ASSURANCE.md) | How are third-party adapter conformance, a distinct JSON runtime adapter, and bounded scheduled/manual live-provider observations kept separate from evaluator authority and provider attestation? |
 | [OPENAI_COMPOSITION.md](OPENAI_COMPOSITION.md) | How do specialized OpenAI bridges retain the strongest scenario-required handoff provenance before adding retrieval, side-effect, or MCP-specific evidence, and why does missing provenance remain `BLOCKED` rather than become subject `FAIL`? |
 | [MCP_LAB.md](MCP_LAB.md) | How are six deterministic MCP faults observed, and how do all six exact fault families cross into explicit agent bridges without conflating their claims? |
 | [MCP_STALE_CACHE.md](MCP_STALE_CACHE.md) | How is one live target removal bound across stale cached discovery, real rejection, host refresh, target-absent model exposure, typed receipt, replay, and non-claims? |

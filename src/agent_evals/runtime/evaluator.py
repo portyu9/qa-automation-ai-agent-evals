@@ -1,9 +1,10 @@
 """Public trial evaluator with evaluator-owned runtime metric provenance.
 
-The grading engine lives in ``_evaluator_core`` unchanged.  This facade validates optional
-adapter metric-source assertions before subject execution and attaches a versioned provenance
-sidecar after the core evaluator has finalized evidence.  ``TrialEvidence/v2`` remains historical
-and unchanged.
+The grading engine lives in ``_evaluator_core``. This facade validates optional adapter
+metric-source assertions before subject execution and attaches a versioned provenance sidecar after
+the core evaluator has finalized evidence. The core performs evaluator-owned normalized-result
+conformance validation without replacing the original adapter identity. ``TrialEvidence/v2``
+remains historical and unchanged.
 """
 
 from __future__ import annotations
