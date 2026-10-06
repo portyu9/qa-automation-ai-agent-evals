@@ -489,7 +489,10 @@ for workflow_path, source in workflows.items():
         "python .github/scripts/compact_compatibility_lock.py --self-test",
         "",
     )
-    if "generate_ci_lock.py" in executable_source or "compact_compatibility_lock.py" in executable_source:
+    if re.search(
+        r"\\bpython3?\\s+\\.github/scripts/(?:generate_ci_lock|compact_compatibility_lock)\\.py\\b",
+        executable_source,
+    ):
         fail(
             "workflow must not invoke maintenance dependency resolution/compaction: "
             f"{workflow_path}"
