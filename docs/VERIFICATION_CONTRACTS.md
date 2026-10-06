@@ -73,9 +73,13 @@ semantics until a future explicitly versioned scenario migration elects the new 
 
 ## Oracle failure codes
 
-structured_oracle_failures(...) projects current deterministic-oracle reasons into stable failure
-classes such as outcome.required_missing, policy.resource, and policy.budget. The original oracle
-still owns verdict and criticality; classification does not recompute or override grading.
+Current deterministic OracleResult values emit stable failure_codes alongside their human-readable
+reasons. structured_oracle_failures(...) consumes those emitted codes and falls back to reason
+classification only for historical/manual OracleResult values that predate the field. The original
+oracle still owns verdict and criticality; codes do not recompute or override grading.
+
+Assurance Report v6 intentionally remains unchanged and does not retroactively persist the new
+runtime codes. Persisting them in a report requires a future explicitly versioned report schema.
 
 ## Common receipt envelopes
 
