@@ -1,9 +1,10 @@
 """Public trial evaluator with evaluator-owned runtime metric provenance.
 
 The grading engine lives in ``_evaluator_core``. This facade validates optional adapter
-metric-source assertions, inserts the evaluator-owned adapter conformance boundary before subject
-execution, and attaches a versioned provenance sidecar after the core evaluator has finalized
-evidence. ``TrialEvidence/v2`` remains historical and unchanged.
+metric-source assertions before subject execution and attaches a versioned provenance sidecar after
+the core evaluator has finalized evidence. The core performs evaluator-owned normalized-result
+conformance validation without replacing the original adapter identity. ``TrialEvidence/v2``
+remains historical and unchanged.
 """
 
 from __future__ import annotations
@@ -12,11 +13,6 @@ from dataclasses import dataclass, field
 from time import perf_counter
 
 from agent_evals.adapters.base import AdapterPreconditionError, AdapterResult, AgentAdapter
-from agent_evals.adapters.conformance import (
-    AdapterConformanceError,
-    conformance_checked,
-    validate_adapter_name,
-)
 from agent_evals.contracts.models import EvaluationScenario, SubjectFingerprint
 from agent_evals.runtime._evaluator_core import (
     EvaluatedTrial as _CoreEvaluatedTrial,
@@ -30,7 +26,6 @@ from agent_evals.runtime.metric_provenance import (
 )
 
 _REJECTED_ADAPTER_NAME = "metric-provenance-rejected"
-_CONFORMANCE_REJECTED_ADAPTER_NAME = "adapter-conformance-rejected"
 
 
 @dataclass(frozen=True, slots=True)
@@ -78,18 +73,12 @@ class TrialRunner(_CoreTrialRunner):
         started = perf_counter()
         try:
             runtime_adapter_name, origin, assertion = resolve_metric_provenance(adapter)
-            validate_adapter_name(runtime_adapter_name)
-            execution_adapter = conformance_checked(adapter)
+            execution_adapter: AgentAdapter = adapter
         except MetricProvenanceError:
             runtime_adapter_name = _REJECTED_ADAPTER_NAME
             origin = MetricOrigin.ADAPTER_BOUNDARY
             assertion = None
-            execution_adapter = conformance_checked(_RejectedMetricProvenanceAdapter())
-        except AdapterConformanceError:
-            runtime_adapter_name = _CONFORMANCE_REJECTED_ADAPTER_NAME
-            origin = MetricOrigin.ADAPTER_BOUNDARY
-            assertion = None
-            execution_adapter = conformance_checked(adapter)
+            execution_adapter = _RejectedMetricProvenanceAdapter()
 
         evaluated = await self._run_trial(
             execution_adapter,
