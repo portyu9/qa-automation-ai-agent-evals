@@ -12,6 +12,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from agent_evals.contracts.models import EvaluationScenario, ScenarioKind
 from agent_evals.contracts.scenario_registry import (
+    ScenarioLifecycle,
     ScenarioOrigin,
     ScenarioRegistry,
     ScenarioRegistryEntry,
@@ -97,7 +98,10 @@ class ScenarioCoverageReport(BaseModel):
         counts = tuple(
             ScenarioCoverageCount(
                 kind=kind,
-                active_count=sum(entry.scenario_kind is kind for entry in checked.entries),
+                active_count=sum(
+                    entry.scenario_kind is kind and entry.lifecycle is ScenarioLifecycle.ACTIVE
+                    for entry in checked.entries
+                ),
                 minimum_required=required[kind],
             )
             for kind in sorted(required, key=lambda item: item.value)
