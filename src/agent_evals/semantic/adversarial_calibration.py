@@ -136,7 +136,9 @@ class SemanticBlindingEnvelope(BaseModel):
         hidden_metadata: Mapping[str, Any],
         blinded_fields: tuple[SemanticBlindField, ...] = tuple(SemanticBlindField),
     ) -> Self:
-        snapshot = SemanticCalibrationCase.model_validate(case.model_dump(mode="json"))
+        if type(case) is not SemanticCalibrationCase:
+            raise ValueError("semantic blinding requires exact SemanticCalibrationCase")
+        snapshot = SemanticCalibrationCase.model_validate_json(case.model_dump_json())
         fields = tuple(sorted(blinded_fields, key=lambda item: item.value))
         missing = sorted(field.value for field in fields if field.value not in hidden_metadata)
         if missing:
@@ -213,11 +215,19 @@ class CalibrationLeakageReceipt(BaseModel):
         policy: CalibrationLeakagePolicy,
         observations: tuple[CalibrationLeakageObservation, ...],
     ) -> Self:
-        checked_policy = CalibrationLeakagePolicy.model_validate(policy.model_dump(mode="json"))
-        checked_observations = tuple(
-            CalibrationLeakageObservation.model_validate(item.model_dump(mode="json"))
-            for item in observations
-        )
+        if type(policy) is not CalibrationLeakagePolicy:
+            raise ValueError("calibration leakage requires exact CalibrationLeakagePolicy")
+        checked_policy = CalibrationLeakagePolicy.model_validate_json(policy.model_dump_json())
+        checked_observations_list: list[CalibrationLeakageObservation] = []
+        for item in observations:
+            if type(item) is not CalibrationLeakageObservation:
+                raise ValueError(
+                    "calibration leakage requires exact CalibrationLeakageObservation values"
+                )
+            checked_observations_list.append(
+                CalibrationLeakageObservation.model_validate_json(item.model_dump_json())
+            )
+        checked_observations = tuple(checked_observations_list)
         metrics = _leakage_metrics(checked_policy, checked_observations)
         unsigned = {
             "schema_version": _LEAKAGE_RECEIPT_SCHEMA,
@@ -297,6 +307,8 @@ class SemanticAbstentionObservation(BaseModel):
 
     @model_validator(mode="after")
     def validate_shape(self) -> Self:
+        if type(self.case) is not SemanticAbstentionCase:
+            raise ValueError("abstention observation requires exact SemanticAbstentionCase")
         if self.response is None and self.failure_code is None:
             raise ValueError("failed abstention observation requires failure_code")
         if self.response is not None and self.failure_code is not None:
@@ -362,11 +374,19 @@ class SemanticAbstentionReceipt(BaseModel):
         policy: SemanticAbstentionPolicy,
         observations: tuple[SemanticAbstentionObservation, ...],
     ) -> Self:
-        checked_policy = SemanticAbstentionPolicy.model_validate(policy.model_dump(mode="json"))
-        checked_observations = tuple(
-            SemanticAbstentionObservation.model_validate(item.model_dump(mode="json"))
-            for item in observations
-        )
+        if type(policy) is not SemanticAbstentionPolicy:
+            raise ValueError("semantic abstention requires exact SemanticAbstentionPolicy")
+        checked_policy = SemanticAbstentionPolicy.model_validate_json(policy.model_dump_json())
+        checked_observations_list: list[SemanticAbstentionObservation] = []
+        for item in observations:
+            if type(item) is not SemanticAbstentionObservation:
+                raise ValueError(
+                    "semantic abstention requires exact SemanticAbstentionObservation values"
+                )
+            checked_observations_list.append(
+                SemanticAbstentionObservation.model_validate_json(item.model_dump_json())
+            )
+        checked_observations = tuple(checked_observations_list)
         metrics = _abstention_metrics(checked_policy, checked_observations)
         unsigned = {
             "schema_version": _ABSTENTION_RECEIPT_SCHEMA,
