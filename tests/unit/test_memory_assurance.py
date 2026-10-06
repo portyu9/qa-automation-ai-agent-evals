@@ -8,6 +8,17 @@ from agent_evals.memory import (
 )
 
 
+def _policy(**overrides: bool) -> MemoryAssurancePolicy:
+    values: dict[str, object] = {
+        "record_id": "memory-7",
+        "owner_tenant_id": "tenant-a",
+        "owner_user_id": "user-a",
+        "content_sha256": "a" * 64,
+    }
+    values.update(overrides)
+    return MemoryAssurancePolicy(**values)
+
+
 def _observation(
     *,
     operation: MemoryOperationKind,
@@ -66,7 +77,7 @@ def test_memory_assurance_covers_persistence_isolation_delete_ttl_and_poisoning(
     )
 
     receipt = MemoryAssuranceReceipt.create(
-        policy=MemoryAssurancePolicy(),
+        policy=_policy(),
         observations=observations,
     )
 
@@ -96,7 +107,7 @@ def test_memory_receipt_rejects_cross_user_leakage_as_incomplete_assurance() -> 
         ),
     )
     receipt = MemoryAssuranceReceipt.create(
-        policy=MemoryAssurancePolicy(
+        policy=_policy(
             require_delete_enforcement=False,
             require_ttl_enforcement=False,
             require_poison_rejection=False,
@@ -106,3 +117,35 @@ def test_memory_receipt_rejects_cross_user_leakage_as_incomplete_assurance() -> 
 
     assert receipt.cross_user_isolation_observed is False
     assert receipt.accepted is False
+
+
+
+def test_memory_policy_binds_record_owner_and_content_identity() -> None:
+    observation = _observation(operation=MemoryOperationKind.WRITE, tick=0, allowed=True)
+
+    for policy in (
+        MemoryAssurancePolicy(
+            record_id="other-record",
+            owner_tenant_id="tenant-a",
+            owner_user_id="user-a",
+            content_sha256="a" * 64,
+        ),
+        MemoryAssurancePolicy(
+            record_id="memory-7",
+            owner_tenant_id="tenant-b",
+            owner_user_id="user-a",
+            content_sha256="a" * 64,
+        ),
+        MemoryAssurancePolicy(
+            record_id="memory-7",
+            owner_tenant_id="tenant-a",
+            owner_user_id="user-a",
+            content_sha256="b" * 64,
+        ),
+    ):
+        try:
+            MemoryAssuranceReceipt.create(policy=policy, observations=(observation,))
+        except ValueError:
+            pass
+        else:
+            raise AssertionError("mismatched memory policy identity must fail closed")
