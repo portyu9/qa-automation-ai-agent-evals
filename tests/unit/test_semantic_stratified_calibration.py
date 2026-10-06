@@ -109,7 +109,9 @@ def _split(
     return StratifiedCalibrationObservation(split=split, observation=observation)
 
 
-def _base_policy(*, require_tag: bool = False, allow_false_pass: bool = False) -> SemanticCalibrationPolicy:
+def _base_policy(
+    *, require_tag: bool = False, allow_false_pass: bool = False
+) -> SemanticCalibrationPolicy:
     return SemanticCalibrationPolicy(
         min_cases=2,
         min_pass_cases=1,
