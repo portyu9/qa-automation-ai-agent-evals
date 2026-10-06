@@ -23,7 +23,7 @@ classifiers = [
   "Topic :: Software Development :: Testing",
   "Typing :: Typed",
 ]
-dependencies = ["pydantic>=2.12.2,<3", "typer>=0.15,<1"]
+dependencies = ["pydantic>=2.12.2,<3", "typer>=0.16,<1"]
 
 [project.optional-dependencies]
 openai = ["openai-agents==0.22.3"]
@@ -121,6 +121,9 @@ line-length = 100
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM", "PTH", "RUF"]
 ignore = ["E501"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["agent_evals"]
 
 [tool.mypy]
 python_version = "3.11"

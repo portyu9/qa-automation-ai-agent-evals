@@ -1,0 +1,57 @@
+name: Deterministic performance
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/scripts/check_deterministic_performance.py"
+      - ".github/workflows/deterministic-performance.yml"
+      - "src/agent_evals/evidence/models.py"
+      - "src/agent_evals/statistics/**"
+  schedule:
+    - cron: "11 9 * * 6"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deterministic-performance-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  performance:
+    name: Deterministic kernel performance guardrail
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      PYTHONHASHSEED: "0"
+    steps:
+      - name: Checkout exact performance subject
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install exact hash-checked core profile
+        run: |
+          python -m pip install --disable-pip-version-check --require-hashes -r requirements/locks/core-py311.txt
+          python -m pip install --disable-pip-version-check --no-deps --no-build-isolation .
+          python -m pip check
+      - name: Self-test performance budget enforcement
+        run: python .github/scripts/check_deterministic_performance.py --self-test
+      - name: Enforce deterministic kernel performance budgets
+        run: >-
+          python .github/scripts/check_deterministic_performance.py
+          --output reports/performance/deterministic-kernels.json
+      - name: Retain performance measurements
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: deterministic-performance-${{ github.sha }}
+          path: reports/performance/deterministic-kernels.json
+          if-no-files-found: error
+          retention-days: 30

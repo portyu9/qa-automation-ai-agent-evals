@@ -5,6 +5,8 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  schedule:
+    - cron: "13 4 * * 4"
   workflow_dispatch:
     inputs:
       subject_sha:
@@ -23,7 +25,7 @@ jobs:
   policy:
     name: Repository policy
     runs-on: ubuntu-24.04
-    timeout-minutes: 5
+    timeout-minutes: 10
     steps:
       - name: Bind explicit dispatch to exact main subject
         if: github.event_name == 'workflow_dispatch'
@@ -54,6 +56,14 @@ jobs:
           python-version: "3.11"
       - name: Validate runtime and CI support contract
         run: python .github/scripts/validate_runtime_policy.py
+      - name: Validate mandatory security scanner stack
+        run: python .github/scripts/validate_security_stack.py
+      - name: Install exact hash-checked semantic parser tools
+        run: python -m pip install --disable-pip-version-check --require-hashes -r requirements/locks/core-py311.txt
+      - name: Self-test semantic workflow graph validator
+        run: python .github/scripts/validate_workflow_graph.py --self-test
+      - name: Validate semantic workflow graph
+        run: python .github/scripts/validate_workflow_graph.py
       - name: Self-test retained release candidate validation
         run: python .github/scripts/release_candidate.py self-test
       - name: Self-test release SPDX and license evidence
@@ -72,6 +82,124 @@ jobs:
         run: python .github/scripts/validate_dependency_compatibility.py
       - name: Self-test coverage policy
         run: python .github/scripts/check_coverage_policy.py --self-test
+
+  actions-security:
+    name: Actions security / actionlint + zizmor
+    needs: policy
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout exact workflow subject
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install hash-verified actionlint
+        shell: bash
+        run: |
+          set -euo pipefail
+          archive="$RUNNER_TEMP/actionlint.tar.gz"
+          install_dir="$RUNNER_TEMP/actionlint"
+          curl --fail --silent --show-error --location             --output "$archive"             https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_linux_amd64.tar.gz
+          printf '%s  %s\n'             '8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8'             "$archive" | sha256sum --check --strict
+          mkdir -p "$install_dir"
+          tar -xzf "$archive" -C "$install_dir"
+          "$install_dir/actionlint" -version
+          "$install_dir/actionlint" -color
+      - name: Audit GitHub Actions with pinned zizmor
+        uses: zizmorcore/zizmor-action@cc914d7f3750a2d13d75c7f184a1060aa0e9d482 # v0.6.4
+        with:
+          version: "1.30.1"
+          online-audits: "false"
+          advanced-security: "false"
+          annotations: "true"
+          persona: "regular"
+          min-severity: "medium"
+          min-confidence: "medium"
+
+  dependency-review:
+    name: Dependency review
+    needs: policy
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    outputs:
+      review_state: ${{ steps.classify.outputs.state }}
+    steps:
+      - name: Verify dependency-graph precondition
+        id: dependency_graph
+        if: github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          MERGE_SHA: ${{ github.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          response="$RUNNER_TEMP/dependency-review-capability.json"
+          status="$(
+            curl --silent --show-error --location \
+              --output "$response" \
+              --write-out '%{http_code}' \
+              --header "Accept: application/vnd.github+json" \
+              --header "Authorization: Bearer $GH_TOKEN" \
+              --header "X-GitHub-Api-Version: 2026-03-10" \
+              "https://api.github.com/repos/$GITHUB_REPOSITORY/dependency-graph/compare/$BASE_SHA...$MERGE_SHA"
+          )"
+          case "$status" in
+            200)
+              echo "state=available" >> "$GITHUB_OUTPUT"
+              ;;
+            403|404)
+              echo "state=blocked-admin-prerequisite" >> "$GITHUB_OUTPUT"
+              echo "::warning::Dependency review BLOCKED: repository dependency graph is not enabled; tracked by #193."
+              ;;
+            *)
+              cat "$response" >&2 || true
+              echo "::error::dependency-review precondition probe returned HTTP $status"
+              exit 1
+              ;;
+          esac
+      - name: Review dependency changes
+        id: review
+        if: github.event_name == 'pull_request' && steps.dependency_graph.outputs.state == 'available'
+        uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
+        with:
+          fail-on-severity: "moderate"
+          vulnerability-check: "true"
+          license-check: "false"
+          warn-only: "false"
+      - name: Record blocked repository prerequisite
+        if: github.event_name == 'pull_request' && steps.dependency_graph.outputs.state == 'blocked-admin-prerequisite'
+        run: |
+          echo "Dependency review is BLOCKED, not PASS or FAIL: dependency graph requires repository-administrator enablement."
+      - name: Record non-PR applicability
+        if: github.event_name != 'pull_request'
+        run: echo "Dependency review is PR-delta authority; no dependency delta exists for this event."
+      - name: Classify dependency review state
+        id: classify
+        if: always()
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          GRAPH_STATE: ${{ steps.dependency_graph.outputs.state }}
+          REVIEW_OUTCOME: ${{ steps.review.outcome }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "$EVENT_NAME" != "pull_request" ]]; then
+            echo "state=not-applicable" >> "$GITHUB_OUTPUT"
+          elif [[ "$GRAPH_STATE" == "available" && "$REVIEW_OUTCOME" == "success" ]]; then
+            echo "state=passed" >> "$GITHUB_OUTPUT"
+          elif [[ "$GRAPH_STATE" == "available" ]]; then
+            echo "state=failed" >> "$GITHUB_OUTPUT"
+          elif [[ "$GRAPH_STATE" == "blocked-admin-prerequisite" ]]; then
+            echo "state=blocked-admin-prerequisite" >> "$GITHUB_OUTPUT"
+          else
+            echo "::error::dependency-review state cannot be classified safely"
+            exit 1
+          fi
 
   quality:
     name: Quality / Python ${{ matrix.python-version }}
@@ -110,13 +238,23 @@ jobs:
         run: mypy
       - name: Tests and trust-class coverage gates
         run: |
-          pytest --cov=agent_evals --cov-branch --cov-report=term-missing --cov-report=json:coverage-core.json
+          pytest --cov=agent_evals --cov-branch --cov-report=term-missing --cov-report=json:coverage-core.json --junitxml="junit-core-${{ matrix.python-version }}.xml"
           coverage report --fail-under=90
           python .github/scripts/check_coverage_policy.py             --coverage coverage-core.json             --profile core-trust
       - name: Bandit
         run: bandit -q -r src
       - name: Dependency audit
         run: pip-audit
+      - name: Retain JUnit and coverage history
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: quality-history-${{ matrix.python-version }}-${{ github.run_id }}
+          path: |
+            coverage-core.json
+            junit-core-${{ matrix.python-version }}.xml
+          if-no-files-found: error
+          retention-days: 30
 
   compatibility:
     name: Compatibility / ${{ matrix.profile }} / ${{ matrix.boundary }} / Python ${{ matrix.python-version }}
@@ -368,7 +506,8 @@ jobs:
         run: |
           python -m pip install --disable-pip-version-check --require-hashes \
             -r requirements/locks/core-py311.txt
-          export SOURCE_DATE_EPOCH="$(git show -s --format=%ct "$GITHUB_SHA")"
+          SOURCE_DATE_EPOCH="$(git show -s --format=%ct "$GITHUB_SHA")"
+          export SOURCE_DATE_EPOCH
           [[ "$SOURCE_DATE_EPOCH" =~ ^[0-9]+$ ]] || {
             echo "::error::could not derive deterministic SOURCE_DATE_EPOCH from $GITHUB_SHA"
             exit 1
@@ -651,7 +790,8 @@ jobs:
         run: |
           python -m pip install --disable-pip-version-check --require-hashes \
             -r requirements/locks/core-py311.txt
-          export SOURCE_DATE_EPOCH="$(git show -s --format=%ct "$GITHUB_SHA")"
+          SOURCE_DATE_EPOCH="$(git show -s --format=%ct "$GITHUB_SHA")"
+          export SOURCE_DATE_EPOCH
           [[ "$SOURCE_DATE_EPOCH" =~ ^[0-9]+$ ]] || {
             echo "::error::could not derive deterministic SOURCE_DATE_EPOCH from $GITHUB_SHA"
             exit 1
@@ -706,7 +846,8 @@ jobs:
         run: python -m pip install --disable-pip-version-check --no-deps retained-dist/*.whl
       - name: Generate deterministic SPDX and license evidence
         run: |
-          export SOURCE_DATE_EPOCH="$(git show -s --format=%ct "$GITHUB_SHA")"
+          SOURCE_DATE_EPOCH="$(git show -s --format=%ct "$GITHUB_SHA")"
+          export SOURCE_DATE_EPOCH
           [[ "$SOURCE_DATE_EPOCH" =~ ^[0-9]+$ ]] || {
             echo "::error::could not derive deterministic SOURCE_DATE_EPOCH from $GITHUB_SHA"
             exit 1
@@ -803,6 +944,8 @@ jobs:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs:
       - policy
+      - actions-security
+      - dependency-review
       - quality
       - compatibility
       - mutation
@@ -839,6 +982,8 @@ jobs:
             --run-attempt "$GITHUB_RUN_ATTEMPT" \
             --event "$GITHUB_EVENT_NAME" \
             --job-result "policy=${{ needs.policy.result }}" \
+            --job-result "actions-security=${{ needs['actions-security'].result }}" \
+            --job-result "dependency-review=${{ needs['dependency-review'].result }}" \
             --job-result "quality=${{ needs.quality.result }}" \
             --job-result "compatibility=${{ needs.compatibility.result }}" \
             --job-result "mutation=${{ needs.mutation.result }}" \
@@ -1117,6 +1262,8 @@ jobs:
     if: always()
     needs:
       - policy
+      - actions-security
+      - dependency-review
       - quality
       - compatibility
       - mutation
@@ -1135,6 +1282,9 @@ jobs:
       - name: Evaluate required CI jobs
         env:
           POLICY: ${{ needs.policy.result }}
+          ACTIONS_SECURITY: ${{ needs['actions-security'].result }}
+          DEPENDENCY_REVIEW: ${{ needs['dependency-review'].result }}
+          DEPENDENCY_REVIEW_STATE: ${{ needs['dependency-review'].outputs.review_state }}
           QUALITY: ${{ needs.quality.result }}
           COMPATIBILITY: ${{ needs.compatibility.result }}
           MUTATION: ${{ needs.mutation.result }}
@@ -1149,9 +1299,20 @@ jobs:
           RELEASE_SUPPLY_CHAIN_REVERIFY: ${{ needs['release-supply-chain-reverify'].result }}
         run: |
           set -euo pipefail
-          for result in "$POLICY" "$QUALITY" "$COMPATIBILITY" "$MUTATION" "$OPENAI_ADAPTER" "$MCP_LAB" "$MCP_REMOTE_AUTH" "$MCP_OAUTH_FLOW" "$PACKAGE" "$PACKAGE_REVERIFY" "$PACKAGE_REPRODUCE" "$RELEASE_SUPPLY_CHAIN" "$RELEASE_SUPPLY_CHAIN_REVERIFY"; do
+          for result in "$POLICY" "$ACTIONS_SECURITY" "$DEPENDENCY_REVIEW" "$QUALITY" "$COMPATIBILITY" "$MUTATION" "$OPENAI_ADAPTER" "$MCP_LAB" "$MCP_REMOTE_AUTH" "$MCP_OAUTH_FLOW" "$PACKAGE" "$PACKAGE_REVERIFY" "$PACKAGE_REPRODUCE" "$RELEASE_SUPPLY_CHAIN" "$RELEASE_SUPPLY_CHAIN_REVERIFY"; do
             [[ "$result" == "success" ]] || { echo "required job result=$result"; exit 1; }
           done
+          case "$DEPENDENCY_REVIEW_STATE" in
+            passed|not-applicable)
+              ;;
+            blocked-admin-prerequisite)
+              echo "::warning::dependency-review state=BLOCKED because the repository dependency graph is disabled; see #193"
+              ;;
+            *)
+              echo "::error::unrecognized dependency-review state=$DEPENDENCY_REVIEW_STATE"
+              exit 1
+              ;;
+          esac
 
   protected-gate:
     name: Package integrity

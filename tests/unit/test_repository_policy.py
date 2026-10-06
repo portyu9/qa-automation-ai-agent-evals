@@ -129,9 +129,9 @@ def test_policy_rejects_package_build_without_source_bound_epoch(tmp_path: Path)
     workspace = _policy_workspace(tmp_path)
     workflow = workspace / ".github/workflows/ci.yml"
     source = workflow.read_text(encoding="utf-8")
-    required = 'export SOURCE_DATE_EPOCH="$(git show -s --format=%ct "$GITHUB_SHA")"'
+    required = 'SOURCE_DATE_EPOCH="$(git show -s --format=%ct "$GITHUB_SHA")"'
     assert source.count(required) >= 2
-    workflow.write_text(source.replace(required, "export SOURCE_DATE_EPOCH=0", 1), encoding="utf-8")
+    workflow.write_text(source.replace(required, "SOURCE_DATE_EPOCH=0", 1), encoding="utf-8")
 
     result = _run_policy(workspace)
 
@@ -175,8 +175,11 @@ def test_policy_rejects_unhashed_quality_dependency_install(tmp_path: Path) -> N
     workspace = _policy_workspace(tmp_path)
     workflow = workspace / ".github/workflows/ci.yml"
     source = workflow.read_text(encoding="utf-8")
-    assert "--require-hashes" in source
-    workflow.write_text(source.replace("--require-hashes", "", 1), encoding="utf-8")
+    required = '--require-hashes             -r "requirements/locks/core-py${lock_suffix}.txt"'
+    assert required in source
+    workflow.write_text(
+        source.replace(required, required.replace("--require-hashes", ""), 1), encoding="utf-8"
+    )
 
     result = _run_policy(workspace)
 
