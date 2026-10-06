@@ -195,7 +195,8 @@ class RetrievalPipelineReceipt(BaseModel):
             "violations": [item.value for item in canonical_violations],
             "accepted": accepted,
         }
-        return validate_receipt_construction(cls,
+        return validate_receipt_construction(
+            cls,
             policy=checked_policy,
             documents=tuple(checked),
             query_sha256=query_sha256,
