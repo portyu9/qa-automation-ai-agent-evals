@@ -146,7 +146,8 @@ class ChaosAssuranceReceipt(BaseModel):
             "blocked": blocked,
             "qualification_complete": complete,
         }
-        return validate_receipt_construction(cls,
+        return validate_receipt_construction(
+            cls,
             policy=checked_policy,
             observations=tuple(checked),
             covered_domains=covered,
