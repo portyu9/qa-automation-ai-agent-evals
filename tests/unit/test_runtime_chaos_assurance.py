@@ -31,7 +31,9 @@ def test_chaos_assurance_covers_all_domains_without_flattening_subject_failure()
         _observation(
             domain,
             index,
-            outcome=ChaosOutcome.SUBJECT_FAILURE if domain is ChaosDomain.CREDENTIAL_EXPIRY else ChaosOutcome.RECOVERED,
+            outcome=ChaosOutcome.SUBJECT_FAILURE
+            if domain is ChaosDomain.CREDENTIAL_EXPIRY
+            else ChaosOutcome.RECOVERED,
         )
         for index, domain in enumerate(ChaosDomain)
     )
