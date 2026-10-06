@@ -54,6 +54,8 @@ jobs:
           python-version: "3.11"
       - name: Validate runtime and CI support contract
         run: python .github/scripts/validate_runtime_policy.py
+      - name: Validate mandatory security scanner stack
+        run: python .github/scripts/validate_security_stack.py
       - name: Self-test semantic workflow graph validator
         run: python .github/scripts/validate_workflow_graph.py --self-test
       - name: Validate semantic workflow graph
