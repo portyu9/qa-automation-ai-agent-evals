@@ -103,7 +103,6 @@ def test_coverage_requires_capability_security_resilience_and_metamorphic() -> N
         ScenarioKind.METAMORPHIC,
     }
 
-    deprecated = entries[-1]
     deprecated_scenario = _scenario("coverage.deprecated", kind=ScenarioKind.METAMORPHIC)
     deprecated_entry = _entry(
         deprecated_scenario,
@@ -113,7 +112,7 @@ def test_coverage_requires_capability_security_resilience_and_metamorphic() -> N
     missing_active = ScenarioRegistry.create(
         registry_id="coverage-registry",
         revision="2",
-        entries=entries[:-1] + (deprecated_entry,),
+        entries=(*entries[:-1], deprecated_entry),
     )
     assert ScenarioCoverageReport.create(missing_active).accepted is False
 
