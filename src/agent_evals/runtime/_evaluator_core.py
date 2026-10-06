@@ -268,15 +268,6 @@ class TrialRunner:
                 elapsed_ms=(perf_counter() - started) * 1000.0,
             )
 
-        if not isinstance(result, AdapterResult):
-            return self._invalid_adapter_result(
-                adapter=adapter,
-                subject=subject,
-                scenario=scenario,
-                trial_id=trial_id,
-                elapsed_ms=(perf_counter() - started) * 1000.0,
-            )
-
         try:
             evidence = self._to_evidence(
                 result,
