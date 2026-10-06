@@ -5,6 +5,8 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  schedule:
+    - cron: "13 4 * * 4"
   workflow_dispatch:
     inputs:
       subject_sha:
