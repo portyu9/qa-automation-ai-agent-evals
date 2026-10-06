@@ -4,7 +4,6 @@ import json
 from pathlib import Path
 
 from typer.testing import CliRunner
-
 from agent_evals import cli
 from agent_evals.contracts.models import (
     AuthorityPolicy,
