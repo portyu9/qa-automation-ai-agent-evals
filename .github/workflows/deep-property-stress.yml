@@ -1,0 +1,73 @@
+name: Deep property and stress assurance
+
+on:
+  schedule:
+    - cron: "29 5 * * 5"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deep-property-stress-${{ github.repository }}
+  cancel-in-progress: true
+
+jobs:
+  deep-property-stress:
+    name: Property / stress / deterministic flake detection
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      EXACT_COMMIT: ${{ github.sha }}
+      HYPOTHESIS_SEED: ${{ github.run_id }}
+      PYTHONHASHSEED: "0"
+    steps:
+      - name: Checkout exact scheduled subject
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.EXACT_COMMIT }}
+          persist-credentials: false
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install exact deep-assurance dependency graph
+        run: |
+          python -m pip install --disable-pip-version-check --require-hashes             -r requirements/locks/core-py311.txt
+          python -m pip install --disable-pip-version-check --no-deps --no-build-isolation .
+          python -m pip check
+      - name: Bind evidence to exact commit and property seed
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXACT_COMMIT"
+          printf '%s\n' "$EXACT_COMMIT" > deep-property-stress-commit.txt
+          printf '%s\n' "$HYPOTHESIS_SEED" > deep-property-stress-seed.txt
+      - name: Run deep property contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pytest             -o addopts="--strict-markers"             -q             tests/unit/test_property_invariants.py             tests/unit/test_property_trust_kernels.py             --hypothesis-seed="$HYPOTHESIS_SEED"             --junitxml=deep-property-junit.xml             2>&1 | tee deep-property.log
+      - name: Run deterministic stress and flake detection
+        shell: bash
+        run: |
+          set -euo pipefail
+          : > deterministic-stress.log
+          for iteration in $(seq 1 10); do
+            echo "deterministic iteration=$iteration" | tee -a deterministic-stress.log
+            python -m pytest               -o addopts="--strict-markers"               -q               tests/unit/test_evidence_resource_limits.py               tests/unit/test_statistics_complexity_limits.py               2>&1 | tee -a deterministic-stress.log
+          done
+      - name: Retain deep property/stress evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: deep-property-stress-${{ env.EXACT_COMMIT }}
+          path: |
+            deep-property-stress-commit.txt
+            deep-property-stress-seed.txt
+            deep-property-junit.xml
+            deep-property.log
+            deterministic-stress.log
+          if-no-files-found: error
+          retention-days: 30
