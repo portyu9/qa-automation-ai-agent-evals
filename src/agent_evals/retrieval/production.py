@@ -156,12 +156,16 @@ class RetrievalPipelineReceipt(BaseModel):
                 violations.add(RetrievalPipelineViolation.FILTER_MISMATCH)
             if item.lifecycle is not RetrievalDocumentLifecycle.ACTIVE:
                 violations.add(RetrievalPipelineViolation.INACTIVE_DOCUMENT)
-            if checked_policy.mode in {RetrievalMode.VECTOR, RetrievalMode.HYBRID}:
-                if item.vector_score_micros is None:
-                    violations.add(RetrievalPipelineViolation.MISSING_VECTOR_SCORE)
-            if checked_policy.mode in {RetrievalMode.LEXICAL, RetrievalMode.HYBRID}:
-                if item.lexical_score is None:
-                    violations.add(RetrievalPipelineViolation.MISSING_LEXICAL_SCORE)
+            if (
+                checked_policy.mode in {RetrievalMode.VECTOR, RetrievalMode.HYBRID}
+                and item.vector_score_micros is None
+            ):
+                violations.add(RetrievalPipelineViolation.MISSING_VECTOR_SCORE)
+            if (
+                checked_policy.mode in {RetrievalMode.LEXICAL, RetrievalMode.HYBRID}
+                and item.lexical_score is None
+            ):
+                violations.add(RetrievalPipelineViolation.MISSING_LEXICAL_SCORE)
             if checked_policy.require_citations and item.citation_uri is None:
                 violations.add(RetrievalPipelineViolation.MISSING_CITATION)
 
