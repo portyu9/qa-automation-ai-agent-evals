@@ -10,9 +10,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from agent_evals.evidence.models import EvidenceEvent, EvidenceKind
 
-_RECEIPT_PROTOCOL: Literal["agent-evals/receipt-envelope/v1"] = (
-    "agent-evals/receipt-envelope/v1"
-)
+_RECEIPT_PROTOCOL: Literal["agent-evals/receipt-envelope/v1"] = "agent-evals/receipt-envelope/v1"
 _RECEIPT_DOMAIN = b"agent-evals/receipt-envelope/v1\0"
 
 
@@ -66,17 +64,13 @@ class ReceiptEnvelopeV1(BaseModel):
             "event_digest": event.digest,
             "payload_sha256": payload_sha256,
         }
-        envelope_root = hashlib.sha256(
-            _RECEIPT_DOMAIN + _canonical_bytes(unsigned)
-        ).hexdigest()
+        envelope_root = hashlib.sha256(_RECEIPT_DOMAIN + _canonical_bytes(unsigned)).hexdigest()
         return cls(**unsigned, envelope_root=envelope_root)
 
     @model_validator(mode="after")
     def verify_envelope_root(self) -> Self:
         unsigned = self.model_dump(mode="json", exclude={"envelope_root"})
-        expected = hashlib.sha256(
-            _RECEIPT_DOMAIN + _canonical_bytes(unsigned)
-        ).hexdigest()
+        expected = hashlib.sha256(_RECEIPT_DOMAIN + _canonical_bytes(unsigned)).hexdigest()
         if self.envelope_root != expected:
             raise ValueError("receipt envelope root mismatch")
         return self
