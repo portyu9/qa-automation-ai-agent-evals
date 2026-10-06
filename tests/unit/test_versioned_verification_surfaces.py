@@ -108,6 +108,20 @@ def test_receipt_projection_and_common_envelope_do_not_upgrade_authority() -> No
         ReceiptEnvelopeV1.model_validate(tampered)
 
 
+    ordinary = EvidenceEvent(
+        sequence=1,
+        kind=EvidenceKind.OUTPUT,
+        source="adapter:test",
+        payload={
+            "schema_version": "agent-evals/fake-receipt/v1",
+            "receipt_root": "d" * 64,
+            "output": "not a receipt",
+        },
+    )
+    with pytest.raises(ValueError, match="receipt-bearing"):
+        ReceiptEnvelopeV1.from_event(ordinary)
+
+
 def test_structured_oracle_failure_projection_preserves_original_reason() -> None:
     outcome = OracleResult(
         name="outcome",
