@@ -263,7 +263,7 @@ class MCPRemoteAssuranceReceipt(BaseModel):
             "covered_conditions": [item.value for item in covered],
             "accepted": accepted,
         }
-        return cls(
+        return cls.model_construct(
             endpoint=checked_endpoint,
             policy=checked_policy,
             observations=tuple(checked),
@@ -417,7 +417,7 @@ class MCPConcurrencyReceipt(BaseModel):
             "minimum_parallelism": minimum_parallelism,
             "accepted": accepted,
         }
-        return cls(
+        return cls.model_construct(
             operations=tuple(checked),
             peak_parallelism=peak,
             minimum_parallelism=minimum_parallelism,
@@ -486,7 +486,7 @@ class MCPMultiServerReceipt(BaseModel):
             "collision_names": list(collisions),
             "accepted": accepted,
         }
-        return cls(
+        return cls.model_construct(
             servers=tuple(checked),
             collision_names=collisions,
             accepted=accepted,
@@ -593,7 +593,7 @@ class MCPHostileServerReceipt(BaseModel):
             "covered_conditions": [item.value for item in covered],
             "accepted": accepted,
         }
-        return cls(
+        return cls.model_construct(
             budget=checked_budget,
             observations=tuple(checked),
             covered_conditions=covered,
