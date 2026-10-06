@@ -480,7 +480,9 @@ for required in (
         fail(f"compatibility job is missing required boundary contract text: {required}")
 for forbidden in ("piptools", "generate_ci_lock.py", "pip install -U", "pip install --upgrade"):
     if forbidden in compatibility:
-        fail(f"compatibility qualification must not resolve or mutate dependencies live: {forbidden}")
+        fail(
+            f"compatibility qualification must not resolve or mutate dependencies live: {forbidden}"
+        )
 
 if Path(".github/workflows/compat-lock-candidates.yml").exists():
     fail("temporary compatibility candidate workflow must not remain in accepted repository state")
