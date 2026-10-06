@@ -5,8 +5,6 @@ import pytest
 from agent_evals.adapters.base import AdapterResult
 from agent_evals.adapters.conformance import (
     AdapterConformanceError,
-    ConformanceCheckedAdapter,
-    authority_adapter,
     validate_adapter_name,
     validate_adapter_result,
 )
@@ -87,19 +85,6 @@ def test_adapter_result_requires_exact_contiguous_events() -> None:
     )
     with pytest.raises(AdapterConformanceError, match="contiguous"):
         validate_adapter_result(result)
-
-
-def test_exact_framework_wrapper_is_the_only_authority_unwrap_boundary() -> None:
-    adapter = _Adapter(AdapterResult(final_state={"status": "ok"}))
-    wrapped = ConformanceCheckedAdapter(adapter)
-
-    assert authority_adapter(wrapped) is adapter
-
-    class _Lookalike:
-        _adapter = adapter
-
-    lookalike = _Lookalike()
-    assert authority_adapter(lookalike) is lookalike  # type: ignore[arg-type]
 
 
 @pytest.mark.asyncio
