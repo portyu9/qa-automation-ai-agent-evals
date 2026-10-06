@@ -280,7 +280,10 @@ def test_policy_rejects_release_statement_with_signing_authority(tmp_path: Path)
     result = _run_policy(workspace)
 
     assert result.returncode != 0
-    assert "release-statement must retain an unsigned statement without signing authority" in result.stderr
+    assert (
+        "release-statement must retain an unsigned statement without signing authority"
+        in result.stderr
+    )
 
 
 def test_policy_rejects_publish_without_release_statement_verification(tmp_path: Path) -> None:
