@@ -143,7 +143,6 @@ def test_structured_oracle_failure_projection_preserves_original_reason() -> Non
     assert policy_failure[0].reason == policy.reasons[0]
 
 
-
 def test_current_deterministic_oracles_emit_failure_codes_directly() -> None:
     scenario = EvaluationScenario(
         scenario_id="failure.codes",
