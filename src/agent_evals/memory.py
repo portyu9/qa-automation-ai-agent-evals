@@ -8,7 +8,12 @@ import json
 from enum import StrEnum
 from typing import Literal, Self
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, model_validator
+
+from agent_evals._receipt_validation import (
+    is_receipt_construction,
+    validate_receipt_construction,
+)
 
 _POLICY_SCHEMA: Literal["agent-evals/memory-assurance-policy/v1"] = (
     "agent-evals/memory-assurance-policy/v1"
@@ -216,7 +221,7 @@ class MemoryAssuranceReceipt(BaseModel):
             "poison_rejected": poison_rejected,
             "accepted": accepted,
         }
-        return cls.model_construct(
+        return validate_receipt_construction(cls,
             policy=checked_policy,
             observations=tuple(checked),
             persistence_observed=persistence,
@@ -229,7 +234,9 @@ class MemoryAssuranceReceipt(BaseModel):
         )
 
     @model_validator(mode="after")
-    def verify_receipt(self) -> Self:
+    def verify_receipt(self, info: ValidationInfo) -> Self:
+        if is_receipt_construction(info):
+            return self
         rebuilt = type(self).create(policy=self.policy, observations=self.observations)
         fields = (
             "persistence_observed",
