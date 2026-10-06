@@ -199,13 +199,14 @@ class ScenarioRegistryEntry(BaseModel):
         snapshot = _revalidate_scenario(scenario)
         validated_benchmark = _revalidate_benchmark(benchmark)
         validated_provenance = _revalidate_provenance(provenance or ScenarioProvenance())
+        behavioral_fingerprint = _behavioral_fingerprint(snapshot)
         unsigned = {
             "schema_version": _ENTRY_SCHEMA,
             "scenario_id": snapshot.scenario_id,
             "scenario_revision": snapshot.revision,
             "scenario_kind": snapshot.kind.value,
             "scenario_identity": snapshot.identity,
-            "behavioral_fingerprint": _behavioral_fingerprint(snapshot),
+            "behavioral_fingerprint": behavioral_fingerprint,
             "scenario_tags": tuple(sorted(snapshot.tags)),
             "owner": owner,
             "taxonomy": taxonomy,
@@ -225,7 +226,7 @@ class ScenarioRegistryEntry(BaseModel):
             scenario_revision=snapshot.revision,
             scenario_kind=snapshot.kind,
             scenario_identity=snapshot.identity,
-            behavioral_fingerprint=unsigned["behavioral_fingerprint"],
+            behavioral_fingerprint=behavioral_fingerprint,
             scenario_tags=tuple(sorted(snapshot.tags)),
             owner=owner,
             taxonomy=taxonomy,
@@ -333,10 +334,7 @@ class ScenarioRegistry(BaseModel):
         revision: str,
         entries: tuple[ScenarioRegistryEntry, ...],
     ) -> Self:
-        validated = tuple(
-            ScenarioRegistryEntry.model_validate_json(entry.model_dump_json())
-            for entry in entries
-        )
+        validated = tuple(_revalidate_entry(entry) for entry in entries)
         canonical = _canonical_entries(validated)
         unsigned = _registry_material(
             registry_id=registry_id,
@@ -349,6 +347,12 @@ class ScenarioRegistry(BaseModel):
             entries=canonical,
             registry_root=_registry_root(unsigned),
         )
+
+    @field_validator("revision")
+    @classmethod
+    def validate_revision(cls, value: str) -> str:
+        _require_trimmed_text(value, label="scenario registry revision")
+        return value
 
     @model_validator(mode="after")
     def validate_registry(self) -> Self:
@@ -373,6 +377,9 @@ class ScenarioRegistry(BaseModel):
             superseded = entry.superseded_by_scenario_identity
             if superseded is not None and superseded not in identities:
                 raise ValueError("scenario supersession target is absent from registry")
+            parent = entry.provenance.parent_scenario_identity
+            if parent is not None and parent not in identities:
+                raise ValueError("scenario provenance parent is absent from registry")
 
         _reject_prerequisite_cycles(self.entries)
         expected = _registry_root(
@@ -417,7 +424,7 @@ class ScenarioRegistryFinding(BaseModel):
 def lint_scenario_registry(registry: ScenarioRegistry) -> tuple[ScenarioRegistryFinding, ...]:
     """Return deterministic quality findings without upgrading metadata labels into evidence."""
 
-    validated = ScenarioRegistry.model_validate_json(registry.model_dump_json())
+    validated = _revalidate_registry(registry)
     findings: list[ScenarioRegistryFinding] = []
     by_identity = {entry.scenario_identity: entry for entry in validated.entries}
 
@@ -576,6 +583,18 @@ def _entry_root(value: object) -> str:
 
 def _registry_root(value: object) -> str:
     return hashlib.sha256(_REGISTRY_DOMAIN + _canonical_json_bytes(value)).hexdigest()
+
+
+def _revalidate_registry(value: ScenarioRegistry) -> ScenarioRegistry:
+    if type(value) is not ScenarioRegistry:
+        raise ValueError("scenario registry quality lint requires exact ScenarioRegistry")
+    return ScenarioRegistry.model_validate_json(value.model_dump_json())
+
+
+def _revalidate_entry(value: ScenarioRegistryEntry) -> ScenarioRegistryEntry:
+    if type(value) is not ScenarioRegistryEntry:
+        raise ValueError("scenario registry requires exact ScenarioRegistryEntry values")
+    return ScenarioRegistryEntry.model_validate_json(value.model_dump_json())
 
 
 def _revalidate_scenario(value: EvaluationScenario) -> EvaluationScenario:
