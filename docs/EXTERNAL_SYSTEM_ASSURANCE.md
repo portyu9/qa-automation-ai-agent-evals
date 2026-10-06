@@ -12,7 +12,7 @@ The ordinary PR suite remains network-independent. Operators can invoke the netw
 
 ## Advanced MCP protocol surfaces
 
-`MCPCapabilitySnapshot` inventories resources, prompts, roots, subscriptions, elicitation, sampling, Tasks and `tools/list_changed` capability. `MCPToolsListChangedReceipt` requires an actual before/after discovery delta and a notification sequence.
+`MCPCapabilitySnapshot` inventories resources, prompts, roots, subscriptions, elicitation, sampling, Tasks and `tools/list_changed`. Inventory alone is not qualification: `MCPCapabilityExerciseReceipt` requires a bounded successful request/response observation for every capability in the bound snapshot. `MCPToolsListChangedReceipt` separately requires an actual before/after discovery delta and a notification sequence.
 
 `MCPConcurrencyReceipt` recomputes peak parallelism from bounded logical intervals and rejects duplicate request IDs. `MCPMultiServerReceipt` reports cross-server tool-name collisions instead of silently aliasing them. `MCPHostileServerReceipt` keeps oversized responses, hangs, protocol trickery and resource pressure inside declared byte/time/message ceilings.
 
@@ -20,7 +20,7 @@ These contracts do not infer that an advertised capability is correct merely bec
 
 ## OAuth, JWT/JWKS and authorization drift
 
-`OAuthKeySetSnapshot` binds observed issuer/JWKS key sets by logical epoch. `OAuthSessionEvent` records only token digests plus externally verified JWT/signature facts; raw bearer material is not persisted. `OAuthAdvancedReceipt` can require key rotation, refresh, revocation rejection, replay rejection and sender constraining by DPoP or mTLS, including third-party issuers declared by policy.
+`OAuthKeySetSnapshot` binds observed issuer/JWKS key sets by logical epoch. `OAuthSessionEvent` records only token digests plus externally verified JWT-signature and sender-binding facts; raw bearer material is not persisted. DPoP/mTLS observations require an external sender-binding verification result plus a sender-key fingerprint. `OAuthAdvancedReceipt` can require key rotation, refresh, revocation rejection, replay rejection and verified sender constraining, including third-party issuers declared by policy.
 
 `OAuthAuthorizationDriftReceipt` requires an observed scope contraction during an active session plus a post-contraction denial. It does not treat a successful authorization flow as behavioral correctness.
 
@@ -34,7 +34,7 @@ The existing scenario-owned `ApprovalIntentSpec` remains the authority for what 
 
 ## Distributed side effects and target acknowledgements
 
-`DistributedSideEffectReceipt` expands run-local idempotency evidence to concurrent duplicates, timeout/cancellation retries, crash recovery, queue redelivery and multi-worker races. Attempts remain bound to one operation/idempotency key, and duplicate causes cannot compensate for a second committed mutation.
+`DistributedSideEffectReceipt` expands run-local idempotency evidence to concurrent duplicates, timeout/cancellation retries, crash recovery, queue redelivery and multi-worker races. Attempts remain bound to one operation/idempotency key. Any one attempt—including a recovery retry—may be the sole successful commit; a second committed mutation still fails the policy.
 
 `TargetEffectAcknowledgement` records target-system effect identity plus external cryptographic verification metadata. `verify_target_acknowledgement()` requires an externally verified acknowledgement to bind the unique committed mutation. The framework does not implement the target's signature verifier and does not reinterpret its own hash as authentication.
 
