@@ -109,7 +109,7 @@ See the repository-level [Typed Resource Authority](../RESOURCE_AUTHORITY.md), p
 
 ## Adapter conformance and live-provider observation
 
-Every adapter entering the public `TrialRunner` passes through an exact evaluator-owned conformance wrapper before its normalized result reaches grading. Structural conformance does not grant producer authority: the core unwraps only that exact framework wrapper and then retains its existing exact-type checks for evaluator-owned attack, retrieval, approval, side-effect, and MCP protocol evidence.
+Every adapter result entering the public `TrialRunner` passes an evaluator-owned normalized-result conformance check before evidence conversion. The original adapter object remains the execution, error-provenance, and producer-authority subject, so structural conformance cannot replace or broaden the existing exact-type checks for evaluator-owned attack, retrieval, approval, side-effect, and MCP protocol evidence.
 
 `JsonHttpRuntimeAdapter` provides a genuinely distinct provider-neutral JSON runtime boundary. The remote side may report terminal output/state and non-authoritative usage telemetry, but it cannot inject framework events or declare trusted evidence roles.
 
