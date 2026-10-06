@@ -334,14 +334,17 @@ if (
     fail("publish-release must serialize release publication attempts without cancellation")
 if "if: github.ref == 'refs/heads/main'" not in publish_release:
     fail("publish-release job must fail closed unless the dispatch ref is main")
-if not any(
+publish_checkout_count = sum(
     action.startswith("actions/checkout@") for action in _WORKFLOW_USES_RE.findall(publish_release)
-):
-    fail("publish-release must checkout exact dispatch-time default-branch release logic")
+)
+if publish_checkout_count != 1:
+    fail("publish-release must contain exactly one trusted default-branch checkout")
 if "ref: ${{ github.sha }}" not in publish_release:
     fail("publish-release checkout must bind to the repository_dispatch default-branch SHA")
 if "persist-credentials: false" not in publish_release:
     fail("publish-release checkout must not persist repository credentials")
+if "ref: ${{ steps.candidate.outputs.commit_sha }}" in publish_release:
+    fail("publish-release must not checkout a dynamically selected candidate commit")
 if "github.event.client_payload" in publish_release:
     fail(
         "publish-release must parse client payload as event-file data, not interpolate it into shell"
@@ -351,8 +354,15 @@ for required in (
     "release_candidate.py validate",
     '--workflow-ref "$GITHUB_REF"',
     '--workflow-sha "$GITHUB_SHA"',
-    "ref: ${{ steps.candidate.outputs.commit_sha }}",
-    "path: candidate-source",
+    "Materialize exact CI-qualified source contract",
+    "CI_COMMIT_SHA: ${{ steps.candidate.outputs.commit_sha }}",
+    "application/vnd.github.raw+json",
+    "requirements/compatibility/core-minimum-py311.txt",
+    "requirements/compatibility/core-latest-py311.txt",
+    "requirements/compatibility/mcp-minimum-py311.txt",
+    "requirements/compatibility/mcp-latest-py311.txt",
+    "requirements/compatibility/openai-mcp-minimum-py311.txt",
+    "requirements/compatibility/openai-mcp-latest-py311.txt",
     "package-artifacts-${{ steps.candidate.outputs.ci_run_id }}",
     "run-id: ${{ steps.candidate.outputs.ci_run_id }}",
     "github-token: ${{ secrets.GITHUB_TOKEN }}",
@@ -707,6 +717,8 @@ if "if: github.event_name == 'push' && github.ref == 'refs/heads/main'" not in r
 for dependency in ("package", "release-supply-chain-reverify", "qualification-evidence"):
     if f"      - {dependency}\n" not in release_statement:
         fail(f"release-statement must depend on {dependency}")
+if "      - release-statement\n" in release_statement:
+    fail("release-statement must not depend on itself")
 for required in (
     "release_statement.py create",
     "release_statement.py verify",
