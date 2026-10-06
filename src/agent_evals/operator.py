@@ -134,7 +134,9 @@ async def run_request(path: Path, *, single: bool) -> dict[str, Any]:
     request = OperatorRunRequest.model_validate(load_json(path, label="operator run request"))
     request.validate_operator_adapter()
     if single and len(request.observations) != 1:
-        raise ValueError("run requires exactly one normalized observation; use 'session run' for many")
+        raise ValueError(
+            "run requires exactly one normalized observation; use 'session run' for many"
+        )
 
     cursor = 0
 
@@ -183,7 +185,9 @@ async def replay_or_regrade(
 ) -> dict[str, Any]:
     evidence = TrialEvidence.model_validate(load_json(evidence_path, label="trial evidence"))
     scenario = EvaluationScenario.model_validate(load_json(scenario_path, label="scenario"))
-    subject = SubjectFingerprint.model_validate(load_json(subject_path, label="subject fingerprint"))
+    subject = SubjectFingerprint.model_validate(
+        load_json(subject_path, label="subject fingerprint")
+    )
     if evidence.subject_identity != subject.identity:
         raise ValueError("evidence subject identity does not match supplied subject fingerprint")
     if evidence.scenario_identity != scenario.identity:
@@ -369,8 +373,13 @@ async def minimize_evidence(
 ) -> dict[str, Any]:
     evidence = TrialEvidence.model_validate(load_json(evidence_path, label="trial evidence"))
     scenario = EvaluationScenario.model_validate(load_json(scenario_path, label="scenario"))
-    subject = SubjectFingerprint.model_validate(load_json(subject_path, label="subject fingerprint"))
-    if evidence.subject_identity != subject.identity or evidence.scenario_identity != scenario.identity:
+    subject = SubjectFingerprint.model_validate(
+        load_json(subject_path, label="subject fingerprint")
+    )
+    if (
+        evidence.subject_identity != subject.identity
+        or evidence.scenario_identity != scenario.identity
+    ):
         raise ValueError("evidence identity does not match supplied subject/scenario")
 
     original = await TrialRunner().run(
@@ -416,9 +425,7 @@ async def minimize_evidence(
 
 
 def calibration_run(path: Path) -> dict[str, Any]:
-    request = CalibrationRunRequest.model_validate(
-        load_json(path, label="calibration run request")
-    )
+    request = CalibrationRunRequest.model_validate(load_json(path, label="calibration run request"))
     receipt = SemanticCalibrationReceipt.create(
         judge_profile=request.judge_profile,
         policy=request.policy,
@@ -530,9 +537,7 @@ def deep_doctor(*, configured_store_root: Path | None) -> dict[str, Any]:
                 lock_count = sum(1 for _ in (store.root / "records").glob("*/*.lock"))
                 store_check.update({"usable": True, "lock_files": lock_count})
             except Exception as exc:
-                store_check.update(
-                    {"usable": False, "reason": f"{type(exc).__name__}: {exc}"}
-                )
+                store_check.update({"usable": False, "reason": f"{type(exc).__name__}: {exc}"})
         checks["evidence_store"] = store_check
 
     ok = python_supported and filesystem_ok
