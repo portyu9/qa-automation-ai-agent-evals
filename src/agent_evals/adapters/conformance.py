@@ -1,9 +1,9 @@
 """Evaluator-owned adapter conformance boundary.
 
 Third-party adapters may translate runtime observations into :class:`AdapterResult`, but they do
-not acquire grading or evidence-producer authority by doing so. The public evaluator wraps every
-adapter in this exact framework type before execution and validates the normalized result before
-the core grading engine can accept it.
+not acquire grading or evidence-producer authority by doing so. The core evaluator validates the
+normalized result before evidence conversion while retaining the original adapter object for call
+binding, error provenance, and exact producer-authority checks.
 
 This layer is deliberately structural. It does not claim that a provider authenticated itself,
 that remote state is truthful, or that adapter-supplied telemetry is independently verified.
@@ -69,59 +69,6 @@ def validate_adapter_result(value: object) -> AdapterResult:
     _validate_nonnegative_integer(value.output_tokens, field_name="output_tokens")
     _validate_nonnegative_number(value.estimated_cost_usd, field_name="estimated_cost_usd")
     return value
-
-
-class ConformanceCheckedAdapter:
-    """Exact evaluator-owned wrapper that validates any adapter before core grading."""
-
-    def __init__(self, adapter: AgentAdapter) -> None:
-        self._adapter = adapter
-
-    @property
-    def name(self) -> str:
-        try:
-            return validate_adapter_name(self._adapter.name)
-        except Exception:
-            return _REJECTED_NAME
-
-    async def execute(
-        self,
-        *,
-        subject: SubjectFingerprint,
-        scenario: EvaluationScenario,
-        trial_id: str,
-    ) -> AdapterResult:
-        try:
-            raw_name = self._adapter.name
-        except Exception as exc:
-            raise AdapterConformanceError("adapter name could not be read safely") from exc
-        validate_adapter_name(raw_name)
-        result = await self._adapter.execute(
-            subject=subject,
-            scenario=scenario,
-            trial_id=trial_id,
-        )
-        return validate_adapter_result(result)
-
-
-def conformance_checked(adapter: AgentAdapter) -> AgentAdapter:
-    """Wrap one adapter exactly once in the evaluator-owned conformance boundary."""
-
-    if type(adapter) is ConformanceCheckedAdapter:
-        return adapter
-    return ConformanceCheckedAdapter(adapter)
-
-
-def authority_adapter(adapter: AgentAdapter) -> AgentAdapter:
-    """Return the underlying producer only for the exact framework conformance wrapper.
-
-    This helper exists solely so the core evaluator can preserve its existing exact-type producer
-    capability checks. A user-defined wrapper or subclass is never unwrapped.
-    """
-
-    if type(adapter) is ConformanceCheckedAdapter:
-        return adapter._adapter
-    return adapter
 
 
 def _validate_nonnegative_integer(value: object, *, field_name: str) -> None:
