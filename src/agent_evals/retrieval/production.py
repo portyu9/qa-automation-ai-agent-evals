@@ -186,7 +186,7 @@ class RetrievalPipelineReceipt(BaseModel):
             "violations": [item.value for item in canonical_violations],
             "accepted": accepted,
         }
-        return cls(
+        return cls.model_construct(
             policy=checked_policy,
             documents=tuple(checked),
             query_sha256=query_sha256,
