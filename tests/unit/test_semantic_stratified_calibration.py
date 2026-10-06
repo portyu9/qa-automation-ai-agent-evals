@@ -422,3 +422,28 @@ def test_stratified_calibration_contracts_are_public_semantic_api() -> None:
     assert expected <= set(semantic.__all__)
     for name in expected:
         assert getattr(semantic, name) is not None
+
+
+def test_create_revalidates_copied_policy_before_acceptance() -> None:
+    policy = _stratified_policy().model_copy(
+        update={"max_holdout_false_pass_upper_bound": 2.0}
+    )
+
+    with pytest.raises(ValidationError, match="less than or equal to 1"):
+        StratifiedCalibrationReceipt.create(
+            judge_profile=_profile(),
+            policy=policy,
+            observations=_passing_partition(),
+        )
+
+
+def test_holdout_release_revalidates_copied_receipt() -> None:
+    rejected = StratifiedCalibrationReceipt.create(
+        judge_profile=_profile(),
+        policy=_stratified_policy(max_bound=0.49),
+        observations=_passing_partition(),
+    )
+    forged = rejected.model_copy(update={"accepted": True})
+
+    with pytest.raises(ValidationError, match="acceptance does not recompute"):
+        forged.require_accepted_holdout()
