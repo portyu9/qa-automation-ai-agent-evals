@@ -194,6 +194,29 @@ The default `SemanticCalibrationPolicy` requires balanced support and is intenti
 
 The policy itself is content-addressed and embedded in the receipt. Changing acceptance thresholds changes calibration identity.
 
+### High-assurance stratified qualification
+
+For stricter empirical qualification, `StratifiedCalibrationReceipt` is an additive layer above the existing v2 calibration receipt. It does **not** reinterpret or replace `SemanticCalibrationReceipt/v2`; instead it partitions existing durable observations into explicit `development`, `validation`, and `holdout` strata and derives independent v2 receipts for validation and holdout.
+
+The stratified contract revalidates detached copies of the judge profile, policy, and every split observation before deriving acceptance. The holdout-release helper revalidates the complete stratified receipt again before returning the embedded v2 holdout receipt, so an in-process unchecked model copy cannot self-assert acceptance.
+
+The stratified contract enforces:
+
+- one exact calibration case identity may appear in only one split;
+- development observations satisfy only a minimum-support requirement and never contribute to validation or holdout acceptance metrics;
+- validation and holdout each satisfy their own existing `SemanticCalibrationPolicy`;
+- configured risk tags have independent minimum evaluator-FAIL support in validation and holdout;
+- false-PASS risk is bounded with an explicit one-sided Wilson upper bound using a policy-bound `confidence_z`;
+- the final accepted bit and all derived support/bound values are recomputed from the persisted observations.
+
+This matters because an observed false-PASS count of zero is not evidence that the true false-PASS rate is zero. With only one FAIL-labeled case and `confidence_z=1`, for example, the one-sided Wilson upper bound is 0.5. A policy may therefore reject a judge even when it made no observed false-PASS error if the holdout support is too small to establish the requested bound.
+
+The default risk requirement remains `judge-prompt-injection`, but the high-assurance defaults require at least 12 FAIL-labeled validation cases and 25 FAIL-labeled holdout cases carrying that tag, plus at least 10 development cases. The default one-sided false-PASS upper-bound limits are 0.20 for validation and 0.10 for holdout. These defaults are chosen so the minimum zero-error risk-tag support is approximately capable of satisfying the corresponding Wilson bound rather than making the default policy internally impossible. Applications can require additional evaluator-owned tags with separate validation and holdout support minima. Tags remain labels bound inside calibration case commitments; they are not authenticated vulnerability classifications.
+
+An accepted stratified receipt may expose its exact embedded v2 holdout receipt for use by existing semantic-judgment machinery. This is deliberately a compatibility bridge, not an authority upgrade: current runtime semantic grading still validates the v2 receipt it receives, deterministic grading still runs first, and an application that wants the stricter claim must retain and verify the stratified receipt as separate qualification evidence.
+
+The stratified receipt does **not** claim random sampling, population representativeness, independence, universal judge correctness, prompt-injection immunity, or absence of benchmark leakage. Those require separate benchmark-registry and sampling/leakage contracts.
+
 ### Prompt-injection coverage
 
 A calibration case committed with the `judge-prompt-injection` tag is not a magic security certification. It proves only that the exact calibrated judge configuration was evaluated against at least one case whose evaluator-owned commitment includes that coverage label. An observation cannot manufacture this coverage by adding a standalone tag.
