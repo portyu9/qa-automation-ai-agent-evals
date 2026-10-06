@@ -152,7 +152,7 @@ jobs:
             200)
               echo "state=available" >> "$GITHUB_OUTPUT"
               ;;
-            404)
+            403|404)
               echo "state=blocked-admin-prerequisite" >> "$GITHUB_OUTPUT"
               echo "::warning::Dependency review BLOCKED: repository dependency graph is not enabled; tracked by #193."
               ;;
