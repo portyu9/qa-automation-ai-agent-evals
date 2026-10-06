@@ -147,3 +147,27 @@ def test_target_system_acknowledgement_requires_external_crypto_verification_and
     )
     with pytest.raises(ValueError, match="does not bind"):
         verify_target_acknowledgement(receipt=receipt, acknowledgement=wrong_effect)
+
+
+
+def test_timeout_retry_can_be_the_single_successful_commit() -> None:
+    attempts = (
+        _attempt(
+            index=0,
+            cause=SideEffectAttemptCause.INITIAL,
+            outcome=SideEffectAttemptOutcome.TIMED_OUT,
+        ),
+        _attempt(
+            index=1,
+            cause=SideEffectAttemptCause.TIMEOUT_RETRY,
+            outcome=SideEffectAttemptOutcome.COMMITTED,
+        ),
+    )
+
+    receipt = DistributedSideEffectReceipt.create(
+        policy=DistributedSideEffectPolicy(),
+        attempts=attempts,
+    )
+
+    assert receipt.committed_mutations == 1
+    assert receipt.accepted is True
