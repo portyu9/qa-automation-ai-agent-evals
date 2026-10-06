@@ -3,7 +3,6 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from click import unstyle
 from typer.testing import CliRunner
 
 from agent_evals import cli
@@ -50,9 +49,9 @@ def _write(path: Path, value: object) -> Path:
 
 
 def test_help_exposes_operator_surface_and_completion() -> None:
-    result = runner.invoke(cli.app, ["--help"])
+    result = runner.invoke(cli.app, ["--help"], color=False)
     assert result.exit_code == 0
-    help_text = unstyle(result.stdout)
+    help_text = result.stdout
     for command in (
         "scenario",
         "run",
