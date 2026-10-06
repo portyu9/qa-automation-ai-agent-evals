@@ -2,6 +2,8 @@
 
 from agent_evals.mcp.advanced import (
     MCPCapability,
+    MCPCapabilityExerciseReceipt,
+    MCPCapabilityOperationObservation,
     MCPCapabilitySnapshot,
     MCPConcurrencyReceipt,
     MCPConcurrentOperation,
@@ -66,6 +68,8 @@ __all__ = [
     "MCPAgentToolSchemaDriftReceipt",
     "MCPAgentToolStaleCacheReceipt",
     "MCPCapability",
+    "MCPCapabilityExerciseReceipt",
+    "MCPCapabilityOperationObservation",
     "MCPCapabilitySnapshot",
     "MCPConcurrencyReceipt",
     "MCPConcurrentOperation",
