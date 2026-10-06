@@ -8,7 +8,12 @@ import json
 from enum import StrEnum
 from typing import Literal, Self
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, field_validator, model_validator
+
+from agent_evals._receipt_validation import (
+    is_receipt_construction,
+    validate_receipt_construction,
+)
 
 _POLICY_SCHEMA: Literal["agent-evals/retrieval-pipeline-policy/v1"] = (
     "agent-evals/retrieval-pipeline-policy/v1"
@@ -190,7 +195,7 @@ class RetrievalPipelineReceipt(BaseModel):
             "violations": [item.value for item in canonical_violations],
             "accepted": accepted,
         }
-        return cls.model_construct(
+        return validate_receipt_construction(cls,
             policy=checked_policy,
             documents=tuple(checked),
             query_sha256=query_sha256,
@@ -202,7 +207,9 @@ class RetrievalPipelineReceipt(BaseModel):
         )
 
     @model_validator(mode="after")
-    def verify_receipt(self) -> Self:
+    def verify_receipt(self, info: ValidationInfo) -> Self:
+        if is_receipt_construction(info):
+            return self
         rebuilt = type(self).create(
             policy=self.policy,
             documents=self.documents,
