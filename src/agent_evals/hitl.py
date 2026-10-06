@@ -266,7 +266,7 @@ class ApprovalGovernanceReceipt(BaseModel):
             "effective_signers": list(signers),
             "accepted": accepted,
         }
-        return cls(
+        return cls.model_construct(
             policy=checked_policy,
             requester_id=requester_id,
             evaluated_at_unix_ms=evaluated_at_unix_ms,
@@ -413,7 +413,7 @@ class HITLResumeReceipt(BaseModel):
             "duplicate_rejections": duplicate_rejections,
             "accepted": accepted,
         }
-        return cls(
+        return cls.model_construct(
             checkpoint=checked_checkpoint,
             attempts=tuple(checked),
             completed_resume_id=completed_id,
