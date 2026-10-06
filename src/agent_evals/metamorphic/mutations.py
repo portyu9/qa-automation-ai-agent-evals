@@ -95,9 +95,7 @@ class MetamorphicMutationRecord(BaseModel):
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    schema_version: Literal["agent-evals/metamorphic-mutation-record/v1"] = (
-        _MUTATION_RECORD_SCHEMA
-    )
+    schema_version: Literal["agent-evals/metamorphic-mutation-record/v1"] = _MUTATION_RECORD_SCHEMA
     mutation_id: str = Field(pattern=r"^[a-z0-9][a-z0-9._-]{2,127}$")
     relation_id: str = Field(pattern=r"^[a-z0-9][a-z0-9._-]{2,127}$")
     parent_scenario_identity: str = Field(pattern=r"^[0-9a-f]{64}$")
@@ -221,16 +219,22 @@ class MetamorphicEffectivenessReport(BaseModel):
     ) -> Self:
         if type(policy) is not MetamorphicEffectivenessPolicy:
             raise ValueError("metamorphic effectiveness requires exact policy type")
-        checked_policy = MetamorphicEffectivenessPolicy.model_validate_json(policy.model_dump_json())
+        checked_policy = MetamorphicEffectivenessPolicy.model_validate_json(
+            policy.model_dump_json()
+        )
         checked_list: list[MetamorphicMutantOutcome] = []
         for item in outcomes:
             if type(item) is not MetamorphicMutantOutcome:
                 raise ValueError("metamorphic effectiveness requires exact outcome values")
-            checked_list.append(MetamorphicMutantOutcome.model_validate_json(item.model_dump_json()))
+            checked_list.append(
+                MetamorphicMutantOutcome.model_validate_json(item.model_dump_json())
+            )
         checked = tuple(checked_list)
         parents = {item.mutation.parent_scenario_identity for item in checked}
         if len(parents) != 1:
-            raise ValueError("metamorphic effectiveness report requires exactly one parent scenario")
+            raise ValueError(
+                "metamorphic effectiveness report requires exactly one parent scenario"
+            )
         parent = next(iter(parents))
         metrics = _effectiveness_metrics(checked_policy, checked)
         return cls(
@@ -269,8 +273,7 @@ def _effectiveness_metrics(
     evaluable = killed + survived
     accepted = (
         evaluable >= policy.min_evaluable_mutants
-        and killed * policy.min_kill_denominator
-        >= evaluable * policy.min_kill_numerator
+        and killed * policy.min_kill_denominator >= evaluable * policy.min_kill_numerator
     )
     return {
         "total_mutants": len(outcomes),
@@ -292,7 +295,9 @@ def _canonical_json_bytes(value: object) -> bytes:
             allow_nan=False,
         ).encode("utf-8")
     except (TypeError, ValueError) as exc:
-        raise ValueError("metamorphic mutation material must be finite JSON-compatible data") from exc
+        raise ValueError(
+            "metamorphic mutation material must be finite JSON-compatible data"
+        ) from exc
 
 
 __all__ = [
