@@ -109,11 +109,11 @@ class OAuthSessionEvent(BaseModel):
             raise ValueError("refresh event requires parent token identity")
         if self.kind is OAuthSessionEventKind.INITIAL and self.parent_token_sha256 is not None:
             raise ValueError("initial token event cannot carry parent token identity")
-        if self.kind is OAuthSessionEventKind.REVOKE and self.accepted_by_resource:
-            raise ValueError("revocation event cannot be accepted as a resource request")
-        if self.kind in {OAuthSessionEventKind.REPLAY, OAuthSessionEventKind.REVOKE}:
-            if self.accepted_by_resource:
-                raise ValueError("replay/revocation event must not be accepted by resource server")
+        if (
+            self.kind in {OAuthSessionEventKind.REPLAY, OAuthSessionEventKind.REVOKE}
+            and self.accepted_by_resource
+        ):
+            raise ValueError("replay/revocation event must not be accepted by resource server")
         return self
 
 
