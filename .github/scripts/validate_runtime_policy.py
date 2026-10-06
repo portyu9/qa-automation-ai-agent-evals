@@ -13,6 +13,7 @@ RUNNER = "ubuntu-24.04"
 REQUIRED_JOBS = (
     "policy",
     "quality",
+    "compatibility",
     "mutation",
     "openai-adapter",
     "mcp-lab",
@@ -129,6 +130,20 @@ lock_result = subprocess.run(
 )
 if lock_result.returncode != 0:
     fail(f"CI lock contract failed: {lock_result.stderr.strip() or lock_result.stdout.strip()}")
+compatibility_validator = Path(".github/scripts/validate_dependency_compatibility.py")
+if not compatibility_validator.is_file():
+    fail("repository must contain .github/scripts/validate_dependency_compatibility.py")
+compatibility_result = subprocess.run(
+    [sys.executable, str(compatibility_validator)],
+    check=False,
+    capture_output=True,
+    text=True,
+)
+if compatibility_result.returncode != 0:
+    fail(
+        "dependency compatibility contract failed: "
+        f"{compatibility_result.stderr.strip() or compatibility_result.stdout.strip()}"
+    )
 project = pyproject["project"]
 pytest_options = pyproject.get("tool", {}).get("pytest", {}).get("ini_options", {})
 pytest_addopts = pytest_options.get("addopts")
@@ -253,6 +268,10 @@ if "python .github/scripts/check_coverage_policy.py --self-test" not in policy:
     fail("policy job must self-test the module-specific coverage policy")
 if "python .github/scripts/validate_ci_locks.py" not in policy:
     fail("policy job must execute the repository-owned CI lock validator")
+if "python .github/scripts/validate_dependency_compatibility.py --self-test" not in policy:
+    fail("policy job must self-test the dependency compatibility validator")
+if "python .github/scripts/validate_dependency_compatibility.py" not in policy:
+    fail("policy job must execute the dependency compatibility validator")
 
 coverage_manifest_path = Path(".github/coverage/thresholds.json")
 try:
@@ -384,7 +403,7 @@ for forbidden in ("python -m build", "twine upload", "uv publish", "pypi.org"):
         fail(f"publish-release workflow contains forbidden release behavior: {forbidden}")
 
 for job, next_job, coverage_profile, coverage_report in (
-    ("quality", "openai-adapter", None, None),
+    ("quality", "compatibility", None, None),
     ("openai-adapter", "mcp-lab", "openai", "coverage-openai.json"),
     ("mcp-lab", "mcp-remote-auth", "mcp-lab", "coverage-mcp-lab.json"),
     (
@@ -420,7 +439,7 @@ locked_job_contracts = {
     "mcp-oauth-flow": "requirements/locks/mcp-py311.txt",
 }
 locked_job_next = {
-    "quality": "mutation",
+    "quality": "compatibility",
     "mutation": "openai-adapter",
     "openai-adapter": "mcp-lab",
     "mcp-lab": "mcp-remote-auth",
@@ -434,6 +453,30 @@ for job, lock_path in locked_job_contracts.items():
             fail(
                 f"{job} must install the exact repository lock before the local project: {required}"
             )
+
+compatibility = job_block(workflow, "compatibility", "mutation")
+if not re.search(r"^\\s+needs:\\s*policy\\s*$", compatibility, flags=re.MULTILINE):
+    fail("compatibility must depend on the repository policy job")
+for required in (
+    "name: Compatibility / ${{ matrix.profile }} / ${{ matrix.boundary }} / Python ${{ matrix.python-version }}",
+    "core-minimum-py311.txt",
+    "core-latest-py311.txt",
+    "mcp-minimum-py311.txt",
+    "mcp-latest-py311.txt",
+    "openai-mcp-minimum-py311.txt",
+    "openai-mcp-latest-py311.txt",
+    "--require-hashes",
+    '"${{ matrix.lock }}"',
+    "--no-deps --no-build-isolation .",
+    "python -m pip check",
+    'pytest -m "mcp or mcp_remote or mcp_oauth" tests/integration/test_mcp_*.py',
+    "pytest -m openai tests/integration/test_openai_*.py",
+):
+    if required not in compatibility:
+        fail(f"compatibility job is missing required boundary contract text: {required}")
+for forbidden in ("piptools", "generate_ci_lock.py", "pip install -U", "pip install --upgrade"):
+    if forbidden in compatibility:
+        fail(f"compatibility qualification must not resolve or mutate dependencies live: {forbidden}")
 
 for workflow_path, source in workflows.items():
     if "pip install --disable-pip-version-check -e '.[" in source:
@@ -744,6 +787,6 @@ print(
     "runtime policy validated: "
     f"python={','.join(SUPPORTED_PYTHONS)}; requires-python={REQUIRES_PYTHON}; "
     f"runner={RUNNER}; workflows={len(workflows)}; gate=ci-gate+protected-codeql; "
-    "package-artifacts=hashed-locks+retained-reverified-reproduced-with-spdx-license-evidence+signed-ci-qualification+trusted-main-oidc-provenance+default-branch-published"
+    "package-artifacts=hashed-locks+minimum-latest-compatibility+retained-reverified-reproduced-with-spdx-license-evidence+signed-ci-qualification+trusted-main-oidc-provenance+default-branch-published"
 )
 sys.exit(0)
