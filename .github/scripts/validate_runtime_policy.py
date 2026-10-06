@@ -268,6 +268,8 @@ if "python .github/scripts/check_coverage_policy.py --self-test" not in policy:
     fail("policy job must self-test the module-specific coverage policy")
 if "python .github/scripts/validate_ci_locks.py" not in policy:
     fail("policy job must execute the repository-owned CI lock validator")
+if "python .github/scripts/compact_compatibility_lock.py --self-test" not in policy:
+    fail("policy job must self-test the compatibility lock compactor")
 if "python .github/scripts/validate_dependency_compatibility.py --self-test" not in policy:
     fail("policy job must self-test the dependency compatibility validator")
 if "python .github/scripts/validate_dependency_compatibility.py" not in policy:
@@ -469,6 +471,8 @@ for required in (
     '"${{ matrix.lock }}"',
     "--no-deps --no-build-isolation .",
     "python -m pip check",
+    '[[ "$RUNNER_OS" == "Linux" ]]',
+    '[[ "$RUNNER_ARCH" == "X64" ]]',
     'pytest -m "mcp or mcp_remote or mcp_oauth" tests/integration/test_mcp_*.py',
     "pytest -m openai tests/integration/test_openai_*.py",
 ):
@@ -477,6 +481,15 @@ for required in (
 for forbidden in ("piptools", "generate_ci_lock.py", "pip install -U", "pip install --upgrade"):
     if forbidden in compatibility:
         fail(f"compatibility qualification must not resolve or mutate dependencies live: {forbidden}")
+
+if Path(".github/workflows/compat-lock-candidates.yml").exists():
+    fail("temporary compatibility candidate workflow must not remain in accepted repository state")
+for workflow_path, source in workflows.items():
+    if "generate_ci_lock.py" in source or "compact_compatibility_lock.py" in source:
+        fail(
+            "workflow must not invoke maintenance dependency resolution/compaction: "
+            f"{workflow_path}"
+        )
 
 for workflow_path, source in workflows.items():
     if "pip install --disable-pip-version-check -e '.[" in source:
