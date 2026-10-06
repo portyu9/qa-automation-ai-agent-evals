@@ -315,6 +315,21 @@ def test_registry_revalidates_copied_entries_and_roots() -> None:
         ScenarioRegistry.model_validate(payload)
 
 
+def test_registry_rejects_empty_taxonomy_labels() -> None:
+    scenario = _scenario("registry.empty-taxonomy")
+
+    with pytest.raises(ValidationError, match="must be non-empty"):
+        ScenarioRegistryEntry.create(
+            scenario,
+            owner="evaluation-platform",
+            taxonomy=("", "regression"),
+            population_scope="Synthetic deterministic agent subjects.",
+            rationale="Reject empty governance labels.",
+            difficulty=ScenarioDifficulty.STANDARD,
+            benchmark=_benchmark(),
+        )
+
+
 def test_registry_json_schema_exports_versioned_tooling_contract() -> None:
     schema = scenario_registry_json_schema()
 
