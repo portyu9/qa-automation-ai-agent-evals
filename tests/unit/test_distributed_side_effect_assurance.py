@@ -155,7 +155,6 @@ def test_target_system_acknowledgement_requires_external_crypto_verification_and
         verify_target_acknowledgement(receipt=receipt, acknowledgement=wrong_effect)
 
 
-
 def test_timeout_retry_can_be_the_single_successful_commit() -> None:
     attempts = (
         _attempt(

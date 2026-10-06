@@ -119,7 +119,6 @@ def test_memory_receipt_rejects_cross_user_leakage_as_incomplete_assurance() -> 
     assert receipt.accepted is False
 
 
-
 def test_memory_policy_binds_record_owner_and_content_identity() -> None:
     observation = _observation(operation=MemoryOperationKind.WRITE, tick=0, allowed=True)
 
