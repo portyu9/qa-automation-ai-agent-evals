@@ -35,7 +35,7 @@ def test_outcome_selector_v1_is_unambiguous_and_canonical() -> None:
     assert nested.lookup(state) == (True, "nested")
     assert escaped.lookup(state) == (True, 7)
 
-    with pytest.raises(ValidationError, match="canonical|unsupported escape"):
+    with pytest.raises(ValidationError, match=r"canonical|unsupported escape"):
         OutcomeSelectorV1(pointer="/a~2b")
 
 
