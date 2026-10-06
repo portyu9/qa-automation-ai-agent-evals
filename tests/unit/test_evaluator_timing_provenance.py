@@ -5,10 +5,12 @@ import json
 import pytest
 from pydantic import ValidationError
 
-from agent_evals.evidence.models import TrialEvidence
-from agent_evals.runtime.evaluator import EvaluatedTrial
+from agent_evals.adapters.base import AdapterResult
+from agent_evals.adapters.scripted import ScriptedAdapter
+from agent_evals.contracts.models import EvaluationScenario, ScenarioKind, SubjectFingerprint
+from agent_evals.evidence.models import TrialEvidence, TrialVerdict
+from agent_evals.runtime.evaluator import EvaluatedTrial, TrialRunner
 from agent_evals.runtime.timing_provenance import EvaluatorTimingProvenance
-from agent_evals.evidence.models import TrialVerdict
 
 
 def _evidence() -> TrialEvidence:
@@ -56,3 +58,37 @@ def test_timing_provenance_rejects_root_and_elapsed_drift() -> None:
             evaluator_elapsed_ms=2.0,
             timing_provenance=timing,
         )
+
+
+
+@pytest.mark.asyncio
+async def test_public_trial_runner_attaches_monotonic_timing_provenance() -> None:
+    subject = SubjectFingerprint.from_material(
+        provider="fixture",
+        model="deterministic",
+        application_revision="rev-1",
+        instructions="",
+        tool_schema={},
+        policy={},
+        memory_policy={},
+        adapter="scripted",
+        adapter_version="1",
+    )
+    scenario = EvaluationScenario(
+        scenario_id="timing.provenance",
+        revision="1",
+        kind=ScenarioKind.REGRESSION,
+        objective="Bind evaluator timing metadata",
+    )
+    result = await TrialRunner().run(
+        ScriptedAdapter(lambda _subject, _scenario, _trial: AdapterResult()),
+        subject=subject,
+        scenario=scenario,
+        trial_id="timed-trial",
+    )
+
+    assert result.timing_provenance is not None
+    assert result.evaluator_elapsed_ms is not None
+    assert result.timing_provenance.elapsed_ms == result.evaluator_elapsed_ms
+    assert result.timing_provenance.clock_source == "time.perf_counter"
+    result.timing_provenance.validate_against_evidence(result.evidence)
