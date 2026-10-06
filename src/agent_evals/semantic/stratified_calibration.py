@@ -205,21 +205,27 @@ class StratifiedCalibrationReceipt(BaseModel):
         policy: StratifiedCalibrationPolicy,
         observations: tuple[StratifiedCalibrationObservation, ...],
     ) -> Self:
-        canonical = _canonical_partition(observations)
+        validated_profile = _revalidate_profile(judge_profile)
+        validated_policy = _revalidate_policy(policy)
+        validated_observations = tuple(
+            _revalidate_stratified_observation(observation)
+            for observation in observations
+        )
+        canonical = _canonical_partition(validated_observations)
         derived = _derive_stratified_metrics(
-            judge_profile=judge_profile,
-            policy=policy,
+            judge_profile=validated_profile,
+            policy=validated_policy,
             observations=canonical,
         )
         unsigned = _unsigned_receipt_material(
-            judge_profile=judge_profile,
-            policy=policy,
+            judge_profile=validated_profile,
+            policy=validated_policy,
             observations=canonical,
             derived=derived,
         )
         return cls(
-            judge_profile=judge_profile,
-            policy=policy,
+            judge_profile=validated_profile,
+            policy=validated_policy,
             observations=canonical,
             validation_receipt=derived["validation_receipt"],
             holdout_receipt=derived["holdout_receipt"],
@@ -238,9 +244,12 @@ class StratifiedCalibrationReceipt(BaseModel):
     def require_accepted_holdout(self) -> SemanticCalibrationReceipt:
         """Return the exact v2 holdout receipt only after stratified qualification succeeds."""
 
-        if not self.accepted:
+        validated = StratifiedCalibrationReceipt.model_validate_json(
+            self.model_dump_json()
+        )
+        if not validated.accepted:
             raise ValueError("stratified semantic calibration is not accepted")
-        return self.holdout_receipt
+        return validated.holdout_receipt
 
     @model_validator(mode="after")
     def verify_receipt(self) -> Self:
@@ -270,6 +279,28 @@ class StratifiedCalibrationReceipt(BaseModel):
         if not hmac.compare_digest(expected, self.receipt_root):
             raise ValueError("stratified semantic calibration receipt root mismatch")
         return self
+
+
+def _revalidate_profile(value: SemanticJudgeProfile) -> SemanticJudgeProfile:
+    if type(value) is not SemanticJudgeProfile:
+        raise ValueError("stratified calibration requires an exact SemanticJudgeProfile")
+    return SemanticJudgeProfile.model_validate(value.model_dump(mode="json"))
+
+
+def _revalidate_policy(value: StratifiedCalibrationPolicy) -> StratifiedCalibrationPolicy:
+    if type(value) is not StratifiedCalibrationPolicy:
+        raise ValueError("stratified calibration requires an exact StratifiedCalibrationPolicy")
+    return StratifiedCalibrationPolicy.model_validate(value.model_dump(mode="json"))
+
+
+def _revalidate_stratified_observation(
+    value: StratifiedCalibrationObservation,
+) -> StratifiedCalibrationObservation:
+    if type(value) is not StratifiedCalibrationObservation:
+        raise ValueError(
+            "stratified calibration requires exact StratifiedCalibrationObservation values"
+        )
+    return StratifiedCalibrationObservation.model_validate(value.model_dump(mode="json"))
 
 
 def _canonical_partition(
