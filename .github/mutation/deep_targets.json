@@ -230,7 +230,8 @@
         "tests/unit/test_deep_mutation_contract_edges.py",
         "tests/unit/test_release_policy_scalar_integrity.py",
         "tests/unit/test_statistics_and_gate.py",
-        "tests/unit/test_statistics_runtime_integrity.py"
+        "tests/unit/test_statistics_runtime_integrity.py",
+        "tests/unit/test_verified_release_authority.py"
       ]
     }
   ]
