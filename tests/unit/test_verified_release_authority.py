@@ -61,7 +61,8 @@ def test_producer_capabilities_are_bound_to_exact_authority_instance() -> None:
         )
 
 
-def test_release_gate_can_derive_noncompensatory_criticality_from_verified_records() -> None:
+def test_release_gate_can_derive_noncompensatory_criticality_from_verified_records(
+) -> None:
     report = ReliabilityReport.from_verdicts((TrialVerdict.PASS,))
     policy = ReleasePolicy(
         min_resolved_trials=1,
@@ -107,7 +108,10 @@ def test_release_gate_can_derive_noncompensatory_criticality_from_verified_recor
     )
     critical_graph = VerificationGraph.from_verified((baseline, critical))
 
-    assert gate.decide_verified(report, verification=clean_graph).decision is GateDecision.ACCEPT
+    assert (
+        gate.decide_verified(report, verification=clean_graph).decision
+        is GateDecision.ACCEPT
+    )
     rejected = gate.decide_verified(report, verification=critical_graph)
     assert rejected.decision is GateDecision.REJECT
     assert rejected.reasons == ("critical violations 1 exceed maximum 0",)
