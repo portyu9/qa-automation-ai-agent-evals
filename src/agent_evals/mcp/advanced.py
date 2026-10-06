@@ -364,7 +364,9 @@ class MCPCapabilityExerciseReceipt(BaseModel):
         checked_snapshot = MCPCapabilitySnapshot.model_validate_json(snapshot.model_dump_json())
         checked_required = frozenset(MCPCapability(item) for item in required_capabilities)
         if not checked_required:
-            raise ValueError("MCP capability exercise requires evaluator-owned capability expectations")
+            raise ValueError(
+                "MCP capability exercise requires evaluator-owned capability expectations"
+            )
         checked: list[MCPCapabilityOperationObservation] = []
         for item in observations:
             _require_exact(
@@ -387,9 +389,8 @@ class MCPCapabilityExerciseReceipt(BaseModel):
                 key=lambda item: item.value,
             )
         )
-        accepted = (
-            checked_required <= checked_snapshot.capabilities
-            and checked_required <= set(exercised)
+        accepted = checked_required <= checked_snapshot.capabilities and checked_required <= set(
+            exercised
         )
         material = {
             "schema_version": _CAPABILITY_EXERCISE_SCHEMA,
