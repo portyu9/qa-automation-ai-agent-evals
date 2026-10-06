@@ -15,6 +15,7 @@ PASS_VERDICT = "PASS"
 
 REQUIRED_JOB_IDS = (
     "policy",
+    "actions-security",
     "quality",
     "compatibility",
     "mutation",
