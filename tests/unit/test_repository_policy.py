@@ -345,7 +345,7 @@ def test_policy_rejects_publish_without_exact_candidate_source_binding(tmp_path:
     result = _run_policy(workspace)
 
     assert result.returncode != 0
-    assert "publish-release workflow is missing required contract text" in result.stderr
+    assert "publish-release candidate source materialization is missing" in result.stderr
 
 
 def test_policy_rejects_dynamic_candidate_checkout(tmp_path: Path) -> None:
