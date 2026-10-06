@@ -429,9 +429,7 @@ def _verification_graph_root(facts: tuple[VerifiedFact, ...]) -> str:
         root = fact.fact_root
         if root in seen:
             raise ValueError("verification graph contains duplicate fact roots")
-        missing = [
-            dependency for dependency in fact.claim.dependencies if dependency not in seen
-        ]
+        missing = [dependency for dependency in fact.claim.dependencies if dependency not in seen]
         if missing:
             raise ValueError(
                 "verification fact dependency is missing or not topologically prior: "
