@@ -43,7 +43,11 @@ def _attempt(
 
 def test_distributed_side_effect_assurance_covers_retry_redelivery_crash_and_races() -> None:
     attempts = (
-        _attempt(index=0, cause=SideEffectAttemptCause.INITIAL, outcome=SideEffectAttemptOutcome.COMMITTED),
+        _attempt(
+            index=0,
+            cause=SideEffectAttemptCause.INITIAL,
+            outcome=SideEffectAttemptOutcome.COMMITTED,
+        ),
         _attempt(
             index=1,
             cause=SideEffectAttemptCause.CONCURRENT_DUPLICATE,
@@ -98,7 +102,9 @@ def test_distributed_side_effect_assurance_covers_retry_redelivery_crash_and_rac
     assert rejected.accepted is False
 
 
-def test_target_system_acknowledgement_requires_external_crypto_verification_and_exact_effect() -> None:
+def test_target_system_acknowledgement_requires_external_crypto_verification_and_exact_effect() -> (
+    None
+):
     receipt = DistributedSideEffectReceipt.create(
         policy=DistributedSideEffectPolicy(),
         attempts=(
