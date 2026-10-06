@@ -8,7 +8,12 @@ import json
 from enum import StrEnum
 from typing import Literal, Self
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, model_validator
+
+from agent_evals._receipt_validation import (
+    is_receipt_construction,
+    validate_receipt_construction,
+)
 
 _POLICY_SCHEMA: Literal["agent-evals/distributed-side-effect-policy/v1"] = (
     "agent-evals/distributed-side-effect-policy/v1"
@@ -164,7 +169,7 @@ class DistributedSideEffectReceipt(BaseModel):
             "covered_causes": [item.value for item in covered],
             "accepted": accepted,
         }
-        return cls.model_construct(
+        return validate_receipt_construction(cls,
             policy=checked_policy,
             attempts=tuple(checked),
             committed_mutations=len(committed),
@@ -174,7 +179,9 @@ class DistributedSideEffectReceipt(BaseModel):
         )
 
     @model_validator(mode="after")
-    def verify_receipt(self) -> Self:
+    def verify_receipt(self, info: ValidationInfo) -> Self:
+        if is_receipt_construction(info):
+            return self
         rebuilt = type(self).create(policy=self.policy, attempts=self.attempts)
         if (
             self.committed_mutations != rebuilt.committed_mutations
