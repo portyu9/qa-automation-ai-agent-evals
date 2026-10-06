@@ -136,5 +136,7 @@ def test_evidence_chain_binds_order_and_previous_roots() -> None:
 
     payload = json.loads(chain.model_dump_json())
     payload["links"][1]["previous_root"] = "0" * 64
-    with pytest.raises(ValidationError, match=r"previous_root relation mismatch|link root mismatch"):
+    with pytest.raises(
+        ValidationError, match=r"previous_root relation mismatch|link root mismatch"
+    ):
         EvidenceChain.model_validate(payload)
