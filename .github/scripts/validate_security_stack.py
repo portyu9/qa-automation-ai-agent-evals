@@ -119,7 +119,7 @@ def main() -> int:
                 )
 
     ci_scanner_contracts = {
-        "Bandit": "bandit -q -r src/agent_evals",
+        "Bandit": "bandit -q -r src",
         "pip-audit": "pip-audit",
         "actionlint": "actionlint_1.7.12_linux_amd64.tar.gz",
         "zizmor": "zizmorcore/zizmor-action@cc914d7f3750a2d13d75c7f184a1060aa0e9d482",
