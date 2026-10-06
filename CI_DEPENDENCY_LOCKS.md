@@ -46,4 +46,24 @@ The generator intentionally derives direct inputs from `pyproject.toml`, the sel
 
 It is **not** publisher authentication, package-index authentication, a digital signature, OIDC provenance, DSSE/in-toto attestation, non-repudiation, or proof that the locked dependency itself is non-malicious. Hashes also do not replace dependency vulnerability, license, or source-review policy. Those remain separate assurance domains.
 
-The lock profiles are CI execution snapshots, not the package's public compatibility declaration. Supported ranges remain in `pyproject.toml`; minimum/latest compatibility lanes are a separate #207 workstream.
+The primary lock profiles are CI execution snapshots, not the package's public compatibility declaration. Supported ranges remain in `pyproject.toml`.
+
+## Compatibility boundary snapshots
+
+Dependency compatibility is qualified separately through reviewed SHA-256 locks under `requirements/compatibility/` for Python 3.11:
+
+- core, MCP, and OpenAI+MCP profiles each have a `minimum` and a `latest` snapshot;
+- `minimum` pins every ranged **direct runtime** dependency to the inclusive lower bound declared in `pyproject.toml` and preserves exact direct pins exactly;
+- `latest` resolves the declared direct runtime ranges at snapshot-generation time, then freezes the complete compatible closure;
+- dev/build tooling remains exact in each generated closure but does not redefine the package's runtime compatibility claim;
+- optional MCP/OpenAI packages stay out of provider-neutral core profiles.
+
+Every compatibility file carries `agent-evals/dependency-compatibility-lock/v1`, profile/boundary/Python metadata, and a SHA-256 digest of the complete generator input set. `.github/scripts/validate_dependency_compatibility.py` fails closed if the committed profile set, source-input digest, direct floors/ranges, exact pins, hashes, interpreter binding, or optional-profile separation drifts.
+
+Ordinary qualification never resolves compatibility ranges from the network. It installs only these committed profiles with `--require-hashes`, then installs the local project with `--no-deps --no-build-isolation`. Network resolution belongs only to a maintenance step used to prepare a candidate lock for code review. A resolver-produced candidate has no qualification authority until its exact bytes are committed and pass repository policy plus exact-head CI/CodeQL.
+
+A `latest` snapshot means “newest compatible closure selected when this reviewed snapshot was generated”; it is not a perpetual claim that the file remains newest. Regenerate/review the boundary snapshots whenever public dependency declarations, build inputs, or the generator contract change, and refresh them before a release when current compatibility is part of the release claim. Qualification itself never mutates the graph.
+
+The first executable minimum pass intentionally exposed stale public floors: the exact MCP/OpenAI integration versions required higher `pydantic`/`httpx2` floors than the package declared. The declarations were tightened rather than allowing the minimum lane to float silently above its advertised bounds. A future declared minimum that cannot resolve or pass is a package-contract failure.
+
+Compatibility snapshots still provide package-file integrity and executable boundary evidence, not publisher authentication. Publisher identity/provenance, vulnerability/license policy, and signed workflow qualification remain separate assurance domains.
