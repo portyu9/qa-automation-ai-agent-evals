@@ -59,10 +59,7 @@ def test_schema_history_keeps_historical_domains_separate() -> None:
     assert VerificationFactClaim.model_fields["schema_version"].default == (
         "agent-evals/verification-fact/v1"
     )
-    assert (
-        EvidenceChain.model_fields["schema_version"].default
-        == "agent-evals/evidence-chain/v1"
-    )
+    assert EvidenceChain.model_fields["schema_version"].default == "agent-evals/evidence-chain/v1"
     assert ReceiptEnvelopeV1.model_fields["schema_version"].default == (
         "agent-evals/receipt-envelope/v1"
     )
@@ -76,12 +73,15 @@ def test_verification_module_does_not_import_provider_adapters() -> None:
     assert "AgentAdapter" not in source_names
 
 
-
 def test_low_level_verification_import_boundaries_remain_one_way() -> None:
     root = Path(__file__).resolve().parents[2] / "src" / "agent_evals"
     forbidden = {
         "verification.py": ("agent_evals.adapters", "agent_evals.runtime", "agent_evals.assurance"),
-        "gates/release.py": ("agent_evals.adapters", "agent_evals.runtime", "agent_evals.assurance"),
+        "gates/release.py": (
+            "agent_evals.adapters",
+            "agent_evals.runtime",
+            "agent_evals.assurance",
+        ),
         "contracts/outcome_selector.py": (
             "agent_evals.adapters",
             "agent_evals.runtime",
