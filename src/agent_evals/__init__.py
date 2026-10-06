@@ -40,11 +40,11 @@ from agent_evals.verification import (
 
 __all__ = [
     "AuthorityPolicy",
-    "EvidenceChain",
     "EvaluationScenario",
+    "EvaluatorTimingProvenance",
+    "EvidenceChain",
     "EvidenceEvent",
     "EvidenceKind",
-    "EvaluatorTimingProvenance",
     "FactKind",
     "FactProducerRole",
     "GateDecision",
