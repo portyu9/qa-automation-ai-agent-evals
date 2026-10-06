@@ -81,7 +81,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.11", "3.12", "3.13", "3.14"]
+        python-version: ["3.11", "3.14"]
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -133,24 +133,24 @@ jobs:
             lock: requirements/compatibility/core-minimum-py311.txt
           - profile: core
             boundary: latest
-            python-version: "3.11"
-            lock: requirements/compatibility/core-latest-py311.txt
+            python-version: "3.14"
+            lock: requirements/compatibility/core-latest-py314.txt
           - profile: mcp
             boundary: minimum
             python-version: "3.11"
             lock: requirements/compatibility/mcp-minimum-py311.txt
           - profile: mcp
             boundary: latest
-            python-version: "3.11"
-            lock: requirements/compatibility/mcp-latest-py311.txt
+            python-version: "3.14"
+            lock: requirements/compatibility/mcp-latest-py314.txt
           - profile: openai-mcp
             boundary: minimum
             python-version: "3.11"
             lock: requirements/compatibility/openai-mcp-minimum-py311.txt
           - profile: openai-mcp
             boundary: latest
-            python-version: "3.11"
-            lock: requirements/compatibility/openai-mcp-latest-py311.txt
+            python-version: "3.14"
+            lock: requirements/compatibility/openai-mcp-latest-py314.txt
     steps:
       - name: Checkout exact compatibility subject
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
