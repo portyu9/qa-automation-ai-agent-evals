@@ -112,7 +112,9 @@ class HumanApprovalEvidence(BaseModel):
             "authentication_verified": authentication_verified,
             "delegated_by": delegated_by,
         }
-        return cls(**material, evidence_root=_domain_root(_EVIDENCE_DOMAIN, material))
+        return cls.model_validate(
+            {**material, "evidence_root": _domain_root(_EVIDENCE_DOMAIN, material)}
+        )
 
     @model_validator(mode="after")
     def verify_root(self) -> Self:
@@ -206,10 +208,10 @@ class ApprovalGovernanceReceipt(BaseModel):
             raise ValueError("approval governance requires at least one approval")
 
         checked_delegations: list[ApprovalDelegation] = []
-        for item in delegations:
-            _require_exact(item, ApprovalDelegation, "approval delegation")
+        for delegation in delegations:
+            _require_exact(delegation, ApprovalDelegation, "approval delegation")
             checked_delegations.append(
-                ApprovalDelegation.model_validate_json(item.model_dump_json())
+                ApprovalDelegation.model_validate_json(delegation.model_dump_json())
             )
 
         ids = [item.approval_id for item in checked_approvals]
@@ -338,7 +340,9 @@ class HITLResumeCheckpoint(BaseModel):
             "approval_receipt_root": approval_receipt_root,
             "generation": generation,
         }
-        return cls(**material, checkpoint_root=_domain_root(_CHECKPOINT_DOMAIN, material))
+        return cls.model_validate(
+            {**material, "checkpoint_root": _domain_root(_CHECKPOINT_DOMAIN, material)}
+        )
 
     @model_validator(mode="after")
     def verify_root(self) -> Self:

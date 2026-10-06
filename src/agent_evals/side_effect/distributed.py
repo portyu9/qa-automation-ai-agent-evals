@@ -247,7 +247,9 @@ class TargetEffectAcknowledgement(BaseModel):
             "cryptographically_verified": cryptographically_verified,
             "observed_at_unix_ms": observed_at_unix_ms,
         }
-        return cls(**material, acknowledgement_root=_domain_root(_ACK_DOMAIN, material))
+        return cls.model_validate(
+            {**material, "acknowledgement_root": _domain_root(_ACK_DOMAIN, material)}
+        )
 
     @model_validator(mode="after")
     def verify_root(self) -> Self:
