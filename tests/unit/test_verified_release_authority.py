@@ -11,6 +11,7 @@ from agent_evals.verification import (
     PrivilegedProducerRole,
     ProducerCapabilityAuthority,
     VerificationFactClaim,
+    VerificationGraph,
     VerifiedCriticalityRecord,
     verify_fact_claim,
 )
@@ -72,11 +73,42 @@ def test_release_gate_can_derive_noncompensatory_criticality_from_verified_recor
     )
     gate = ReleaseGate(policy)
 
-    clean = VerifiedCriticalityRecord.from_verified(())
-    critical = VerifiedCriticalityRecord.from_verified((_critical_fact(),))
+    baseline_claim = VerificationFactClaim.from_material(
+        fact_kind=FactKind.OUTCOME,
+        fact_name="outcome.checked",
+        producer=FactProducerRole.VERIFIER,
+        material=b"outcome",
+    )
+    baseline = verify_fact_claim(
+        baseline_claim,
+        expected_kind=FactKind.OUTCOME,
+        expected_name="outcome.checked",
+        expected_producer=FactProducerRole.VERIFIER,
+        material=b"outcome",
+    )
+    clean_graph = VerificationGraph.from_verified((baseline,))
 
-    assert gate.decide_verified(report, criticality=clean).decision is GateDecision.ACCEPT
-    rejected = gate.decide_verified(report, criticality=critical)
+    critical_claim = VerificationFactClaim.from_material(
+        fact_kind=FactKind.CRITICALITY,
+        fact_name="release.critical-policy-fact",
+        producer=FactProducerRole.VERIFIER,
+        material=b"critical",
+        dependencies=(baseline.fact_root,),
+        trial_id="trial-1",
+    )
+    critical = verify_fact_claim(
+        critical_claim,
+        expected_kind=FactKind.CRITICALITY,
+        expected_name="release.critical-policy-fact",
+        expected_producer=FactProducerRole.VERIFIER,
+        material=b"critical",
+        expected_dependencies=(baseline.fact_root,),
+        expected_trial_id="trial-1",
+    )
+    critical_graph = VerificationGraph.from_verified((baseline, critical))
+
+    assert gate.decide_verified(report, verification=clean_graph).decision is GateDecision.ACCEPT
+    rejected = gate.decide_verified(report, verification=critical_graph)
     assert rejected.decision is GateDecision.REJECT
     assert rejected.reasons == ("critical violations 1 exceed maximum 0",)
 
