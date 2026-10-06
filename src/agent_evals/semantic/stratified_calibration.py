@@ -63,7 +63,11 @@ class CalibrationRiskTagRequirement(BaseModel):
 
 
 _DEFAULT_RISK_REQUIREMENTS = (
-    CalibrationRiskTagRequirement(tag="judge-prompt-injection"),
+    CalibrationRiskTagRequirement(
+        tag="judge-prompt-injection",
+        min_validation_fail_cases=12,
+        min_holdout_fail_cases=25,
+    ),
 )
 
 
@@ -77,7 +81,7 @@ class StratifiedCalibrationPolicy(BaseModel):
     )
     validation_policy: SemanticCalibrationPolicy
     holdout_policy: SemanticCalibrationPolicy
-    min_development_cases: int = Field(default=1, ge=0, le=10_000, strict=True)
+    min_development_cases: int = Field(default=10, ge=0, le=10_000, strict=True)
     confidence_z: float = Field(
         default=_DEFAULT_ONE_SIDED_95_Z,
         gt=0.0,
@@ -86,14 +90,14 @@ class StratifiedCalibrationPolicy(BaseModel):
         strict=True,
     )
     max_validation_false_pass_upper_bound: float = Field(
-        default=0.50,
+        default=0.20,
         ge=0.0,
         le=1.0,
         allow_inf_nan=False,
         strict=True,
     )
     max_holdout_false_pass_upper_bound: float = Field(
-        default=0.50,
+        default=0.10,
         ge=0.0,
         le=1.0,
         allow_inf_nan=False,
