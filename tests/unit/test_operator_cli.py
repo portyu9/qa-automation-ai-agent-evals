@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 import pytest
@@ -251,7 +252,8 @@ def test_config_environment_and_validation_branches(tmp_path: Path) -> None:
 
     rejected_format = runner.invoke(cli.app, ["--format", "xml", "doctor"], color=False)
     assert rejected_format.exit_code == cli.EXIT_USAGE
-    assert "--format must be json or jsonl" in rejected_format.stderr
+    stderr_text = re.sub(r"\\x1b\\[[0-9;]*m", "", rejected_format.stderr)
+    assert "--format must be json or jsonl" in stderr_text
 
 
 def test_explain_errors_include_non_authoritative_proof_chain(tmp_path: Path) -> None:
