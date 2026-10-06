@@ -52,6 +52,8 @@
     ".github/scripts/dependency_recovery.py",
     ".github/scripts/dependency_recovery_selfcheck.py",
     ".github/scripts/generate_ci_lock.py",
+    ".github/scripts/release_candidate.py",
+    ".github/scripts/release_statement.py",
     ".github/scripts/validate_ci_locks.py",
     ".github/scripts/validate_codeql_sarif.py",
     ".github/scripts/validate_codeql_sarif_selfcheck.py",
@@ -61,7 +63,9 @@
     ".github/workflows/codeql.yml",
     ".github/workflows/deep-mutation.yml",
     ".github/workflows/dependency-governance.yml",
+    ".github/workflows/publish-release.yml",
     "CI_DEPENDENCY_LOCKS.md",
+    "RELEASE_PROVENANCE.md",
     "requirements-dev-ci-build.txt",
     "requirements/compatibility",
     "requirements/locks"
