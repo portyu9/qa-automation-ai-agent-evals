@@ -19,7 +19,6 @@ from agent_evals._receipt_validation import (
     is_receipt_construction,
     validate_receipt_construction,
 )
-
 from agent_evals.contracts.models import ApprovalDecision
 
 _EVIDENCE_SCHEMA: Literal["agent-evals/human-approval-evidence/v1"] = (
