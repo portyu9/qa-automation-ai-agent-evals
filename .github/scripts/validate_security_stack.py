@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import json
 import re
 import subprocess
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 CODEQL_WORKFLOW = ROOT / ".github" / "workflows" / "codeql.yml"
+CI_WORKFLOW = ROOT / ".github" / "workflows" / "ci.yml"
+SCANNER_POLICY = ROOT / ".github" / "security-scanners.json"
 
 CODEQL_BY_SUFFIX = {
     ".py": "python",
@@ -59,7 +62,73 @@ def main() -> int:
     errors: list[str] = []
     files = tracked_files()
     workflow_text = CODEQL_WORKFLOW.read_text(encoding="utf-8")
+    ci_workflow_text = CI_WORKFLOW.read_text(encoding="utf-8")
     discovered_codeql: set[str] = set()
+
+    try:
+        scanner_policy = json.loads(SCANNER_POLICY.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+        errors.append(f"cannot load mandatory scanner policy: {type(exc).__name__}")
+        scanner_policy = {}
+
+    expected_scanners = {
+        "bandit": ("python-source", "ci-gate"),
+        "pip-audit": ("installed-dependency-graph", "ci-gate"),
+        "actionlint": ("github-actions-syntax-semantics", "ci-gate"),
+        "zizmor": ("github-actions-security", "ci-gate"),
+        "codeql": ("python-and-actions-sast", "protected-gate"),
+    }
+    if scanner_policy.get("schema_version") != "agent-evals/security-scanners/v1":
+        errors.append("mandatory scanner policy has an unsupported schema_version")
+    scanners = scanner_policy.get("required_scanners")
+    if not isinstance(scanners, list):
+        errors.append("mandatory scanner policy required_scanners must be a list")
+        scanners = []
+    normalized_scanners: dict[str, tuple[str, str]] = {}
+    for item in scanners:
+        if not isinstance(item, dict):
+            errors.append("mandatory scanner policy contains a non-object scanner entry")
+            continue
+        scanner_id = item.get("id")
+        scope = item.get("scope")
+        enforcement = item.get("enforcement")
+        if not all(isinstance(value, str) and value for value in (scanner_id, scope, enforcement)):
+            errors.append("mandatory scanner policy scanner entries require id/scope/enforcement")
+            continue
+        if scanner_id in normalized_scanners:
+            errors.append(f"mandatory scanner policy duplicates scanner {scanner_id!r}")
+            continue
+        normalized_scanners[scanner_id] = (scope, enforcement)
+    if normalized_scanners != expected_scanners:
+        errors.append(
+            "mandatory scanner policy mismatch: "
+            f"found={normalized_scanners!r}, expected={expected_scanners!r}"
+        )
+
+    feature_policy = scanner_policy.get("repository_security_features")
+    if not isinstance(feature_policy, dict):
+        errors.append("mandatory scanner policy must declare repository_security_features")
+    else:
+        for feature in ("secret_scanning", "push_protection"):
+            entry = feature_policy.get(feature)
+            if not isinstance(entry, dict) or entry.get("required") is not True:
+                errors.append(f"repository security feature {feature!r} must remain required")
+            elif entry.get("verification") not in {"verified-enabled", "unverified-admin-surface"}:
+                errors.append(
+                    f"repository security feature {feature!r} has unsupported verification state"
+                )
+
+    ci_scanner_contracts = {
+        "Bandit": "bandit -q -r src/agent_evals",
+        "pip-audit": "pip-audit",
+        "actionlint": "actionlint_1.7.12_linux_amd64.tar.gz",
+        "zizmor": "zizmorcore/zizmor-action@cc914d7f3750a2d13d75c7f184a1060aa0e9d482",
+        "zizmor version": 'version: "1.30.1"',
+        "Actions security gate": "- actions-security",
+    }
+    for name, needle in ci_scanner_contracts.items():
+        if needle not in ci_workflow_text:
+            errors.append(f"CI workflow is missing mandatory {name} scanner contract")
 
     for path in files:
         suffix = path.suffix.lower()
@@ -116,7 +185,17 @@ def main() -> int:
             print(f"- {error}")
         return 1
 
-    print("Security stack coverage contract: Python and GitHub Actions are zero-alert gated")
+    security_features = scanner_policy.get("repository_security_features", {})
+    unverified = [
+        name
+        for name, value in security_features.items()
+        if isinstance(value, dict) and value.get("verification") == "unverified-admin-surface"
+    ]
+    suffix = f"; admin verification outstanding={sorted(unverified)}" if unverified else ""
+    print(
+        "Security stack coverage contract: mandatory Bandit/pip-audit/actionlint/zizmor/CodeQL "
+        f"gates are declared and bound{suffix}"
+    )
     return 0
 
 
