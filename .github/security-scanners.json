@@ -26,6 +26,18 @@
       "evidence": ".github/workflows/ci.yml#actions-security"
     },
     {
+      "id": "dependency-review",
+      "scope": "pull-request-dependency-delta",
+      "enforcement": "ci-gate",
+      "evidence": ".github/workflows/ci.yml#dependency-review"
+    },
+    {
+      "id": "scorecard",
+      "scope": "repository-security-posture",
+      "enforcement": "scheduled-monitor",
+      "evidence": ".github/workflows/security-scorecard.yml#scorecard"
+    },
+    {
       "id": "codeql",
       "scope": "python-and-actions-sast",
       "enforcement": "protected-gate",
