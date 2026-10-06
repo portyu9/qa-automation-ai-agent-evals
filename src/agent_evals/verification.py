@@ -25,7 +25,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 FACT_SCHEMA: Literal["agent-evals/verification-fact/v1"] = "agent-evals/verification-fact/v1"
 GRAPH_SCHEMA: Literal["agent-evals/verification-graph/v1"] = "agent-evals/verification-graph/v1"
 CHAIN_SCHEMA: Literal["agent-evals/evidence-chain/v1"] = "agent-evals/evidence-chain/v1"
-IDENTIFIER_POLICY = "agent-evals/identifier/nfc-v1"
+IDENTIFIER_POLICY: Literal["agent-evals/identifier/nfc-v1"] = "agent-evals/identifier/nfc-v1"
 
 _FACT_DOMAIN = b"agent-evals/verification-fact/v1\0"
 _GRAPH_DOMAIN = b"agent-evals/verification-graph/v1\0"
