@@ -92,6 +92,7 @@ class OAuthSessionEvent(BaseModel):
     scopes: frozenset[str]
     sender_binding: OAuthSenderBinding
     sender_key_sha256: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+    sender_binding_verified: bool = Field(default=False, strict=True)
     jwt_signature_verified: bool = Field(strict=True)
     accepted_by_resource: bool = Field(strict=True)
     parent_token_sha256: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
@@ -108,8 +109,13 @@ class OAuthSessionEvent(BaseModel):
         if self.sender_binding is OAuthSenderBinding.BEARER:
             if self.sender_key_sha256 is not None:
                 raise ValueError("bearer token event cannot carry sender-key binding")
-        elif self.sender_key_sha256 is None:
-            raise ValueError("DPoP/mTLS event requires sender-key fingerprint")
+            if self.sender_binding_verified:
+                raise ValueError("bearer token event cannot claim sender-binding verification")
+        else:
+            if self.sender_key_sha256 is None:
+                raise ValueError("DPoP/mTLS event requires sender-key fingerprint")
+            if not self.sender_binding_verified:
+                raise ValueError("DPoP/mTLS event requires external sender-binding verification")
         if self.kind is OAuthSessionEventKind.REFRESH and self.parent_token_sha256 is None:
             raise ValueError("refresh event requires parent token identity")
         if self.kind is OAuthSessionEventKind.INITIAL and self.parent_token_sha256 is not None:
@@ -204,6 +210,7 @@ class OAuthAdvancedReceipt(BaseModel):
         sender_constraint = any(
             event.sender_binding in checked_policy.allowed_sender_bindings
             and event.sender_key_sha256 is not None
+            and event.sender_binding_verified
             for event in checked_events
             if event.kind in {OAuthSessionEventKind.INITIAL, OAuthSessionEventKind.REFRESH}
         )
