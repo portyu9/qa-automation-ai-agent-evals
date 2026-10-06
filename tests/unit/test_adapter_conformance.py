@@ -124,7 +124,7 @@ async def test_core_evaluator_cannot_bypass_conformance_boundary() -> None:
     )
 
     assert evaluated.verdict is TrialVerdict.BLOCKED
-    assert evaluated.evidence.events[0].payload["code"] == "adapter_conformance_failed"
+    assert evaluated.evidence.events[0].payload["code"] == "invalid_adapter_result"
 
 
 @pytest.mark.asyncio
@@ -151,7 +151,7 @@ async def test_public_evaluator_blocks_nonconforming_adapter_before_grading() ->
     assert evaluated.verdict is TrialVerdict.BLOCKED
     assert evaluated.oracle_results == ()
     assert evaluated.evidence.events[0].kind is EvidenceKind.EVALUATION_ERROR
-    assert evaluated.evidence.events[0].payload["code"] == "adapter_conformance_failed"
+    assert evaluated.evidence.events[0].payload["code"] == "invalid_adapter_result"
 
 
 @pytest.mark.asyncio
@@ -165,10 +165,10 @@ async def test_invalid_adapter_name_fails_closed_without_using_raw_name_as_sourc
 
     assert evaluated.verdict is TrialVerdict.BLOCKED
     error = evaluated.evidence.events[0]
-    assert error.source == "adapter:adapter-conformance-rejected"
-    assert error.payload["code"] == "adapter_conformance_failed"
+    assert error.source == "adapter:metric-provenance-rejected"
+    assert error.payload["code"] == "invalid_metric_provenance"
     assert evaluated.metric_provenance is not None
-    assert evaluated.metric_provenance.runtime_adapter_name == "adapter-conformance-rejected"
+    assert evaluated.metric_provenance.runtime_adapter_name == "metric-provenance-rejected"
 
 
 @pytest.mark.asyncio
