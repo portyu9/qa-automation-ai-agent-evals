@@ -424,9 +424,7 @@ def test_stratified_calibration_contracts_are_public_semantic_api() -> None:
 
 
 def test_create_revalidates_copied_policy_before_acceptance() -> None:
-    policy = _stratified_policy().model_copy(
-        update={"max_holdout_false_pass_upper_bound": 2.0}
-    )
+    policy = _stratified_policy().model_copy(update={"max_holdout_false_pass_upper_bound": 2.0})
 
     with pytest.raises(ValidationError, match="less than or equal to 1"):
         StratifiedCalibrationReceipt.create(
