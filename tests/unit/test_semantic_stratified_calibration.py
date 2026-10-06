@@ -6,7 +6,6 @@ import pytest
 from pydantic import ValidationError
 
 import agent_evals.semantic as semantic
-
 from agent_evals.semantic.calibration import (
     SemanticCalibrationCase,
     SemanticCalibrationObservation,
