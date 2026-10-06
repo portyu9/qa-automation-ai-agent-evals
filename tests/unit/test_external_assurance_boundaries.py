@@ -93,9 +93,7 @@ def _healthy_payload(
 ) -> bytes:
     if server_name is None:
         return (
-            b'{"jsonrpc":"2.0","id":'
-            + str(response_id).encode()
-            + b',"result":{"serverInfo":{}}}'
+            b'{"jsonrpc":"2.0","id":' + str(response_id).encode() + b',"result":{"serverInfo":{}}}'
         )
     return (
         b'{"jsonrpc":"2.0","id":'
@@ -334,7 +332,9 @@ def test_oauth_contract_validators_reject_ambiguous_or_unverified_material() -> 
             verifier_revision="1",
         )
     with pytest.raises(ValidationError, match="sender-key"):
-        _event(sender_binding=OAuthSenderBinding.BEARER, sender_key="unexpected", sender_verified=False)
+        _event(
+            sender_binding=OAuthSenderBinding.BEARER, sender_key="unexpected", sender_verified=False
+        )
     with pytest.raises(ValidationError, match="cannot claim"):
         _event(sender_binding=OAuthSenderBinding.BEARER, sender_key=None, sender_verified=True)
     with pytest.raises(ValidationError, match="sender-key fingerprint"):
