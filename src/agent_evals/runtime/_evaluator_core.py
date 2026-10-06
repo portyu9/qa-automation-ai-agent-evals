@@ -11,7 +11,7 @@ from typing import Any
 from pydantic import ValidationError
 
 from agent_evals.adapters.base import AdapterPreconditionError, AdapterResult, AgentAdapter
-from agent_evals.adapters.conformance import conformance_checked
+from agent_evals.adapters.conformance import AdapterConformanceError, validate_adapter_result
 from agent_evals.adapters.replay import EvidenceReplayAdapter
 from agent_evals.contracts.models import EvaluationScenario, SubjectFingerprint
 from agent_evals.evidence.models import EvidenceEvent, EvidenceKind, TrialEvidence, TrialVerdict
@@ -127,7 +127,6 @@ class TrialRunner:
         trial_id: str,
         started: float,
     ) -> EvaluatedTrial:
-        adapter = conformance_checked(adapter)
         subject = subject.snapshot()
         scenario = scenario.snapshot()
         execution_scenario = scenario.snapshot()
@@ -251,6 +250,17 @@ class TrialRunner:
 
         if self._scenario_contract_drifted(execution_scenario, scenario_identity):
             return self._scenario_contract_mutated(
+                adapter=adapter,
+                subject=subject,
+                scenario=scenario,
+                trial_id=trial_id,
+                elapsed_ms=(perf_counter() - started) * 1000.0,
+            )
+
+        try:
+            result = validate_adapter_result(result)
+        except AdapterConformanceError:
+            return self._invalid_adapter_result(
                 adapter=adapter,
                 subject=subject,
                 scenario=scenario,
@@ -697,9 +707,6 @@ class TrialRunner:
         adapter: AgentAdapter,
         evidence: TrialEvidence,
     ) -> tuple[str, str, str] | None:
-        from agent_evals.adapters.conformance import authority_adapter
-
-        adapter = authority_adapter(adapter)
         if type(adapter) is EvidenceReplayAdapter:
             return None
 
