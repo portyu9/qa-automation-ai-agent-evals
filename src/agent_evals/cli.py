@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import json
 import os
+from collections.abc import Callable
 from dataclasses import dataclass
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
-from typing import Any, Callable, cast
+from typing import Annotated, Any, cast
 
 import typer
 from pydantic import ValidationError
@@ -49,7 +50,10 @@ def root(
     ctx: typer.Context,
     output_format: str | None = typer.Option(None, "--format", help="json or jsonl"),
     explain: bool = typer.Option(False, "--explain", help="Include proof-chain explanations."),
-    config: Path | None = typer.Option(None, "--config", help="Versioned operator JSON config."),
+    config: Annotated[
+        Path | None,
+        typer.Option(help="Versioned operator JSON config."),
+    ] = None,
 ) -> None:
     """Inspect and operate the deterministic agent-assurance framework."""
     config_path = config
@@ -238,10 +242,11 @@ def calibration_verify(ctx: typer.Context, receipt: Path) -> None:
 @ci_app.command("check-policy")
 def ci_check_policy(
     ctx: typer.Context,
-    root: Path = typer.Option(Path("."), "--root"),
+    root: Annotated[Path | None, typer.Option(help="Repository root.")] = None,
 ) -> None:
     """Execute repository-owned runtime, security-stack, and semantic workflow policy checks."""
-    _dispatch(ctx, lambda: operator.check_repository_policy(root.resolve()))
+    selected_root = root if root is not None else Path.cwd()
+    _dispatch(ctx, lambda: operator.check_repository_policy(selected_root.resolve()))
 
 
 def _dispatch(ctx: typer.Context, operation: Callable[[], dict[str, Any]]) -> None:
