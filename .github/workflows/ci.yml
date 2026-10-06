@@ -171,13 +171,23 @@ jobs:
         run: mypy
       - name: Tests and trust-class coverage gates
         run: |
-          pytest --cov=agent_evals --cov-branch --cov-report=term-missing --cov-report=json:coverage-core.json
+          pytest --cov=agent_evals --cov-branch --cov-report=term-missing --cov-report=json:coverage-core.json --junitxml="junit-core-${{ matrix.python-version }}.xml"
           coverage report --fail-under=90
           python .github/scripts/check_coverage_policy.py             --coverage coverage-core.json             --profile core-trust
       - name: Bandit
         run: bandit -q -r src
       - name: Dependency audit
         run: pip-audit
+      - name: Retain JUnit and coverage history
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: quality-history-${{ matrix.python-version }}-${{ github.run_id }}
+          path: |
+            coverage-core.json
+            junit-core-${{ matrix.python-version }}.xml
+          if-no-files-found: error
+          retention-days: 30
 
   compatibility:
     name: Compatibility / ${{ matrix.profile }} / ${{ matrix.boundary }} / Python ${{ matrix.python-version }}
