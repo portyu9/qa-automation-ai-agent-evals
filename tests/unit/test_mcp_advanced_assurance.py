@@ -8,6 +8,8 @@ from pydantic import ValidationError
 
 from agent_evals.mcp.advanced import (
     MCPCapability,
+    MCPCapabilityExerciseReceipt,
+    MCPCapabilityOperationObservation,
     MCPCapabilitySnapshot,
     MCPConcurrencyReceipt,
     MCPConcurrentOperation,
@@ -145,6 +147,40 @@ def test_advanced_capabilities_list_changed_concurrency_and_multi_server_collisi
     assert set(snapshot.capabilities) == set(MCPCapability)
     assert len(snapshot.identity) == 64
 
+    exercised = MCPCapabilityExerciseReceipt.create(
+        snapshot=snapshot,
+        observations=tuple(
+            MCPCapabilityOperationObservation(
+                capability=capability,
+                operation_id=f"exercise.{index}",
+                request_sha256=_sha(f"request:{capability.value}"),
+                response_sha256=_sha(f"response:{capability.value}"),
+                response_bytes=128,
+                succeeded=True,
+            )
+            for index, capability in enumerate(
+                sorted(MCPCapability, key=lambda item: item.value)
+            )
+        ),
+    )
+    assert exercised.accepted is True
+    assert set(exercised.exercised_capabilities) == set(MCPCapability)
+
+    incomplete = MCPCapabilityExerciseReceipt.create(
+        snapshot=snapshot,
+        observations=(
+            MCPCapabilityOperationObservation(
+                capability=MCPCapability.RESOURCES,
+                operation_id="exercise.resources",
+                request_sha256=_sha("request"),
+                response_sha256=_sha("response"),
+                response_bytes=64,
+                succeeded=True,
+            ),
+        ),
+    )
+    assert incomplete.accepted is False
+
     changed = MCPToolsListChangedReceipt.create(
         server_identity="remote-mcp",
         before_tools=("read",),
@@ -268,6 +304,7 @@ def _oauth_event(
         scopes=frozenset({"read", "write"}),
         sender_binding=OAuthSenderBinding.DPOP,
         sender_key_sha256=_sha("dpop-key"),
+        sender_binding_verified=True,
         jwt_signature_verified=True,
         accepted_by_resource=accepted,
         parent_token_sha256=None if parent is None else _sha(parent),
