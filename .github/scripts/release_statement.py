@@ -470,7 +470,7 @@ def self_test() -> None:
 
 
 def _common(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument("--repo-root", type=Path, default=Path("."))
+    parser.add_argument("--repo-root", type=Path, default=Path())
     parser.add_argument("--package-dir", type=Path, required=True)
     parser.add_argument("--supply-chain-dir", type=Path, required=True)
     parser.add_argument("--qualification-dir", type=Path, required=True)
