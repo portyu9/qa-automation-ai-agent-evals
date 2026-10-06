@@ -247,6 +247,8 @@ if "python .github/scripts/validate_runtime_policy.py" not in policy:
     fail("policy job must execute validate_runtime_policy.py")
 if "python .github/scripts/release_candidate.py self-test" not in policy:
     fail("policy job must self-test retained release candidate validation")
+if "python .github/scripts/ci_qualification_evidence.py self-test" not in policy:
+    fail("policy job must self-test CI qualification evidence")
 if "python .github/scripts/check_coverage_policy.py --self-test" not in policy:
     fail("policy job must self-test the module-specific coverage policy")
 if "python .github/scripts/validate_ci_locks.py" not in policy:
@@ -336,6 +338,9 @@ for required in (
     "--no-deps --no-build-isolation retained-dist/*.tar.gz",
     "release-supply-chain-${{ steps.candidate.outputs.ci_run_id }}",
     "release_supply_chain.py verify",
+    "ci-qualification-${{ steps.candidate.outputs.ci_run_id }}",
+    "ci_qualification_evidence.py verify",
+    "retained-qualification/ci-qualification-evidence.json",
     "release-provenance-${{ steps.candidate.outputs.ci_run_id }}",
     "retained-provenance/release-provenance.sigstore.json",
     "retained-provenance/subject-checksums.sha256",
@@ -365,6 +370,7 @@ for retained_path, minimum_count in (
     ("retained-dist/artifact-manifest.json", 2),
     ("retained-supply-chain/release-sbom.spdx.json", 2),
     ("retained-supply-chain/release-supply-chain-evidence.json", 2),
+    ("retained-qualification/ci-qualification-evidence.json", 3),
 ):
     if publish_release.count(retained_path) < minimum_count:
         fail(
@@ -558,7 +564,7 @@ if "python -m build" in release_supply_chain:
 release_supply_chain_reverify = job_block(
     workflow,
     "release-supply-chain-reverify",
-    "release-provenance",
+    "qualification-evidence",
 )
 for dependency in ("package", "release-supply-chain"):
     if f"      - {dependency}\n" not in release_supply_chain_reverify:
@@ -581,6 +587,44 @@ if "release_supply_chain.py create" in release_supply_chain_reverify:
 if "python -m build" in release_supply_chain_reverify:
     fail("release-supply-chain-reverify must not rebuild package distributions")
 
+qualification_evidence = job_block(workflow, "qualification-evidence", "release-provenance")
+if "name: Retain CI qualification evidence" not in qualification_evidence:
+    fail("qualification-evidence must use the canonical qualification job name")
+if (
+    "if: github.event_name == 'push' && github.ref == 'refs/heads/main'"
+    not in qualification_evidence
+):
+    fail("qualification-evidence must be restricted to trusted main pushes")
+for dependency in (*REQUIRED_JOBS, "ci-gate", "protected-gate"):
+    if f"      - {dependency}\n" not in qualification_evidence:
+        fail(f"qualification-evidence must depend on {dependency}")
+for job in (*REQUIRED_JOBS, "ci-gate", "protected-gate"):
+    if not any(reference in qualification_evidence for reference in needs_result_reference(job)):
+        fail(f"qualification-evidence must bind the exact {job} result")
+for required in (
+    "ci_qualification_evidence.py create",
+    "ci_qualification_evidence.py verify",
+    "qualification/ci-qualification-evidence.json",
+    "ci-qualification-${{ github.run_id }}",
+    '--repository "$GITHUB_REPOSITORY"',
+    '--commit-sha "$GITHUB_SHA"',
+    '--ref "$GITHUB_REF"',
+    '--workflow "$GITHUB_WORKFLOW"',
+    '--run-id "$GITHUB_RUN_ID"',
+    '--run-attempt "$GITHUB_RUN_ATTEMPT"',
+    '--event "$GITHUB_EVENT_NAME"',
+):
+    if required not in qualification_evidence:
+        fail(f"qualification-evidence is missing required contract text: {required}")
+for forbidden_permission in ("id-token: write", "attestations: write", "artifact-metadata: write"):
+    if forbidden_permission in qualification_evidence:
+        fail("qualification-evidence must retain evidence without signing authority")
+if not any(
+    action.startswith("actions/upload-artifact@")
+    for action in _WORKFLOW_USES_RE.findall(qualification_evidence)
+):
+    fail("qualification-evidence must retain its exact canonical record as an artifact")
+
 release_provenance = job_block(workflow, "release-provenance", "ci-gate")
 if "name: Attest retained release artifacts" not in release_provenance:
     fail("release-provenance must use the canonical qualification job name")
@@ -591,6 +635,7 @@ for dependency in (
     "package-reverify",
     "package-reproduce",
     "release-supply-chain-reverify",
+    "qualification-evidence",
 ):
     if f"      - {dependency}\n" not in release_provenance:
         fail(f"release-provenance must depend on {dependency}")
@@ -610,13 +655,17 @@ if workflow.count("actions/attest@") != 1:
 for required in (
     "package-artifacts-${{ github.run_id }}",
     "release-supply-chain-${{ github.run_id }}",
+    "ci-qualification-${{ github.run_id }}",
     "package_artifact_manifest.py verify",
     "release_supply_chain.py verify",
+    "ci_qualification_evidence.py verify",
     "retained-dist/*.whl",
     "retained-dist/*.tar.gz",
     "retained-dist/artifact-manifest.json",
     "retained-supply-chain/release-sbom.spdx.json",
     "retained-supply-chain/release-supply-chain-evidence.json",
+    "retained-qualification/ci-qualification-evidence.json",
+    'test "${#subjects[@]}" -eq 6',
     "steps.attest.outputs.bundle-path",
     "release-provenance/release-provenance.sigstore.json",
     "gh attestation verify",
@@ -695,6 +744,6 @@ print(
     "runtime policy validated: "
     f"python={','.join(SUPPORTED_PYTHONS)}; requires-python={REQUIRES_PYTHON}; "
     f"runner={RUNNER}; workflows={len(workflows)}; gate=ci-gate+protected-codeql; "
-    "package-artifacts=hashed-locks+retained-reverified-reproduced-with-spdx-license-evidence+trusted-main-oidc-provenance+default-branch-published"
+    "package-artifacts=hashed-locks+retained-reverified-reproduced-with-spdx-license-evidence+signed-ci-qualification+trusted-main-oidc-provenance+default-branch-published"
 )
 sys.exit(0)

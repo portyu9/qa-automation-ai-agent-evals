@@ -204,13 +204,41 @@ def test_policy_rejects_lock_hash_algorithm_tampering(tmp_path: Path) -> None:
     assert "CI lock contract failed" in result.stderr
 
 
+def test_policy_rejects_qualification_evidence_outside_trusted_main_push(
+    tmp_path: Path,
+) -> None:
+    workspace = _policy_workspace(tmp_path)
+    workflow = workspace / ".github/workflows/ci.yml"
+    source = workflow.read_text(encoding="utf-8")
+    required = "if: github.event_name == 'push' && github.ref == 'refs/heads/main'"
+    qualification_marker = "  qualification-evidence:\n"
+    assert qualification_marker in source
+    prefix, qualification = source.split(qualification_marker, 1)
+    assert required in qualification
+    workflow.write_text(
+        prefix + qualification_marker + qualification.replace(required, "if: always()", 1),
+        encoding="utf-8",
+    )
+
+    result = _run_policy(workspace)
+
+    assert result.returncode != 0
+    assert "qualification-evidence must be restricted to trusted main pushes" in result.stderr
+
+
 def test_policy_rejects_provenance_signing_outside_trusted_main_push(tmp_path: Path) -> None:
     workspace = _policy_workspace(tmp_path)
     workflow = workspace / ".github/workflows/ci.yml"
     source = workflow.read_text(encoding="utf-8")
     required = "if: github.event_name == 'push' && github.ref == 'refs/heads/main'"
-    assert required in source
-    workflow.write_text(source.replace(required, "if: always()", 1), encoding="utf-8")
+    signer_marker = "  release-provenance:\n"
+    assert signer_marker in source
+    prefix, signer = source.split(signer_marker, 1)
+    assert required in signer
+    workflow.write_text(
+        prefix + signer_marker + signer.replace(required, "if: always()", 1),
+        encoding="utf-8",
+    )
 
     result = _run_policy(workspace)
 
