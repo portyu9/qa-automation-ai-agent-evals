@@ -883,7 +883,6 @@ jobs:
       - package
       - release-supply-chain-reverify
       - qualification-evidence
-      - release-statement
     runs-on: ubuntu-24.04
     timeout-minutes: 7
     steps:
@@ -958,6 +957,7 @@ jobs:
       - package-reproduce
       - release-supply-chain-reverify
       - qualification-evidence
+      - release-statement
     permissions:
       contents: read
       id-token: write
