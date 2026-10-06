@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 
 from typer.testing import CliRunner
+
 from agent_evals import cli
 from agent_evals.contracts.models import (
     AuthorityPolicy,
@@ -12,7 +13,6 @@ from agent_evals.contracts.models import (
     SubjectFingerprint,
 )
 from agent_evals.evidence.models import EvidenceEvent, EvidenceKind, TrialEvidence
-
 
 runner = CliRunner()
 
