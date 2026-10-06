@@ -38,6 +38,12 @@ Serialized FactProducerRole values are also not authority. A VerificationFactCla
 run-local VerifiedFact only when verify_fact_claim(...) independently recomputes the exact material
 digest and checks the caller-owned expected kind, name, producer role, dependencies, and context.
 
+The public TrialRunner issues producer-capability sidecars only after the core evaluator has already
+accepted the existing exact-type live-producer boundary. Exact replay receives no fresh live
+capability, and any trial containing a core *_live_injection producer-authority rejection receives
+no capability. The sidecar therefore records accepted run-local producer role; it does not replace
+the legacy exact-type gate or make a blocked forged event authoritative.
+
 ## Release criticality
 
 The compatibility ReleaseGate.decide(..., critical_violations=...) API remains available so old
