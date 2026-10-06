@@ -4,11 +4,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import StrEnum
+import hashlib
+import json
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from agent_evals.statistics.reliability import ReliabilityReport
-from agent_evals.verification import VerificationGraph, VerifiedCriticalityRecord
+from agent_evals.verification import VerifiedCriticalityRecord
 
 
 class GateDecision(StrEnum):
@@ -48,14 +50,15 @@ class ReleaseGate:
         self,
         report: ReliabilityReport,
         *,
-        verification: VerificationGraph,
+        criticality: VerifiedCriticalityRecord,
     ) -> GateResult:
-        """Derive non-compensatory criticality from the complete verified fact graph."""
+        """Gate with evaluator-issued criticality bound to the exact reliability report."""
 
-        if type(verification) is not VerificationGraph:
-            raise ValueError("verification must be an exact VerificationGraph")
-        criticality = VerifiedCriticalityRecord.from_graph(verification)
-        return self.decide(report, critical_violations=criticality.count)
+        if type(criticality) is not VerifiedCriticalityRecord:
+            raise ValueError("criticality must be an exact VerifiedCriticalityRecord")
+        if criticality.reliability_sha256 != _reliability_report_sha256(report):
+            raise ValueError("verified criticality does not bind the supplied reliability report")
+        return self.decide(report, critical_violations=criticality.critical_violations)
 
     def decide(self, report: ReliabilityReport, *, critical_violations: int) -> GateResult:
         if type(report) is not ReliabilityReport:
@@ -100,3 +103,32 @@ class ReleaseGate:
         if uncertainty:
             return GateResult(GateDecision.INCONCLUSIVE, tuple(uncertainty))
         return GateResult(GateDecision.ACCEPT, ())
+
+
+
+def _reliability_report_sha256(report: ReliabilityReport) -> str:
+    if type(report) is not ReliabilityReport:
+        raise ValueError("report must be an exact ReliabilityReport")
+    report.validate()
+    material = {
+        "trials": report.trials,
+        "resolved_trials": report.resolved_trials,
+        "passes": report.passes,
+        "failures": report.failures,
+        "blocked": report.blocked,
+        "inconclusive": report.inconclusive,
+        "success_rate": report.success_rate,
+        "wilson_low": report.wilson_low,
+        "wilson_high": report.wilson_high,
+        "pass_at_k": report.pass_at_k,
+        "pass_power_k": report.pass_power_k,
+        "k": report.k,
+        "confidence_z": report.confidence_z,
+    }
+    canonical = json.dumps(
+        material,
+        sort_keys=True,
+        separators=(",", ":"),
+        allow_nan=False,
+    ).encode("utf-8")
+    return hashlib.sha256(b"agent-evals/reliability-report/v1\0" + canonical).hexdigest()
