@@ -89,15 +89,9 @@ def compact(raw_lock: Path, report_path: Path, output: Path) -> None:
                 f"selected version drift for {name}: {selected_version} != {version}"
             )
 
-    filtered_headers = [
-        line for line in headers if not line.startswith("# Artifact-Selection:")
-    ]
+    filtered_headers = [line for line in headers if not line.startswith("# Artifact-Selection:")]
     insertion = next(
-        (
-            index + 1
-            for index, line in enumerate(filtered_headers)
-            if line.startswith("# Python:")
-        ),
+        (index + 1 for index, line in enumerate(filtered_headers) if line.startswith("# Python:")),
         None,
     )
     if insertion is None:
@@ -111,9 +105,7 @@ def compact(raw_lock: Path, report_path: Path, output: Path) -> None:
         lines.append(f"    --hash=sha256:{sha256}")
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text("\n".join(lines) + "\n", encoding="utf-8")
-    print(
-        f"compacted {len(pins)} exact package pins for linux-x86_64 into {output}"
-    )
+    print(f"compacted {len(pins)} exact package pins for linux-x86_64 into {output}")
 
 
 def self_test() -> None:
