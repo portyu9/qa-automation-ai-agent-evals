@@ -255,6 +255,34 @@ def test_policy_rejects_release_statement_outside_trusted_main_push(
     assert "release-statement must be restricted to trusted main pushes" in result.stderr
 
 
+def test_policy_rejects_release_statement_self_dependency(tmp_path: Path) -> None:
+    workspace = _policy_workspace(tmp_path)
+    workflow = workspace / ".github/workflows/ci.yml"
+    source = workflow.read_text(encoding="utf-8")
+    statement_marker = "  release-statement:\n"
+    signer_marker = "  release-provenance:\n"
+    assert statement_marker in source
+    assert signer_marker in source
+    prefix, tail = source.split(statement_marker, 1)
+    statement, suffix = tail.split(signer_marker, 1)
+    anchor = "      - qualification-evidence\n"
+    assert anchor in statement
+    statement = statement.replace(
+        anchor,
+        anchor + "      - release-statement\n",
+        1,
+    )
+    workflow.write_text(
+        prefix + statement_marker + statement + signer_marker + suffix,
+        encoding="utf-8",
+    )
+
+    result = _run_policy(workspace)
+
+    assert result.returncode != 0
+    assert "release-statement must not depend on itself" in result.stderr
+
+
 def test_policy_rejects_release_statement_with_signing_authority(tmp_path: Path) -> None:
     workspace = _policy_workspace(tmp_path)
     workflow = workspace / ".github/workflows/ci.yml"
