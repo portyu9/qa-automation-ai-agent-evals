@@ -29,11 +29,6 @@ on:
       - 'requirements/locks/**'
       - 'requirements/compatibility/**'
       - 'pyproject.toml'
-  pull_request_target:
-    types: [opened, reopened, synchronize, ready_for_review, labeled, unlabeled]
-  workflow_run:
-    workflows: [CI, CodeQL]
-    types: [completed]
   schedule:
     - cron: '17 * * * *'
   workflow_dispatch:
@@ -118,7 +113,7 @@ jobs:
           python .github/scripts/dependency_governance.py --validate-config --self-test
           python .github/scripts/dependency_recovery.py --validate-config --self-test
       - name: Attempt one bounded transient recovery
-        if: github.event_name == 'workflow_run' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: python .github/scripts/dependency_recovery.py --recover
@@ -129,6 +124,6 @@ jobs:
         run: |
           args=(--reconcile)
           case "$GITHUB_EVENT_NAME" in
-            workflow_run|schedule|workflow_dispatch) args+=(--allow-merge) ;;
+            schedule|workflow_dispatch) args+=(--allow-merge) ;;
           esac
           python .github/scripts/dependency_governance.py "${args[@]}"
