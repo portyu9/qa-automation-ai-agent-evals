@@ -22,6 +22,7 @@ exists to make new authority-bearing integrations explicit without changing what
 | Verification fact | agent-evals/verification-fact/v1 | Bind one fact claim to exact material, context, dependencies, and a non-authorizing producer label. |
 | Verification graph | agent-evals/verification-graph/v1 | Commit to an ordered topological DAG of independently verified facts. |
 | Evidence chain | agent-evals/evidence-chain/v1 | Optional bounded previous-root chain over existing event digests for incremental verification. |
+| Evaluator timing | agent-evals/evaluator-timing/v1 | Bind evaluator-observed elapsed time to the explicit monotonic time.perf_counter clock. |
 | Typed event projection | agent-evals/event-payload/v1 | Validate historical event payloads into explicit kind-discriminated views without rewriting v2 evidence. |
 | Outcome selector | agent-evals/outcome-selector/v1 | Unambiguous JSON-pointer selectors for new contracts; historical dotted selectors remain legacy behavior. |
 | Receipt envelope | agent-evals/receipt-envelope/v1 | Common metadata/digest wrapper around domain-specific receipts without collapsing trust domains. |
@@ -85,6 +86,7 @@ These contracts intentionally do not claim:
 - a producer label authenticates a producer;
 - a receipt envelope upgrades the trust of its embedded receipt;
 - the previous-root chain is a Merkle membership proof;
+- evaluator timing is provider latency, CPU time, cancellation proof, or a latency attestation;
 - a typed payload projection proves the payload was truthfully produced;
 - structured failure codes replace deterministic oracle authority;
 - old persisted evidence is reinterpreted under new schema labels.
