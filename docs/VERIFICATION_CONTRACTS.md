@@ -41,9 +41,9 @@ digest and checks the caller-owned expected kind, name, producer role, dependenc
 ## Release criticality
 
 The compatibility ReleaseGate.decide(..., critical_violations=...) API remains available so old
-callers are not silently reinterpreted. New hardened integrations can use decide_verified(...) with
-VerifiedCriticalityRecord; the gate derives the non-compensatory count from exact verified
-criticality facts rather than taking a caller-supplied integer.
+callers are not silently reinterpreted. New hardened integrations can use decide_verified(...)
+with the complete VerificationGraph; the gate derives the non-compensatory count from every verified
+criticality fact in that topological graph rather than taking a caller-supplied integer.
 
 A verified criticality fact still proves only the relation its verifier checked. It is not a
 signature, human identity assertion, provider attestation, or permission to upgrade unrelated facts.
