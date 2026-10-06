@@ -46,7 +46,13 @@ def _rubric() -> SemanticRubricSpec:
 
 
 def _response(decision: SemanticDecision) -> SemanticJudgeResponse:
-    score = None if decision is SemanticDecision.ABSTAIN else 4 if decision is SemanticDecision.PASS else 1
+    score = (
+        None
+        if decision is SemanticDecision.ABSTAIN
+        else 4
+        if decision is SemanticDecision.PASS
+        else 1
+    )
     return SemanticJudgeResponse(
         criteria=(
             SemanticCriterionResult(
@@ -104,9 +110,12 @@ def test_blinding_envelope_commits_irrelevant_metadata_without_exposing_it() -> 
     assert "provider-secret" not in dumped
     assert "model-secret" not in dumped
     assert "baseline-secret" not in dumped
-    assert envelope.hidden_metadata_sha256 == hashlib.sha256(
-        json.dumps(hidden, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
-    ).hexdigest()
+    assert (
+        envelope.hidden_metadata_sha256
+        == hashlib.sha256(
+            json.dumps(hidden, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
+        ).hexdigest()
+    )
 
     with pytest.raises(ValueError, match="absent from source metadata"):
         SemanticBlindingEnvelope.from_case(
@@ -200,9 +209,7 @@ def test_abstention_judge_failure_is_not_counted_as_safe_abstention() -> None:
     )
     receipt = SemanticAbstentionReceipt.create(
         policy=SemanticAbstentionPolicy(min_cases=1),
-        observations=(
-            SemanticAbstentionObservation(case=case, failure_code="judge-timeout"),
-        ),
+        observations=(SemanticAbstentionObservation(case=case, failure_code="judge-timeout"),),
     )
 
     assert receipt.abstentions == 0
