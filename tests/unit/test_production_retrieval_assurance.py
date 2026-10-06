@@ -34,7 +34,9 @@ def _document(
     )
 
 
-def test_hybrid_retrieval_pipeline_enforces_lifecycle_filters_rerank_rewrite_citations_and_tenant() -> None:
+def test_hybrid_retrieval_pipeline_enforces_lifecycle_filters_rerank_rewrite_citations_and_tenant() -> (
+    None
+):
     policy = RetrievalPipelinePolicy(
         tenant_id="tenant-a",
         mode=RetrievalMode.HYBRID,
@@ -107,9 +109,7 @@ def test_vector_and_lexical_modes_require_only_their_owned_score_domains() -> No
     )
 
     lexical_policy = vector_policy.model_copy(update={"mode": RetrievalMode.LEXICAL})
-    lexical_doc = vector_doc.model_copy(
-        update={"lexical_score": 5, "vector_score_micros": None}
-    )
+    lexical_doc = vector_doc.model_copy(update={"lexical_score": 5, "vector_score_micros": None})
     assert (
         RetrievalPipelineReceipt.create(
             policy=lexical_policy,
