@@ -233,6 +233,162 @@ def test_policy_rejects_qualification_evidence_outside_trusted_main_push(
     assert "qualification-evidence must be restricted to trusted main pushes" in result.stderr
 
 
+def test_policy_rejects_release_statement_outside_trusted_main_push(
+    tmp_path: Path,
+) -> None:
+    workspace = _policy_workspace(tmp_path)
+    workflow = workspace / ".github/workflows/ci.yml"
+    source = workflow.read_text(encoding="utf-8")
+    required = "if: github.event_name == 'push' && github.ref == 'refs/heads/main'"
+    statement_marker = "  release-statement:\n"
+    assert statement_marker in source
+    prefix, statement = source.split(statement_marker, 1)
+    assert required in statement
+    workflow.write_text(
+        prefix + statement_marker + statement.replace(required, "if: always()", 1),
+        encoding="utf-8",
+    )
+
+    result = _run_policy(workspace)
+
+    assert result.returncode != 0
+    assert "release-statement must be restricted to trusted main pushes" in result.stderr
+
+
+def test_policy_rejects_release_statement_self_dependency(tmp_path: Path) -> None:
+    workspace = _policy_workspace(tmp_path)
+    workflow = workspace / ".github/workflows/ci.yml"
+    source = workflow.read_text(encoding="utf-8")
+    statement_marker = "  release-statement:\n"
+    signer_marker = "  release-provenance:\n"
+    assert statement_marker in source
+    assert signer_marker in source
+    prefix, tail = source.split(statement_marker, 1)
+    statement, suffix = tail.split(signer_marker, 1)
+    anchor = "      - qualification-evidence\n"
+    assert anchor in statement
+    statement = statement.replace(
+        anchor,
+        anchor + "      - release-statement\n",
+        1,
+    )
+    workflow.write_text(
+        prefix + statement_marker + statement + signer_marker + suffix,
+        encoding="utf-8",
+    )
+
+    result = _run_policy(workspace)
+
+    assert result.returncode != 0
+    assert "release-statement must not depend on itself" in result.stderr
+
+
+def test_policy_rejects_release_statement_with_signing_authority(tmp_path: Path) -> None:
+    workspace = _policy_workspace(tmp_path)
+    workflow = workspace / ".github/workflows/ci.yml"
+    source = workflow.read_text(encoding="utf-8")
+    statement_marker = "  release-statement:\n"
+    signer_marker = "  release-provenance:\n"
+    assert statement_marker in source
+    assert signer_marker in source
+    prefix, tail = source.split(statement_marker, 1)
+    statement, suffix = tail.split(signer_marker, 1)
+    anchor = "    runs-on: ubuntu-24.04\n"
+    assert anchor in statement
+    statement = statement.replace(
+        anchor,
+        "    permissions:\n      id-token: write\n" + anchor,
+        1,
+    )
+    workflow.write_text(
+        prefix + statement_marker + statement + signer_marker + suffix,
+        encoding="utf-8",
+    )
+
+    result = _run_policy(workspace)
+
+    assert result.returncode != 0
+    assert (
+        "release-statement must retain an unsigned statement without signing authority"
+        in result.stderr
+    )
+
+
+def test_policy_rejects_publish_without_release_statement_verification(tmp_path: Path) -> None:
+    workspace = _policy_workspace(tmp_path)
+    workflow = workspace / ".github/workflows/publish-release.yml"
+    source = workflow.read_text(encoding="utf-8")
+    required = "release_statement.py verify"
+    assert required in source
+    workflow.write_text(
+        source.replace(required, "release_statement.py self-test", 1),
+        encoding="utf-8",
+    )
+
+    result = _run_policy(workspace)
+
+    assert result.returncode != 0
+    assert "publish-release workflow is missing required contract text" in result.stderr
+
+
+def test_policy_rejects_publish_without_exact_candidate_source_binding(tmp_path: Path) -> None:
+    workspace = _policy_workspace(tmp_path)
+    workflow = workspace / ".github/workflows/publish-release.yml"
+    source = workflow.read_text(encoding="utf-8")
+    required = "CI_COMMIT_SHA: ${{ steps.candidate.outputs.commit_sha }}"
+    assert required in source
+    workflow.write_text(
+        source.replace(required, "CI_COMMIT_SHA: ${{ github.sha }}", 1),
+        encoding="utf-8",
+    )
+
+    result = _run_policy(workspace)
+
+    assert result.returncode != 0
+    assert "publish-release candidate source materialization is missing" in result.stderr
+
+
+def test_policy_rejects_dynamic_candidate_checkout(tmp_path: Path) -> None:
+    workspace = _policy_workspace(tmp_path)
+    workflow = workspace / ".github/workflows/publish-release.yml"
+    source = workflow.read_text(encoding="utf-8")
+    anchor = "      - name: Download exact CI-tested package artifact\n"
+    assert anchor in source
+    dynamic_checkout = (
+        "      - name: Forbidden dynamic candidate checkout\n"
+        "        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1\n"
+        "        with:\n"
+        "          ref: ${{ steps.candidate.outputs.commit_sha }}\n"
+        "          persist-credentials: false\n"
+    )
+    workflow.write_text(
+        source.replace(anchor, dynamic_checkout + anchor, 1),
+        encoding="utf-8",
+    )
+
+    result = _run_policy(workspace)
+
+    assert result.returncode != 0
+    assert "exactly one trusted default-branch checkout" in result.stderr
+
+
+def test_policy_rejects_pypi_publication_without_trusted_publishing_contract(
+    tmp_path: Path,
+) -> None:
+    workspace = _policy_workspace(tmp_path)
+    workflow = workspace / ".github/workflows/publish-release.yml"
+    source = workflow.read_text(encoding="utf-8")
+    workflow.write_text(
+        source + "\n# forbidden publication mutation\n# twine upload dist/*\n",
+        encoding="utf-8",
+    )
+
+    result = _run_policy(workspace)
+
+    assert result.returncode != 0
+    assert "forbidden release behavior: twine upload" in result.stderr
+
+
 def test_policy_rejects_provenance_signing_outside_trusted_main_push(tmp_path: Path) -> None:
     workspace = _policy_workspace(tmp_path)
     workflow = workspace / ".github/workflows/ci.yml"
