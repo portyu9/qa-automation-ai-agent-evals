@@ -619,6 +619,8 @@ def _revalidate_provenance(value: ScenarioProvenance) -> ScenarioProvenance:
 
 
 def _require_trimmed_text(value: str, *, label: str) -> None:
+    if not value:
+        raise ValueError(f"{label} must be non-empty")
     if value != value.strip():
         raise ValueError(f"{label} must not contain surrounding whitespace")
     if any(ord(character) < 32 or ord(character) == 127 for character in value):
