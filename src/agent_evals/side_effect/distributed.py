@@ -164,7 +164,7 @@ class DistributedSideEffectReceipt(BaseModel):
             "covered_causes": [item.value for item in covered],
             "accepted": accepted,
         }
-        return cls(
+        return cls.model_construct(
             policy=checked_policy,
             attempts=tuple(checked),
             committed_mutations=len(committed),
