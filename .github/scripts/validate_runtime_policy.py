@@ -349,12 +349,26 @@ if "github.event.client_payload" in publish_release:
     fail(
         "publish-release must parse client payload as event-file data, not interpolate it into shell"
     )
+materialize_marker = "      - name: Materialize exact CI-qualified source contract\n"
+materialize_start = publish_release.find(materialize_marker)
+if materialize_start < 0:
+    fail("publish-release must materialize exact CI-qualified source contract data")
+materialize_end = publish_release.find("\n      - name:", materialize_start + len(materialize_marker))
+candidate_materialization = (
+    publish_release[materialize_start:]
+    if materialize_end < 0
+    else publish_release[materialize_start:materialize_end]
+)
+for required in (
+    "pyproject.toml",
+):
+    if required not in candidate_materialization:
+        fail(f"publish-release candidate source materialization is missing: {required}")
 for required in (
     "release_candidate.py self-test",
     "release_candidate.py validate",
     '--workflow-ref "$GITHUB_REF"',
     '--workflow-sha "$GITHUB_SHA"',
-    "Materialize exact CI-qualified source contract",
     "CI_COMMIT_SHA: ${{ steps.candidate.outputs.commit_sha }}",
     "application/vnd.github.raw+json",
     "requirements/compatibility/core-minimum-py311.txt",
