@@ -197,7 +197,6 @@ def test_crash_safe_hitl_resume_accepts_exactly_one_completion_and_rejects_dupli
         )
 
 
-
 def test_receipt_validation_context_cannot_self_declare_trusted_construction() -> None:
     approval = _approval(
         approval_id="approval.context",
