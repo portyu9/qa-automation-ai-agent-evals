@@ -589,9 +589,7 @@ def test_chaos_observation_shape_and_receipt_limits() -> None:
 
     secret = ChaosAssuranceReceipt.create(
         policy=ChaosPolicy(required_domains=frozenset({ChaosDomain.CLOCK})),
-        observations=(
-            _chaos_observation(secret_exposed=True),
-        ),
+        observations=(_chaos_observation(secret_exposed=True),),
     )
     assert secret.qualification_complete is False
 
