@@ -249,7 +249,7 @@ def test_config_environment_and_validation_branches(tmp_path: Path) -> None:
     assert rejected_unknown.exit_code == cli.EXIT_USAGE
     assert "unknown keys" in rejected_unknown.stderr
 
-    rejected_format = runner.invoke(cli.app, ["--format", "xml", "doctor"])
+    rejected_format = runner.invoke(cli.app, ["--format", "xml", "doctor"], color=False)
     assert rejected_format.exit_code == cli.EXIT_USAGE
     assert "--format must be json or jsonl" in rejected_format.stderr
 
