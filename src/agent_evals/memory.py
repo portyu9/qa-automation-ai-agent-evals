@@ -216,7 +216,7 @@ class MemoryAssuranceReceipt(BaseModel):
             "poison_rejected": poison_rejected,
             "accepted": accepted,
         }
-        return cls(
+        return cls.model_construct(
             policy=checked_policy,
             observations=tuple(checked),
             persistence_observed=persistence,
