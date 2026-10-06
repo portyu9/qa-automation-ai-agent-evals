@@ -56,17 +56,36 @@ jobs:
           python-version: ${{ matrix.python-version }}
       - name: Bootstrap pinned maintenance resolver
         run: python -m pip install --disable-pip-version-check "pip==25.3" "pip-tools==7.5.2"
-      - name: Generate candidate compatibility lock
+      - name: Require the qualification artifact-selection platform
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$RUNNER_OS" == "Linux" ]]
+          [[ "$RUNNER_ARCH" == "X64" ]]
+      - name: Generate raw candidate compatibility lock
         run: |
           python .github/scripts/generate_ci_lock.py \
             --profile "${{ matrix.profile }}" \
             --boundary "${{ matrix.boundary }}" \
+            --output "candidate/raw.txt"
+      - name: Select exact platform artifacts without installing
+        run: |
+          python -m pip install --disable-pip-version-check \
+            --dry-run --ignore-installed \
+            --report candidate/selection.json \
+            --require-hashes -r candidate/raw.txt
+      - name: Compact candidate to exact selected artifact hashes
+        run: |
+          python .github/scripts/compact_compatibility_lock.py \
+            --raw-lock candidate/raw.txt \
+            --report candidate/selection.json \
             --output "candidate/${{ matrix.profile }}-${{ matrix.boundary }}-${{ matrix.suffix }}.txt"
+          rm candidate/raw.txt candidate/selection.json
       - name: Upload candidate only
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: compat-lock-${{ matrix.profile }}-${{ matrix.boundary }}-${{ matrix.suffix }}
-          path: candidate/*.txt
+          path: "candidate/${{ matrix.profile }}-${{ matrix.boundary }}-${{ matrix.suffix }}.txt"
           if-no-files-found: error
           compression-level: 0
           retention-days: 3
