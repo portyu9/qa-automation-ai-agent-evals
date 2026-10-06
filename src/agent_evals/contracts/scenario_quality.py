@@ -184,23 +184,25 @@ class RegressionPromotionProposal(BaseModel):
             raise ValueError("promoted scenario is absent from registry") from exc
         _validate_promotion_entry(entry)
         provenance = entry.provenance
-        assert provenance.parent_scenario_identity is not None
-        assert provenance.source_trial_id is not None
-        assert provenance.source_evidence_root is not None
+        parent_identity = provenance.parent_scenario_identity
+        source_trial_id = provenance.source_trial_id
+        source_evidence_root = provenance.source_evidence_root
+        if parent_identity is None or source_trial_id is None or source_evidence_root is None:
+            raise ValueError("regression promotion source lineage is incomplete after validation")
         unsigned = {
             "schema_version": _PROMOTION_SCHEMA,
             "promoted_scenario_identity": entry.scenario_identity,
-            "parent_scenario_identity": provenance.parent_scenario_identity,
+            "parent_scenario_identity": parent_identity,
             "origin": provenance.origin.value,
-            "source_trial_id": provenance.source_trial_id,
-            "source_evidence_root": provenance.source_evidence_root,
+            "source_trial_id": source_trial_id,
+            "source_evidence_root": source_evidence_root,
         }
         return cls(
             promoted_scenario_identity=entry.scenario_identity,
-            parent_scenario_identity=provenance.parent_scenario_identity,
+            parent_scenario_identity=parent_identity,
             origin=provenance.origin,
-            source_trial_id=provenance.source_trial_id,
-            source_evidence_root=provenance.source_evidence_root,
+            source_trial_id=source_trial_id,
+            source_evidence_root=source_evidence_root,
             proposal_root=_domain_root(_PROMOTION_DOMAIN, unsigned),
         )
 
