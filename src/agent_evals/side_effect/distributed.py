@@ -158,6 +158,7 @@ class DistributedSideEffectReceipt(BaseModel):
                     SideEffectAttemptOutcome.ROLLED_BACK,
                 }
                 for item in duplicate_attempts
+                if item.outcome is not SideEffectAttemptOutcome.COMMITTED
             )
         )
         accepted = len(committed) <= checked_policy.max_committed_mutations and duplicates_safe
