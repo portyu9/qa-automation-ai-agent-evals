@@ -139,7 +139,10 @@ class ScenarioSemanticDuplicateDeclaration(BaseModel):
     def require_canonical_pair(self) -> Self:
         if self.left_scenario_identity >= self.right_scenario_identity:
             raise ValueError("semantic duplicate identities must be distinct and canonical")
-        if self.reviewer != self.reviewer.strip() or self.review_revision != self.review_revision.strip():
+        if (
+            self.reviewer != self.reviewer.strip()
+            or self.review_revision != self.review_revision.strip()
+        ):
             raise ValueError("semantic duplicate review metadata must be trimmed")
         return self
 
@@ -204,7 +207,9 @@ class RegressionPromotionProposal(BaseModel):
     @model_validator(mode="after")
     def verify_root(self) -> Self:
         if self.origin not in {ScenarioOrigin.COUNTEREXAMPLE, ScenarioOrigin.MINIMIZED_FAILURE}:
-            raise ValueError("regression promotion requires counterexample or minimized-failure origin")
+            raise ValueError(
+                "regression promotion requires counterexample or minimized-failure origin"
+            )
         expected = _domain_root(
             _PROMOTION_DOMAIN,
             self.model_dump(mode="json", exclude={"proposal_root"}),
@@ -325,7 +330,10 @@ def lint_semantic_duplicate_declarations(
     if len(set(pairs)) != len(pairs):
         raise ValueError("semantic duplicate declarations must have unique scenario pairs")
     for item in checked:
-        if item.left_scenario_identity not in identities or item.right_scenario_identity not in identities:
+        if (
+            item.left_scenario_identity not in identities
+            or item.right_scenario_identity not in identities
+        ):
             raise ValueError("semantic duplicate declaration references scenario outside registry")
 
     findings = [
