@@ -86,7 +86,7 @@ class ScenarioCoverageReport(BaseModel):
         *,
         minimums: dict[ScenarioKind, int] | None = None,
     ) -> Self:
-        checked = ScenarioRegistry.model_validate(registry.model_dump(mode="json"))
+        checked = _revalidate_registry(registry)
         required = minimums or {
             ScenarioKind.CAPABILITY: 1,
             ScenarioKind.SECURITY: 1,
@@ -173,7 +173,7 @@ class RegressionPromotionProposal(BaseModel):
         *,
         promoted_scenario_identity: str,
     ) -> Self:
-        checked = ScenarioRegistry.model_validate(registry.model_dump(mode="json"))
+        checked = _revalidate_registry(registry)
         by_identity = {entry.scenario_identity: entry for entry in checked.entries}
         try:
             entry = by_identity[promoted_scenario_identity]
@@ -309,12 +309,18 @@ def lint_semantic_duplicate_declarations(
 ) -> tuple[ScenarioSemanticDuplicateFinding, ...]:
     """Validate reviewer-owned semantic dedup declarations against one exact registry."""
 
-    checked_registry = ScenarioRegistry.model_validate(registry.model_dump(mode="json"))
+    checked_registry = _revalidate_registry(registry)
     identities = {entry.scenario_identity for entry in checked_registry.entries}
-    checked = tuple(
-        ScenarioSemanticDuplicateDeclaration.model_validate(item.model_dump(mode="json"))
-        for item in declarations
-    )
+    checked_list: list[ScenarioSemanticDuplicateDeclaration] = []
+    for item in declarations:
+        if type(item) is not ScenarioSemanticDuplicateDeclaration:
+            raise ValueError(
+                "semantic duplicate review requires exact ScenarioSemanticDuplicateDeclaration"
+            )
+        checked_list.append(
+            ScenarioSemanticDuplicateDeclaration.model_validate_json(item.model_dump_json())
+        )
+    checked = tuple(checked_list)
     pairs = [(item.left_scenario_identity, item.right_scenario_identity) for item in checked]
     if len(set(pairs)) != len(pairs):
         raise ValueError("semantic duplicate declarations must have unique scenario pairs")
@@ -360,6 +366,13 @@ def require_no_semantic_duplicates(
     ]
     if errors:
         raise ValueError("scenario corpus contains reviewer-confirmed semantic duplicates")
+
+
+
+def _revalidate_registry(value: ScenarioRegistry) -> ScenarioRegistry:
+    if type(value) is not ScenarioRegistry:
+        raise ValueError("scenario quality requires exact ScenarioRegistry")
+    return ScenarioRegistry.model_validate_json(value.model_dump_json())
 
 
 def _validate_promotion_entry(entry: ScenarioRegistryEntry) -> None:
