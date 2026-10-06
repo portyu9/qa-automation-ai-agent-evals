@@ -955,3 +955,40 @@ def test_directory_sync_open_oserror_diagnostic_is_exact(
     assert str(captured.value) == (
         f"cannot open evidence directory for durability sync: {tmp_path}"
     )
+
+
+def test_manifest_strict_json_requires_object_root_and_preserves_parser_label(
+    tmp_path: Path,
+) -> None:
+    store = LocalEvidenceStore(tmp_path / "evidence")
+    manifest = store.write(_evidence())
+    _, manifest_path = _artifact_paths(store)
+    manifest_path.write_bytes(b"[]")
+
+    with pytest.raises(EvidenceIntegrityError) as captured:
+        store.read(manifest.record_key)
+
+    assert str(captured.value) == "evidence manifest failed strict JSON decoding"
+    assert captured.value.__cause__ is not None
+    assert str(captured.value.__cause__) == "evidence manifest JSON root must be an object"
+
+
+def test_payload_strict_json_requires_object_root_and_preserves_parser_label(
+    tmp_path: Path,
+) -> None:
+    store = LocalEvidenceStore(tmp_path / "evidence")
+    manifest = store.write(_evidence())
+    payload_path, manifest_path = _artifact_paths(store)
+    payload_bytes = b"[]"
+    manifest_data = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest_data["payload_bytes"] = len(payload_bytes)
+    manifest_data["payload_sha256"] = hashlib.sha256(payload_bytes).hexdigest()
+    payload_path.write_bytes(payload_bytes)
+    manifest_path.write_bytes(_json_bytes(manifest_data))
+
+    with pytest.raises(EvidenceIntegrityError) as captured:
+        store.read(manifest.record_key)
+
+    assert str(captured.value) == "stored evidence payload failed strict JSON decoding"
+    assert captured.value.__cause__ is not None
+    assert str(captured.value.__cause__) == "stored evidence payload JSON root must be an object"
