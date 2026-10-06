@@ -13,6 +13,7 @@ on:
       - '.github/scripts/validate_codeql_sarif.py'
       - '.github/scripts/validate_codeql_sarif_selfcheck.py'
       - '.github/scripts/validate_security_stack.py'
+      - '.github/scripts/validate_workflow_graph.py'
       - '.github/scripts/verify_required_codeql.py'
       - '.github/workflows/dependency-governance.yml'
       - '.github/workflows/ci.yml'
@@ -73,6 +74,7 @@ jobs:
           .github/scripts/validate_codeql_sarif.py
           .github/scripts/validate_codeql_sarif_selfcheck.py
           .github/scripts/validate_security_stack.py
+          .github/scripts/validate_workflow_graph.py
           .github/scripts/verify_required_codeql.py
       - name: Validate governance and recovery configuration
         run: |
