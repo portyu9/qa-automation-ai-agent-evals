@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from click import unstyle
 from typer.testing import CliRunner
 
 import agent_evals.cli as cli
@@ -51,6 +52,7 @@ def _write(path: Path, value: object) -> Path:
 def test_help_exposes_operator_surface_and_completion() -> None:
     result = runner.invoke(cli.app, ["--help"])
     assert result.exit_code == 0
+    help_text = unstyle(result.stdout)
     for command in (
         "scenario",
         "run",
@@ -65,8 +67,8 @@ def test_help_exposes_operator_surface_and_completion() -> None:
         "calibration",
         "ci",
     ):
-        assert command in result.stdout
-    assert "--install-completion" in result.stdout
+        assert command in help_text
+    assert "--install-completion" in help_text
 
 
 def test_scenario_validate_and_jsonl_explain(tmp_path: Path) -> None:
