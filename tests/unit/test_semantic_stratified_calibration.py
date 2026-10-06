@@ -129,12 +129,18 @@ def _stratified_policy(
     kwargs: dict[str, object] = {
         "validation_policy": validation_policy or _base_policy(),
         "holdout_policy": holdout_policy or _base_policy(),
+        "min_development_cases": 1,
         "confidence_z": 1.0,
         "max_validation_false_pass_upper_bound": max_bound,
         "max_holdout_false_pass_upper_bound": max_bound,
     }
-    if risk_requirements is not None:
-        kwargs["risk_requirements"] = risk_requirements
+    kwargs["risk_requirements"] = risk_requirements or (
+        CalibrationRiskTagRequirement(
+            tag="judge-prompt-injection",
+            min_validation_fail_cases=1,
+            min_holdout_fail_cases=1,
+        ),
+    )
     return StratifiedCalibrationPolicy.model_validate(kwargs)
 
 
