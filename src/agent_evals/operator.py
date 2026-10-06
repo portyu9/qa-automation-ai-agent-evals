@@ -8,7 +8,7 @@ trusted evidence and does not make telemetry or presentation output grading auth
 from __future__ import annotations
 
 import os
-import subprocess
+import subprocess  # nosec B404 - operator explicitly runs fixed repository policy scripts
 import sys
 import tempfile
 from collections.abc import Sequence
@@ -477,7 +477,7 @@ def check_repository_policy(root: Path) -> dict[str, Any]:
             results.append({"script": relative, "status": "missing"})
             failed = True
             continue
-        completed = subprocess.run(
+        completed = subprocess.run(  # nosec B603 - fixed argv, no shell invocation
             [sys.executable, str(script)],
             cwd=root,
             check=False,
