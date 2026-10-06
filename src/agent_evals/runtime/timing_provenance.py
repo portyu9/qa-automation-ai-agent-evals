@@ -47,7 +47,11 @@ class EvaluatorTimingProvenance(BaseModel):
     def create(cls, evidence: TrialEvidence, *, elapsed_ms: float) -> Self:
         if type(evidence) is not TrialEvidence:
             raise ValueError("timing provenance requires exact TrialEvidence")
-        if isinstance(elapsed_ms, bool) or not isinstance(elapsed_ms, float) or elapsed_ms < 0.0:
+        if (
+            isinstance(elapsed_ms, bool)
+            or not isinstance(elapsed_ms, float)
+            or elapsed_ms < 0.0
+        ):
             raise ValueError("timing provenance elapsed_ms must be a non-negative float")
         unsigned = {
             "schema_version": _SCHEMA,
