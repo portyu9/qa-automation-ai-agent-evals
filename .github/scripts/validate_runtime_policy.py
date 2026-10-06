@@ -457,7 +457,7 @@ for job, lock_path in locked_job_contracts.items():
             )
 
 compatibility = job_block(workflow, "compatibility", "mutation")
-if not re.search(r"^\\s+needs:\\s*policy\\s*$", compatibility, flags=re.MULTILINE):
+if not re.search(r"^\s+needs:\s*policy\s*$", compatibility, flags=re.MULTILINE):
     fail("compatibility must depend on the repository policy job")
 for required in (
     "name: Compatibility / ${{ matrix.profile }} / ${{ matrix.boundary }} / Python ${{ matrix.python-version }}",
