@@ -8,18 +8,19 @@ Ordinary pull requests and deterministic CI prove repository-owned contracts wit
 
 ## Evaluator-owned adapter conformance
 
-`TrialRunner` inserts the exact framework-owned `ConformanceCheckedAdapter` around every subject adapter before normalized evidence reaches the grading engine. The wrapper validates:
+The core evaluator applies an evaluator-owned conformance check to every normalized adapter result before evidence conversion. The check validates:
 
-- a bounded, trimmed adapter identity with no control characters;
 - an exact `AdapterResult`;
 - exact `EvidenceEvent` instances with contiguous zero-based sequence values;
 - an exact terminal-state object;
 - bounded output shape;
 - finite non-negative elapsed time, token counts, and estimated cost.
 
-A conformance failure is an evaluator precondition failure and therefore resolves to `BLOCKED`, never subject `FAIL`.
+Adapter identity remains the original runtime object throughout execution, drift detection, error provenance, and producer-authority checks. Invalid or hostile adapter names continue to fail through the existing bounded metric-provenance boundary rather than creating a second competing identity path.
 
-Conformance is not producer authorization. The core evaluator unwraps only the exact framework-owned wrapper when applying its existing producer-capability checks. It then checks the original adapter by exact type for evaluator-owned `ATTACK_DELIVERY`, retrieval, approval, side-effect, and MCP protocol evidence. A user-defined wrapper, subclass, matching class name, matching source string, or conformance pass cannot manufacture that authority.
+A conformance failure is mapped into the evaluator's established invalid-adapter-result precondition and therefore resolves to `BLOCKED`, never subject `FAIL`.
+
+Conformance is not producer authorization. The core evaluator still checks the original adapter by exact type for evaluator-owned `ATTACK_DELIVERY`, retrieval, approval, side-effect, and MCP protocol evidence. A subclass, matching class name, matching source string, structurally valid result, or conformance pass cannot manufacture that authority.
 
 This design keeps extensibility separate from trust:
 
