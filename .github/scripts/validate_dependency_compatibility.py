@@ -67,8 +67,7 @@ def minimum_requirement(requirement: str) -> str:
     lowers = [version for operator, version in specifiers if operator == ">="]
     if len(lowers) != 1:
         raise CompatibilityPolicyError(
-            "minimum compatibility requires exactly one inclusive >= lower bound: "
-            f"{requirement!r}"
+            f"minimum compatibility requires exactly one inclusive >= lower bound: {requirement!r}"
         )
     unsupported = sorted({operator for operator, _ in specifiers if operator in {"~=", ">"}})
     if unsupported:
@@ -192,9 +191,7 @@ def parse_lock(path: Path) -> tuple[dict[str, str], dict[str, str]]:
     for offset, (start, name) in enumerate(starts):
         end = starts[offset + 1][0] if offset + 1 < len(starts) else len(lines)
         if HASH_RE.search("\n".join(lines[start:end])) is None:
-            raise CompatibilityPolicyError(
-                f"{path.name} package pin lacks a SHA-256 hash: {name}"
-            )
+            raise CompatibilityPolicyError(f"{path.name} package pin lacks a SHA-256 hash: {name}")
     return parse_header(raw, filename=path.name), pins
 
 
@@ -271,8 +268,7 @@ def validate_profile(
     expected_digest = input_digest(generator_inputs)
     if header["Input-SHA256"] != expected_digest:
         raise CompatibilityPolicyError(
-            f"{filename} source-input digest drift: "
-            f"{header['Input-SHA256']} != {expected_digest}"
+            f"{filename} source-input digest drift: {header['Input-SHA256']} != {expected_digest}"
         )
 
     pyproject = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
