@@ -243,9 +243,18 @@ def test_leakage_metadata_enforces_rotation_shape_and_surfaces_risk() -> None:
         revision="1",
         entries=(entry,),
     )
-    codes = {finding.code for finding in lint_scenario_registry(registry)}
+    findings = lint_scenario_registry(registry)
+    codes = {finding.code for finding in findings}
     assert RegistryFindingCode.UNKNOWN_LEAKAGE_RISK in codes
     assert RegistryFindingCode.PUBLIC_HIGH_MEMORIZATION_RISK in codes
+    unknown = next(
+        finding
+        for finding in findings
+        if finding.code is RegistryFindingCode.UNKNOWN_LEAKAGE_RISK
+    )
+    assert unknown.severity is RegistryFindingSeverity.ERROR
+    with pytest.raises(ValueError, match="unknown_leakage_risk"):
+        require_scenario_registry_quality(registry)
 
 
 def test_counterexample_promotion_binds_parent_trial_and_evidence() -> None:
