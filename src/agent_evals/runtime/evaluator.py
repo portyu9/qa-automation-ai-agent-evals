@@ -151,7 +151,6 @@ class TrialRunner(_CoreTrialRunner):
         )
 
 
-
 _PRIVILEGED_EVENT_ROLES: dict[EvidenceKind, PrivilegedProducerRole] = {
     EvidenceKind.ATTACK_DELIVERY: PrivilegedProducerRole.ATTACK_INJECTOR,
     EvidenceKind.PROTOCOL_DELIVERY: PrivilegedProducerRole.PROTOCOL_BRIDGE,
