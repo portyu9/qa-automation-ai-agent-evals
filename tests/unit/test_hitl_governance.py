@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 
 import pytest
+from pydantic import ValidationError
 
 from agent_evals.contracts.models import ApprovalDecision
 from agent_evals.hitl import (
@@ -193,4 +194,28 @@ def test_crash_safe_hitl_resume_accepts_exactly_one_completion_and_rejects_dupli
                     outcome=HITLResumeOutcome.DUPLICATE_REJECTED,
                 ),
             ),
+        )
+
+
+
+def test_receipt_validation_context_cannot_self_declare_trusted_construction() -> None:
+    approval = _approval(
+        approval_id="approval.context",
+        signer="approver",
+        session="session",
+        observed_at=100,
+    )
+    receipt = ApprovalGovernanceReceipt.create(
+        policy=ApprovalGovernancePolicy(),
+        requester_id="requester",
+        evaluated_at_unix_ms=200,
+        approvals=(approval,),
+    )
+    tampered = receipt.model_dump(mode="json")
+    tampered["accepted"] = False
+
+    with pytest.raises(ValidationError, match="does not recompute"):
+        ApprovalGovernanceReceipt.model_validate(
+            tampered,
+            context={"agent_evals_receipt_construction": True},
         )
