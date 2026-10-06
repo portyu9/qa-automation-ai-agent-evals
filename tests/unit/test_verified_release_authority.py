@@ -164,6 +164,4 @@ def test_verified_release_exact_type_guards_fail_closed() -> None:
         )
 
     with pytest.raises(ValueError, match="exact ReliabilityReport"):
-        release_gate_module._reliability_report_sha256(
-            cast(ReliabilityReport, object())
-        )
+        release_gate_module._reliability_report_sha256(cast(ReliabilityReport, object()))
