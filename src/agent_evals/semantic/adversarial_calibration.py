@@ -10,8 +10,9 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
+from collections.abc import Mapping
 from enum import StrEnum
-from typing import Any, Literal, Mapping, Self, TypedDict
+from typing import Any, Literal, Self, TypedDict
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
