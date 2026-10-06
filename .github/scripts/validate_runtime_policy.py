@@ -264,6 +264,8 @@ if "python .github/scripts/release_candidate.py self-test" not in policy:
     fail("policy job must self-test retained release candidate validation")
 if "python .github/scripts/ci_qualification_evidence.py self-test" not in policy:
     fail("policy job must self-test CI qualification evidence")
+if "python .github/scripts/release_statement.py self-test" not in policy:
+    fail("policy job must self-test the release compatibility statement")
 if "python .github/scripts/check_coverage_policy.py --self-test" not in policy:
     fail("policy job must self-test the module-specific coverage policy")
 if "python .github/scripts/validate_ci_locks.py" not in policy:
@@ -362,6 +364,9 @@ for required in (
     "ci-qualification-${{ steps.candidate.outputs.ci_run_id }}",
     "ci_qualification_evidence.py verify",
     "retained-qualification/ci-qualification-evidence.json",
+    "release-statement-${{ steps.candidate.outputs.ci_run_id }}",
+    "release_statement.py verify",
+    "retained-release-statement/release-statement.json",
     "release-provenance-${{ steps.candidate.outputs.ci_run_id }}",
     "retained-provenance/release-provenance.sigstore.json",
     "retained-provenance/subject-checksums.sha256",
@@ -392,6 +397,7 @@ for retained_path, minimum_count in (
     ("retained-supply-chain/release-sbom.spdx.json", 2),
     ("retained-supply-chain/release-supply-chain-evidence.json", 2),
     ("retained-qualification/ci-qualification-evidence.json", 3),
+    ("retained-release-statement/release-statement.json", 3),
 ):
     if publish_release.count(retained_path) < minimum_count:
         fail(
@@ -652,7 +658,7 @@ if "release_supply_chain.py create" in release_supply_chain_reverify:
 if "python -m build" in release_supply_chain_reverify:
     fail("release-supply-chain-reverify must not rebuild package distributions")
 
-qualification_evidence = job_block(workflow, "qualification-evidence", "release-provenance")
+qualification_evidence = job_block(workflow, "qualification-evidence", "release-statement")
 if "name: Retain CI qualification evidence" not in qualification_evidence:
     fail("qualification-evidence must use the canonical qualification job name")
 if (
@@ -690,6 +696,41 @@ if not any(
 ):
     fail("qualification-evidence must retain its exact canonical record as an artifact")
 
+release_statement = job_block(workflow, "release-statement", "release-provenance")
+if "name: Retain release compatibility statement" not in release_statement:
+    fail("release-statement must use the canonical retention job name")
+if "if: github.event_name == 'push' && github.ref == 'refs/heads/main'" not in release_statement:
+    fail("release-statement must be restricted to trusted main pushes")
+for dependency in ("package", "release-supply-chain-reverify", "qualification-evidence"):
+    if f"      - {dependency}\n" not in release_statement:
+        fail(f"release-statement must depend on {dependency}")
+for required in (
+    "release_statement.py create",
+    "release_statement.py verify",
+    "package-artifacts-${{ github.run_id }}",
+    "release-supply-chain-${{ github.run_id }}",
+    "ci-qualification-${{ github.run_id }}",
+    "release-statement/release-statement.json",
+    "release-statement-${{ github.run_id }}",
+    '--repository "$GITHUB_REPOSITORY"',
+    '--commit-sha "$GITHUB_SHA"',
+    '--ref "$GITHUB_REF"',
+    '--workflow "$GITHUB_WORKFLOW"',
+    '--run-id "$GITHUB_RUN_ID"',
+    '--run-attempt "$GITHUB_RUN_ATTEMPT"',
+):
+    if required not in release_statement:
+        fail(f"release-statement is missing required contract text: {required}")
+for forbidden_permission in ("id-token: write", "attestations: write", "artifact-metadata: write"):
+    if forbidden_permission in release_statement:
+        fail("release-statement must retain an unsigned statement without signing authority")
+if not any(
+    action.startswith("actions/upload-artifact@")
+    for action in _WORKFLOW_USES_RE.findall(release_statement)
+):
+    fail("release-statement must retain its exact canonical record as an artifact")
+
+
 release_provenance = job_block(workflow, "release-provenance", "ci-gate")
 if "name: Attest retained release artifacts" not in release_provenance:
     fail("release-provenance must use the canonical qualification job name")
@@ -701,6 +742,7 @@ for dependency in (
     "package-reproduce",
     "release-supply-chain-reverify",
     "qualification-evidence",
+    "release-statement",
 ):
     if f"      - {dependency}\n" not in release_provenance:
         fail(f"release-provenance must depend on {dependency}")
@@ -721,16 +763,19 @@ for required in (
     "package-artifacts-${{ github.run_id }}",
     "release-supply-chain-${{ github.run_id }}",
     "ci-qualification-${{ github.run_id }}",
+    "release-statement-${{ github.run_id }}",
     "package_artifact_manifest.py verify",
     "release_supply_chain.py verify",
     "ci_qualification_evidence.py verify",
+    "release_statement.py verify",
     "retained-dist/*.whl",
     "retained-dist/*.tar.gz",
     "retained-dist/artifact-manifest.json",
     "retained-supply-chain/release-sbom.spdx.json",
     "retained-supply-chain/release-supply-chain-evidence.json",
     "retained-qualification/ci-qualification-evidence.json",
-    'test "${#subjects[@]}" -eq 6',
+    "retained-release-statement/release-statement.json",
+    'test "${#subjects[@]}" -eq 7',
     "steps.attest.outputs.bundle-path",
     "release-provenance/release-provenance.sigstore.json",
     "gh attestation verify",
@@ -756,6 +801,21 @@ for workflow_path, source in workflows.items():
         or "actions/attest@" in source
     ):
         fail(f"{workflow_path.as_posix()} introduces signing authority outside trusted-main CI")
+
+for workflow_path, source in workflows.items():
+    lowered = source.lower()
+    for marker in (
+        "pypa/gh-action-pypi-publish",
+        "twine upload",
+        "uv publish",
+        "upload.pypi.org",
+        "pypi.org/legacy",
+    ):
+        if marker in lowered:
+            fail(
+                "PyPI publication is intentionally disabled until a dedicated OIDC Trusted "
+                f"Publishing contract is reviewed: {workflow_path.as_posix()}: {marker}"
+            )
 
 ci_gate = job_block(workflow, "ci-gate", "protected-gate")
 if not re.search(r"^\s+if:\s*always\(\)\s*$", ci_gate, flags=re.MULTILINE):
@@ -809,6 +869,6 @@ print(
     "runtime policy validated: "
     f"python={','.join(SUPPORTED_PYTHONS)}; requires-python={REQUIRES_PYTHON}; "
     f"runner={RUNNER}; workflows={len(workflows)}; gate=ci-gate+protected-codeql; "
-    "package-artifacts=hashed-locks+minimum-latest-compatibility+retained-reverified-reproduced-with-spdx-license-evidence+signed-ci-qualification+trusted-main-oidc-provenance+default-branch-published"
+    "package-artifacts=hashed-locks+minimum-latest-compatibility+retained-reverified-reproduced-with-spdx-license-evidence+signed-ci-qualification+attested-release-statement+trusted-main-oidc-provenance+default-branch-published"
 )
 sys.exit(0)
