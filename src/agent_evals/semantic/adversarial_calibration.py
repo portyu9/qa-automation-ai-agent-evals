@@ -142,7 +142,9 @@ class SemanticBlindingEnvelope(BaseModel):
         fields = tuple(sorted(blinded_fields, key=lambda item: item.value))
         missing = sorted(field.value for field in fields if field.value not in hidden_metadata)
         if missing:
-            raise ValueError(f"blinded metadata fields are absent from source metadata: {missing!r}")
+            raise ValueError(
+                f"blinded metadata fields are absent from source metadata: {missing!r}"
+            )
         return cls(
             case_identity=snapshot.identity,
             judge_input=snapshot.judge_input,
@@ -450,7 +452,9 @@ def _abstention_metrics(
     if len(set(identities)) != len(identities):
         raise ValueError("semantic abstention case identities must be unique")
     abstentions = sum(item.observed is SemanticDecision.ABSTAIN for item in observations)
-    incorrect = sum(item.observed in {SemanticDecision.PASS, SemanticDecision.FAIL} for item in observations)
+    incorrect = sum(
+        item.observed in {SemanticDecision.PASS, SemanticDecision.FAIL} for item in observations
+    )
     failures = sum(item.observed is None for item in observations)
     covered_tags = tuple(sorted({tag for item in observations for tag in item.case.tags}))
     accepted = (
@@ -487,7 +491,9 @@ def _canonical_json_bytes(value: object) -> bytes:
             allow_nan=False,
         ).encode("utf-8")
     except (TypeError, ValueError) as exc:
-        raise ValueError("semantic adversarial material must be finite JSON-compatible data") from exc
+        raise ValueError(
+            "semantic adversarial material must be finite JSON-compatible data"
+        ) from exc
 
 
 __all__ = [
