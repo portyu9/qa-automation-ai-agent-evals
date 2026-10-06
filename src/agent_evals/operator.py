@@ -7,7 +7,6 @@ trusted evidence and does not make telemetry or presentation output grading auth
 
 from __future__ import annotations
 
-import json
 import os
 import subprocess
 import sys
@@ -559,7 +558,8 @@ def _trial_payload(trial: EvaluatedTrial, *, include_evidence: bool) -> dict[str
                 "name": result.name,
                 "verdict": result.verdict.value,
                 "critical": result.critical,
-                "reason": result.reason,
+                "reasons": list(result.reasons),
+                "failure_codes": [code.value for code in result.failure_codes],
             }
             for result in trial.oracle_results
         ],
