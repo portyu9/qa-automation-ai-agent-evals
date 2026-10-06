@@ -25,10 +25,7 @@ def structured_oracle_failures(result: OracleResult) -> tuple[OracleFailure, ...
     codes = (
         result.failure_codes
         if len(result.failure_codes) == len(result.reasons)
-        else tuple(
-            classify_legacy_oracle_reason(result.name, reason)
-            for reason in result.reasons
-        )
+        else tuple(classify_legacy_oracle_reason(result.name, reason) for reason in result.reasons)
     )
     return tuple(
         OracleFailure(code=code, reason=reason)
