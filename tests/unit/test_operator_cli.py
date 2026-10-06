@@ -6,7 +6,7 @@ from pathlib import Path
 from click import unstyle
 from typer.testing import CliRunner
 
-import agent_evals.cli as cli
+from agent_evals import cli
 from agent_evals.contracts.models import (
     AuthorityPolicy,
     EvaluationScenario,
