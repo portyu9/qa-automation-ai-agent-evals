@@ -360,7 +360,15 @@ candidate_materialization = (
     else publish_release[materialize_start:materialize_end]
 )
 for required in (
+    "CI_COMMIT_SHA: ${{ steps.candidate.outputs.commit_sha }}",
+    "application/vnd.github.raw+json",
     "pyproject.toml",
+    "requirements/compatibility/core-minimum-py311.txt",
+    "requirements/compatibility/core-latest-py311.txt",
+    "requirements/compatibility/mcp-minimum-py311.txt",
+    "requirements/compatibility/mcp-latest-py311.txt",
+    "requirements/compatibility/openai-mcp-minimum-py311.txt",
+    "requirements/compatibility/openai-mcp-latest-py311.txt",
 ):
     if required not in candidate_materialization:
         fail(f"publish-release candidate source materialization is missing: {required}")
