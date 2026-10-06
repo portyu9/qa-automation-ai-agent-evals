@@ -23,7 +23,9 @@ _KEYSET_SCHEMA: Literal["agent-evals/oauth-keyset-snapshot/v1"] = (
     "agent-evals/oauth-keyset-snapshot/v1"
 )
 _EVENT_SCHEMA: Literal["agent-evals/oauth-session-event/v1"] = "agent-evals/oauth-session-event/v1"
-_POLICY_SCHEMA: Literal["agent-evals/oauth-advanced-policy/v1"] = "agent-evals/oauth-advanced-policy/v1"
+_POLICY_SCHEMA: Literal["agent-evals/oauth-advanced-policy/v1"] = (
+    "agent-evals/oauth-advanced-policy/v1"
+)
 _RECEIPT_SCHEMA: Literal["agent-evals/oauth-advanced-receipt/v1"] = (
     "agent-evals/oauth-advanced-receipt/v1"
 )
@@ -115,7 +117,9 @@ class OAuthSessionEvent(BaseModel):
             if self.sender_key_sha256 is None:
                 raise ValueError("DPoP/mTLS event requires sender-key fingerprint")
             if not self.sender_binding_verified:
-                raise ValueError("DPoP/mTLS event requires external sender-binding verification")
+                raise ValueError(
+                    "DPoP/mTLS event requires external sender-binding verification"
+                )
         if self.kind is OAuthSessionEventKind.REFRESH and self.parent_token_sha256 is None:
             raise ValueError("refresh event requires parent token identity")
         if self.kind is OAuthSessionEventKind.INITIAL and self.parent_token_sha256 is not None:
@@ -188,7 +192,9 @@ class OAuthAdvancedReceipt(BaseModel):
         checked_keysets = _check_keysets(keysets)
         checked_events = _check_events(events)
 
-        issuers = {item.issuer for item in checked_keysets} | {item.issuer for item in checked_events}
+        issuers = {item.issuer for item in checked_keysets} | {
+            item.issuer for item in checked_events
+        }
         if not issuers <= checked_policy.allowed_issuers:
             raise ValueError("OAuth observations contain issuer outside policy")
         known_kids = {item for snapshot in checked_keysets for item in snapshot.key_ids}
@@ -233,7 +239,8 @@ class OAuthAdvancedReceipt(BaseModel):
             "sender_constraint_observed": sender_constraint,
             "accepted": accepted,
         }
-        return validate_receipt_construction(cls,
+        return validate_receipt_construction(
+            cls,
             policy=checked_policy,
             keysets=checked_keysets,
             events=checked_events,
@@ -325,7 +332,8 @@ class OAuthAuthorizationDriftReceipt(BaseModel):
             "post_contraction_denial_observed": denial,
             "accepted": accepted,
         }
-        return validate_receipt_construction(cls,
+        return validate_receipt_construction(
+            cls,
             observations=tuple(checked),
             contraction_observed=contraction,
             post_contraction_denial_observed=denial,
@@ -382,7 +390,9 @@ def _check_events(values: tuple[OAuthSessionEvent, ...]) -> tuple[OAuthSessionEv
             if item.kind is OAuthSessionEventKind.REFRESH:
                 parent = item.parent_token_sha256
                 if parent is None or parent not in seen_tokens:
-                    raise ValueError("OAuth refresh parent must reference a previously observed token")
+                    raise ValueError(
+                        "OAuth refresh parent must reference a previously observed token"
+                    )
         elif item.kind is OAuthSessionEventKind.REVOKE:
             if item.token_sha256 not in seen_tokens:
                 raise ValueError("OAuth revocation must reference a previously observed token")
