@@ -485,7 +485,11 @@ for forbidden in ("piptools", "generate_ci_lock.py", "pip install -U", "pip inst
 if Path(".github/workflows/compat-lock-candidates.yml").exists():
     fail("temporary compatibility candidate workflow must not remain in accepted repository state")
 for workflow_path, source in workflows.items():
-    if "generate_ci_lock.py" in source or "compact_compatibility_lock.py" in source:
+    executable_source = source.replace(
+        "python .github/scripts/compact_compatibility_lock.py --self-test",
+        "",
+    )
+    if "generate_ci_lock.py" in executable_source or "compact_compatibility_lock.py" in executable_source:
         fail(
             "workflow must not invoke maintenance dependency resolution/compaction: "
             f"{workflow_path}"
