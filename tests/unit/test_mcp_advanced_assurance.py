@@ -285,6 +285,11 @@ def test_hostile_server_resource_limits_preserve_fault_classes() -> None:
     receipt = MCPHostileServerReceipt.create(budget=budget, observations=observations)
 
     assert receipt.accepted is True
+    incomplete = MCPHostileServerReceipt.create(
+        budget=budget,
+        observations=(observations[0],),
+    )
+    assert incomplete.accepted is False
     assert set(receipt.covered_conditions) == {
         MCPRemoteCondition.OVERSIZED_RESPONSE,
         MCPRemoteCondition.HANG_TIMEOUT,
@@ -432,9 +437,29 @@ def test_oauth_active_session_authorization_drift_requires_post_contraction_deni
                 epoch=1,
                 scopes=frozenset({"read"}),
                 resource_identity="tenant/7",
-                operation="read",
+                operation="write",
                 allowed=True,
             ),
         )
     )
     assert no_denial.accepted is False
+
+    with pytest.raises(ValueError, match="one resource and operation"):
+        OAuthAuthorizationDriftReceipt.create(
+            (
+                OAuthAuthorizationEpoch(
+                    epoch=0,
+                    scopes=frozenset({"read", "write"}),
+                    resource_identity="tenant/7",
+                    operation="write",
+                    allowed=True,
+                ),
+                OAuthAuthorizationEpoch(
+                    epoch=1,
+                    scopes=frozenset({"read"}),
+                    resource_identity="tenant/7",
+                    operation="read",
+                    allowed=False,
+                ),
+            )
+        )

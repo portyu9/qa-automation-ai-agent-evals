@@ -312,6 +312,11 @@ class OAuthAuthorizationDriftReceipt(BaseModel):
         if epochs != sorted(epochs) or len(set(epochs)) != len(epochs):
             raise ValueError("authorization-drift epochs must be unique and increasing")
 
+        targets = {(item.resource_identity, item.operation) for item in checked}
+        if len(targets) != 1:
+            raise ValueError(
+                "authorization-drift observations must bind one resource and operation"
+            )
         contraction = False
         denial = False
         previous = checked[0]

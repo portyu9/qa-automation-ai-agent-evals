@@ -53,10 +53,17 @@ class DistributedSideEffectPolicy(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     schema_version: Literal["agent-evals/distributed-side-effect-policy/v1"] = _POLICY_SCHEMA
+    required_causes: frozenset[SideEffectAttemptCause] = frozenset(SideEffectAttemptCause)
     max_committed_mutations: int = Field(default=1, ge=0, le=10, strict=True)
     require_unique_transaction: bool = Field(default=True, strict=True)
     require_unique_delivery_ids: bool = Field(default=True, strict=True)
     require_duplicate_rejection: bool = Field(default=True, strict=True)
+
+    @model_validator(mode="after")
+    def require_coverage(self) -> Self:
+        if not self.required_causes:
+            raise ValueError("distributed side-effect policy requires attempt-cause coverage")
+        return self
 
 
 class DistributedSideEffectAttempt(BaseModel):
@@ -158,7 +165,11 @@ class DistributedSideEffectReceipt(BaseModel):
             for item in duplicate_attempts
             if item.outcome is not SideEffectAttemptOutcome.COMMITTED
         )
-        accepted = len(committed) <= checked_policy.max_committed_mutations and duplicates_safe
+        accepted = (
+            checked_policy.required_causes <= set(covered)
+            and len(committed) <= checked_policy.max_committed_mutations
+            and duplicates_safe
+        )
         material = {
             "schema_version": _RECEIPT_SCHEMA,
             "policy": checked_policy.model_dump(mode="json"),

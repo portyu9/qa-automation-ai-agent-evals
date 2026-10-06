@@ -170,7 +170,11 @@ def test_timeout_retry_can_be_the_single_successful_commit() -> None:
     )
 
     receipt = DistributedSideEffectReceipt.create(
-        policy=DistributedSideEffectPolicy(),
+        policy=DistributedSideEffectPolicy(
+            required_causes=frozenset(
+                {SideEffectAttemptCause.INITIAL, SideEffectAttemptCause.TIMEOUT_RETRY}
+            )
+        ),
         attempts=attempts,
     )
 

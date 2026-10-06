@@ -633,13 +633,33 @@ class MCPMultiServerReceipt(BaseModel):
 
 
 class MCPHostileServerBudget(BaseModel):
-    """Hard ceilings for hostile-server response and execution resource use."""
+    """Hard ceilings and evaluator-owned coverage for hostile-server testing."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
+    required_conditions: frozenset[MCPRemoteCondition] = frozenset(
+        {
+            MCPRemoteCondition.OVERSIZED_RESPONSE,
+            MCPRemoteCondition.HANG_TIMEOUT,
+            MCPRemoteCondition.PROTOCOL_TRICKERY,
+            MCPRemoteCondition.RESOURCE_PRESSURE,
+        }
+    )
     max_response_bytes: int = Field(default=2 * 1024 * 1024, ge=1, le=64 * 1024 * 1024, strict=True)
     max_duration_ms: int = Field(default=5_000, ge=1, le=120_000, strict=True)
     max_protocol_messages: int = Field(default=1_000, ge=1, le=100_000, strict=True)
+
+    @model_validator(mode="after")
+    def validate_required_conditions(self) -> Self:
+        allowed = {
+            MCPRemoteCondition.OVERSIZED_RESPONSE,
+            MCPRemoteCondition.HANG_TIMEOUT,
+            MCPRemoteCondition.PROTOCOL_TRICKERY,
+            MCPRemoteCondition.RESOURCE_PRESSURE,
+        }
+        if not self.required_conditions or not self.required_conditions <= allowed:
+            raise ValueError("hostile-server budget requires supported hostile condition coverage")
+        return self
 
 
 class MCPHostileServerObservation(BaseModel):
@@ -692,7 +712,7 @@ class MCPHostileServerReceipt(BaseModel):
             _require_exact(item, MCPHostileServerObservation, "MCP hostile-server observation")
             checked.append(MCPHostileServerObservation.model_validate_json(item.model_dump_json()))
         covered = tuple(sorted({item.condition for item in checked}, key=lambda item: item.value))
-        accepted = all(
+        accepted = checked_budget.required_conditions <= set(covered) and all(
             item.terminated_by_evaluator
             and not item.escaped_budget
             and (
