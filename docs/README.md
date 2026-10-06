@@ -1,6 +1,6 @@
 # ƳƤ AI Agent Evaluation & Assurance Framework — Documentation
 
-New verification-layer contracts are documented in [Verification Contracts](VERIFICATION_CONTRACTS.md); they are additive to historical TrialEvidence/v2 and existing receipt trust domains.
+New verification-layer contracts are documented in [Verification Contracts](VERIFICATION_CONTRACTS.md); they are additive to historical TrialEvidence/v2 and existing receipt trust domains. Scenario benchmark governance is documented separately in [Scenario Registry](SCENARIO_REGISTRY.md).
 
 This documentation is organized by the question a reviewer is trying to answer. The framework keeps **subject identity**, **scenario/adversarial identity**, **attack-delivery producer authority**, **approval-intent evidence**, **side-effect observation evidence**, **evaluation-precondition evidence**, **retrieval-delivery evidence**, **MCP protocol-fault evidence**, **MCP→agent bridge evidence**, **MCP resource-server authorization evidence**, **MCP OAuth-flow evidence**, **subject evidence**, **runtime turn-budget authority**, **deterministic authority**, **calibrated semantic-judgment evidence**, **persistence integrity**, **session derivation**, and **statistical inference** separate. A statement from one domain never silently becomes proof in another.
 

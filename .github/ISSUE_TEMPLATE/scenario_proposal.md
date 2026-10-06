@@ -14,6 +14,18 @@ What agent behavior is this scenario intended to evaluate, and for which subject
 
 Choose capability, regression, security, resilience, or metamorphic; propose stable tags and a difficulty/risk rationale.
 
+## Registry metadata
+
+Name the owning team/role, taxonomy path, intended population scope, difficulty, prerequisite scenario identities, and lifecycle/deprecation status. If this is an intentional exact structural alias, explain the duplicate waiver.
+
+## Benchmark exposure and leakage
+
+Classify the benchmark material as stable-public, rotating-private, or private-holdout. For rotating-private material, identify the rotation epoch/ID. Record contamination and memorization risk plus the review revision. A private label is not secrecy if raw material is committed to a public repository.
+
+## Promotion provenance
+
+If the scenario was promoted from a counterexample or minimized failure, identify the exact parent scenario identity, source trial ID, and source evidence root. For a metamorphic mutant, identify the parent scenario and any source trial/evidence pair.
+
 ## Initial state and outcomes
 
 Define the synthetic starting state, required outcomes, forbidden outcomes, and independent state observation method.
