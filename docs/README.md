@@ -1,6 +1,6 @@
 # ƳƤ AI Agent Evaluation & Assurance Framework — Documentation
 
-New verification-layer contracts are documented in [Verification Contracts](VERIFICATION_CONTRACTS.md); they are additive to historical TrialEvidence/v2 and existing receipt trust domains. Scenario benchmark governance is documented separately in [Scenario Registry](SCENARIO_REGISTRY.md).
+New verification-layer contracts are documented in [Verification Contracts](VERIFICATION_CONTRACTS.md); they are additive to historical TrialEvidence/v2 and existing receipt trust domains. Scenario benchmark governance is documented separately in [Scenario Registry](SCENARIO_REGISTRY.md). Semantic robustness surveillance is documented in [Semantic Robustness](SEMANTIC_ROBUSTNESS.md).
 
 This documentation is organized by the question a reviewer is trying to answer. The framework keeps **subject identity**, **scenario/adversarial identity**, **attack-delivery producer authority**, **approval-intent evidence**, **side-effect observation evidence**, **evaluation-precondition evidence**, **retrieval-delivery evidence**, **MCP protocol-fault evidence**, **MCP→agent bridge evidence**, **MCP resource-server authorization evidence**, **MCP OAuth-flow evidence**, **subject evidence**, **runtime turn-budget authority**, **deterministic authority**, **calibrated semantic-judgment evidence**, **persistence integrity**, **session derivation**, and **statistical inference** separate. A statement from one domain never silently becomes proof in another.
 
@@ -191,6 +191,7 @@ For stale-cache and both drift bridges, refresh is deliberately **host-owned**: 
 | [EVIDENCE_HIERARCHY.md](EVIDENCE_HIERARCHY.md) | Which evidence/authority layer outranks which, and why can provider/model output never become terminal evaluator truth by itself? |
 | [EVALUATION_MODEL.md](EVALUATION_MODEL.md) | What exactly constitutes a task, trial, outcome, policy violation, semantic judgment, and verdict? |
 | [SEMANTIC_JUDGING.md](SEMANTIC_JUDGING.md) | How are rubrics, judge profiles, calibration, bounded inputs, semantic receipts, deterministic precedence, replay, and OpenAI SDK judge behavior kept evidence-bound? |
+| [SEMANTIC_ROBUSTNESS.md](SEMANTIC_ROBUSTNESS.md) | How are paraphrase/order/format stability, judge drift, inter-judge agreement, and ensemble consistency measured without becoming grading authority? |
 | [HANDOFF_AUTHORITY.md](HANDOFF_AUTHORITY.md) | How are native OpenAI handoffs authorized as a scenario-bound directed graph, how is run-item agent provenance bound, and how is authority forced to attenuate across each observed hop? |
 | [TURN_BUDGET_AUTHORITY.md](TURN_BUDGET_AUTHORITY.md) | Why is `max_turns` runtime-owned rather than inferred from normalized events, how must adapters enforce it, and how does a confirmed exhaustion remain a deterministic policy fact without masking unresolved evaluator preconditions? |
 | [APPROVAL_INTENT.md](APPROVAL_INTENT.md) | How is one native OpenAI HITL approve/reject decision bound to the exact pending invocation, accepted delegated-authority path, same-run continuation, and deterministic failure semantics? |
