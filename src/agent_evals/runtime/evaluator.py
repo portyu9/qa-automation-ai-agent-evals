@@ -24,6 +24,7 @@ from agent_evals.runtime.metric_provenance import (
     RuntimeMetricProvenance,
     resolve_metric_provenance,
 )
+from agent_evals.runtime.timing_provenance import EvaluatorTimingProvenance
 
 _REJECTED_ADAPTER_NAME = "metric-provenance-rejected"
 
@@ -33,11 +34,18 @@ class EvaluatedTrial(_CoreEvaluatedTrial):
     """Core evaluated trial plus optional evaluator-owned metric provenance."""
 
     metric_provenance: RuntimeMetricProvenance | None = field(default=None, kw_only=True)
+    timing_provenance: EvaluatorTimingProvenance | None = field(default=None, kw_only=True)
 
     def __post_init__(self) -> None:
         _CoreEvaluatedTrial.__post_init__(self)
         if self.metric_provenance is not None:
             self.metric_provenance.validate_against_evidence(self.evidence)
+        if self.timing_provenance is not None:
+            self.timing_provenance.validate_against_evidence(self.evidence)
+            if self.evaluator_elapsed_ms != self.timing_provenance.elapsed_ms:
+                raise ValueError(
+                    "evaluator timing provenance elapsed_ms does not match finalized trial timing"
+                )
 
 
 class _RejectedMetricProvenanceAdapter:
@@ -94,6 +102,10 @@ class TrialRunner(_CoreTrialRunner):
             origin=origin,
             assertion=assertion,
         )
+        timing_provenance = EvaluatorTimingProvenance.create(
+            evaluated.evidence,
+            elapsed_ms=evaluator_elapsed_ms,
+        )
         return EvaluatedTrial(
             evidence=evaluated.evidence,
             oracle_results=evaluated.oracle_results,
@@ -101,4 +113,5 @@ class TrialRunner(_CoreTrialRunner):
             semantic_judgment=evaluated.semantic_judgment,
             evaluator_elapsed_ms=evaluator_elapsed_ms,
             metric_provenance=metric_provenance,
+            timing_provenance=timing_provenance,
         )
