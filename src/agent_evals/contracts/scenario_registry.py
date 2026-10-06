@@ -25,9 +25,7 @@ _PROVENANCE_SCHEMA: Literal["agent-evals/scenario-provenance/v1"] = (
 _ENTRY_SCHEMA: Literal["agent-evals/scenario-registry-entry/v1"] = (
     "agent-evals/scenario-registry-entry/v1"
 )
-_REGISTRY_SCHEMA: Literal["agent-evals/scenario-registry/v1"] = (
-    "agent-evals/scenario-registry/v1"
-)
+_REGISTRY_SCHEMA: Literal["agent-evals/scenario-registry/v1"] = "agent-evals/scenario-registry/v1"
 _ENTRY_DOMAIN = b"agent-evals/scenario-registry-entry/v1\0"
 _REGISTRY_DOMAIN = b"agent-evals/scenario-registry/v1\0"
 
@@ -288,7 +286,10 @@ class ScenarioRegistryEntry(BaseModel):
             raise ValueError("scenario provenance cannot name itself as parent")
 
         if self.lifecycle is ScenarioLifecycle.ACTIVE:
-            if self.deprecation_reason is not None or self.superseded_by_scenario_identity is not None:
+            if (
+                self.deprecation_reason is not None
+                or self.superseded_by_scenario_identity is not None
+            ):
                 raise ValueError("active scenario cannot carry deprecation metadata")
         else:
             if self.deprecation_reason is None:
