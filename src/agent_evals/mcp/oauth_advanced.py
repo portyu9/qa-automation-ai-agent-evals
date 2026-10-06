@@ -117,9 +117,7 @@ class OAuthSessionEvent(BaseModel):
             if self.sender_key_sha256 is None:
                 raise ValueError("DPoP/mTLS event requires sender-key fingerprint")
             if not self.sender_binding_verified:
-                raise ValueError(
-                    "DPoP/mTLS event requires external sender-binding verification"
-                )
+                raise ValueError("DPoP/mTLS event requires external sender-binding verification")
         if self.kind is OAuthSessionEventKind.REFRESH and self.parent_token_sha256 is None:
             raise ValueError("refresh event requires parent token identity")
         if self.kind is OAuthSessionEventKind.INITIAL and self.parent_token_sha256 is not None:
