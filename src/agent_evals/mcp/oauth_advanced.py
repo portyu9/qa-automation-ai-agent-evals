@@ -12,7 +12,12 @@ import json
 from enum import StrEnum
 from typing import Literal, Self
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, field_validator, model_validator
+
+from agent_evals._receipt_validation import (
+    is_receipt_construction,
+    validate_receipt_construction,
+)
 
 _KEYSET_SCHEMA: Literal["agent-evals/oauth-keyset-snapshot/v1"] = (
     "agent-evals/oauth-keyset-snapshot/v1"
@@ -221,7 +226,7 @@ class OAuthAdvancedReceipt(BaseModel):
             "sender_constraint_observed": sender_constraint,
             "accepted": accepted,
         }
-        return cls.model_construct(
+        return validate_receipt_construction(cls,
             policy=checked_policy,
             keysets=checked_keysets,
             events=checked_events,
@@ -235,7 +240,9 @@ class OAuthAdvancedReceipt(BaseModel):
         )
 
     @model_validator(mode="after")
-    def verify_receipt(self) -> Self:
+    def verify_receipt(self, info: ValidationInfo) -> Self:
+        if is_receipt_construction(info):
+            return self
         rebuilt = type(self).create(policy=self.policy, keysets=self.keysets, events=self.events)
         fields = (
             "key_rotation_observed",
@@ -311,7 +318,7 @@ class OAuthAuthorizationDriftReceipt(BaseModel):
             "post_contraction_denial_observed": denial,
             "accepted": accepted,
         }
-        return cls.model_construct(
+        return validate_receipt_construction(cls,
             observations=tuple(checked),
             contraction_observed=contraction,
             post_contraction_denial_observed=denial,
@@ -320,7 +327,9 @@ class OAuthAuthorizationDriftReceipt(BaseModel):
         )
 
     @model_validator(mode="after")
-    def verify_receipt(self) -> Self:
+    def verify_receipt(self, info: ValidationInfo) -> Self:
+        if is_receipt_construction(info):
+            return self
         rebuilt = type(self).create(self.observations)
         if (
             self.contraction_observed != rebuilt.contraction_observed
