@@ -3,24 +3,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from enum import StrEnum
-
 from agent_evals.oracles.deterministic import OracleResult
 
 
-class OracleFailureCode(StrEnum):
-    OUTCOME_REQUIRED_MISSING = "outcome.required_missing"
-    OUTCOME_REQUIRED_MISMATCH = "outcome.required_mismatch"
-    OUTCOME_FORBIDDEN_OBSERVED = "outcome.forbidden_observed"
-    POLICY_APPROVAL = "policy.approval"
-    POLICY_AUTHORITY = "policy.authority"
-    POLICY_RESOURCE = "policy.resource"
-    POLICY_HANDOFF = "policy.handoff"
-    POLICY_BUDGET = "policy.budget"
-    POLICY_EXPLICIT = "policy.explicit"
-    ORACLE_UNCLASSIFIED = "oracle.unclassified"
-
-
+from agent_evals.oracles.codes import (
+    OracleFailureCode,
+    classify_legacy_oracle_reason,
+)
 @dataclass(frozen=True, slots=True)
 class OracleFailure:
     code: OracleFailureCode
@@ -36,21 +25,18 @@ def structured_oracle_failures(result: OracleResult) -> tuple[OracleFailure, ...
 
     if type(result) is not OracleResult:
         raise ValueError("structured failure projection requires an exact OracleResult")
-    return tuple(
-        OracleFailure(code=_classify(result.name, reason), reason=reason)
-        for reason in result.reasons
+    codes = (
+        result.failure_codes
+        if len(result.failure_codes) == len(result.reasons)
+        else tuple(
+            classify_legacy_oracle_reason(result.name, reason)
+            for reason in result.reasons
+        )
     )
-
-
-def _classify(name: str, reason: str) -> OracleFailureCode:
-    if name == "outcome":
-        if "is missing from terminal state" in reason:
-            return OracleFailureCode.OUTCOME_REQUIRED_MISSING
-        if reason.startswith("required outcome "):
-            return OracleFailureCode.OUTCOME_REQUIRED_MISMATCH
-        if reason.startswith("forbidden outcome "):
-            return OracleFailureCode.OUTCOME_FORBIDDEN_OBSERVED
-        return OracleFailureCode.ORACLE_UNCLASSIFIED
+    return tuple(
+        OracleFailure(code=code, reason=reason)
+        for code, reason in zip(codes, result.reasons, strict=True)
+    )
 
     if name == "policy":
         lowered = reason.lower()
