@@ -13,9 +13,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from agent_evals.evidence.models import EvidenceEvent, EvidenceKind
 
-_PAYLOAD_SCHEMA: Literal["agent-evals/event-payload/v1"] = (
-    "agent-evals/event-payload/v1"
-)
+_PAYLOAD_SCHEMA: Literal["agent-evals/event-payload/v1"] = "agent-evals/event-payload/v1"
 
 
 class _AllowExtraPayload(BaseModel):
