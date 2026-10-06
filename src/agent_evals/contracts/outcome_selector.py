@@ -11,9 +11,7 @@ from typing import Any, Literal, Self
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-_SELECTOR_SCHEMA: Literal["agent-evals/outcome-selector/v1"] = (
-    "agent-evals/outcome-selector/v1"
-)
+_SELECTOR_SCHEMA: Literal["agent-evals/outcome-selector/v1"] = "agent-evals/outcome-selector/v1"
 
 
 def _escape(segment: str) -> str:
@@ -69,9 +67,7 @@ class OutcomeSelectorV1(BaseModel):
 
     @classmethod
     def from_segments(cls, segments: tuple[str, ...]) -> Self:
-        if not segments or any(
-            type(segment) is not str or not segment for segment in segments
-        ):
+        if not segments or any(type(segment) is not str or not segment for segment in segments):
             raise ValueError("outcome selector requires non-empty exact string segments")
         pointer = "/" + "/".join(_escape(segment) for segment in segments)
         return cls(pointer=pointer)
