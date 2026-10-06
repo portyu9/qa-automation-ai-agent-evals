@@ -129,7 +129,7 @@ jobs:
       review_state: ${{ steps.classify.outputs.state }}
     steps:
       - name: Verify dependency-graph precondition
-        id: dependency-graph
+        id: dependency_graph
         if: github.event_name == 'pull_request'
         env:
           GH_TOKEN: ${{ github.token }}
@@ -163,7 +163,8 @@ jobs:
               ;;
           esac
       - name: Review dependency changes
-        if: github.event_name == 'pull_request' && steps.dependency-graph.outputs.state == 'available'
+        id: review
+        if: github.event_name == 'pull_request' && steps.dependency_graph.outputs.state == 'available'
         uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
         with:
           fail-on-severity: "moderate"
@@ -171,7 +172,7 @@ jobs:
           license-check: "false"
           warn-only: "false"
       - name: Record blocked repository prerequisite
-        if: github.event_name == 'pull_request' && steps.dependency-graph.outputs.state == 'blocked-admin-prerequisite'
+        if: github.event_name == 'pull_request' && steps.dependency_graph.outputs.state == 'blocked-admin-prerequisite'
         run: |
           echo "Dependency review is BLOCKED, not PASS or FAIL: dependency graph requires repository-administrator enablement."
       - name: Record non-PR applicability
@@ -182,14 +183,17 @@ jobs:
         if: always()
         env:
           EVENT_NAME: ${{ github.event_name }}
-          GRAPH_STATE: ${{ steps.dependency-graph.outputs.state }}
+          GRAPH_STATE: ${{ steps.dependency_graph.outputs.state }}
+          REVIEW_OUTCOME: ${{ steps.review.outcome }}
         shell: bash
         run: |
           set -euo pipefail
           if [[ "$EVENT_NAME" != "pull_request" ]]; then
             echo "state=not-applicable" >> "$GITHUB_OUTPUT"
-          elif [[ "$GRAPH_STATE" == "available" ]]; then
+          elif [[ "$GRAPH_STATE" == "available" && "$REVIEW_OUTCOME" == "success" ]]; then
             echo "state=passed" >> "$GITHUB_OUTPUT"
+          elif [[ "$GRAPH_STATE" == "available" ]]; then
+            echo "state=failed" >> "$GITHUB_OUTPUT"
           elif [[ "$GRAPH_STATE" == "blocked-admin-prerequisite" ]]; then
             echo "state=blocked-admin-prerequisite" >> "$GITHUB_OUTPUT"
           else
