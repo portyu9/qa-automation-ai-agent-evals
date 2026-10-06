@@ -167,6 +167,26 @@ def test_advanced_capabilities_list_changed_concurrency_and_multi_server_collisi
     assert exercised.accepted is True
     assert set(exercised.exercised_capabilities) == set(MCPCapability)
 
+    limited_snapshot = MCPCapabilitySnapshot(
+        server_identity="remote-mcp",
+        capabilities=frozenset({MCPCapability.RESOURCES}),
+        capability_revision="cap-limited",
+    )
+    limited = MCPCapabilityExerciseReceipt.create(
+        snapshot=limited_snapshot,
+        observations=(
+            MCPCapabilityOperationObservation(
+                capability=MCPCapability.RESOURCES,
+                operation_id="exercise.limited-resources",
+                request_sha256=_sha("limited-request"),
+                response_sha256=_sha("limited-response"),
+                response_bytes=64,
+                succeeded=True,
+            ),
+        ),
+    )
+    assert limited.accepted is False
+
     incomplete = MCPCapabilityExerciseReceipt.create(
         snapshot=snapshot,
         observations=(
