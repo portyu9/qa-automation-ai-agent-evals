@@ -284,7 +284,7 @@ def _emit_result(ctx: typer.Context, payload: dict[str, Any]) -> None:
 
 
 def _emit_error(ctx: typer.Context, exc: Exception) -> None:
-    payload = {
+    payload: dict[str, Any] = {
         "status": "error",
         "error_type": type(exc).__name__,
         "message": str(exc),
