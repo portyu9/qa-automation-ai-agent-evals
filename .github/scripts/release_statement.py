@@ -148,7 +148,11 @@ def _load_project(pyproject_path: Path) -> dict[str, object]:
     version = _require_text(project.get("version"), "project.version")
     requires_python = _require_text(project.get("requires-python"), "project.requires-python")
     dependencies = project.get("dependencies")
-    if type(dependencies) is not list or not dependencies or any(type(item) is not str for item in dependencies):
+    if (
+        type(dependencies) is not list
+        or not dependencies
+        or any(type(item) is not str for item in dependencies)
+    ):
         raise ReleaseStatementError("project.dependencies must be a non-empty string array")
     optional = project.get("optional-dependencies", {})
     if type(optional) is not dict:
@@ -156,7 +160,11 @@ def _load_project(pyproject_path: Path) -> dict[str, object]:
     runtime_optional: dict[str, list[str]] = {}
     for group in sorted(optional):
         values = optional[group]
-        if type(group) is not str or type(values) is not list or any(type(item) is not str for item in values):
+        if (
+            type(group) is not str
+            or type(values) is not list
+            or any(type(item) is not str for item in values)
+        ):
             raise ReleaseStatementError("optional dependency groups must be string arrays")
         if group != "dev":
             runtime_optional[group] = list(values)
@@ -176,7 +184,9 @@ def _load_project(pyproject_path: Path) -> dict[str, object]:
         raise ReleaseStatementError("project classifiers must declare supported Python minors")
     expected_tag = f"v{version}"
     if not re.fullmatch(r"v[0-9A-Za-z][0-9A-Za-z._+-]{0,127}", expected_tag):
-        raise ReleaseStatementError("project.version cannot form the canonical expected release tag")
+        raise ReleaseStatementError(
+            "project.version cannot form the canonical expected release tag"
+        )
 
     return {
         "name": name,
@@ -186,6 +196,7 @@ def _load_project(pyproject_path: Path) -> dict[str, object]:
         "supported_python": supported_python,
         "dependencies": list(dependencies),
         "optional_runtime_dependencies": runtime_optional,
+        "pyproject_sha256": hashlib.sha256(pyproject_path.read_bytes()).hexdigest(),
     }
 
 
@@ -369,7 +380,20 @@ def self_test() -> None:
         for path in (repo_root / "requirements/compatibility", package, supply, qualification):
             path.mkdir(parents=True, exist_ok=True)
         (repo_root / "pyproject.toml").write_text(
-            """[project]\nname = "qa-automation-ai-agent-evals"\nversion = "1.2.3"\nrequires-python = ">=3.11,<3.15"\ndependencies = ["pydantic>=2,<3"]\nclassifiers = [\n  "Programming Language :: Python :: 3.11",\n  "Programming Language :: Python :: 3.14",\n]\n[project.optional-dependencies]\nopenai = ["openai-agents==0.22.3"]\ndev = ["pytest>=9,<10"]\n""",
+            (
+                '[project]\n'
+                'name = "qa-automation-ai-agent-evals"\n'
+                'version = "1.2.3"\n'
+                'requires-python = ">=3.11,<3.15"\n'
+                'dependencies = ["pydantic>=2,<3"]\n'
+                'classifiers = [\n'
+                '  "Programming Language :: Python :: 3.11",\n'
+                '  "Programming Language :: Python :: 3.14",\n'
+                ']\n'
+                '[project.optional-dependencies]\n'
+                'openai = ["openai-agents==0.22.3"]\n'
+                'dev = ["pytest>=9,<10"]\n'
+            ),
             encoding="utf-8",
         )
         for profile, boundary, relative in _COMPATIBILITY_LOCKS:
@@ -416,7 +440,9 @@ def self_test() -> None:
             expected_tag="v1.2.3",
             **args,
         )
-        assert loaded["publication"]["github_release_object_signature"] == "not-claimed"  # type: ignore[index]
+        publication = loaded["publication"]
+        assert isinstance(publication, dict)
+        assert publication["github_release_object_signature"] == "not-claimed"
         try:
             verify_statement(
                 statement_path=statement_path,
