@@ -8,6 +8,7 @@ on:
       - ".github/scripts/validate_runtime_policy.py"
       - "pyproject.toml"
       - "requirements/locks/core-py314.txt"
+      - "requirements/platform/windows-core-py314-supplement.txt"
       - "src/agent_evals/**"
       - "tests/unit/test_strict_json.py"
       - "tests/unit/test_oracles.py"
@@ -47,8 +48,17 @@ jobs:
         with:
           python-version: "3.14"
           cache: pip
-      - name: Install exact hash-checked core profile
+      - name: Install hash-pinned Windows supplement
+        if: runner.os == 'Windows'
+        shell: bash
         run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check --require-hashes \
+            -r requirements/platform/windows-core-py314-supplement.txt
+      - name: Install exact hash-checked core profile
+        shell: bash
+        run: |
+          set -euo pipefail
           python -m pip install --disable-pip-version-check --require-hashes -r requirements/locks/core-py314.txt
           python -m pip install --disable-pip-version-check --no-deps --no-build-isolation .
           python -m pip check
