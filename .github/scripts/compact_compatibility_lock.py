@@ -4,8 +4,6 @@ import argparse
 import json
 import re
 from pathlib import Path
-from typing import Any
-
 PIN_RE = re.compile(r"^([A-Za-z0-9_.-]+)==([^\s\\;]+)(?:\s*;.*)?(?:\s*\\)?$")
 SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 
