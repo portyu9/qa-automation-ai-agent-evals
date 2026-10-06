@@ -78,7 +78,10 @@ def main() -> int:
         "pip-audit": ("installed-dependency-graph", "ci-gate"),
         "actionlint": ("github-actions-syntax-semantics", "ci-gate"),
         "zizmor": ("github-actions-security", "ci-gate"),
-        "dependency-review": ("pull-request-dependency-delta", "ci-gate-when-precondition-satisfied"),
+        "dependency-review": (
+            "pull-request-dependency-delta",
+            "ci-gate-when-precondition-satisfied",
+        ),
         "scorecard": ("repository-security-posture", "scheduled-monitor"),
         "codeql": ("python-and-actions-sast", "protected-gate"),
     }
