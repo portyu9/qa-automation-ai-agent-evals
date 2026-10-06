@@ -5,6 +5,12 @@ import hashlib
 import pytest
 from pydantic import ValidationError
 
+import agent_evals.hitl as hitl
+import agent_evals.memory as memory
+import agent_evals.retrieval.production as retrieval_production
+import agent_evals.runtime.chaos as chaos
+import agent_evals.side_effect.distributed as distributed
+
 from agent_evals.contracts.models import ApprovalDecision
 from agent_evals.hitl import (
     ApprovalAuthenticationMethod,
@@ -735,3 +741,99 @@ def test_target_acknowledgement_integrity_and_unique_commit_requirement() -> Non
     tampered["acknowledgement_root"] = "0" * 64
     with pytest.raises(ValidationError, match="root mismatch"):
         TargetEffectAcknowledgement.model_validate(tampered)
+
+
+@pytest.mark.parametrize(
+    ("module", "message"),
+    (
+        (hitl, "HITL assurance material"),
+        (memory, "memory assurance material"),
+        (retrieval_production, "retrieval pipeline material"),
+        (chaos, "chaos assurance material"),
+        (distributed, "side-effect assurance material"),
+    ),
+)
+def test_assurance_canonical_json_helpers_reject_non_finite_material(
+    module: object,
+    message: str,
+) -> None:
+    with pytest.raises(ValueError, match=message):
+        module._canonical_json_bytes({"value": float("nan")})  # type: ignore[attr-defined]
+
+
+@pytest.mark.parametrize(
+    ("require_exact", "expected"),
+    (
+        (hitl._require_exact, HITLResumeCheckpoint),
+        (memory._require_exact, MemoryAssurancePolicy),
+        (retrieval_production._require_exact, RetrievalPipelinePolicy),
+        (chaos._require_exact, ChaosPolicy),
+        (distributed._require_exact, DistributedSideEffectPolicy),
+    ),
+)
+def test_assurance_exact_type_helpers_reject_untrusted_substitutes(
+    require_exact: object,
+    expected: type[object],
+) -> None:
+    with pytest.raises(ValueError, match="requires exact"):
+        require_exact(object(), expected, "boundary")  # type: ignore[operator]
+
+
+def test_remaining_assurance_receipts_reject_tampered_derived_fields() -> None:
+    chaos_receipt = ChaosAssuranceReceipt.create(
+        policy=ChaosPolicy(required_domains=frozenset({ChaosDomain.CLOCK})),
+        observations=(_chaos_observation(),),
+    )
+    chaos_tampered = chaos_receipt.model_dump(mode="json")
+    chaos_tampered["qualification_complete"] = False
+    with pytest.raises(ValidationError, match="metrics do not recompute"):
+        ChaosAssuranceReceipt.model_validate(chaos_tampered)
+
+    retrieval_receipt = RetrievalPipelineReceipt.create(
+        policy=_retrieval_policy(
+            require_query_rewrite=False,
+            require_reranker=False,
+            require_citations=False,
+        ),
+        documents=(_document(),),
+        query_sha256="a" * 64,
+    )
+    retrieval_tampered = retrieval_receipt.model_dump(mode="json")
+    retrieval_tampered["accepted"] = False
+    with pytest.raises(ValidationError, match="does not recompute"):
+        RetrievalPipelineReceipt.model_validate(retrieval_tampered)
+
+    side_effect_receipt = DistributedSideEffectReceipt.create(
+        policy=DistributedSideEffectPolicy(
+            required_causes=frozenset({SideEffectAttemptCause.INITIAL})
+        ),
+        attempts=(
+            _side_attempt(
+                attempt_id="attempt.tamper",
+                cause=SideEffectAttemptCause.INITIAL,
+                outcome=SideEffectAttemptOutcome.TIMED_OUT,
+                delivery_id="delivery-tamper",
+            ),
+        ),
+    )
+    side_effect_tampered = side_effect_receipt.model_dump(mode="json")
+    side_effect_tampered["accepted"] = not side_effect_tampered["accepted"]
+    with pytest.raises(ValidationError, match="does not recompute"):
+        DistributedSideEffectReceipt.model_validate(side_effect_tampered)
+
+    checkpoint = _checkpoint()
+    resume_receipt = HITLResumeReceipt.create(
+        checkpoint=checkpoint,
+        attempts=(
+            HITLResumeAttempt(
+                checkpoint_root=checkpoint.checkpoint_root,
+                resume_id="resume.tamper",
+                worker_id="worker",
+                outcome=HITLResumeOutcome.ABORTED,
+            ),
+        ),
+    )
+    resume_tampered = resume_receipt.model_dump(mode="json")
+    resume_tampered["duplicate_rejections"] = 1
+    with pytest.raises(ValidationError, match="does not recompute"):
+        HITLResumeReceipt.model_validate(resume_tampered)
