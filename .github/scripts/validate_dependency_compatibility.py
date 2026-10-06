@@ -300,10 +300,10 @@ def validate_profile(
             continue
         if boundary == "minimum":
             minimum = exact_pin(transformed_by_name[name])
-            if minimum is None or pins[name] != minimum:
+            if minimum is None or compare_versions(pins[name], minimum) != 0:
                 raise CompatibilityPolicyError(
                     f"{filename} minimum direct pin drift for {name}: "
-                    f"{pins[name]} != {minimum}"
+                    f"{pins[name]} != semantic floor {minimum}"
                 )
         elif not satisfies(pins[name], declared):
             raise CompatibilityPolicyError(
@@ -368,6 +368,7 @@ def validate() -> None:
 
 def self_test() -> None:
     assert compare_versions("2.12.0", "2.12") == 0
+    assert compare_versions("0.15.0", "0.15") == 0
     assert satisfies("2.12.0", "pydantic>=2.12.0,<3")
     assert not satisfies("3.0", "pydantic>=2.12.0,<3")
     assert exact_pin("mcp==2.2.0") == "2.2.0"
