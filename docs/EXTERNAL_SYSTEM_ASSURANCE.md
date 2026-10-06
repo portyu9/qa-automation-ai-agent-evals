@@ -12,7 +12,7 @@ The ordinary PR suite remains network-independent. Operators can invoke the netw
 
 ## Advanced MCP protocol surfaces
 
-`MCPCapabilitySnapshot` inventories resources, prompts, roots, subscriptions, elicitation, sampling, Tasks and `tools/list_changed`. Inventory alone is not qualification: `MCPCapabilityExerciseReceipt` requires a bounded successful request/response observation for every capability in the bound snapshot. `MCPToolsListChangedReceipt` separately requires an actual before/after discovery delta and a notification sequence.
+`MCPCapabilitySnapshot` inventories resources, prompts, roots, subscriptions, elicitation, sampling, Tasks and `tools/list_changed`. Inventory alone is not qualification: `MCPCapabilityExerciseReceipt` defaults to an evaluator-owned requirement for the complete advanced-capability set and requires bounded successful request/response observations for those requirements. A server cannot qualify itself by advertising only an easier subset. `MCPToolsListChangedReceipt` separately requires an actual before/after discovery delta and a notification sequence.
 
 `MCPConcurrencyReceipt` recomputes peak parallelism from bounded logical intervals and rejects duplicate request IDs. `MCPMultiServerReceipt` reports cross-server tool-name collisions instead of silently aliasing them. `MCPHostileServerReceipt` keeps oversized responses, hangs, protocol trickery and resource pressure inside declared byte/time/message ceilings.
 
@@ -46,7 +46,7 @@ The receipt verifies the declared pipeline observations; it does not prove a vec
 
 ## Persisted memory
 
-`MemoryAssuranceReceipt` verifies a bounded record trace for persistence, cross-user/tenant isolation, deletion, TTL expiry and poisoning rejection. Cross-user leakage cannot be relabeled as successful persistence. The contract is backend-neutral and does not claim secure deletion from physical media.
+`MemoryAssurancePolicy` binds the evaluator-owned record ID, owner tenant/user and expected content digest before observations are considered. `MemoryAssuranceReceipt` then verifies a bounded trace for persistence, cross-user/tenant isolation, deletion, TTL expiry and poisoning rejection. Cross-user leakage cannot be relabeled as successful persistence. The contract is backend-neutral and does not claim secure deletion from physical media.
 
 ## Environment chaos
 
