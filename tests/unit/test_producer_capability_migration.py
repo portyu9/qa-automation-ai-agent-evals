@@ -41,9 +41,7 @@ async def test_rejected_privileged_injection_never_receives_run_local_capability
         payload={},
     )
     result = await TrialRunner().run(
-        ScriptedAdapter(
-            lambda _subject, _scenario, _trial: AdapterResult(events=(injected,))
-        ),
+        ScriptedAdapter(lambda _subject, _scenario, _trial: AdapterResult(events=(injected,))),
         subject=_subject(),
         scenario=_scenario(),
         trial_id="forged-producer",
