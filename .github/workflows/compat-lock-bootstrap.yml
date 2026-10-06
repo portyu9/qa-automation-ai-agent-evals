@@ -1,0 +1,49 @@
+name: Bootstrap Python 3.14 compatibility locks
+
+on:
+  push:
+    branches: [hardening/216-python-boundaries]
+    paths:
+      - .github/workflows/compat-lock-bootstrap.yml
+
+permissions:
+  contents: write
+
+jobs:
+  generate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout bootstrap branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: true
+      - name: Set up Python 3.14
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: "3.14"
+      - name: Install pinned lock generator
+        run: python -m pip install --disable-pip-version-check "pip==25.3" "pip-tools==7.5.2"
+      - name: Generate compact latest-boundary locks under Python 3.14
+        shell: bash
+        run: |
+          set -euo pipefail
+          for profile in core mcp openai-mcp; do
+            raw="/tmp/${profile}-latest-py314.raw.txt"
+            report="/tmp/${profile}-latest-py314.report.json"
+            output="requirements/compatibility/${profile}-latest-py314.txt"
+            python .github/scripts/generate_ci_lock.py               --profile "$profile"               --boundary latest               --output "$raw"
+            python -m pip install               --disable-pip-version-check               --dry-run               --ignore-installed               --require-hashes               --report "$report"               -r "$raw"
+            python .github/scripts/compact_compatibility_lock.py               --raw-lock "$raw"               --report "$report"               --output "$output"
+          done
+          rm -f             requirements/compatibility/core-latest-py311.txt             requirements/compatibility/mcp-latest-py311.txt             requirements/compatibility/openai-mcp-latest-py311.txt
+      - name: Commit generated locks
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add requirements/compatibility
+          git diff --cached --quiet && { echo "No lock changes generated"; exit 1; }
+          git commit -m "chore(ci): generate Python 3.14 latest compatibility locks"
+          git push origin HEAD:hardening/216-python-boundaries
