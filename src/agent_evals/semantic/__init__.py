@@ -66,6 +66,7 @@ from agent_evals.semantic.verification import (
 )
 
 __all__ = [
+    "SEMANTIC_JUDGMENT_SOURCE",
     "CalibrationLeakageObservation",
     "CalibrationLeakagePolicy",
     "CalibrationLeakageProbeKind",
@@ -74,7 +75,6 @@ __all__ = [
     "CalibrationRiskTagRequirement",
     "CalibrationSplit",
     "PromptInjectionClass",
-    "SEMANTIC_JUDGMENT_SOURCE",
     "SemanticAbstentionCase",
     "SemanticAbstentionObservation",
     "SemanticAbstentionPolicy",
