@@ -86,7 +86,7 @@ class SemanticDriftObservation(BaseModel):
     @model_validator(mode="after")
     def require_distinct_profiles(self) -> Self:
         if self.baseline_profile_identity == self.candidate_profile_identity:
-            raise ValueError("semantic drift observation requires distinct judge profile identities")
+            raise ValueError(\n                "semantic drift observation requires distinct judge profile identities"\n            )
         return self
 
     @property
