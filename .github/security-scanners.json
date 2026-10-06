@@ -28,8 +28,9 @@
     {
       "id": "dependency-review",
       "scope": "pull-request-dependency-delta",
-      "enforcement": "ci-gate",
-      "evidence": ".github/workflows/ci.yml#dependency-review"
+      "enforcement": "ci-gate-when-precondition-satisfied",
+      "evidence": ".github/workflows/ci.yml#dependency-review",
+      "precondition": "repository-dependency-graph"
     },
     {
       "id": "scorecard",
@@ -45,6 +46,10 @@
     }
   ],
   "repository_security_features": {
+    "dependency_graph": {
+      "required": true,
+      "verification": "verified-disabled"
+    },
     "secret_scanning": {
       "required": true,
       "verification": "unverified-admin-surface"
@@ -56,6 +61,7 @@
   },
   "non_claims": [
     "Scanner success is not evidence of absence of vulnerabilities.",
-    "Secret scanning and push protection are not claimed enabled until verified through an authorized repository-administration surface."
+    "Secret scanning and push protection are not claimed enabled until verified through an authorized repository-administration surface.",
+    "Dependency review is BLOCKED, not PASS or FAIL, while the repository dependency graph remains disabled."
   ]
 }
