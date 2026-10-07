@@ -5,6 +5,8 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import subprocess
+from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 from typing import NoReturn
@@ -12,7 +14,12 @@ from typing import NoReturn
 ROOT = Path(__file__).resolve().parents[2]
 POLICY_PATH = ROOT / ".github" / "semantic-adr-policy.json"
 _POLICY_SCHEMA = "agent-evals/semantic-adr-policy/v1"
+_SHA = re.compile(r"^[0-9a-f]{40}$")
 _ADR_NAME = re.compile(r"^docs/adr/([0-9]{4})-[a-z0-9][a-z0-9-]*\.md$")
+_ACTION_LINE = re.compile(
+    r"^\s*(?:-\s+)?uses:\s+(?P<action>[A-Za-z0-9_.-]+/[A-Za-z0-9_./-]+)"
+    r"@(?P<sha>[0-9a-f]{40})\s+#\s+v(?P<version>\d+(?:\.\d+){0,2})\s*$"
+)
 _REQUIRED_ADR_MARKERS = (
     "**Status:** Accepted",
     "## Context",
@@ -32,6 +39,8 @@ class Policy:
     adr_directory: str
     governed_prefixes: tuple[str, ...]
     governed_exact_paths: tuple[str, ...]
+    automation_actor: str
+    automation_path_prefix: str
 
     def governs(self, path: str) -> bool:
         return path in self.governed_exact_paths or any(
@@ -72,6 +81,7 @@ def load_policy(path: Path = POLICY_PATH) -> Policy:
         "adr_directory",
         "governed_prefixes",
         "governed_exact_paths",
+        "automation_exemption",
     }
     if set(raw) != expected_keys:
         raise AdrPolicyError("ADR policy fields must match the versioned schema exactly")
@@ -85,6 +95,19 @@ def load_policy(path: Path = POLICY_PATH) -> Policy:
         raw["governed_exact_paths"],
         label="governed_exact_paths",
     )
+    automation = raw["automation_exemption"]
+    if type(automation) is not dict or set(automation) != {
+        "actor",
+        "kind",
+        "path_prefix",
+    }:
+        raise AdrPolicyError("automation_exemption must match the versioned schema exactly")
+    if automation["actor"] != "dependabot[bot]":
+        raise AdrPolicyError("automation exemption actor must remain exact Dependabot identity")
+    if automation["kind"] != "github-actions-immutable-pin-only":
+        raise AdrPolicyError("automation exemption kind is unsupported")
+    if automation["path_prefix"] != ".github/workflows/":
+        raise AdrPolicyError("automation exemption path must remain GitHub workflows")
     if not all(item.endswith("/") and not item.startswith("/") for item in prefixes):
         raise AdrPolicyError("governed prefixes must be repository-relative directories")
     if not all(not item.endswith("/") and not item.startswith("/") for item in exact_paths):
@@ -93,6 +116,8 @@ def load_policy(path: Path = POLICY_PATH) -> Policy:
         adr_directory="docs/adr",
         governed_prefixes=prefixes,
         governed_exact_paths=exact_paths,
+        automation_actor="dependabot[bot]",
+        automation_path_prefix=".github/workflows/",
     )
 
 
@@ -127,6 +152,112 @@ def _is_accepted_adr(path: str, policy: Policy) -> bool:
     match = _ADR_NAME.fullmatch(path)
     return match is not None and int(match.group(1)) >= 1
 
+
+
+def _parse_action_change(line: str) -> tuple[str, str, tuple[int, ...]] | None:
+    match = _ACTION_LINE.fullmatch(line)
+    if match is None:
+        return None
+    return (
+        match.group("action"),
+        match.group("sha"),
+        tuple(int(part) for part in match.group("version").split(".")),
+    )
+
+
+def _action_pin_patch_is_safe(patch: str) -> bool:
+    removed: list[tuple[str, str, tuple[int, ...]]] = []
+    added: list[tuple[str, str, tuple[int, ...]]] = []
+    for raw in patch.splitlines():
+        if not raw or raw.startswith(("diff --git ", "index ", "--- ", "+++ ", "@@ ", "\\")):
+            continue
+        if raw[0] not in {"+", "-"}:
+            return False
+        parsed = _parse_action_change(raw[1:])
+        if parsed is None:
+            return False
+        (added if raw[0] == "+" else removed).append(parsed)
+
+    if not removed or len(removed) != len(added):
+        return False
+    if Counter(item[0] for item in removed) != Counter(item[0] for item in added):
+        return False
+    for action in sorted({item[0] for item in removed}):
+        old = [item for item in removed if item[0] == action]
+        new = [item for item in added if item[0] == action]
+        old_versions = {item[2] for item in old}
+        new_versions = {item[2] for item in new}
+        old_shas = {item[1] for item in old}
+        new_shas = {item[1] for item in new}
+        if (
+            len(old_versions) != 1
+            or len(new_versions) != 1
+            or len(old_shas) != 1
+            or len(new_shas) != 1
+        ):
+            return False
+        if next(iter(new_versions)) <= next(iter(old_versions)):
+            return False
+        if next(iter(new_shas)) == next(iter(old_shas)):
+            return False
+    return True
+
+
+def _dependabot_action_pin_exempt(
+    policy: Policy,
+    changes: tuple[Change, ...],
+    *,
+    actor: str,
+    base_sha: str,
+    head_sha: str,
+) -> bool:
+    if actor != policy.automation_actor:
+        return False
+    if _SHA.fullmatch(base_sha) is None or _SHA.fullmatch(head_sha) is None:
+        raise AdrPolicyError("automation exemption requires canonical base/head SHAs")
+
+    governed_changes = [
+        change
+        for change in changes
+        if any(policy.governs(path) for path in change.paths)
+    ]
+    if not governed_changes:
+        return False
+    workflow_paths: list[str] = []
+    for change in governed_changes:
+        if (
+            change.status != "M"
+            or len(change.paths) != 1
+            or not change.paths[0].startswith(policy.automation_path_prefix)
+        ):
+            return False
+        workflow_paths.append(change.paths[0])
+
+    try:
+        result = subprocess.run(
+            [
+                "git",
+                "diff",
+                "--unified=0",
+                "--no-ext-diff",
+                "--no-renames",
+                f"{base_sha}...{head_sha}",
+                "--",
+                *sorted(set(workflow_paths)),
+            ],
+            cwd=ROOT,
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        raise AdrPolicyError(
+            f"cannot verify Dependabot workflow patch: {type(exc).__name__}"
+        ) from exc
+    if result.returncode != 0:
+        raise AdrPolicyError("git diff failed while verifying Dependabot workflow patch")
+    return _action_pin_patch_is_safe(result.stdout)
 
 def _new_adr_paths(
     changes: tuple[Change, ...],
@@ -168,6 +299,7 @@ def evaluate(
     changes: tuple[Change, ...],
     *,
     validate_files: bool,
+    automation_exempt: bool = False,
 ) -> None:
     mutated_adrs = tuple(
         sorted(
@@ -193,6 +325,8 @@ def evaluate(
         return
 
     new_adrs = _new_adr_paths(changes, policy)
+    if not new_adrs and automation_exempt:
+        return
     if not new_adrs:
         preview = ", ".join(governed[:5])
         suffix = "" if len(governed) <= 5 else ", ..."
@@ -206,6 +340,22 @@ def evaluate(
 
 
 def self_test(policy: Policy) -> None:
+    old_sha = "a" * 40
+    new_sha = "b" * 40
+    safe_patch = (
+        "diff --git a/.github/workflows/ci.yml b/.github/workflows/ci.yml\n"
+        "index 1111111..2222222 100644\n"
+        "--- a/.github/workflows/ci.yml\n"
+        "+++ b/.github/workflows/ci.yml\n"
+        "@@ -1 +1 @@\n"
+        f"-uses: actions/checkout@{old_sha} # v7.0.0\n"
+        f"+uses: actions/checkout@{new_sha} # v7.0.1\n"
+    )
+    if not _action_pin_patch_is_safe(safe_patch):
+        raise AdrPolicyError("canonical action-pin update was not recognized")
+    if _action_pin_patch_is_safe(safe_patch + "+run: echo bypass\n"):
+        raise AdrPolicyError("non-action workflow change bypassed action-pin policy")
+
     evaluate(
         policy,
         parse_name_status("M\tdocs/README.md\n"),
@@ -281,6 +431,9 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--self-test", action="store_true")
     parser.add_argument("--changed-files", type=Path)
+    parser.add_argument("--actor")
+    parser.add_argument("--base-sha")
+    parser.add_argument("--head-sha")
     args = parser.parse_args()
 
     try:
@@ -293,6 +446,8 @@ def main() -> int:
             return 0
         if args.changed_files is None:
             raise AdrPolicyError("--changed-files is required outside --self-test")
+        if args.actor is None or args.base_sha is None or args.head_sha is None:
+            raise AdrPolicyError("PR ADR validation requires actor and exact base/head SHAs")
         try:
             diff_text = args.changed_files.read_text(encoding="utf-8")
         except (OSError, UnicodeError) as exc:
@@ -300,7 +455,19 @@ def main() -> int:
                 f"cannot read changed-file inventory: {type(exc).__name__}"
             ) from exc
         changes = parse_name_status(diff_text)
-        evaluate(policy, changes, validate_files=True)
+        automation_exempt = _dependabot_action_pin_exempt(
+            policy,
+            changes,
+            actor=args.actor,
+            base_sha=args.base_sha,
+            head_sha=args.head_sha,
+        )
+        evaluate(
+            policy,
+            changes,
+            validate_files=True,
+            automation_exempt=automation_exempt,
+        )
     except AdrPolicyError as exc:
         fail(str(exc))
 
