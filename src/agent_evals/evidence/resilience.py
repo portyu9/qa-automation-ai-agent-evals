@@ -36,8 +36,8 @@ _LOCK_OBSERVATION_SCHEMA: Literal["agent-evals/evidence-lock-observation/v1"] = 
 _LOCK_QUARANTINE_SCHEMA: Literal["agent-evals/evidence-lock-quarantine/v1"] = (
     "agent-evals/evidence-lock-quarantine/v1"
 )
-_LOCK_OBSERVATION_DOMAIN = b"agent-evals/evidence-lock-observation/v1\\0"
-_LOCK_QUARANTINE_DOMAIN = b"agent-evals/evidence-lock-quarantine/v1\\0"
+_LOCK_OBSERVATION_DOMAIN = b"agent-evals/evidence-lock-observation/v1\\x00"
+_LOCK_QUARANTINE_DOMAIN = b"agent-evals/evidence-lock-quarantine/v1\\x00"
 
 
 class EvidenceStorePlatformMode(StrEnum):
