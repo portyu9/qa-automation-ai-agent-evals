@@ -11,14 +11,13 @@ filesystems, or turn inode/device values into identities outside the local files
 
 from __future__ import annotations
 
-import errno
 import hashlib
 import os
 import secrets
 import stat
+from collections.abc import Iterator
 from contextlib import contextmanager, suppress
 from pathlib import Path
-from typing import Iterator
 
 from pydantic import ValidationError
 
