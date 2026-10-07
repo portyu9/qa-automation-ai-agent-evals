@@ -17,7 +17,7 @@ import json
 import re
 from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Literal, Self
+from typing import Literal, Self, cast
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -488,24 +488,13 @@ def _replicate_snapshot_to_target(
 
 @dataclass(frozen=True, slots=True)
 class _ReadOnlyEnvelopeBackend:
-    key: str
+    """Minimal get-only view used exclusively for existing-envelope verification."""
+
     envelope: bytes
 
-    def put_if_absent(self, key: str, content: bytes) -> bool:  # pragma: no cover
-        del key, content
-        raise RuntimeError("read-only envelope verifier cannot write")
-
     def get(self, key: str) -> bytes:
-        if key != self.key:  # pragma: no cover - verifier requests only its bound key
-            raise KeyError(key)
-        return self.envelope
-
-    def list_keys(self) -> tuple[str, ...]:  # pragma: no cover - protocol completeness only
-        return (self.key,)
-
-    def delete(self, key: str) -> bool:  # pragma: no cover - protocol completeness only
         del key
-        raise RuntimeError("read-only envelope verifier cannot delete")
+        return self.envelope
 
 
 def _backend_get(
@@ -529,7 +518,7 @@ def _verify_exact_envelope(
     *,
     max_logical_bytes: int,
 ) -> TrialEvidence:
-    backend = _ReadOnlyEnvelopeBackend(key=key, envelope=bytes(envelope))
+    backend = cast(EvidenceBlobBackend, _ReadOnlyEnvelopeBackend(envelope=bytes(envelope)))
     verifier = ContentAddressedEvidenceStore(
         backend,
         max_logical_bytes=max_logical_bytes,
