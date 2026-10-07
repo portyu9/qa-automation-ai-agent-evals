@@ -393,6 +393,196 @@ def test_content_addressed_store_minimizes_before_content_key_or_backend_write()
     assert loaded.evidence_root == receipt.result_evidence_root
 
 
+def test_policy_rejects_non_materialized_over_budget_and_non_string_paths() -> None:
+    with pytest.raises(ValidationError, match="bounded materialized collection"):
+        EvidenceMinimizationPolicy.model_validate(
+            {"operator_pii_paths": "/final_state/email"}
+        )
+
+    with pytest.raises(ValidationError, match="path count"):
+        EvidenceMinimizationPolicy(
+            operator_pii_paths=tuple(
+                f"/final_state/field{index}" for index in range(65)
+            )
+        )
+
+    with pytest.raises(ValidationError, match="exact strings"):
+        EvidenceMinimizationPolicy.model_validate(
+            {"operator_pii_paths": ["/final_state/email", 7]}
+        )
+
+    with pytest.raises(ValidationError, match="unique"):
+        EvidenceMinimizationPolicy(
+            operator_pii_paths=("/final_state/email", "/final_state/email")
+        )
+
+
+def test_receipt_rejects_noncanonical_classification_order() -> None:
+    prepared = minimize_evidence_for_persistence(
+        _evidence(final_state={"api_key": "secret-value"})
+    )
+    dumped = prepared.receipt.model_dump(mode="json")
+    dumped["classifications"] = list(reversed(dumped["classifications"]))
+
+    with pytest.raises(ValidationError, match="complete and canonical"):
+        EvidenceMinimizationReceipt.model_validate(dumped)
+
+
+def test_minimizer_rejects_trial_and_policy_subclasses() -> None:
+    class DerivedEvidence(TrialEvidence):
+        pass
+
+    class DerivedPolicy(EvidenceMinimizationPolicy):
+        pass
+
+    derived_evidence = DerivedEvidence.model_validate(
+        _evidence().model_dump(mode="python")
+    )
+
+    with pytest.raises(TypeError, match="exact TrialEvidence"):
+        minimize_evidence_for_persistence(derived_evidence)
+
+    with pytest.raises(TypeError, match="exact EvidenceMinimizationPolicy"):
+        minimize_evidence_for_persistence(_evidence(), policy=DerivedPolicy())
+
+
+def test_final_output_path_handles_absence_conflict_and_idempotent_marker() -> None:
+    policy = EvidenceMinimizationPolicy(operator_pii_paths=("/final_output",))
+
+    absent = minimize_evidence_for_persistence(_evidence(), policy=policy)
+    assert _count(absent.receipt, SensitiveDataClass.OPERATOR_PII) == 0
+
+    with pytest.raises(EvidenceMinimizationError, match="conflicts with credential"):
+        minimize_evidence_for_persistence(
+            _evidence(final_output="Bearer abcdefghijklmnop"),
+            policy=policy,
+        )
+
+    first = minimize_evidence_for_persistence(
+        _evidence(final_output="person@example.test"),
+        policy=policy,
+    )
+    second = minimize_evidence_for_persistence(first.evidence, policy=policy)
+    assert second == first
+
+
+def test_missing_and_out_of_range_declared_paths_are_deterministic_noops() -> None:
+    policy = EvidenceMinimizationPolicy(
+        operator_pii_paths=(
+            "/events/9/payload/email",
+            "/final_state/missing/deep",
+            "/final_state/present/missing",
+        )
+    )
+    original = _evidence(
+        events=(_event(0, payload={"email": "safe@example.test"}),),
+        final_state={"present": {"value": "safe"}},
+    )
+
+    prepared = minimize_evidence_for_persistence(original, policy=policy)
+
+    assert prepared.evidence == original.snapshot()
+    assert _count(prepared.receipt, SensitiveDataClass.OPERATOR_PII) == 0
+
+
+def test_declared_paths_support_list_replacement_and_fail_on_bad_container_shape() -> None:
+    valid_policy = EvidenceMinimizationPolicy(
+        operator_pii_paths=("/final_state/people/0/email",)
+    )
+    prepared = minimize_evidence_for_persistence(
+        _evidence(final_state={"people": [{"email": "person@example.test"}]}),
+        policy=valid_policy,
+    )
+    assert prepared.evidence.final_state["people"][0]["email"] == "[REDACTED:OPERATOR_PII]"
+
+    with pytest.raises(EvidenceMinimizationError, match="JSON container shape"):
+        minimize_evidence_for_persistence(
+            _evidence(final_state={"people": [{"email": "person@example.test"}]}),
+            policy=EvidenceMinimizationPolicy(
+                operator_pii_paths=("/final_state/people/not-an-index/email",)
+            ),
+        )
+
+    out_of_range = minimize_evidence_for_persistence(
+        _evidence(final_state={"people": [{"email": "person@example.test"}]}),
+        policy=EvidenceMinimizationPolicy(
+            operator_pii_paths=("/final_state/people/4/email",)
+        ),
+    )
+    assert _count(out_of_range.receipt, SensitiveDataClass.OPERATOR_PII) == 0
+
+    with pytest.raises(EvidenceMinimizationError, match="non-container"):
+        minimize_evidence_for_persistence(
+            _evidence(final_state={"person": "scalar"}),
+            policy=EvidenceMinimizationPolicy(
+                operator_pii_paths=("/final_state/person/email",)
+            ),
+        )
+
+
+@pytest.mark.parametrize(
+    "target",
+    [
+        {"nested": {"api_key": "secret-value"}},
+        [{"password": "secret-value"}],
+    ],
+)
+def test_operator_pii_parent_conflicts_with_nested_credentials(target: object) -> None:
+    with pytest.raises(EvidenceMinimizationError, match="conflicts with credential"):
+        minimize_evidence_for_persistence(
+            _evidence(final_state={"profile": target}),
+            policy=EvidenceMinimizationPolicy(
+                operator_pii_paths=("/final_state/profile",)
+            ),
+        )
+
+
+def test_operator_pii_can_replace_noncredential_scalar_and_credentials_walk_lists() -> None:
+    pii = minimize_evidence_for_persistence(
+        _evidence(final_state={"age": 42}),
+        policy=EvidenceMinimizationPolicy(operator_pii_paths=("/final_state/age",)),
+    )
+    assert pii.evidence.final_state["age"] == "[REDACTED:OPERATOR_PII]"
+
+    credential = minimize_evidence_for_persistence(
+        _evidence(final_state={"items": [{"service_token": "secret-value"}]})
+    )
+    assert credential.evidence.final_state["items"][0]["service_token"] == "[REDACTED:CREDENTIAL]"
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "/final_state",
+        "/unknown/email",
+        "/final_state//email",
+        "/events/not-an-index/payload/email",
+    ],
+)
+def test_additional_invalid_operator_path_shapes_fail_closed(path: str) -> None:
+    with pytest.raises(ValidationError):
+        EvidenceMinimizationPolicy(operator_pii_paths=(path,))
+
+
+def test_disjoint_specific_event_paths_are_not_falsely_treated_as_overlapping() -> None:
+    policy = EvidenceMinimizationPolicy(
+        operator_pii_paths=(
+            "/events/0/payload/person/email",
+            "/events/1/payload/person/email",
+        )
+    )
+    original = _evidence(
+        events=(
+            _event(0, payload={"person": {"email": "one@example.test"}}),
+            _event(1, payload={"person": {"email": "two@example.test"}}),
+        )
+    )
+
+    prepared = minimize_evidence_for_persistence(original, policy=policy)
+
+    assert _count(prepared.receipt, SensitiveDataClass.OPERATOR_PII) == 2
+
+
 def test_store_constructor_rejects_policy_subclasses(tmp_path: Path) -> None:
     class DerivedPolicy(EvidenceMinimizationPolicy):
         pass
