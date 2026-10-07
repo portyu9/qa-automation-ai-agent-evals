@@ -237,3 +237,27 @@ jobs:
             --verify-tag \
             --title "$VERSION_TAG" \
             --notes "Published from exact retained CI-tested package bytes with retained SPDX 2.3/license evidence, retained canonical CI qualification evidence, an attested release compatibility statement, and a reverified GitHub Actions OIDC/Sigstore SLSA provenance bundle for the exact subjects. The release statement binds the expected tag, supported Python/package contract, reviewed min/latest compatibility snapshots, and exact retained subject digests. The provenance authenticates the GitHub workflow/source identity for those files; it does not itself sign the GitHub Release entity, authenticate a human maintainer, prove external target behavior, retroactively authenticate older unsigned evidence, or establish PyPI Trusted Publishing."
+      - name: Dispatch verified release to PyPI publication verifier
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION_TAG: ${{ steps.candidate.outputs.version_tag }}
+          CI_COMMIT_SHA: ${{ steps.candidate.outputs.commit_sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY' > pypi-publication-request.json
+          import json
+          import os
+
+          payload = {
+              "event_type": "pypi-publish-request",
+              "client_payload": {
+                  "version_tag": os.environ["VERSION_TAG"],
+                  "commit_sha": os.environ["CI_COMMIT_SHA"],
+              },
+          }
+          print(json.dumps(payload, separators=(",", ":"), sort_keys=True))
+          PY
+          gh api --method POST \
+            "repos/$GITHUB_REPOSITORY/dispatches" \
+            --input pypi-publication-request.json
