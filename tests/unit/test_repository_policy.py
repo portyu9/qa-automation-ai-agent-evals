@@ -445,8 +445,7 @@ def test_policy_rejects_pypi_missing_repository_dispatch_handoff(tmp_path: Path)
     workspace = _policy_workspace(tmp_path)
     workflow = workspace / ".github/workflows/publish-pypi.yml"
     source = workflow.read_text(encoding="utf-8")
-    required = "  repository_dispatch:\\n    types: [pypi-publish-request]\\n"
-    required = required.encode("utf-8").decode("unicode_escape")
+    required = "  repository_dispatch:\n    types: [pypi-publish-request]\n"
     assert required in source
     workflow.write_text(source.replace(required, "", 1), encoding="utf-8")
 
@@ -461,7 +460,7 @@ def test_policy_rejects_direct_pypi_client_payload_interpolation(tmp_path: Path)
     workflow = workspace / ".github/workflows/publish-pypi.yml"
     source = workflow.read_text(encoding="utf-8")
     workflow.write_text(
-        source + "\\n# forbidden: ${{ github.event.client_payload.version_tag }}\\n",
+        source + "\n# forbidden: ${{ github.event.client_payload.version_tag }}\n",
         encoding="utf-8",
     )
 
