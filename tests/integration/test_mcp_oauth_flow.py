@@ -14,7 +14,7 @@ from agent_evals.mcp import (
 )
 from agent_evals.mcp.oauth_flow import _access_token_from_introspection
 
-pytestmark = pytest.mark.mcp_oauth
+pytestmark = [pytest.mark.mcp_oauth, pytest.mark.network_loopback]
 
 
 def make_policy(**overrides: object) -> MCPOAuthFlowPolicy:

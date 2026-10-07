@@ -61,10 +61,11 @@ packages = ["src/agent_evals"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
-addopts = "-q --strict-markers -m 'not openai and not mcp and not mcp_remote and not mcp_oauth and not fuzz'"
+addopts = "-q --strict-markers -m 'not openai and not mcp and not mcp_remote and not mcp_oauth and not fuzz and not live'"
 markers = [
   "integration: deterministic integration tests",
   "live: tests requiring a live model/provider",
+  "network_loopback: explicit loopback-only IPv4/IPv6 authority for deterministic real-TCP tests",
   "openai: deterministic OpenAI Agents SDK adapter tests; no API calls",
   "mcp: deterministic Model Context Protocol SDK tests; no network or provider calls",
   "mcp_remote: deterministic MCP Streamable HTTP authorization tests over loopback TCP only",
