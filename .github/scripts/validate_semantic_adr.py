@@ -12,7 +12,7 @@ from typing import NoReturn
 ROOT = Path(__file__).resolve().parents[2]
 POLICY_PATH = ROOT / ".github" / "semantic-adr-policy.json"
 _POLICY_SCHEMA = "agent-evals/semantic-adr-policy/v1"
-_ADR_NAME = re.compile(r"^docs/adr/([0-9]{4})-[a-z0-9][a-z0-9-]*\\.md$")
+_ADR_NAME = re.compile(r"^docs/adr/([0-9]{4})-[a-z0-9][a-z0-9-]*\.md$")
 _REQUIRED_ADR_MARKERS = (
     "**Status:** Accepted",
     "## Context",
