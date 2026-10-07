@@ -86,9 +86,7 @@ def detect_platform_capabilities() -> EvidenceStorePlatformCapabilities:
     """Derive the exact filesystem primitives available to this Python runtime."""
 
     supports_dir_fd: set[object] = set(getattr(os, "supports_dir_fd", set()))
-    supports_follow_symlinks: set[object] = set(
-        getattr(os, "supports_follow_symlinks", set())
-    )
+    supports_follow_symlinks: set[object] = set(getattr(os, "supports_follow_symlinks", set()))
     return EvidenceStorePlatformCapabilities(
         os_name=os.name,
         posix=os.name == "posix",
