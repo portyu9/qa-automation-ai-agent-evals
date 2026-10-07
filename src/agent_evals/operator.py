@@ -27,6 +27,7 @@ from agent_evals.assurance.report import AssuranceReport
 from agent_evals.assurance.report_v7 import AssuranceReportV7
 from agent_evals.contracts.models import EvaluationScenario, SubjectFingerprint
 from agent_evals.evidence.models import EvidenceEvent, TrialEvidence, TrialVerdict
+from agent_evals.evidence.resilience import inspect_record_lock, quarantine_record_lock
 from agent_evals.evidence.store import LocalEvidenceStore
 from agent_evals.minimization.delta import ddmin
 from agent_evals.runtime.evaluator import EvaluatedTrial, TrialRunner
