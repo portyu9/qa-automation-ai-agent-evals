@@ -3,7 +3,6 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
-import os
 import re
 import tempfile
 import tomllib
@@ -414,11 +413,6 @@ def inspect_statement(statement_path: Path) -> dict[str, object]:
         "expected_tag": expected_tag,
         "pypi_trusted_publishing": pypi_mode,
     }
-    github_output = os.environ.get("GITHUB_OUTPUT")
-    if github_output:
-        with Path(github_output).open("a", encoding="utf-8") as stream:
-            for key, value in metadata.items():
-                stream.write(f"{key}={value}\n")
     return metadata
 
 
@@ -570,7 +564,16 @@ def main() -> None:
         self_test()
         return
     if args.command == "inspect":
-        inspect_statement(args.statement)
+        metadata = inspect_statement(args.statement)
+        for key in (
+            "schema_version",
+            "commit_sha",
+            "run_id",
+            "run_attempt",
+            "expected_tag",
+            "pypi_trusted_publishing",
+        ):
+            print(f"{key}={metadata[key]}")
         return
     kwargs = {
         "repo_root": args.repo_root,
