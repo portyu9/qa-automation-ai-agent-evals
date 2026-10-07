@@ -121,7 +121,9 @@ class OperationalEvent(BaseModel):
     trial_id: str | None = Field(default=None, max_length=_MAX_CORRELATION_BYTES)
     relation_id: str | None = Field(default=None, max_length=_MAX_CORRELATION_BYTES)
     reason: OperationalReason | None = None
-    details: dict[str, OperationalScalar] = Field(default_factory=dict, max_length=_MAX_DETAIL_FIELDS)
+    details: dict[str, OperationalScalar] = Field(
+        default_factory=dict, max_length=_MAX_DETAIL_FIELDS
+    )
 
     @field_validator("campaign_id", "trial_id", "relation_id")
     @classmethod
@@ -295,7 +297,9 @@ class StructuredOperationalLogger:
             allow_nan=False,
         )
         if len(line.encode("utf-8")) > self._max_event_bytes:
-            raise OperationalEventTooLargeError("operational log event exceeds configured byte ceiling")
+            raise OperationalEventTooLargeError(
+                "operational log event exceeds configured byte ceiling"
+            )
         self._stream.write(line + "\n")
 
 
