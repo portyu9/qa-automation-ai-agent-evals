@@ -464,6 +464,7 @@ def test_oauth_active_session_authorization_drift_requires_post_contraction_deni
             )
         )
 
+
 def test_unordered_mcp_and_oauth_material_is_canonical_and_root_stable() -> None:
     endpoint = _endpoint()
     conditions = list(MCPRemotePolicy().required_conditions)
