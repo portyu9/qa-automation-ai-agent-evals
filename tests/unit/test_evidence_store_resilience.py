@@ -57,8 +57,11 @@ def test_hardened_platform_request_fails_closed_when_capability_is_missing(
         o_directory=False,
         o_nofollow=False,
         open_dir_fd=False,
+        mkdir_dir_fd=False,
         stat_dir_fd=False,
+        stat_nofollow=False,
         link_dir_fd=False,
+        link_nofollow=False,
         unlink_dir_fd=False,
         rename_dir_fd=False,
     )
