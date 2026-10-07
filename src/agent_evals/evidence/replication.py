@@ -331,7 +331,9 @@ def probe_backend(
     try:
         deleted = backend.delete(key)
     except Exception as exc:
-        raise EvidenceIntegrityError("backend deletion probe failed without an observation") from exc
+        raise EvidenceIntegrityError(
+            "backend deletion probe failed without an observation"
+        ) from exc
     if type(deleted) is not bool:
         raise EvidenceIntegrityError("backend delete must return an exact boolean")
     if deleted:
