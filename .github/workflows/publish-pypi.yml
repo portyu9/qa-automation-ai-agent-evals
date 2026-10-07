@@ -1,0 +1,231 @@
+name: Publish package to PyPI
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: pypi-trusted-publication
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Publish exact attested release distributions
+    if: github.event.release.draft == false && github.event.release.prerelease == false
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    environment: pypi
+    steps:
+      - name: Checkout trusted default-branch publication logic only
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          persist-credentials: false
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: "3.11"
+      - name: Self-test release validators
+        run: |
+          python .github/scripts/release_candidate.py self-test
+          python .github/scripts/release_statement.py self-test
+      - name: Validate published release tag and package binding
+        id: candidate
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          python .github/scripts/release_candidate.py validate-pypi \
+            --event "$GITHUB_EVENT_PATH" \
+            --repository "$GITHUB_REPOSITORY" \
+            --workflow-ref "$GITHUB_REF" \
+            --event-sha "$GITHUB_SHA" \
+            --api-url "$GITHUB_API_URL" \
+            --output validated-pypi-release.json
+      - name: Download published release assets
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION_TAG: ${{ steps.candidate.outputs.version_tag }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p release-assets
+          gh release download "$VERSION_TAG" --repo "$GITHUB_REPOSITORY" --dir release-assets
+      - name: Inspect canonical release statement
+        id: statement
+        run: python .github/scripts/release_statement.py inspect --statement release-assets/release-statement.json
+      - name: Bind release event to attested v2 publication contract
+        env:
+          EVENT_COMMIT: ${{ steps.candidate.outputs.commit_sha }}
+          EVENT_TAG: ${{ steps.candidate.outputs.version_tag }}
+          STATEMENT_COMMIT: ${{ steps.statement.outputs.commit_sha }}
+          STATEMENT_TAG: ${{ steps.statement.outputs.expected_tag }}
+          STATEMENT_SCHEMA: ${{ steps.statement.outputs.schema_version }}
+          PYPI_MODE: ${{ steps.statement.outputs.pypi_trusted_publishing }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$EVENT_COMMIT" == "$STATEMENT_COMMIT" ]] || {
+            echo "::error::release event commit does not match attested release statement"
+            exit 1
+          }
+          [[ "$EVENT_TAG" == "$STATEMENT_TAG" ]] || {
+            echo "::error::release event tag does not match attested release statement"
+            exit 1
+          }
+          [[ "$STATEMENT_SCHEMA" == "agent-evals/release-statement/v2" ]] || {
+            echo "::error::PyPI publication requires release-statement/v2"
+            exit 1
+          }
+          [[ "$PYPI_MODE" == "release-event-oidc-only" ]] || {
+            echo "::error::release statement does not authorize OIDC-only PyPI publication"
+            exit 1
+          }
+      - name: Materialize exact release source contract as data
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CI_COMMIT_SHA: ${{ steps.statement.outputs.commit_sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$CI_COMMIT_SHA" =~ ^[0-9a-f]{40}$ ]] || {
+            echo "::error::release statement commit must remain a canonical SHA"
+            exit 1
+          }
+          files=(
+            pyproject.toml
+            requirements/compatibility/core-minimum-py311.txt
+            requirements/compatibility/core-latest-py314.txt
+            requirements/compatibility/mcp-minimum-py311.txt
+            requirements/compatibility/mcp-latest-py314.txt
+            requirements/compatibility/openai-mcp-minimum-py311.txt
+            requirements/compatibility/openai-mcp-latest-py314.txt
+          )
+          mkdir -p candidate-source
+          for path in "${files[@]}"; do
+            mkdir -p "candidate-source/$(dirname "$path")"
+            gh api --method GET \
+              -H "Accept: application/vnd.github.raw+json" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "repos/$GITHUB_REPOSITORY/contents/$path?ref=$CI_COMMIT_SHA" \
+              > "candidate-source/$path"
+          done
+      - name: Arrange retained release subjects
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p retained-dist retained-supply-chain retained-qualification retained-release-statement retained-provenance
+          cp release-assets/*.whl retained-dist/
+          cp release-assets/*.tar.gz retained-dist/
+          cp release-assets/artifact-manifest.json retained-dist/
+          cp release-assets/release-sbom.spdx.json retained-supply-chain/
+          cp release-assets/release-supply-chain-evidence.json retained-supply-chain/
+          cp release-assets/ci-qualification-evidence.json retained-qualification/
+          cp release-assets/release-statement.json retained-release-statement/
+          cp release-assets/release-provenance.sigstore.json retained-provenance/
+          cp release-assets/subject-checksums.sha256 retained-provenance/
+          cp release-assets/bundle-checksum.sha256 retained-provenance/
+          test "$(find retained-dist -maxdepth 1 -type f -name '*.whl' | wc -l)" -eq 1
+          test "$(find retained-dist -maxdepth 1 -type f -name '*.tar.gz' | wc -l)" -eq 1
+      - name: Install exact verifier environment
+        run: |
+          python -m pip install --disable-pip-version-check --require-hashes \
+            -r requirements/locks/core-py311.txt
+          python -m pip install --disable-pip-version-check --no-deps retained-dist/*.whl
+      - name: Reverify exact retained release evidence
+        env:
+          CI_COMMIT_SHA: ${{ steps.statement.outputs.commit_sha }}
+          CI_RUN_ID: ${{ steps.statement.outputs.run_id }}
+          CI_RUN_ATTEMPT: ${{ steps.statement.outputs.run_attempt }}
+          VERSION_TAG: ${{ steps.statement.outputs.expected_tag }}
+        run: |
+          python .github/scripts/package_artifact_manifest.py verify \
+            --dist-dir retained-dist \
+            --repository "$GITHUB_REPOSITORY" \
+            --commit-sha "$CI_COMMIT_SHA" \
+            --workflow "CI" \
+            --run-id "$CI_RUN_ID" \
+            --run-attempt "$CI_RUN_ATTEMPT"
+          python .github/scripts/release_supply_chain.py verify \
+            --package-dir retained-dist \
+            --evidence-dir retained-supply-chain \
+            --policy .github/dependency-license-policy.json \
+            --repository "$GITHUB_REPOSITORY" \
+            --commit-sha "$CI_COMMIT_SHA" \
+            --workflow "CI" \
+            --run-id "$CI_RUN_ID" \
+            --run-attempt "$CI_RUN_ATTEMPT"
+          python .github/scripts/ci_qualification_evidence.py verify \
+            --evidence retained-qualification/ci-qualification-evidence.json \
+            --repository "$GITHUB_REPOSITORY" \
+            --commit-sha "$CI_COMMIT_SHA" \
+            --ref "refs/heads/main" \
+            --workflow "CI" \
+            --run-id "$CI_RUN_ID" \
+            --run-attempt "$CI_RUN_ATTEMPT" \
+            --event "push"
+          python .github/scripts/release_statement.py verify \
+            --statement retained-release-statement/release-statement.json \
+            --repo-root candidate-source \
+            --package-dir retained-dist \
+            --supply-chain-dir retained-supply-chain \
+            --qualification-dir retained-qualification \
+            --repository "$GITHUB_REPOSITORY" \
+            --commit-sha "$CI_COMMIT_SHA" \
+            --ref "refs/heads/main" \
+            --workflow "CI" \
+            --run-id "$CI_RUN_ID" \
+            --run-attempt "$CI_RUN_ATTEMPT" \
+            --expected-tag "$VERSION_TAG"
+      - name: Cryptographically reverify retained provenance
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CI_COMMIT_SHA: ${{ steps.statement.outputs.commit_sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          (
+            cd retained-provenance
+            sha256sum -c bundle-checksum.sha256
+          )
+          sha256sum -c retained-provenance/subject-checksums.sha256
+          subjects=(
+            retained-dist/*.whl
+            retained-dist/*.tar.gz
+            retained-dist/artifact-manifest.json
+            retained-supply-chain/release-sbom.spdx.json
+            retained-supply-chain/release-supply-chain-evidence.json
+            retained-qualification/ci-qualification-evidence.json
+            retained-release-statement/release-statement.json
+          )
+          test "${#subjects[@]}" -eq 7
+          for subject in "${subjects[@]}"; do
+            gh attestation verify "$subject" \
+              --repo "$GITHUB_REPOSITORY" \
+              --bundle retained-provenance/release-provenance.sigstore.json \
+              --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/ci.yml" \
+              --signer-digest "$CI_COMMIT_SHA" \
+              --source-digest "$CI_COMMIT_SHA" \
+              --source-ref "refs/heads/main" \
+              --predicate-type "https://slsa.dev/provenance/v1" \
+              --deny-self-hosted-runners \
+              --format json >/dev/null
+          done
+      - name: Isolate only distributions eligible for PyPI
+        run: |
+          mkdir -p pypi-dist
+          cp retained-dist/*.whl pypi-dist/
+          cp retained-dist/*.tar.gz pypi-dist/
+          test "$(find pypi-dist -maxdepth 1 -type f | wc -l)" -eq 2
+      - name: Publish distributions with PyPI Trusted Publishing
+        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # release/v1 2026-07-28
+        with:
+          packages-dir: pypi-dist
+          verify-metadata: true
+          skip-existing: false
+          print-hash: true
+          attestations: true
+          verbose: false
