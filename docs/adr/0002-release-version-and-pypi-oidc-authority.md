@@ -28,13 +28,16 @@ pull-request write, OIDC, or attestation authority. The repository's normal pull
 the only route for accepting a version bump.
 
 Second, `Publish package to PyPI` runs only after a non-draft, non-prerelease GitHub Release is
-published. It has only `contents: read` and `id-token: write`, is bound to the GitHub environment
-`pypi`, and executes trusted default-branch code rather than release-tag code. The tag commit is
-treated as data. Before invoking the immutable-pinned PyPA publisher, the workflow requires exact
-tag/package binding, release-statement/v2, retained package/SBOM/license/CI qualification evidence,
-subject and bundle checksums, and successful Sigstore verification of all seven attested release
-subjects. Only the verified wheel and sdist enter the upload directory. No PyPI password, API token,
-alternate repository URL, rebuild, or skip-existing behavior is permitted.
+published and splits authority across two jobs. The verification job inherits only `contents: read`,
+executes trusted default-branch code rather than release-tag code, and treats the tag commit as data.
+It requires exact tag/package binding, release-statement/v2, retained
+package/SBOM/license/CI-qualification evidence, subject and bundle checksums, and successful Sigstore
+verification of all seven attested release subjects. It then retains only the verified wheel and
+sdist as a same-run workflow artifact. The final publication job has only `actions: read` plus
+`id-token: write`, is bound to the GitHub environment `pypi`, does not checkout or execute
+repository code, downloads that verified two-file artifact, and invokes the immutable-pinned PyPA
+publisher. No PyPI password, API token, alternate repository URL, rebuild, or skip-existing behavior
+is permitted.
 
 Version the release statement to `agent-evals/release-statement/v2` for new trusted-main runs with
 `pypi_trusted_publishing=release-event-oidc-only`. The verifier keeps exact v1 reconstruction with
@@ -67,10 +70,10 @@ The change adds a new external publication authority while preserving non-compen
 qualification. A PyPI publish is downstream of a published GitHub Release and cannot compensate for
 missing package, supply-chain, qualification, release-statement, or provenance evidence.
 
-OIDC authority is granted only to the dedicated PyPI workflow. The workflow cannot execute code from
-the release tag under that authority, and the existing GitHub Release publisher cannot mint PyPI
-OIDC credentials. Repository policy machine-checks both separations and rejects token-based PyPI
-upload markers.
+OIDC authority is granted only to the dedicated final PyPI publication job. The evidence-verification
+job has no OIDC grant, the OIDC job cannot checkout or execute repository code, and the existing
+GitHub Release publisher cannot mint PyPI OIDC credentials. Repository policy machine-checks all
+three separations and rejects token-based PyPI upload markers.
 
 BLOCKED and FAIL semantics, evaluator authority, evidence roots, report signing, and historical replay
 meaning are unchanged.
