@@ -533,12 +533,20 @@ if "workflow_dispatch:" in prepare_release or "release:" in prepare_release:
     fail("prepare-release must not expose selectable-ref or release-event execution surfaces")
 if "permissions:\n  contents: read" not in prepare_release:
     fail("prepare-release must remain read-only")
-for forbidden in ("contents: write", "pull-requests: write", "id-token: write", "attestations: write"):
+for forbidden in (
+    "contents: write",
+    "pull-requests: write",
+    "id-token: write",
+    "attestations: write",
+):
     if forbidden in prepare_release:
         fail(f"prepare-release must not gain write/signing authority: {forbidden}")
 if "if: github.ref == 'refs/heads/main'" not in prepare_release:
     fail("prepare-release must fail closed unless repository_dispatch executes on main")
-if "ref: ${{ github.sha }}" not in prepare_release or "persist-credentials: false" not in prepare_release:
+if (
+    "ref: ${{ github.sha }}" not in prepare_release
+    or "persist-credentials: false" not in prepare_release
+):
     fail("prepare-release must checkout the exact default-branch dispatch SHA without credentials")
 for required in (
     "release_version.py self-test",
