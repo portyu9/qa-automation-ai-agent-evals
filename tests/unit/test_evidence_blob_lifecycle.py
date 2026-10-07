@@ -14,12 +14,12 @@ from agent_evals.evidence.blob_store import (
     canonical_evidence_bytes,
 )
 from agent_evals.evidence.models import EvidenceEvent, EvidenceKind, TrialEvidence
-from agent_evals.evidence.store import EvidenceIntegrityError
 from agent_evals.evidence.retention import (
     GarbageCollectionPlan,
     RetentionReferenceSet,
     execute_garbage_collection,
 )
+from agent_evals.evidence.store import EvidenceIntegrityError
 
 SUBJECT = "a" * 64
 SCENARIO = "b" * 64
@@ -106,7 +106,7 @@ def test_remote_backend_corruption_fails_closed() -> None:
     manifest = store.write(_evidence("corrupt"))
     backend.objects[manifest.logical_sha256] += b"tamper"
 
-    with pytest.raises(EvidenceIntegrityError, match="blob|evidence|compressed|length|hash"):
+    with pytest.raises(EvidenceIntegrityError, match=r"blob|evidence|compressed|length|hash"):
         store.read(manifest.logical_sha256)
 
 
