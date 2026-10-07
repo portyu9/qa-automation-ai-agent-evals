@@ -424,6 +424,53 @@ def test_policy_rejects_pypi_publication_without_trusted_publishing_contract(
     assert "forbidden release behavior: twine upload" in result.stderr
 
 
+def test_policy_rejects_release_without_pypi_dispatch_handoff(tmp_path: Path) -> None:
+    workspace = _policy_workspace(tmp_path)
+    workflow = workspace / ".github/workflows/publish-release.yml"
+    source = workflow.read_text(encoding="utf-8")
+    required = '"event_type": "pypi-publish-request"'
+    assert required in source
+    workflow.write_text(
+        source.replace(required, '"event_type": "disabled-pypi-handoff"', 1),
+        encoding="utf-8",
+    )
+
+    result = _run_policy(workspace)
+
+    assert result.returncode != 0
+    assert "publish-release workflow is missing required contract text" in result.stderr
+
+
+def test_policy_rejects_pypi_missing_repository_dispatch_handoff(tmp_path: Path) -> None:
+    workspace = _policy_workspace(tmp_path)
+    workflow = workspace / ".github/workflows/publish-pypi.yml"
+    source = workflow.read_text(encoding="utf-8")
+    required = "  repository_dispatch:\\n    types: [pypi-publish-request]\\n"
+    required = required.encode("utf-8").decode("unicode_escape")
+    assert required in source
+    workflow.write_text(source.replace(required, "", 1), encoding="utf-8")
+
+    result = _run_policy(workspace)
+
+    assert result.returncode != 0
+    assert "default-branch-bound pypi-publish-request handoff" in result.stderr
+
+
+def test_policy_rejects_direct_pypi_client_payload_interpolation(tmp_path: Path) -> None:
+    workspace = _policy_workspace(tmp_path)
+    workflow = workspace / ".github/workflows/publish-pypi.yml"
+    source = workflow.read_text(encoding="utf-8")
+    workflow.write_text(
+        source + "\\n# forbidden: ${{ github.event.client_payload.version_tag }}\\n",
+        encoding="utf-8",
+    )
+
+    result = _run_policy(workspace)
+
+    assert result.returncode != 0
+    assert "parse dispatch payload only through the event file validator" in result.stderr
+
+
 def test_policy_rejects_pypi_oidc_in_verification_job(tmp_path: Path) -> None:
     workspace = _policy_workspace(tmp_path)
     workflow = workspace / ".github/workflows/publish-pypi.yml"
