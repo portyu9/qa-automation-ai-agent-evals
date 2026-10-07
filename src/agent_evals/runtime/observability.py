@@ -163,12 +163,26 @@ class OperationalWindowSummary(BaseModel):
     window_start_unix_ms: int = Field(ge=0, strict=True)
     window_ms: int = Field(gt=0, strict=True)
     total_events: int = Field(ge=0, strict=True)
-    blocked_by_reason: dict[str, int] = Field(default_factory=dict)
+    blocked_by_reason: dict[str, int] = Field(
+        default_factory=dict,
+        max_length=len(OperationalReason),
+    )
     evaluator_errors: int = Field(ge=0, strict=True)
     judge_abstentions: int = Field(ge=0, strict=True)
     judge_calibration_drifts: int = Field(ge=0, strict=True)
     provider_instability: int = Field(ge=0, strict=True)
     mcp_instability: int = Field(ge=0, strict=True)
+
+    @field_validator("blocked_by_reason")
+    @classmethod
+    def validate_blocked_by_reason(cls, value: dict[str, int]) -> dict[str, int]:
+        allowed = {reason.value for reason in OperationalReason}
+        for reason, count in value.items():
+            if reason not in allowed:
+                raise ValueError("blocked operational reason is not from the bounded reason enum")
+            if type(count) is not int or count < 0:
+                raise ValueError("blocked operational counts must be non-negative exact integers")
+        return dict(sorted(value.items()))
 
     @property
     def evaluator_error_rate(self) -> float:
@@ -184,7 +198,7 @@ class OperationalSummary(BaseModel):
 
     schema_version: Literal["agent-evals/operational-summary/v1"] = _SUMMARY_SCHEMA
     authority: Literal["non_authoritative_operational"] = _AUTHORITY
-    windows: tuple[OperationalWindowSummary, ...]
+    windows: tuple[OperationalWindowSummary, ...] = Field(max_length=_MAX_WINDOWS)
 
 
 @dataclass(slots=True)
