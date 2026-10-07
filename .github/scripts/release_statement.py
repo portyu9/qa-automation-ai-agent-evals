@@ -514,10 +514,7 @@ def self_test() -> None:
         assert legacy["schema_version"] == LEGACY_SCHEMA_VERSION
         legacy_publication = legacy["publication"]
         assert isinstance(legacy_publication, dict)
-        assert (
-            legacy_publication["pypi_trusted_publishing"]
-            == LEGACY_PYPI_TRUSTED_PUBLISHING_MODE
-        )
+        assert legacy_publication["pypi_trusted_publishing"] == LEGACY_PYPI_TRUSTED_PUBLISHING_MODE
 
         mutated = statement_path.read_text(encoding="utf-8").replace(
             '"schema_version":"agent-evals/release-statement/v2"',
