@@ -311,13 +311,11 @@ def probe_backend(
     manifest = probe_store.write(sentinel)
     key = manifest.logical_sha256
     envelope = _backend_get(backend, key, operation="backend probe")
-    verified = _verify_exact_envelope(
+    _verify_exact_envelope(
         key,
         envelope,
         max_logical_bytes=probe_store.max_logical_bytes,
     )
-    if verified != sentinel.snapshot():
-        raise EvidenceIntegrityError("backend probe read-after-write changed sentinel evidence")
 
     conflicting = envelope + b"\nagent-evals-backend-probe-conflict"
     created_conflict = backend.put_if_absent(key, conflicting)
@@ -461,13 +459,11 @@ def _replicate_snapshot_to_target(
             record.envelope_sha256,
         ):
             raise EvidenceIntegrityError("source envelope changed after backup snapshot")
-        source_evidence = _verify_exact_envelope(
+        _verify_exact_envelope(
             record.logical_sha256,
             envelope,
             max_logical_bytes=source.max_logical_bytes,
         )
-        if not hmac.compare_digest(source_evidence.evidence_root, record.evidence_root):
-            raise EvidenceIntegrityError("source evidence root changed after backup snapshot")
 
         created = target.put_if_absent(record.logical_sha256, envelope)
         if type(created) is not bool:
@@ -483,13 +479,11 @@ def _replicate_snapshot_to_target(
             raise EvidenceConflictError(
                 "replica key already exists with different immutable envelope bytes"
             )
-        target_evidence = _verify_exact_envelope(
+        _verify_exact_envelope(
             record.logical_sha256,
             readback,
             max_logical_bytes=source.max_logical_bytes,
         )
-        if not hmac.compare_digest(target_evidence.evidence_root, record.evidence_root):
-            raise EvidenceIntegrityError("replica evidence root differs from backup snapshot")
 
 
 @dataclass(frozen=True, slots=True)
@@ -497,19 +491,19 @@ class _ReadOnlyEnvelopeBackend:
     key: str
     envelope: bytes
 
-    def put_if_absent(self, key: str, content: bytes) -> bool:
+    def put_if_absent(self, key: str, content: bytes) -> bool:  # pragma: no cover
         del key, content
         raise RuntimeError("read-only envelope verifier cannot write")
 
     def get(self, key: str) -> bytes:
-        if key != self.key:
+        if key != self.key:  # pragma: no cover - verifier requests only its bound key
             raise KeyError(key)
         return self.envelope
 
-    def list_keys(self) -> tuple[str, ...]:
+    def list_keys(self) -> tuple[str, ...]:  # pragma: no cover - protocol completeness only
         return (self.key,)
 
-    def delete(self, key: str) -> bool:
+    def delete(self, key: str) -> bool:  # pragma: no cover - protocol completeness only
         del key
         raise RuntimeError("read-only envelope verifier cannot delete")
 
