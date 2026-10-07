@@ -1,13 +1,18 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import hashlib
 from pathlib import Path
 
 import pytest
 from pydantic import ValidationError
 
 import agent_evals.evidence.store as store_module
-from agent_evals.evidence.blob_store import ContentAddressedEvidenceStore, EvidenceBlobBackend
+from agent_evals.evidence.blob_store import (
+    ContentAddressedEvidenceStore,
+    EvidenceBlobBackend,
+    canonical_evidence_bytes,
+)
 from agent_evals.evidence.minimization import (
     EvidenceMinimizationError,
     EvidenceMinimizationPolicy,
@@ -369,6 +374,7 @@ def test_content_addressed_store_minimizes_before_content_key_or_backend_write()
     assert backend.observed_writes
     assert all(secret.encode() not in content for _, content in backend.observed_writes)
     loaded = store.read(manifest.logical_sha256)
+    assert manifest.logical_sha256 == hashlib.sha256(canonical_evidence_bytes(loaded)).hexdigest()
     assert secret not in loaded.model_dump_json()
     assert manifest.evidence_root == receipt.result_evidence_root
     assert loaded.evidence_root == receipt.result_evidence_root
