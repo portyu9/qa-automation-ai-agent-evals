@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 from pathlib import Path
 
@@ -15,6 +16,7 @@ from agent_evals.contracts.models import (
     SubjectFingerprint,
 )
 from agent_evals.evidence.models import EvidenceEvent, EvidenceKind, TrialEvidence
+from agent_evals.evidence.store import LocalEvidenceStore, evidence_record_key
 
 runner = CliRunner()
 
@@ -214,8 +216,6 @@ def test_store_lock_inspect_requires_exact_confirmation_before_quarantine(
     key = evidence_record_key(item)
     paths = store._paths(key, create_bucket=True)
     fd = store._acquire_lock(paths.lock)
-    import os
-
     os.close(fd)
 
     inspected = runner.invoke(cli.app, ["store", "lock-inspect", str(root), key])
