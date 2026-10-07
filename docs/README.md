@@ -291,7 +291,7 @@ Audited protected-`main` implementation checkpoint `f440d24a815c9e251f4b6fd82a5b
 - deterministic MCP OAuth flow: **3/3 passed**;
 - documentation-link/discoverability integrity and optional-integration lane-discovery guards: exercised by the required quality lanes;
 - Bandit, package build/wheel inspection, wheel installation/import/CLI smoke, and all **7/7 required CI jobs**: green;
-- dependency audit reported **no known vulnerabilities** in both core quality environments and the complete OpenAI/MCP runtime dependency graph; the project package itself is skipped because it is not published on PyPI.
+- dependency audit reported **no known vulnerabilities** in both core quality environments and the complete OpenAI/MCP runtime dependency graph; at this historical checkpoint, the project package itself was skipped because it had not yet been published on PyPI. The current package is now published; see [Release Provenance](../RELEASE_PROVENANCE.md) and [PyPI](https://pypi.org/project/qa-automation-ai-agent-evals/).
 
 This checkpoint is intentionally bound to the exact commit and CI run above. It verifies the repository behavior and controls exercised by those required jobs—including the current Assurance current revision, authority, replay, retrieval, side-effect, semantic-judging, OpenAI composition, and MCP paths—but it is not a claim about untested hosted providers, external production systems, remote attestation, publisher identity, or behavior introduced after that SHA. Any later code, dependency, workflow, or documentation change requires its own exact-head and post-merge `main` verification before inheriting this checkpoint.
 
