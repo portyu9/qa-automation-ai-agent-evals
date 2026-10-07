@@ -136,12 +136,16 @@ def test_backend_probe_credits_worm_only_from_failed_delete_and_exact_readback()
 
     assert receipt.deletion_resistance_observed is True
     assert receipt.sentinel_sha256 in backend.objects
-    assert receipt.sentinel_envelope_sha256 == hashlib.sha256(
-        backend.objects[receipt.sentinel_sha256]
-    ).hexdigest()
-    assert ContentAddressedEvidenceStore(backend).read(receipt.sentinel_sha256).final_state[
-        "backend_probe"
-    ] is True
+    assert (
+        receipt.sentinel_envelope_sha256
+        == hashlib.sha256(backend.objects[receipt.sentinel_sha256]).hexdigest()
+    )
+    assert (
+        ContentAddressedEvidenceStore(backend)
+        .read(receipt.sentinel_sha256)
+        .final_state["backend_probe"]
+        is True
+    )
 
 
 def test_backend_probe_rejects_no_clobber_violation() -> None:
