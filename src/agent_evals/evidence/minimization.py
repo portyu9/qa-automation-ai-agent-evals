@@ -545,9 +545,7 @@ def _contains_credential(
         return value == _CREDENTIAL_MARKER or _string_has_credential(value)
     if value is None or type(value) in (bool, int, float):
         return False
-    raise EvidenceMinimizationError(
-        "evidence minimization encountered an unsupported JSON value"
-    )
+    raise EvidenceMinimizationError("evidence minimization encountered an unsupported JSON value")
 
 
 def _sensitive_key(key: str) -> bool:
