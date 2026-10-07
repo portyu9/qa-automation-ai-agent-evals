@@ -19,6 +19,11 @@ from typing import Literal, Protocol
 from pydantic import BaseModel, ConfigDict, Field
 
 from agent_evals._strict_json import StrictJsonError, strict_json_loads
+from agent_evals.evidence.minimization import (
+    EvidenceMinimizationPolicy,
+    EvidenceMinimizationReceipt,
+    minimize_evidence_for_persistence,
+)
 from agent_evals.evidence.models import TrialEvidence
 from agent_evals.evidence.store import EvidenceConflictError, EvidenceIntegrityError
 
@@ -113,6 +118,7 @@ class ContentAddressedEvidenceStore:
         *,
         compression: Literal["none", "gzip"] = "none",
         max_logical_bytes: int = 8 * 1024 * 1024,
+        minimization_policy: EvidenceMinimizationPolicy | None = None,
     ) -> None:
         if compression not in ("none", "gzip"):
             raise ValueError("unsupported evidence blob compression")
@@ -121,8 +127,25 @@ class ContentAddressedEvidenceStore:
         self.backend = backend
         self.compression = compression
         self.max_logical_bytes = max_logical_bytes
+        self.minimization_policy = minimization_policy or EvidenceMinimizationPolicy()
+        if type(self.minimization_policy) is not EvidenceMinimizationPolicy:
+            raise TypeError("minimization_policy must be an exact EvidenceMinimizationPolicy")
 
     def write(self, evidence: TrialEvidence) -> EvidenceBlobManifest:
+        manifest, _ = self.write_with_receipt(evidence)
+        return manifest
+
+    def write_with_receipt(
+        self,
+        evidence: TrialEvidence,
+    ) -> tuple[EvidenceBlobManifest, EvidenceMinimizationReceipt]:
+        prepared = minimize_evidence_for_persistence(
+            evidence,
+            policy=self.minimization_policy,
+        )
+        return self._write_prepared(prepared.evidence), prepared.receipt
+
+    def _write_prepared(self, evidence: TrialEvidence) -> EvidenceBlobManifest:
         evidence = evidence.snapshot()
         logical = canonical_evidence_bytes(evidence)
         if len(logical) > self.max_logical_bytes:
