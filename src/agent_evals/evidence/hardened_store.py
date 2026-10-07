@@ -161,15 +161,11 @@ class HardenedPosixEvidenceStore:
         try:
             fd = os.open(self._records, flags)
         except OSError as exc:
-            raise EvidenceIntegrityError(
-                "cannot open hardened evidence records directory"
-            ) from exc
+            raise EvidenceIntegrityError("cannot open hardened evidence records directory") from exc
         try:
             metadata = os.fstat(fd)
             if not stat.S_ISDIR(metadata.st_mode):
-                raise EvidenceIntegrityError(
-                    "hardened evidence records handle is not a directory"
-                )
+                raise EvidenceIntegrityError("hardened evidence records handle is not a directory")
             yield fd
         finally:
             os.close(fd)
@@ -195,9 +191,7 @@ class HardenedPosixEvidenceStore:
             except FileNotFoundError:
                 raise
             except OSError as exc:
-                raise EvidenceIntegrityError(
-                    "cannot open hardened evidence record bucket"
-                ) from exc
+                raise EvidenceIntegrityError("cannot open hardened evidence record bucket") from exc
             try:
                 metadata = os.fstat(bucket_fd)
                 if not stat.S_ISDIR(metadata.st_mode):
@@ -317,9 +311,7 @@ def _safe_read_fd(bucket_fd: int, name: str, max_bytes: int) -> bytes:
         extra = os.read(fd, 1)
         data = b"".join(chunks)
         if remaining != 0 or extra or len(data) != metadata.st_size:
-            raise EvidenceIntegrityError(
-                f"evidence artifact changed during bounded read: {name}"
-            )
+            raise EvidenceIntegrityError(f"evidence artifact changed during bounded read: {name}")
         return data
     finally:
         os.close(fd)
@@ -410,9 +402,7 @@ def _decode_record(
         )
         evidence = TrialEvidence.model_validate(evidence_raw)
     except StrictJsonError as exc:
-        raise EvidenceIntegrityError(
-            "stored evidence payload failed strict JSON decoding"
-        ) from exc
+        raise EvidenceIntegrityError("stored evidence payload failed strict JSON decoding") from exc
     except ValidationError as exc:
         raise EvidenceIntegrityError("stored evidence payload failed schema validation") from exc
 
