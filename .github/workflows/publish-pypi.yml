@@ -3,6 +3,8 @@ name: Publish package to PyPI
 on:
   release:
     types: [published]
+  repository_dispatch:
+    types: [pypi-publish-request]
 
 permissions:
   contents: read
@@ -14,7 +16,6 @@ concurrency:
 jobs:
   verify:
     name: Verify exact attested release distributions
-    if: github.event.release.draft == false && github.event.release.prerelease == false
     runs-on: ubuntu-24.04
     timeout-minutes: 12
     steps:
