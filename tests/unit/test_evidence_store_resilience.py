@@ -273,3 +273,89 @@ def test_reader_observes_explicit_partial_state_during_payload_before_manifest_w
     assert not thread.is_alive()
     assert failure == []
     assert store.read(key).evidence == item
+
+
+@pytest.mark.parametrize(
+    ("failure_stage", "published"),
+    [
+        ("write", False),
+        ("file_fsync", False),
+        ("link", False),
+        ("post_link_directory_fsync", True),
+        ("temporary_unlink", True),
+        ("post_unlink_directory_fsync", True),
+    ],
+)
+def test_atomic_materialize_failure_boundaries_never_create_ambiguous_bytes(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    failure_stage: str,
+    published: bool,
+) -> None:
+    target = tmp_path / "artifact.bin"
+    content = b"immutable-evidence"
+    real_write = store_module.os.write
+    real_fsync = store_module.os.fsync
+    real_hardlink = Path.hardlink_to
+    real_unlink = Path.unlink
+    fsync_calls = 0
+    unlink_failed = False
+
+    if failure_stage == "write":
+
+        def fail_write(fd: int, data: bytes) -> int:
+            del fd, data
+            raise OSError("controlled write failure")
+
+        monkeypatch.setattr(store_module.os, "write", fail_write)
+
+    if failure_stage in {
+        "file_fsync",
+        "post_link_directory_fsync",
+        "post_unlink_directory_fsync",
+    }:
+        target_call = {
+            "file_fsync": 1,
+            "post_link_directory_fsync": 2,
+            "post_unlink_directory_fsync": 3,
+        }[failure_stage]
+
+        def fail_selected_fsync(fd: int) -> None:
+            nonlocal fsync_calls
+            fsync_calls += 1
+            if fsync_calls == target_call:
+                raise OSError("controlled fsync failure")
+            real_fsync(fd)
+
+        monkeypatch.setattr(store_module.os, "fsync", fail_selected_fsync)
+
+    if failure_stage == "link":
+
+        def fail_link(destination: Path, source: Path) -> None:
+            del destination, source
+            raise OSError("controlled link failure")
+
+        monkeypatch.setattr(Path, "hardlink_to", fail_link)
+
+    if failure_stage == "temporary_unlink":
+
+        def fail_first_temp_unlink(
+            candidate: Path,
+            *args: object,
+            **kwargs: object,
+        ) -> None:
+            nonlocal unlink_failed
+            if candidate.name.startswith(".artifact.bin.") and not unlink_failed:
+                unlink_failed = True
+                raise OSError("controlled temp unlink failure")
+            real_unlink(candidate, *args, **kwargs)
+
+        monkeypatch.setattr(Path, "unlink", fail_first_temp_unlink)
+
+    with pytest.raises((OSError, EvidenceStoreError)):
+        store_module._atomic_materialize(target, content)
+
+    assert target.exists() is published
+    if published:
+        assert target.read_bytes() == content
+    assert tuple(tmp_path.glob(".artifact.bin.*.tmp")) == ()
