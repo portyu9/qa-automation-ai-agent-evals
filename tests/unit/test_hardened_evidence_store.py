@@ -60,9 +60,7 @@ def test_hardened_store_preserves_portable_manifest_and_payload_identity(tmp_pat
 
 def test_hardened_store_minimizes_before_anchored_persistence(tmp_path: Path) -> None:
     secret = "ghp_abcdefghijklmnop"
-    policy = EvidenceMinimizationPolicy(
-        operator_pii_paths=("/final_state/person/email",)
-    )
+    policy = EvidenceMinimizationPolicy(operator_pii_paths=("/final_state/person/email",))
     hardened = HardenedPosixEvidenceStore(
         tmp_path / "hardened",
         minimization_policy=policy,
@@ -80,10 +78,7 @@ def test_hardened_store_minimizes_before_anchored_persistence(tmp_path: Path) ->
     manifest, receipt = hardened.write_with_receipt(item)
     stored = hardened.read(manifest.record_key).evidence
     payload_path = (
-        hardened.root
-        / "records"
-        / manifest.record_key[:2]
-        / f"{manifest.record_key}.evidence.json"
+        hardened.root / "records" / manifest.record_key[:2] / f"{manifest.record_key}.evidence.json"
     )
     persisted = payload_path.read_bytes()
 
