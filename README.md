@@ -5,13 +5,15 @@
 ### Evidence-Bound TEVV for Agentic Systems
 
 [![Python](https://img.shields.io/badge/Python-Supported-3776AB?logo=python&logoColor=white&style=flat-square)](pyproject.toml)
+[![PyPI](https://img.shields.io/pypi/v/qa-automation-ai-agent-evals?style=flat-square&label=PyPI)](https://pypi.org/project/qa-automation-ai-agent-evals/)
+[![GitHub Release](https://img.shields.io/github/v/release/portyu9/qa-automation-ai-agent-evals?style=flat-square&label=Release)](https://github.com/portyu9/qa-automation-ai-agent-evals/releases/latest)
 [![OpenAI Agents SDK](https://img.shields.io/badge/OpenAI%20Agents%20SDK-Integrated-000000?style=flat-square)](docs/OPENAI_ADAPTER.md)
 [![MIT License](https://img.shields.io/badge/License-MIT-2ea44f?style=flat-square)](LICENSE)
 [![Architecture](https://img.shields.io/badge/Architecture-Evidence--Bound-111827?style=flat-square)](docs/ARCHITECTURE.md)
 
 **A provider-neutral quality-engineering framework for evaluating autonomous agents by observable outcomes, side effects, authority boundaries, approval intent, adversarial conditions, protocol state, authorization behavior, reliability, and reproducible evidence—not persuasive final prose.**
 
-[Documentation](docs/README.md) · [Architecture](docs/ARCHITECTURE.md) · [Framework Surface](docs/FRAMEWORK_SURFACE.md) · [Evaluation Lifecycle](docs/EVALUATION_LIFECYCLE.md) · [Evidence Hierarchy](docs/EVIDENCE_HIERARCHY.md) · [OpenAI Adapter](docs/OPENAI_ADAPTER.md) · [Evidence & Replay](docs/EVIDENCE_AND_REPLAY.md) · [Security](docs/SECURITY.md) · [Limitations](docs/LIMITATIONS.md)
+[Documentation](docs/README.md) · [Architecture](docs/ARCHITECTURE.md) · [Framework Surface](docs/FRAMEWORK_SURFACE.md) · [Evaluation Lifecycle](docs/EVALUATION_LIFECYCLE.md) · [Evidence Hierarchy](docs/EVIDENCE_HIERARCHY.md) · [OpenAI Adapter](docs/OPENAI_ADAPTER.md) · [Evidence & Replay](docs/EVIDENCE_AND_REPLAY.md) · [Release Provenance](RELEASE_PROVENANCE.md) · [Releases](https://github.com/portyu9/qa-automation-ai-agent-evals/releases) · [PyPI](https://pypi.org/project/qa-automation-ai-agent-evals/) · [Security](docs/SECURITY.md) · [Limitations](docs/LIMITATIONS.md)
 
 </div>
 
@@ -30,7 +32,9 @@
 | **Adversarial assurance** | content-addressed attacks, controlled delivery preconditions, authority-preserving derivation, and replayable evidence |
 | **Evidence** | ordered normalized events, typed receipts, content-addressed identities, local persistence verification, replay, and report rederivation |
 | **Semantic judging** | calibrated and subordinate; may only preserve or narrow deterministic success |
-| **Release assurance** | repeated trials, uncertainty-aware statistics, non-compensatory safety rules, and deterministic release gates |
+| **Operator CLI** | scenario validation, deterministic run/session execution, replay/regrade, evidence/store/report verification, comparison, minimization, calibration, and CI-policy inspection |
+| **Release assurance** | repeated trials, uncertainty-aware statistics, non-compensatory safety rules, deterministic release gates, retained-byte publication, and provenance verification |
+| **Distribution** | GitHub Releases plus PyPI Trusted Publishing via GitHub OIDC; no hosted application/runtime deployment is configured by this repository |
 
 ## Architecture
 
@@ -135,17 +139,25 @@ See [Evaluation Lifecycle](docs/EVALUATION_LIFECYCLE.md), [Evaluation Model](doc
 | **MCP protocol/auth** | official-client fault laboratories, resource-server authorization, OAuth flow, and agent bridges | [MCP Lab](docs/MCP_LAB.md) · [Remote Auth](docs/MCP_REMOTE_AUTH.md) · [OAuth Flow](docs/MCP_OAUTH_FLOW.md) |
 | **Adversarial assurance** | attack identity, delivery verification, authority-preserving derivation, fail-closed grading | [Adversarial Testing](docs/ADVERSARIAL_TESTING.md) |
 | **Evidence/replay** | local evidence integrity, typed receipt verification, historical regrading, report rederivation | [Evidence & Replay](docs/EVIDENCE_AND_REPLAY.md) |
+| **Operator CLI** | repository-supported assurance operations without requiring bespoke Python glue for common validation/replay/report tasks | [Framework Surface](docs/FRAMEWORK_SURFACE.md) |
+| **Release/distribution** | deterministic version preparation, exact retained-byte GitHub Release publication, Sigstore provenance, and PyPI OIDC Trusted Publishing | [Release Provenance](RELEASE_PROVENANCE.md) · [Compatibility](docs/COMPATIBILITY.md) · [Deprecation Policy](docs/DEPRECATION_POLICY.md) |
 
 ## Quick start
 
-The deterministic core runs without model credentials.
+The deterministic core runs without model credentials. For the published package:
 
 ```bash
 python -m venv .venv
 source .venv/bin/activate
+python -m pip install qa-automation-ai-agent-evals
+agent-evals doctor
+```
+
+For repository development and the full deterministic test suite:
+
+```bash
 python -m pip install -e '.[dev]'
 pytest
-agent-evals doctor
 ```
 
 Optional integration lanes are declared in `pyproject.toml`:
@@ -154,7 +166,40 @@ Optional integration lanes are declared in `pyproject.toml`:
 python -m pip install -e '.[dev,openai,mcp]'
 ```
 
-Project manifests and repository-owned requirement files are authoritative for interpreter and dependency requirements; the README intentionally avoids duplicating executable version truth.
+Published versions are available from [PyPI](https://pypi.org/project/qa-automation-ai-agent-evals/) and [GitHub Releases](https://github.com/portyu9/qa-automation-ai-agent-evals/releases). Project manifests and repository-owned requirement files remain authoritative for interpreter and dependency requirements; the README intentionally avoids duplicating executable version truth.
+
+## Operator CLI
+
+The installed `agent-evals` command exposes the repository's common assurance-operator paths:
+
+| Command surface | Purpose |
+|---|---|
+| `agent-evals doctor [--deep]` | bounded environment/runtime diagnostics |
+| `agent-evals scenario validate` | validate a versioned scenario and derive canonical identity |
+| `agent-evals run` / `agent-evals session run` | deterministic operator-scripted single-trial or fixed-horizon session execution |
+| `agent-evals replay` / `agent-evals regrade` | historical evidence replay or deterministic regrading without pretending to rerun external behavior |
+| `agent-evals evidence verify` / `inspect` | strict trial-evidence validation and bounded inspection |
+| `agent-evals store verify-all` | verify immutable local evidence-store records and partial/locked state |
+| `agent-evals report verify` | rederive and validate assurance-report claims |
+| `agent-evals compare` / `minimize` | candidate-baseline comparison and bounded failure minimization |
+| `agent-evals calibration run` / `verify` | derive and verify semantic calibration receipts |
+| `agent-evals ci check-policy` | inspect repository CI-policy conformance |
+
+Use `agent-evals --help` and the subcommand `--help` output for the executable argument contract.
+
+## Releases, distribution, and deployment boundary
+
+This repository ships a **Python assurance framework/package**, not a hosted application service. Its production distribution surface is therefore package publication:
+
+1. `prepare-release.yml` can prepare a deterministic version patch, while the version choice and acceptance remain operator/repository-policy decisions.
+2. The version change goes through the protected pull-request/CI path.
+3. An operator selects an existing version tag and an exact qualified main-branch CI run for `publish-release.yml`.
+4. The publisher re-verifies the exact retained wheel/sdist, SBOM/license evidence, CI qualification statement, compatibility statement, and GitHub Actions OIDC/Sigstore provenance before creating the GitHub Release; it does not rebuild different package bytes.
+5. After a qualifying GitHub Release exists, `publish-pypi.yml` re-verifies the published asset set and automatically publishes only the verified wheel/sdist through PyPI Trusted Publishing with GitHub OIDC. No long-lived PyPI token is part of that path.
+
+The current repository does **not** define a cloud, Kubernetes, VM, container-service, website, or other hosted runtime deployment workflow. The GitHub `pypi` environment is an OIDC publication authority boundary, not an application deployment target.
+
+See [Release Provenance](RELEASE_PROVENANCE.md) for the full evidence/authority chain, [Changelog](CHANGELOG.md) for release history, [Compatibility](docs/COMPATIBILITY.md) and [Deprecation Policy](docs/DEPRECATION_POLICY.md) for the public contract, plus [GitHub Releases](https://github.com/portyu9/qa-automation-ai-agent-evals/releases) and [PyPI](https://pypi.org/project/qa-automation-ai-agent-evals/) for published artifacts.
 
 ## Documentation
 
@@ -169,6 +214,7 @@ Use the [documentation hub](docs/README.md) for role-based review paths. Key ent
 | How are provider behavior and MCP boundaries normalized? | [OpenAI Adapter](docs/OPENAI_ADAPTER.md) · [MCP Lab](docs/MCP_LAB.md) |
 | How are handoffs/approvals/side effects/retrieval governed? | [Handoff Authority](docs/HANDOFF_AUTHORITY.md) · [Approval Intent](docs/APPROVAL_INTENT.md) · [Side-Effect Idempotency](docs/SIDE_EFFECT_IDEMPOTENCY.md) · [Retrieval Assurance](docs/RETRIEVAL_ASSURANCE.md) |
 | How is evidence persisted/replayed? | [Evidence & Replay](docs/EVIDENCE_AND_REPLAY.md) · [Assurance Reports](docs/ASSURANCE_REPORTS.md) |
+| How are releases, PyPI distribution, and deployment boundaries handled? | [Release Provenance](RELEASE_PROVENANCE.md) · [Changelog](CHANGELOG.md) · [Compatibility](docs/COMPATIBILITY.md) · [Deprecation Policy](docs/DEPRECATION_POLICY.md) · [GitHub Releases](https://github.com/portyu9/qa-automation-ai-agent-evals/releases) · [PyPI](https://pypi.org/project/qa-automation-ai-agent-evals/) |
 | What is deliberately not claimed? | [Security](docs/SECURITY.md) · [Limitations](docs/LIMITATIONS.md) |
 
 ## Repository map
@@ -185,9 +231,9 @@ Only top-level ownership boundaries are shown; individual files are documented i
 
 ## Scope and non-claims
 
-Local deterministic evidence does **not** by itself prove live-provider correctness, hosted MCP behavior, production IAM, human identity, external target state, distributed exactly-once execution, arbitrary cache coherence/schema migration, universal prompt-injection resistance, or cryptographic publisher attestation.
+Local deterministic trial evidence does **not** by itself prove live-provider correctness, hosted MCP behavior, production IAM, human identity, external target state, distributed exactly-once execution, arbitrary cache coherence/schema migration, universal prompt-injection resistance, or release/publisher identity. Release provenance and PyPI publish attestations are separate publication evidence domains and do not retroactively authenticate unrelated trial evidence.
 
-Those boundaries are intentional. See [Security](docs/SECURITY.md) and [Limitations](docs/LIMITATIONS.md).
+Those boundaries are intentional. See [Security](docs/SECURITY.md), [Limitations](docs/LIMITATIONS.md), and [Release Provenance](RELEASE_PROVENANCE.md).
 
 ---
 
