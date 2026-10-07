@@ -65,7 +65,7 @@ def test_operational_details_and_correlation_cardinality_are_bounded() -> None:
             details={f"k-{index}": index for index in range(17)},
         )
 
-    with pytest.raises(ValidationError, match="correlation"):
+    with pytest.raises(ValidationError, match="256 characters"):
         OperationalEvent(
             kind=OperationalEventKind.INFO,
             component=OperationalComponent.RUNTIME,
@@ -136,8 +136,8 @@ def test_operational_summary_keeps_health_signals_separate_from_subject_reliabil
     assert second.judge_calibration_drifts == 1
     assert second.provider_instability == 1
     assert second.mcp_instability == 1
-    assert "passes" not in second.model_fields
-    assert "failures" not in second.model_fields
+    assert "passes" not in type(second).model_fields
+    assert "failures" not in type(second).model_fields
 
 
 def test_operational_window_cardinality_fails_closed_instead_of_unbounded_growth() -> None:
