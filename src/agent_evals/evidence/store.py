@@ -27,6 +27,11 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from agent_evals._strict_json import StrictJsonError, strict_json_loads
+from agent_evals.evidence.minimization import (
+    EvidenceMinimizationPolicy,
+    EvidenceMinimizationReceipt,
+    minimize_evidence_for_persistence,
+)
 from agent_evals.evidence.models import TrialEvidence
 
 _MANIFEST_SCHEMA: Literal["agent-evals-evidence-manifest/v1"] = "agent-evals-evidence-manifest/v1"
@@ -108,6 +113,7 @@ class LocalEvidenceStore:
         *,
         max_payload_bytes: int = 8 * 1024 * 1024,
         max_manifest_bytes: int = 64 * 1024,
+        minimization_policy: EvidenceMinimizationPolicy | None = None,
     ) -> None:
         if not _is_positive_byte_ceiling(max_payload_bytes) or not _is_positive_byte_ceiling(
             max_manifest_bytes
@@ -116,6 +122,9 @@ class LocalEvidenceStore:
         self._root = Path(root)
         self._max_payload_bytes = max_payload_bytes
         self._max_manifest_bytes = max_manifest_bytes
+        self.minimization_policy = minimization_policy or EvidenceMinimizationPolicy()
+        if type(self.minimization_policy) is not EvidenceMinimizationPolicy:
+            raise TypeError("minimization_policy must be an exact EvidenceMinimizationPolicy")
         self._records = self._root / "records"
         _ensure_store_directory(self._root)
         _ensure_store_directory(self._records)
@@ -125,6 +134,20 @@ class LocalEvidenceStore:
         return self._root
 
     def write(self, evidence: TrialEvidence) -> ArtifactManifest:
+        manifest, _ = self.write_with_receipt(evidence)
+        return manifest
+
+    def write_with_receipt(
+        self,
+        evidence: TrialEvidence,
+    ) -> tuple[ArtifactManifest, EvidenceMinimizationReceipt]:
+        prepared = minimize_evidence_for_persistence(
+            evidence,
+            policy=self.minimization_policy,
+        )
+        return self._write_prepared(prepared.evidence), prepared.receipt
+
+    def _write_prepared(self, evidence: TrialEvidence) -> ArtifactManifest:
         evidence = evidence.snapshot()
         payload = _canonical_json_bytes(evidence.model_dump(mode="json"))
         if len(payload) > self._max_payload_bytes:
