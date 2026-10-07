@@ -12,8 +12,10 @@ change must add a new numbered ADR matching:
 docs/adr/NNNN-lowercase-kebab-title.md
 
 Editing, renaming, or reusing an existing ADR does not satisfy the gate. There is no free-form
-"no ADR needed" exemption for a governed path. If the governed-path policy is too broad or too
-narrow, changing that policy is itself governed and therefore requires a new ADR.
+"no ADR needed" exemption for a governed path. The sole machine-bounded exception is the exact
+Dependabot action-pin-only workflow case defined by the versioned policy and ADR 0001; authors cannot
+select or assert that exception themselves. If the governed-path policy is too broad or too narrow,
+changing that policy is itself governed and therefore requires a new ADR.
 
 ## Lifecycle
 
