@@ -417,11 +417,7 @@ def replicate_backup(
         for label, backend in target_items
     }
     if require_worm:
-        missing = tuple(
-            label
-            for label in labels
-            if not probes[label].deletion_resistance_observed
-        )
+        missing = tuple(label for label in labels if not probes[label].deletion_resistance_observed)
         if missing:
             raise EvidenceIntegrityError(
                 "WORM-required replication lacks observed deletion resistance for: "
@@ -572,8 +568,7 @@ def _challenge_digest(target_label: str, challenge: str) -> str:
         "challenge": challenge,
     }
     return hashlib.sha256(
-        b"agent-evals/evidence-backend-probe-challenge/v1\x00"
-        + _canonical_json_bytes(material)
+        b"agent-evals/evidence-backend-probe-challenge/v1\x00" + _canonical_json_bytes(material)
     ).hexdigest()
 
 
