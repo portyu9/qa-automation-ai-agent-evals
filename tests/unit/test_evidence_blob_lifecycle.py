@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import hashlib
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Literal
 
 import pytest
 
@@ -12,6 +14,7 @@ from agent_evals.evidence.blob_store import (
     canonical_evidence_bytes,
 )
 from agent_evals.evidence.models import EvidenceEvent, EvidenceKind, TrialEvidence
+from agent_evals.evidence.store import EvidenceIntegrityError
 from agent_evals.evidence.retention import (
     GarbageCollectionPlan,
     RetentionReferenceSet,
@@ -63,15 +66,15 @@ class _RemoteMemoryBackend(EvidenceBlobBackend):
 
 @pytest.mark.parametrize("compression", ["none", "gzip"])
 def test_content_addressed_store_hashes_canonical_uncompressed_content(
-    compression: str,
+    compression: Literal["none", "gzip"],
 ) -> None:
     backend = _RemoteMemoryBackend()
-    store = ContentAddressedEvidenceStore(backend, compression=compression)  # type: ignore[arg-type]
+    store = ContentAddressedEvidenceStore(backend, compression=compression)
     evidence = _evidence("same")
 
     manifest = store.write(evidence)
 
-    assert manifest.logical_sha256 == __import__("hashlib").sha256(
+    assert manifest.logical_sha256 == hashlib.sha256(
         canonical_evidence_bytes(evidence.snapshot())
     ).hexdigest()
     assert store.read(manifest.logical_sha256) == evidence.snapshot()
@@ -103,7 +106,7 @@ def test_remote_backend_corruption_fails_closed() -> None:
     manifest = store.write(_evidence("corrupt"))
     backend.objects[manifest.logical_sha256] += b"tamper"
 
-    with pytest.raises(Exception, match="blob|evidence|compressed|length|hash"):
+    with pytest.raises(EvidenceIntegrityError, match="blob|evidence|compressed|length|hash"):
         store.read(manifest.logical_sha256)
 
 
