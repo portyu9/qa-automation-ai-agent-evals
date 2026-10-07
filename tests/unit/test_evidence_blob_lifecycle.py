@@ -74,9 +74,10 @@ def test_content_addressed_store_hashes_canonical_uncompressed_content(
 
     manifest = store.write(evidence)
 
-    assert manifest.logical_sha256 == hashlib.sha256(
-        canonical_evidence_bytes(evidence.snapshot())
-    ).hexdigest()
+    assert (
+        manifest.logical_sha256
+        == hashlib.sha256(canonical_evidence_bytes(evidence.snapshot())).hexdigest()
+    )
     assert store.read(manifest.logical_sha256) == evidence.snapshot()
     assert manifest.evidence_root == evidence.evidence_root
     if compression == "gzip":
