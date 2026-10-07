@@ -1,6 +1,6 @@
 # Release provenance
 
-## Current stage: retained release subjects, compatibility statement, and CI qualification evidence carry trusted-main OIDC/Sigstore provenance
+## Current stage: retained release subjects carry trusted-main OIDC/Sigstore provenance, with verified GitHub Release and PyPI Trusted Publishing
 
 Release-version preparation is also automated without granting repository write authority. The
 `Prepare release version` workflow accepts only the default-branch-bound `release-preparation`
@@ -82,6 +82,39 @@ The publisher is pinned to
 allowed by repository policy. The separate GitHub Release publisher deliberately retains no
 `id-token: write` authority.
 
+
+## Verified public publication state
+
+The first complete production-distribution chain has now executed successfully for `v0.1.0`.
+
+- GitHub Release `v0.1.0` was published from exact retained CI-qualified package bytes after the
+  package manifest, SPDX/license evidence, CI qualification evidence, release statement, checksums,
+  and all retained Sigstore subjects were reverified.
+- The retained wheel digest is
+  `f1feb1c935d4947a9604d33be0e0209a38b9cae7b073f84d55582890bd3753ca`.
+- The retained source-distribution digest is
+  `85bce179ef26a6d5d195dead1119154ebcd992e11d03fcaa9f7332a85f775bac`.
+- PyPI Trusted Publishing workflow run `37652849477` completed successfully. Its verifier job
+  reverified the published GitHub Release and retained provenance without OIDC authority; the
+  isolated final publisher job then used GitHub OIDC to publish exactly the verified wheel and sdist.
+- The pinned PyPA publisher generated PyPI publish attestations for both distributions.
+- The public package is available at
+  <https://pypi.org/project/qa-automation-ai-agent-evals/0.1.0/>.
+
+The GitHub Release and PyPI publication are separate evidence domains. The GitHub Release database
+object itself is still not claimed to be cryptographically signed; the release assets carry the
+retained GitHub Actions OIDC/Sigstore provenance described above, while PyPI's publish attestations
+cover the package publication path.
+
+### Distribution is not hosted runtime deployment
+
+This repository distributes a Python framework/package. Its production distribution surface is the
+qualified GitHub Release plus PyPI package publication. It does not currently configure a cloud,
+Kubernetes, VM, container-service, website, or other hosted application/runtime deployment.
+
+The GitHub environment named `pypi` is an authority boundary for PyPI OIDC Trusted Publishing. It
+is not evidence that an application runtime was deployed.
+
 ## Locked executable dependency environment
 
 Trust-bearing CI now installs third-party Python dependencies only from repository-owned exact lock profiles with pip `--require-hashes`. Core Python 3.11–3.14, MCP Python 3.11, and OpenAI+MCP Python 3.11 are separate profiles so optional integration dependencies do not become implicit provider-neutral prerequisites.
@@ -117,24 +150,26 @@ This stage therefore does not claim:
 - reproducibility across arbitrary operating systems, Python implementations, builders, or dependency graphs beyond the explicitly exercised clean-runner contract;
 - an independent third-party assertion that the SBOM/license contents are semantically complete or correct beyond the repository's verified generation/policy contract;
 - a cryptographic signature over the GitHub Release database object itself; the claim is instead limited to the attested asset set and canonical release statement;
-- successful PyPI Trusted Publishing merely because the repository workflow is configured; the
-  external PyPI Trusted Publisher registration and an actual publication remain separately verified
-  external states.
+- success of any future PyPI publication merely because the repository workflow is configured; the
+  successful `v0.1.0` publication is separately verified historical evidence and does not guarantee
+  later publication success.
 
-Repository-side PyPI Trusted Publishing is configured, but activation remains conditional on the
-external PyPI publisher record. The intended publisher tuple is project
-`qa-automation-ai-agent-evals`, owner `portyu9`, repository
-`qa-automation-ai-agent-evals`, workflow `publish-pypi.yml`, environment `pypi`. Until that
-record is registered and a publication succeeds, the repository must not claim that a PyPI release
-exists. This does not retroactively reinterpret older unsigned material or release-statement/v1 as
-authenticated PyPI evidence.
+PyPI Trusted Publishing is active for project `qa-automation-ai-agent-evals` with owner
+`portyu9`, repository `qa-automation-ai-agent-evals`, workflow `publish-pypi.yml`, and
+environment `pypi`; the `v0.1.0` publication succeeded through that OIDC path. Future releases
+still require an actual successful publication run before their PyPI availability may be claimed.
+This verified publication does not retroactively reinterpret older unsigned material or
+release-statement/v1 as authenticated PyPI evidence.
 
-## Intended release chain
+## Release chain
 
-The target chain remains:
+The chain is:
 
 `source commit -> tested build -> retained wheel/sdist -> SBOM -> post-gate CI qualification evidence -> executable compatibility statement -> assurance artifacts -> signed provenance/attestation -> GitHub Release carrying the exact attested asset set -> published-release verification (native event or default-branch dispatch handoff) -> PyPI Trusted Publishing`
 
-The signed-provenance/attestation link covers the six pre-statement retained release subjects plus the canonical release statement on trusted main pushes. The statement binds the expected tag, package compatibility contract, reviewed min/latest snapshot identities, and exact retained subject digests. This is the repository's authenticated GitHub-release asset-set contract; it intentionally does not claim a separate cryptographic signature over GitHub's Release object. PyPI Trusted Publishing remains conditional on the external publisher registration and an actual successful publication.
+That full chain executed successfully for `v0.1.0`. Future releases remain operator-gated at
+version/tag/qualified-run selection and must independently satisfy the same publication checks.
+
+The signed-provenance/attestation link covers the six pre-statement retained release subjects plus the canonical release statement on trusted main pushes. The statement binds the expected tag, package compatibility contract, reviewed min/latest snapshot identities, and exact retained subject digests. This is the repository's authenticated GitHub-release asset-set contract; it intentionally does not claim a separate cryptographic signature over GitHub's Release object. PyPI Trusted Publishing is now verified for `v0.1.0`; each future publication remains a separate external event whose success must be observed rather than inferred from configuration.
 
 The invariant introduced here is still deliberately narrow: the CI run must retain/reverify the tested package bytes, independently reproduce those exact bytes from the same source in a fresh runner, generate a canonical SPDX/runtime-license evidence pair bound to the retained package manifest and checked-in license policy, and independently reverify that evidence in another clean job. Publication consumes only the original retained, qualified bytes, retained supply-chain evidence, retained release statement, and retained provenance bundle from the explicitly validated CI run and existing version tag; the publisher itself never rebuilds, regenerates, re-signs, or broadens release evidence.
