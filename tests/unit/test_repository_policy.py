@@ -428,12 +428,21 @@ def test_policy_rejects_pypi_oidc_in_verification_job(tmp_path: Path) -> None:
     workspace = _policy_workspace(tmp_path)
     workflow = workspace / ".github/workflows/publish-pypi.yml"
     source = workflow.read_text(encoding="utf-8")
-    marker = "  verify:\n"
-    assert marker in source
-    workflow.write_text(
-        source.replace(marker, marker + "    permissions:\n      id-token: write\n", 1),
-        encoding="utf-8",
+    verify_marker = "  verify:\n"
+    publish_oidc = "    permissions:\n      actions: read\n      id-token: write\n"
+    assert verify_marker in source
+    assert source.count(publish_oidc) == 1
+    mutated = source.replace(
+        publish_oidc,
+        "    permissions:\n      actions: read\n",
+        1,
     )
+    mutated = mutated.replace(
+        verify_marker,
+        verify_marker + "    permissions:\n      id-token: write\n",
+        1,
+    )
+    workflow.write_text(mutated, encoding="utf-8")
 
     result = _run_policy(workspace)
 
