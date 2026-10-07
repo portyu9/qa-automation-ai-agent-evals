@@ -45,7 +45,7 @@ new record rather than rewriting the accepted record.
 The gate strengthens repository decision provenance without changing evaluator authority, evidence
 roots, BLOCKED versus FAIL, release artifact provenance, or live GitHub administration. CI self-tests
 no-ADR failure, successful newly added ADR handling, historical-ADR edits, rename handling, and
-malformed diff status behavior, ADR-only rewrites, and attempts to pair an accepted-ADR mutation with\na new ADR.\n
+malformed diff status behavior, ADR-only rewrites, and attempts to pair an accepted-ADR mutation\nwith a new ADR.\n
 This ADR also authorizes the #329 governance additions that introduce the policy itself.
 
 ## Non-claims
