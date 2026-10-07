@@ -552,7 +552,9 @@ def _contains_credential(
 
 def _sensitive_key(key: str) -> bool:
     normalized = re.sub(r"[^a-z0-9]", "", key.casefold())
-    return any(part in normalized for part in _SENSITIVE_KEY_PARTS)
+    return normalized in _SENSITIVE_KEY_PARTS or any(
+        normalized.endswith(part) for part in _SENSITIVE_KEY_PARTS
+    )
 
 
 def _string_has_credential(value: str) -> bool:
