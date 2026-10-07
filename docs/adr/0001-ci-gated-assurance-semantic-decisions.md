@@ -31,6 +31,16 @@ architecture/security/limitations/release-provenance/compatibility/deprecation c
 cannot broaden those assurance claims without a new decision record. Changing what counts as
 assurance-semantic therefore requires another append-only ADR.
 
+One narrow automation exception preserves the repository's already accepted Dependabot action-pin
+lane without creating an author-controlled bypass. The validator requires the immutable GitHub actor
+to be exactly dependabot[bot], requires every governed change to be an in-place file under
+.github/workflows/, and inspects the exact base-to-head patch. Only one-for-one replacements of the
+same action identity from one immutable 40-hex SHA to a different SHA with an advancing semantic
+version comment may proceed without a new ADR. Any other changed line, actor, path shape, rename,
+creation, deletion, or mixed governed change falls back to the normal ADR requirement. Python
+dependency and reviewed compatibility-lock churn remain governed by the repository's separate
+dependency/compatibility controls rather than by ADR path matching.
+
 ## Consequences
 
 Small changes inside governed source areas may need an ADR even when an author considers them
@@ -45,7 +55,9 @@ new record rather than rewriting the accepted record.
 The gate strengthens repository decision provenance without changing evaluator authority, evidence
 roots, BLOCKED versus FAIL, release artifact provenance, or live GitHub administration. CI self-tests
 no-ADR failure, successful newly added ADR handling, historical-ADR edits, rename handling, and
-malformed diff status behavior, ADR-only rewrites, and attempts to pair an accepted-ADR mutation\nwith a new ADR.\n
+malformed diff status behavior, ADR-only rewrites, attempts to pair an accepted-ADR mutation with
+a new ADR, and the bounded action-pin parser versus a non-action workflow mutation.
+
 This ADR also authorizes the #329 governance additions that introduce the policy itself.
 
 ## Non-claims
