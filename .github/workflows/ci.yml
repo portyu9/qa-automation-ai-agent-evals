@@ -75,7 +75,10 @@ jobs:
           set -euo pipefail
           git diff --name-status "$BASE_SHA...$HEAD_SHA" > "$RUNNER_TEMP/semantic-adr-changes.txt"
           python .github/scripts/validate_semantic_adr.py \
-            --changed-files "$RUNNER_TEMP/semantic-adr-changes.txt"
+            --changed-files "$RUNNER_TEMP/semantic-adr-changes.txt" \
+            --actor "${{ github.actor }}" \
+            --base-sha "$BASE_SHA" \
+            --head-sha "$HEAD_SHA"
       - name: Validate mandatory security scanner stack
         run: python .github/scripts/validate_security_stack.py
       - name: Install exact hash-checked semantic parser tools
