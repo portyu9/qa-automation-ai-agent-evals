@@ -4,7 +4,6 @@
   "governed_prefixes": [
     ".github/scripts/",
     ".github/workflows/",
-    "requirements/compatibility/",
     "src/agent_evals/adapters/",
     "src/agent_evals/adversarial/",
     "src/agent_evals/assurance/",
@@ -39,7 +38,6 @@
     "docs/LIMITATIONS.md",
     "docs/REPOSITORY_GOVERNANCE.md",
     "docs/SECURITY.md",
-    "pyproject.toml",
     "src/agent_evals/_receipt_validation.py",
     "src/agent_evals/_strict_json.py",
     "src/agent_evals/authority.py",
@@ -50,5 +48,10 @@
     "src/agent_evals/operator.py",
     "src/agent_evals/receipts.py",
     "src/agent_evals/verification.py"
-  ]
+  ],
+  "automation_exemption": {
+    "actor": "dependabot[bot]",
+    "kind": "github-actions-immutable-pin-only",
+    "path_prefix": ".github/workflows/"
+  }
 }
