@@ -180,9 +180,7 @@ def validate_pypi_dispatch_event(
 ) -> tuple[str, str]:
     repo = event.get("repository")
     if event.get("action") != PYPI_DISPATCH_TYPE:
-        raise ReleaseCandidateError(
-            "repository_dispatch action must be pypi-publish-request"
-        )
+        raise ReleaseCandidateError("repository_dispatch action must be pypi-publish-request")
     if type(repo) is not dict or repo.get("full_name") != repository:
         raise ReleaseCandidateError(
             "PyPI repository_dispatch repository does not match expected repository"
@@ -194,9 +192,7 @@ def validate_pypi_dispatch_event(
     require_sha(event_sha, "PyPI dispatch workflow SHA")
     payload = event.get("client_payload")
     if type(payload) is not dict:
-        raise ReleaseCandidateError(
-            "PyPI repository_dispatch client_payload must be an object"
-        )
+        raise ReleaseCandidateError("PyPI repository_dispatch client_payload must be an object")
     _require_exact_keys(
         payload,
         {"version_tag", "commit_sha"},
@@ -403,9 +399,7 @@ def fetch_pyproject(api_url: str, repository: str, commit_sha: str, token: str) 
     return data
 
 
-def fetch_release(
-    api_url: str, repository: str, version_tag: str, token: str
-) -> dict[str, Any]:
+def fetch_release(api_url: str, repository: str, version_tag: str, token: str) -> dict[str, Any]:
     encoded = urllib.parse.quote(require_tag(version_tag), safe="")
     release = _request_json(
         _api_url(api_url, repository, f"releases/tags/{encoded}"),
@@ -534,9 +528,7 @@ def validate_pypi_release(
             object_pairs_hook=_strict_object,
         )
     except (OSError, UnicodeError, json.JSONDecodeError) as exc:
-        raise ReleaseCandidateError(
-            "PyPI publication event file is not valid UTF-8 JSON"
-        ) from exc
+        raise ReleaseCandidateError("PyPI publication event file is not valid UTF-8 JSON") from exc
     if type(event) is not dict:
         raise ReleaseCandidateError("PyPI publication event root must be an object")
 
@@ -854,15 +846,12 @@ def self_test() -> None:
             ],
         },
     }
-    assert (
-        validate_pypi_release_event(
-            release_event,
-            repository=repo,
-            workflow_ref="refs/tags/v1.2.3",
-            event_sha=sha,
-        )
-        == ("v1.2.3", sha)
-    )
+    assert validate_pypi_release_event(
+        release_event,
+        repository=repo,
+        workflow_ref="refs/tags/v1.2.3",
+        event_sha=sha,
+    ) == ("v1.2.3", sha)
     try:
         validate_pypi_release_event(
             dict(release_event, action="edited"),
@@ -913,9 +902,7 @@ def self_test() -> None:
         except ReleaseCandidateError:
             pass
         else:
-            raise ReleaseCandidateError(
-                "self-test accepted invalid PyPI repository_dispatch event"
-            )
+            raise ReleaseCandidateError("self-test accepted invalid PyPI repository_dispatch event")
     try:
         validate_pypi_dispatch_event(
             pypi_dispatch_event,
@@ -926,9 +913,7 @@ def self_test() -> None:
     except ReleaseCandidateError:
         pass
     else:
-        raise ReleaseCandidateError(
-            "self-test accepted non-default-branch PyPI dispatch"
-        )
+        raise ReleaseCandidateError("self-test accepted non-default-branch PyPI dispatch")
 
     print("release candidate self-test: ok")
 
