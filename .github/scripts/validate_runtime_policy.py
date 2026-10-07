@@ -120,6 +120,20 @@ if (
 if set(allowed_licenses) & set(denied_licenses):
     fail("dependency license allowlist and denylist must not overlap")
 validate_action_pins(workflows)
+governance_validator = Path(".github/scripts/validate_governance_policy.py")
+if not governance_validator.is_file():
+    fail("repository must contain .github/scripts/validate_governance_policy.py")
+governance_result = subprocess.run(
+    [sys.executable, str(governance_validator)],
+    check=False,
+    capture_output=True,
+    text=True,
+)
+if governance_result.returncode != 0:
+    fail(
+        "repository governance contract failed: "
+        f"{governance_result.stderr.strip() or governance_result.stdout.strip()}"
+    )
 lock_validator = Path(".github/scripts/validate_ci_locks.py")
 if not lock_validator.is_file():
     fail("repository must contain .github/scripts/validate_ci_locks.py")
@@ -261,6 +275,8 @@ if qualified != QUALITY_PYTHONS:
 policy = job_block(workflow, "policy", "quality")
 if "python .github/scripts/validate_runtime_policy.py" not in policy:
     fail("policy job must execute validate_runtime_policy.py")
+if "python .github/scripts/validate_governance_policy.py" not in policy:
+    fail("policy job must execute the repository governance validator")
 if "python .github/scripts/validate_security_stack.py" not in policy:
     fail("policy job must execute the mandatory security scanner-stack validator")
 if "python .github/scripts/validate_workflow_graph.py --self-test" not in policy:

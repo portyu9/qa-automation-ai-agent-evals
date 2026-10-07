@@ -51,7 +51,15 @@ Contributions must preserve these rules unless an explicit, reviewed architectur
 - replay is historical verification/regrading, not a claim that external side effects or provider behavior were rerun;
 - hashes prove content integrity/identity only where documented; they are not signatures or authenticated provenance.
 
-Read `docs/ARCHITECTURE.md`, `docs/SECURITY.md`, and `docs/LIMITATIONS.md` before changing a trust boundary.
+Read `docs/ARCHITECTURE.md`, `docs/SECURITY.md`, `docs/LIMITATIONS.md`, and `docs/REPOSITORY_GOVERNANCE.md` before changing a trust boundary.
+
+## Repository governance
+
+Repository-owned governance intent is versioned in `.github/repository-governance.json` and validated in CI. It does not attest live GitHub ruleset state.
+
+Trust-critical changes must identify whether they alter review authority, CODEOWNERS routing, protected-history policy, release/CI authority, or an external administration prerequisite. Independent CODEOWNER review is currently BLOCKED by the single-maintainer topology; do not describe self-review or committed policy text as equivalent to a distinct live reviewer approval.
+
+The signed-history decision is to require signatures on protected history once the live ruleset is updated through an authorized administration surface. Auto-merge and update-branch support remain deferred until the live approval/CODEOWNER/stale-review/thread-resolution controls are authoritative.
 
 ## Evidence and schema changes
 

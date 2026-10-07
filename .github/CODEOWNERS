@@ -1,5 +1,15 @@
+# Current ownership is single-maintainer. This routes review but does not satisfy
+# independent CODEOWNER approval until a second distinct trust maintainer exists.
 * @portyu9
+
 /.github/ @portyu9
+/pyproject.toml @portyu9
+/requirements/ @portyu9
 /src/agent_evals/contracts/ @portyu9
+/src/agent_evals/evidence/ @portyu9
 /src/agent_evals/gates/ @portyu9
+/src/agent_evals/runtime/ @portyu9
 /src/agent_evals/security/ @portyu9
+/src/agent_evals/semantic/ @portyu9
+/docs/SECURITY.md @portyu9
+/docs/LIMITATIONS.md @portyu9

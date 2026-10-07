@@ -24,6 +24,12 @@ Tracks #192 item(s):
 - [ ] Authorization/resource/approval/handoff changes include adversarial negative tests.
 - [ ] New GitHub Actions are full commit-SHA pinned and workflow permissions remain least-privilege.
 
+## Repository governance review
+
+- [ ] This change does not alter CODEOWNERS, CI/release authority, protected-history policy, or live-admin prerequisites.
+- [ ] Or: it does alter repository governance, and the PR updates `.github/repository-governance.json`, `docs/REPOSITORY_GOVERNANCE.md`, and executable policy checks as required.
+- [ ] I have not represented repository-owned policy as proof that a live GitHub administration setting is enabled.
+
 ## Statistical review
 
 - [ ] No statistical contract changes.
