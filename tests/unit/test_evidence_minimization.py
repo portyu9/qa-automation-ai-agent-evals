@@ -300,9 +300,7 @@ def test_minimization_receipt_detects_tampering_and_has_no_raw_fingerprint() -> 
 
 def test_local_store_round_trip_persists_only_minimized_evidence(tmp_path: Path) -> None:
     secret = "ghp_abcdefghijklmnop"
-    policy = EvidenceMinimizationPolicy(
-        operator_pii_paths=("/final_state/person/email",)
-    )
+    policy = EvidenceMinimizationPolicy(operator_pii_paths=("/final_state/person/email",))
     store = LocalEvidenceStore(
         tmp_path / "evidence",
         minimization_policy=policy,
