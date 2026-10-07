@@ -73,7 +73,8 @@ def apply_version(pyproject: Path, target_version: str) -> bool:
         return False
 
     text = pyproject.read_text(encoding="utf-8")
-    pattern = re.compile(r'(?ms)^(\[project\]\n(?:(?!^\[).)*?^version = ")[^"]+(")    matches = list(pattern.finditer(text))
+    pattern = re.compile(r'(?ms)^(\[project\]\n(?:(?!^\[).)*?^version = ")[^"]+(")$')
+    matches = list(pattern.finditer(text))
     if len(matches) != 1:
         raise ReleaseVersionError("pyproject.toml must contain exactly one [project] version line")
     updated = pattern.sub(rf"\g<1>{target_version}\g<2>", text, count=1)
