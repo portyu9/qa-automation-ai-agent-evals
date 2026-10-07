@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 from dataclasses import dataclass, field
 from typing import Literal
 
@@ -37,12 +38,15 @@ class _MemoryBackend(EvidenceBlobBackend):
     deletion_resistant: bool = False
     advertised_worm: bool = False
     corrupt_put_call: int | None = None
+    drop_put_call: int | None = None
     put_calls: int = 0
 
     def put_if_absent(self, key: str, content: bytes) -> bool:
         self.put_calls += 1
         if key in self.objects:
             return False
+        if self.drop_put_call == self.put_calls:
+            return True
         stored = bytes(content)
         if self.corrupt_put_call == self.put_calls:
             stored += b"controlled-corruption"
@@ -132,6 +136,9 @@ def test_backend_probe_credits_worm_only_from_failed_delete_and_exact_readback()
 
     assert receipt.deletion_resistance_observed is True
     assert receipt.sentinel_sha256 in backend.objects
+    assert receipt.sentinel_envelope_sha256 == hashlib.sha256(
+        backend.objects[receipt.sentinel_sha256]
+    ).hexdigest()
     assert ContentAddressedEvidenceStore(backend).read(receipt.sentinel_sha256).final_state[
         "backend_probe"
     ] is True
@@ -251,6 +258,18 @@ def test_replication_rejects_corrupted_target_readback() -> None:
             source,
             {"replica-corrupt": target},
             challenge="corrupt-check",
+        )
+
+
+def test_replication_rejects_missing_target_readback() -> None:
+    _, source = _source("missing-target")
+    target = _MemoryBackend(drop_put_call=3)
+
+    with pytest.raises(EvidenceIntegrityError, match="replica readback backend read failed"):
+        replicate_backup(
+            source,
+            {"replica-missing": target},
+            challenge="missing-check",
         )
 
 
