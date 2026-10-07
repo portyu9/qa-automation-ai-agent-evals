@@ -359,7 +359,7 @@ def self_test(policy: Policy) -> None:
         head_sha="1" * 40,
     ):
         raise AdrPolicyError("non-Dependabot actor bypassed the ADR requirement")
-    mixed_change = workflow_change + (Change(status="M", paths=("pyproject.toml",)),)
+    mixed_change = (*workflow_change, Change(status="M", paths=("pyproject.toml",)))
     if _dependabot_action_pin_exempt(
         policy,
         mixed_change,
