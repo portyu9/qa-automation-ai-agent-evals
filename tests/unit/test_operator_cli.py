@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 from pathlib import Path
 
@@ -15,6 +16,7 @@ from agent_evals.contracts.models import (
     SubjectFingerprint,
 )
 from agent_evals.evidence.models import EvidenceEvent, EvidenceKind, TrialEvidence
+from agent_evals.evidence.store import LocalEvidenceStore, evidence_record_key
 
 runner = CliRunner()
 
@@ -198,6 +200,62 @@ def test_store_verify_all_accepts_empty_store_and_flags_lock(tmp_path: Path) -> 
     dirty = runner.invoke(cli.app, ["store", "verify-all", str(root)])
     assert dirty.exit_code == cli.EXIT_INTEGRITY
     assert "operator review" in dirty.stdout
+
+
+def test_store_lock_inspect_requires_exact_confirmation_before_quarantine(
+    tmp_path: Path,
+) -> None:
+    root = tmp_path / "store"
+    store = LocalEvidenceStore(root)
+    item = TrialEvidence(
+        trial_id="operator-lock",
+        subject_identity="a" * 64,
+        scenario_identity="b" * 64,
+        final_state={"status": "ok"},
+    )
+    key = evidence_record_key(item)
+    paths = store._paths(key, create_bucket=True)
+    fd = store._acquire_lock(paths.lock)
+    os.close(fd)
+
+    inspected = runner.invoke(cli.app, ["store", "lock-inspect", str(root), key])
+    assert inspected.exit_code == 0
+    observation = json.loads(inspected.stdout)
+    assert observation["status"] == "observed"
+    assert observation["record_key"] == key
+    assert observation["stale"] is None
+
+    rejected = runner.invoke(
+        cli.app,
+        [
+            "store",
+            "lock-quarantine",
+            str(root),
+            key,
+            "--confirm-observation-root",
+            "0" * 64,
+        ],
+    )
+    assert rejected.exit_code == cli.EXIT_VALIDATION
+    assert paths.lock.exists()
+
+    quarantined = runner.invoke(
+        cli.app,
+        [
+            "store",
+            "lock-quarantine",
+            str(root),
+            key,
+            "--confirm-observation-root",
+            observation["observation_root"],
+        ],
+    )
+    assert quarantined.exit_code == 0
+    payload = json.loads(quarantined.stdout)
+    assert payload["status"] == "quarantined"
+    assert payload["observation_root"] == observation["observation_root"]
+    assert not paths.lock.exists()
+    assert (root / "quarantine" / "locks" / payload["quarantine_name"]).is_file()
 
 
 def test_versioned_config_and_deep_doctor(tmp_path: Path) -> None:

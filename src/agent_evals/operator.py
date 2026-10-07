@@ -27,6 +27,7 @@ from agent_evals.assurance.report import AssuranceReport
 from agent_evals.assurance.report_v7 import AssuranceReportV7
 from agent_evals.contracts.models import EvaluationScenario, SubjectFingerprint
 from agent_evals.evidence.models import EvidenceEvent, TrialEvidence, TrialVerdict
+from agent_evals.evidence.resilience import inspect_record_lock, quarantine_record_lock
 from agent_evals.evidence.store import LocalEvidenceStore
 from agent_evals.minimization.delta import ddmin
 from agent_evals.runtime.evaluator import EvaluatedTrial, TrialRunner
@@ -258,6 +259,58 @@ def inspect_evidence(path: Path, *, include_payloads: bool) -> dict[str, Any]:
             "the complete evidence envelope was validated before inspection",
             "event digests are shown from normalized validated events",
             "event payloads remain omitted unless explicitly requested",
+        ],
+    }
+
+
+def inspect_store_lock(root: Path, record_key: str) -> dict[str, Any]:
+    """Inspect one exact lock without inferring staleness or writer identity."""
+
+    store = LocalEvidenceStore(root)
+    observation = inspect_record_lock(store, record_key)
+    return {
+        "status": "observed",
+        "record_key": observation.record_key,
+        "device": observation.device,
+        "inode": observation.inode,
+        "size_bytes": observation.size_bytes,
+        "mtime_ns": observation.mtime_ns,
+        "observation_root": observation.observation_root,
+        "stale": None,
+        "_proof": [
+            "the lock was opened without following symlinks and revalidated against its path identity",
+            "device/inode/size/mtime are filesystem observations, not authenticated writer identity",
+            "no staleness decision or cleanup was performed",
+        ],
+    }
+
+
+def quarantine_store_lock(
+    root: Path,
+    record_key: str,
+    *,
+    confirm_observation_root: str,
+) -> dict[str, Any]:
+    """Quarantine only the exact lock identity explicitly confirmed by the operator."""
+
+    store = LocalEvidenceStore(root)
+    observation = inspect_record_lock(store, record_key)
+    receipt = quarantine_record_lock(
+        store,
+        observation,
+        confirm_observation_root=confirm_observation_root,
+    )
+    return {
+        "status": "quarantined",
+        "record_key": receipt.record_key,
+        "observation_root": receipt.observation_root,
+        "quarantine_name": receipt.quarantine_name,
+        "receipt_root": receipt.receipt_root,
+        "_proof": [
+            "the active lock was re-observed immediately before recovery",
+            "the caller confirmed the exact observation root rather than an age/PID heuristic",
+            "a no-clobber audit copy was materialized before the active lock path was removed",
+            "the quarantine receipt is an integrity record, not writer authentication",
         ],
     }
 

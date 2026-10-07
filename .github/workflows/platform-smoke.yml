@@ -12,6 +12,7 @@ on:
       - "src/agent_evals/**"
       - "tests/unit/test_strict_json.py"
       - "tests/unit/test_oracles.py"
+      - "tests/unit/test_evidence_store_platform_contract.py"
   push:
     branches: [main]
   schedule:
@@ -69,3 +70,4 @@ jobs:
           -q
           tests/unit/test_strict_json.py
           tests/unit/test_oracles.py
+          tests/unit/test_evidence_store_platform_contract.py

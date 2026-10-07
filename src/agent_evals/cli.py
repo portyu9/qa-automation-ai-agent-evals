@@ -187,6 +187,38 @@ def evidence_inspect(
     _dispatch(ctx, lambda: operator.inspect_evidence(path, include_payloads=include_payloads))
 
 
+@store_app.command("lock-inspect")
+def store_lock_inspect(ctx: typer.Context, root: Path, record_key: str) -> None:
+    """Inspect one exact record lock without deciding that it is stale."""
+
+    _dispatch(ctx, lambda: operator.inspect_store_lock(root, record_key))
+
+
+@store_app.command("lock-quarantine")
+def store_lock_quarantine(
+    ctx: typer.Context,
+    root: Path,
+    record_key: str,
+    confirm_observation_root: Annotated[
+        str,
+        typer.Option(
+            "--confirm-observation-root",
+            help="Exact observation_root returned by store lock-inspect.",
+        ),
+    ],
+) -> None:
+    """Quarantine only the exact previously inspected lock identity."""
+
+    _dispatch(
+        ctx,
+        lambda: operator.quarantine_store_lock(
+            root,
+            record_key,
+            confirm_observation_root=confirm_observation_root,
+        ),
+    )
+
+
 @store_app.command("verify-all")
 def store_verify_all(ctx: typer.Context, root: Path) -> None:
     """Verify every immutable local evidence-store record and report partial/locked entries."""
