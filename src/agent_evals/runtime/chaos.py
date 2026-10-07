@@ -12,7 +12,7 @@ import json
 from enum import StrEnum
 from typing import Literal, Self
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, model_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, field_serializer, model_validator
 
 from agent_evals._receipt_validation import (
     is_receipt_construction,
@@ -58,6 +58,10 @@ class ChaosPolicy(BaseModel):
         strict=True,
     )
     require_secret_suppression: bool = Field(default=True, strict=True)
+
+    @field_serializer("required_domains", when_used="json")
+    def serialize_required_domains(self, value: frozenset[ChaosDomain]) -> list[str]:
+        return sorted(item.value for item in value)
 
 
 class ChaosObservation(BaseModel):
