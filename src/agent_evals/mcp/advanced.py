@@ -170,9 +170,7 @@ class MCPRemotePolicy(BaseModel):
     require_dns_on_healthy: bool = Field(default=True, strict=True)
 
     @field_serializer("required_conditions", when_used="json")
-    def serialize_required_conditions(
-        self, value: frozenset[MCPRemoteCondition]
-    ) -> list[str]:
+    def serialize_required_conditions(self, value: frozenset[MCPRemoteCondition]) -> list[str]:
         return sorted(item.value for item in value)
 
     @model_validator(mode="after")
@@ -674,9 +672,7 @@ class MCPHostileServerBudget(BaseModel):
     max_protocol_messages: int = Field(default=1_000, ge=1, le=100_000, strict=True)
 
     @field_serializer("required_conditions", when_used="json")
-    def serialize_required_conditions(
-        self, value: frozenset[MCPRemoteCondition]
-    ) -> list[str]:
+    def serialize_required_conditions(self, value: frozenset[MCPRemoteCondition]) -> list[str]:
         return sorted(item.value for item in value)
 
     @model_validator(mode="after")
