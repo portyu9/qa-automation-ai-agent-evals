@@ -46,29 +46,6 @@ Version the release statement to `agent-evals/release-statement/v2` for new trus
 The existing GitHub Release publisher remains a separate write-capable workflow and does not gain
 `id-token: write` or PyPI publication authority.
 
-
-### Implementation amendment — bot-created Release handoff
-
-The first real `v0.1.0` publication demonstrated an execution-platform constraint that was not
-observable from static workflow configuration: a Release created by the retained-byte publisher with
-the repository `GITHUB_TOKEN` does not emit the ordinary recursive `release: published` workflow
-run. That transport assumption is therefore superseded.
-
-The accepted implementation keeps the published GitHub Release as the prerequisite authority but
-uses a default-branch-bound `repository_dispatch` type `pypi-publish-request` as the bot-to-bot
-handoff after `gh release create` succeeds. The handoff contains only the validated version tag and
-commit SHA. The PyPI verifier executes trusted `main` code, fetches the actual Release by tag,
-requires it to be non-draft/non-prerelease with the retained evidence asset set, resolves the tag to
-the authorized commit, and then performs the same evidence/provenance checks before the isolated OIDC
-job can run. Native `release: published` remains supported for Releases created outside the
-repository `GITHUB_TOKEN` path.
-
-This amendment does not give the Release publisher OIDC authority and does not make the dispatch
-itself trusted evidence. The published Release plus reverified retained evidence remain the
-prerequisite. The already-attested v2 value `release-event-oidc-only` is preserved byte-for-byte;
-the implementation correction is explicit here rather than rewriting historical release-statement
-material.
-
 ## Consequences
 
 Repository-side PyPI Trusted Publishing is now configured, but actual activation still requires the
