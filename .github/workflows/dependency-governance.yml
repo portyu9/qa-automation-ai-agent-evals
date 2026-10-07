@@ -27,6 +27,7 @@ on:
       - '.github/workflows/ci.yml'
       - '.github/workflows/codeql.yml'
       - '.github/workflows/security-scorecard.yml'
+      - '.github/workflows/security.yml'
       - '.github/scripts/generate_ci_lock.py'
       - '.github/scripts/compact_compatibility_lock.py'
       - '.github/scripts/validate_ci_locks.py'
