@@ -162,13 +162,55 @@ if compatibility_result.returncode != 0:
 project = pyproject["project"]
 pytest_options = pyproject.get("tool", {}).get("pytest", {}).get("ini_options", {})
 pytest_addopts = pytest_options.get("addopts")
-if not isinstance(pytest_addopts, str) or "not fuzz" not in pytest_addopts:
-    fail("ordinary pytest addopts must exclude the deep fuzz marker")
-pytest_markers = pytest_options.get("markers")
-if not isinstance(pytest_markers, list) or not any(
-    isinstance(marker, str) and marker.startswith("fuzz:") for marker in pytest_markers
+if not isinstance(pytest_addopts, str):
+    fail("ordinary pytest addopts must be a string")
+for required_exclusion, label in (
+    ("not fuzz", "deep fuzz"),
+    ("not live", "live-provider"),
 ):
-    fail("pyproject.toml must register the fuzz marker")
+    if required_exclusion not in pytest_addopts:
+        fail(f"ordinary pytest addopts must exclude the {label} marker")
+pytest_markers = pytest_options.get("markers")
+if not isinstance(pytest_markers, list):
+    fail("pyproject.toml must register pytest markers")
+for marker_prefix in ("fuzz:", "live:", "network_loopback:", "mcp_remote:", "mcp_oauth:"):
+    if not any(
+        isinstance(marker, str) and marker.startswith(marker_prefix) for marker in pytest_markers
+    ):
+        fail(f"pyproject.toml must register the {marker_prefix[:-1]} marker")
+
+network_guard_path = Path("tests/conftest.py")
+try:
+    network_guard = network_guard_path.read_text(encoding="utf-8")
+except (OSError, UnicodeError) as exc:
+    fail(f"cannot read pytest network guard: {type(exc).__name__}")
+for required in (
+    'get_closest_marker("live")',
+    'get_closest_marker("network_loopback")',
+    "socket.AF_INET",
+    "socket.AF_INET6",
+    "_guarded_connect",
+    "_guarded_bind",
+    "_guarded_sendto",
+    "_guarded_getaddrinfo",
+):
+    if required not in network_guard:
+        fail(f"pytest network guard is missing required contract text: {required}")
+
+for path, domain_marker in (
+    (Path("tests/integration/test_mcp_remote_auth.py"), "pytest.mark.mcp_remote"),
+    (Path("tests/integration/test_mcp_oauth_flow.py"), "pytest.mark.mcp_oauth"),
+):
+    try:
+        source = path.read_text(encoding="utf-8")
+    except (OSError, UnicodeError) as exc:
+        fail(f"cannot read loopback test classification {path.as_posix()!r}: {type(exc).__name__}")
+    if domain_marker not in source:
+        fail(f"{path.as_posix()} must retain its protocol-specific marker")
+    if "pytest.mark.network_loopback" not in source:
+        fail(f"{path.as_posix()} must opt into network_loopback authority")
+    if "pytest.mark.live" in source:
+        fail(f"{path.as_posix()} must not widen deterministic loopback authority to live")
 
 deep_fuzz_path = Path(".github/workflows/deep-fuzz.yml")
 deep_fuzz = workflows.get(deep_fuzz_path)

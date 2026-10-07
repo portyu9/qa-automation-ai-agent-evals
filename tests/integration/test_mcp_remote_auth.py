@@ -11,7 +11,7 @@ from agent_evals.mcp import (
     MCPRemoteAuthReceipt,
 )
 
-pytestmark = pytest.mark.mcp_remote
+pytestmark = (pytest.mark.mcp_remote, pytest.mark.network_loopback)
 
 
 def make_policy(**overrides: object) -> MCPRemoteAuthPolicy:

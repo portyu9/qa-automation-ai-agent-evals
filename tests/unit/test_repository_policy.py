@@ -17,6 +17,7 @@ def _policy_workspace(tmp_path: Path) -> Path:
     (workspace / ".github/coverage").mkdir(parents=True)
     (workspace / ".github/scripts").mkdir(parents=True)
     (workspace / "docs").mkdir(parents=True)
+    (workspace / "tests/integration").mkdir(parents=True)
     (workspace / "requirements/locks").mkdir(parents=True)
     (workspace / "requirements/compatibility").mkdir(parents=True)
     (workspace / "src/agent_evals").mkdir(parents=True)
@@ -75,6 +76,15 @@ def _policy_workspace(tmp_path: Path) -> Path:
         workspace / ".github/coverage/thresholds.json",
     )
     shutil.copy2(_PROJECT_ROOT / "src/agent_evals/py.typed", workspace / "src/agent_evals/py.typed")
+    shutil.copy2(_PROJECT_ROOT / "tests/conftest.py", workspace / "tests/conftest.py")
+    shutil.copy2(
+        _PROJECT_ROOT / "tests/integration/test_mcp_remote_auth.py",
+        workspace / "tests/integration/test_mcp_remote_auth.py",
+    )
+    shutil.copy2(
+        _PROJECT_ROOT / "tests/integration/test_mcp_oauth_flow.py",
+        workspace / "tests/integration/test_mcp_oauth_flow.py",
+    )
     return workspace
 
 
@@ -484,3 +494,47 @@ def test_policy_rejects_publish_workflow_minting_fresh_attestation(tmp_path: Pat
 
     assert result.returncode != 0
     assert "verify retained provenance without minting new attestations" in result.stderr
+
+
+def test_policy_rejects_missing_network_loopback_marker_registration(tmp_path: Path) -> None:
+    workspace = _policy_workspace(tmp_path)
+    pyproject = workspace / "pyproject.toml"
+    source = pyproject.read_text(encoding="utf-8")
+    pyproject.write_text(
+        "\n".join(line for line in source.splitlines() if "network_loopback:" not in line) + "\n",
+        encoding="utf-8",
+    )
+
+    result = _run_policy(workspace)
+
+    assert result.returncode != 0
+    assert "must register the network_loopback marker" in result.stderr
+
+
+def test_policy_rejects_live_tests_from_ordinary_pytest_selection(tmp_path: Path) -> None:
+    workspace = _policy_workspace(tmp_path)
+    pyproject = workspace / "pyproject.toml"
+    source = pyproject.read_text(encoding="utf-8")
+    assert " and not live" in source
+    pyproject.write_text(source.replace(" and not live", "", 1), encoding="utf-8")
+
+    result = _run_policy(workspace)
+
+    assert result.returncode != 0
+    assert "must exclude the live-provider marker" in result.stderr
+
+
+def test_policy_rejects_mcp_remote_without_loopback_authority(tmp_path: Path) -> None:
+    workspace = _policy_workspace(tmp_path)
+    test_path = workspace / "tests/integration/test_mcp_remote_auth.py"
+    source = test_path.read_text(encoding="utf-8")
+    assert ", pytest.mark.network_loopback" in source
+    test_path.write_text(
+        source.replace(", pytest.mark.network_loopback", "", 1),
+        encoding="utf-8",
+    )
+
+    result = _run_policy(workspace)
+
+    assert result.returncode != 0
+    assert "must opt into network_loopback authority" in result.stderr
