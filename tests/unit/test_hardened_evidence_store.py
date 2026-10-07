@@ -55,12 +55,7 @@ def test_hardened_store_preserves_portable_manifest_and_payload_identity(tmp_pat
 def test_hardened_store_rejects_symlink_record_bucket(tmp_path: Path) -> None:
     hardened = HardenedPosixEvidenceStore(tmp_path / "hardened")
     item = _evidence()
-    key = item.trial_id
-    record_key = __import__(
-        "agent_evals.evidence.store",
-        fromlist=["evidence_record_key"],
-    ).evidence_record_key(item)
-    del key
+    record_key = evidence_record_key(item)
 
     external = tmp_path / "external"
     external.mkdir()
@@ -127,8 +122,6 @@ def test_hardened_store_artifact_operations_are_anchored_to_directory_fds(
 
 
 def test_hardened_store_concurrent_record_keys_remain_independent(tmp_path: Path) -> None:
-    from concurrent.futures import ThreadPoolExecutor
-
     hardened = HardenedPosixEvidenceStore(tmp_path / "hardened")
     items = tuple(_evidence(f"hardened-{index}") for index in range(24))
 
