@@ -4,6 +4,14 @@ This document is intentionally strict. Repository claims must never become stron
 
 ## Current non-claims
 
+### Local evidence-store hardening is not filesystem or writer attestation
+
+The portable `LocalEvidenceStore` provides immutable no-clobber publication, manifest-last commit semantics, bounded strict reads, symlink rejection/no-follow where supported, private newly created POSIX directories, and lock replacement protection. The optional `HardenedPosixEvidenceStore` additionally anchors trust-critical bucket/artifact operations to opened POSIX directory descriptors when the runtime exposes the required primitives.
+
+Those mechanisms reduce local filesystem ambiguity; they do not authenticate the process/user that wrote an otherwise valid record, prove malicious intent, provide distributed/NFS/object-store locking or linearizability, establish WORM retention, attest a remote storage service, or prove crash-consistency guarantees for arbitrary filesystem/hardware stacks. Explicit hardened mode fails closed when its POSIX capability set is unavailable rather than silently claiming an equivalent guarantee.
+
+Lock inspection/quarantine is operator-confirmed and identity-bound. Device/inode/size/mtime facts and their integrity roots do not prove a lock is stale or identify its creator. Recovery moves the exact revalidated lock into an audit quarantine before active-path cleanup; it is not an automatic stale-lock heuristic.
+
 ### Credentialed live-provider assurance is a bounded historical canary
 
 The OpenAI integration is pinned to `openai-agents`. Ordinary CI continues to exercise the real SDK runner/tool/handoff/approval/context loop deterministically with `agents.testing.ScriptedModel` and no provider API call.
