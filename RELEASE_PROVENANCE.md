@@ -59,15 +59,17 @@ rebuilds packages, or drops tag verification. Ordinary CI self-tests the release
 release-version, and canonical release-statement validators.
 
 PyPI publication is a separate authority domain. `Publish package to PyPI` runs only for a
-non-draft, non-prerelease GitHub Release `published` event, has only `contents: read` plus
-`id-token: write`, and is bound to the GitHub environment `pypi`. It checks out `main`, never
-the release tag, under OIDC authority. The published tag/commit is treated only as data. Before the
-PyPA publisher runs, default-branch code resolves the tag, requires package/tag equality, downloads
-the Release assets, requires release-statement/v2 with `release-event-oidc-only`, materializes only
-the fixed source-contract files from the attested commit, re-verifies package/SBOM/license/CI
-qualification/release-statement evidence, verifies checksum inventories, and cryptographically
-re-verifies all seven retained subjects against the CI Sigstore bundle. Only the wheel and sdist are
-then isolated into the PyPI upload directory.
+non-draft, non-prerelease GitHub Release `published` event and splits verification from credential
+authority. The verification job has only `contents: read`, checks out `main` rather than the
+release tag, and treats the published tag/commit only as data. Default-branch code resolves the tag,
+requires package/tag equality, downloads the Release assets, requires release-statement/v2 with
+`release-event-oidc-only`, materializes only the fixed source-contract files from the attested
+commit, re-verifies package/SBOM/license/CI qualification/release-statement evidence, verifies
+checksum inventories, and cryptographically re-verifies all seven retained subjects against the CI
+Sigstore bundle. It retains only the verified wheel and sdist in a one-day same-run artifact. A
+separate final job, bound to environment `pypi`, has only `actions: read` plus `id-token: write`,
+does not checkout or execute repository code, downloads that two-file artifact, and invokes the PyPA
+publisher.
 
 The publisher is pinned to
 `pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33`; no `user`,
