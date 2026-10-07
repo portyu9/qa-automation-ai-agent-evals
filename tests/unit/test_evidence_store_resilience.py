@@ -145,13 +145,10 @@ def test_lock_recovery_roots_have_stable_nul_domain_separation() -> None:
     receipt = EvidenceLockQuarantineReceipt.create(
         record_key="a" * 64,
         observation_root=observation.observation_root,
-        quarantine_name=(
-            "a" * 64 + "." + observation.observation_root[:16] + ".lock"
-        ),
+        quarantine_name=("a" * 64 + "." + observation.observation_root[:16] + ".lock"),
     )
     assert (
-        receipt.receipt_root
-        == "e062f639d4f9b07498eb05fe1426e1a421c2d798d3fb3890affef1346df8f8fa"
+        receipt.receipt_root == "e062f639d4f9b07498eb05fe1426e1a421c2d798d3fb3890affef1346df8f8fa"
     )
 
 
