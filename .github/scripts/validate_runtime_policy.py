@@ -567,17 +567,34 @@ if "release:\n    types: [published]" not in publish_pypi:
     fail("publish-pypi must trigger only from a published GitHub Release")
 if "workflow_dispatch:" in publish_pypi or "repository_dispatch:" in publish_pypi:
     fail("publish-pypi must not expose manual or repository-dispatch publication entrypoints")
-if "permissions:\n  contents: read\n  id-token: write" not in publish_pypi:
-    fail("publish-pypi must grant only contents-read plus OIDC id-token write authority")
+if "permissions:\n  contents: read" not in publish_pypi:
+    fail("publish-pypi workflow default authority must remain contents-read only")
+if publish_pypi.count("id-token: write") != 1:
+    fail("publish-pypi must contain exactly one OIDC authority grant")
 for forbidden in ("contents: write", "pull-requests: write", "attestations: write"):
     if forbidden in publish_pypi:
         fail(f"publish-pypi must not gain unrelated write authority: {forbidden}")
-if "environment: pypi" not in publish_pypi:
-    fail("publish-pypi must bind the Trusted Publisher to the pypi environment")
-if "ref: main" not in publish_pypi or "persist-credentials: false" not in publish_pypi:
-    fail("publish-pypi must execute trusted default-branch code only")
-if "ref: ${{ github.sha }}" in publish_pypi:
-    fail("publish-pypi must never checkout release-tag code under OIDC authority")
+
+pypi_verify = job_block(publish_pypi, "verify", "publish")
+pypi_publish = job_block(publish_pypi, "publish", None)
+if "id-token: write" in pypi_verify or "environment: pypi" in pypi_verify:
+    fail("publish-pypi verification job must not receive PyPI environment/OIDC authority")
+if "ref: main" not in pypi_verify or "persist-credentials: false" not in pypi_verify:
+    fail("publish-pypi verification must execute trusted default-branch code only")
+if "ref: ${{ github.sha }}" in pypi_verify:
+    fail("publish-pypi verification must never checkout release-tag code")
+if "name: Publish verified distributions with PyPI OIDC" not in pypi_publish:
+    fail("publish-pypi must retain a dedicated final OIDC publication job")
+if "needs: verify" not in pypi_publish:
+    fail("PyPI OIDC publication must depend on successful non-OIDC verification")
+if "environment: pypi" not in pypi_publish:
+    fail("PyPI OIDC publication must bind the Trusted Publisher to environment pypi")
+if "actions: read" not in pypi_publish or "id-token: write" not in pypi_publish:
+    fail("PyPI publication job must have only artifact-read plus OIDC authority")
+if "actions/checkout@" in pypi_publish or ".github/scripts/" in pypi_publish:
+    fail("PyPI OIDC publication job must not checkout or execute repository code")
+if "actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c" not in pypi_publish:
+    fail("PyPI OIDC publication job must consume only the verified distribution artifact")
 for required in (
     "release_candidate.py validate-pypi",
     "release_statement.py inspect",
@@ -592,6 +609,9 @@ for required in (
     '--signer-workflow "$GITHUB_REPOSITORY/.github/workflows/ci.yml"',
     '--source-ref "refs/heads/main"',
     "pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33",
+    "verified-pypi-dist-${{ github.run_id }}",
+    "actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a",
+    "actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c",
     "packages-dir: pypi-dist",
     "skip-existing: false",
     "attestations: true",
