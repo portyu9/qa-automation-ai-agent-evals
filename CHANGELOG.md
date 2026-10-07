@@ -6,6 +6,12 @@ evidence or authority semantics.
 
 ## Unreleased
 
+### Release automation
+
+- Add deterministic default-branch release-version preparation that emits a validated patch artifact without repository write authority.
+- Add a separate PyPI Trusted Publishing workflow that is triggered only by a published GitHub Release, executes default-branch code only, re-verifies the exact attested release subjects, and uses GitHub OIDC instead of a long-lived PyPI token.
+- Version the canonical release statement to v2 for the OIDC-only PyPI publication contract while retaining exact v1 verification semantics.
+
 ### Governance
 
 - Require append-only architecture decision records (ADRs) for governed assurance-semantic changes.

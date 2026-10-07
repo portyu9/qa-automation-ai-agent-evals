@@ -2,6 +2,14 @@
 
 ## Current stage: retained release subjects, compatibility statement, and CI qualification evidence carry trusted-main OIDC/Sigstore provenance
 
+Release-version preparation is also automated without granting repository write authority. The
+`Prepare release version` workflow accepts only the default-branch-bound `release-preparation`
+repository-dispatch event, validates a canonical stable SemVer target, and emits a canonical
+`agent-evals/release-version-plan/v1` plus a deterministic `pyproject.toml` patch. It does not push
+a branch, create a pull request, mint an OIDC token, or bypass the repository's pull-request rules.
+A same-version request is an explicit `release-current` plan, which supports preparing the initial
+0.1.0 release without inventing a version bump.
+
 The release chain retains the exact wheel and source distribution that the CI package job builds, inspects, and smoke-tests. CI writes `artifact-manifest.json` using the versioned `agent-evals/package-artifact-manifest/v1` contract and uploads the wheel, sdist, and manifest as one run-bound GitHub Actions artifact.
 
 A separate `package-reverify` job downloads that retained artifact, recomputes size and SHA-256 values, rejects unexpected material, and installs both retained distributions without invoking `python -m build`.
@@ -14,7 +22,7 @@ A fresh `release-supply-chain-reverify` job downloads the retained package and s
 
 After `ci-gate` succeeds, the ruleset-bound `Package integrity` job independently requires exact-subject CodeQL success. Only then, and only on a trusted `push` of `refs/heads/main`, `Retain CI qualification evidence` emits canonical `agent-evals/ci-qualification-evidence/v1`. The record binds the repository, exact commit SHA/ref, `CI` workflow name, run ID, run attempt, push event, and the exact logical result set for every required CI dependency plus `ci-gate` and `protected-gate`. Creation fails unless every bound result is `success`. The exact JSON is re-parsed with duplicate-key and canonical-serialization checks and retained as `ci-qualification-<run_id>`; pull-request runs never produce this trusted-main qualification artifact.
 
-A downstream trusted-main `release-statement` job has no OIDC or attestation write authority. It hashes the exact retained wheel, sdist, package manifest, SPDX SBOM, supply-chain evidence, and CI qualification evidence; binds the exact repository/commit/ref/workflow/run identity; derives the expected `v<project.version>` tag and public `requires-python`/runtime dependency contract from `pyproject.toml`; and binds all six reviewed `core`/`mcp`/`openai-mcp` × `minimum`/`latest` Python 3.11 compatibility snapshots by path, header identity, input digest, file digest, and size. The canonical `agent-evals/release-statement/v1` record explicitly states `github_release_object_signature=not-claimed` and `pypi_trusted_publishing=not-enabled`, is reverified from the retained bytes, and is uploaded as `release-statement-<run_id>`.
+A downstream trusted-main `release-statement` job has no OIDC or attestation write authority. It hashes the exact retained wheel, sdist, package manifest, SPDX SBOM, supply-chain evidence, and CI qualification evidence; binds the exact repository/commit/ref/workflow/run identity; derives the expected `v<project.version>` tag and public `requires-python`/runtime dependency contract from `pyproject.toml`; and binds all six reviewed `core`/`mcp`/`openai-mcp` × `minimum`/`latest` Python 3.11 compatibility snapshots by path, header identity, input digest, file digest, and size. New trusted-main runs emit canonical `agent-evals/release-statement/v2`, which explicitly states `github_release_object_signature=not-claimed` and `pypi_trusted_publishing=release-event-oidc-only`. The verifier retains exact `agent-evals/release-statement/v1` reconstruction, where the PyPI field remains `not-enabled`; v1 material is never silently reinterpreted as v2. The statement is reverified from retained bytes and uploaded as `release-statement-<run_id>`.
 
 On trusted `push` executions of `refs/heads/main` only, a downstream `release-provenance` job receives GitHub OIDC/attestation write authority. Pull-request executions never enter this job and therefore never receive signing authority. The job re-verifies the retained package manifest and retained SPDX/license evidence, then independently reverifies the retained CI qualification JSON and uses the immutable-pinned `actions/attest` action to generate SLSA provenance for exactly seven retained subjects: the wheel, sdist, package manifest, SPDX SBOM, supply-chain evidence JSON, CI qualification evidence JSON, and canonical release statement. The resulting Sigstore bundle is retained as `release-provenance-<run_id>` together with subject/bundle checksums and per-subject verification output.
 
@@ -44,7 +52,30 @@ The publisher then:
 7. exercises the retained sdist, revalidates the tag and release-absence state immediately before publication; and
 8. publishes the retained wheel, sdist, artifact manifest, SPDX SBOM, supply-chain evidence, CI qualification evidence, attested release statement, Sigstore bundle, checksum inventories, and verification receipts to the existing tag with `gh release create --verify-tag`.
 
-Repository policy requires full-SHA action pins and rejects drift that reintroduces `workflow_dispatch`/`workflow_run`, interpolates `client_payload` into shell, drops default-branch SHA binding, omits exact run/artifact bindings, rebuilds packages, or drops tag verification. Ordinary CI also executes deterministic self-tests for both the release-candidate validator and canonical release statement. Repository policy rejects PyPI upload markers while publication is disabled; enabling PyPI later therefore requires an explicit reviewed policy change for OIDC Trusted Publishing rather than quietly introducing a token-based upload path.
+Repository policy requires full-SHA action pins and rejects drift that reintroduces
+`workflow_dispatch`/`workflow_run` into the GitHub Release publisher, interpolates
+`client_payload` into shell, drops default-branch SHA binding, omits exact run/artifact bindings,
+rebuilds packages, or drops tag verification. Ordinary CI self-tests the release-candidate,
+release-version, and canonical release-statement validators.
+
+PyPI publication is a separate authority domain. `Publish package to PyPI` runs only for a
+non-draft, non-prerelease GitHub Release `published` event and splits verification from credential
+authority. The verification job has only `contents: read`, checks out `main` rather than the
+release tag, and treats the published tag/commit only as data. Default-branch code resolves the tag,
+requires package/tag equality, downloads the Release assets, requires release-statement/v2 with
+`release-event-oidc-only`, materializes only the fixed source-contract files from the attested
+commit, re-verifies package/SBOM/license/CI qualification/release-statement evidence, verifies
+checksum inventories, and cryptographically re-verifies all seven retained subjects against the CI
+Sigstore bundle. It retains only the verified wheel and sdist in a one-day same-run artifact. A
+separate final job, bound to environment `pypi`, has only `actions: read` plus `id-token: write`,
+does not checkout or execute repository code, downloads that two-file artifact, and invokes the PyPA
+publisher.
+
+The publisher is pinned to
+`pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33`; no `user`,
+`password`, PyPI API token, alternate repository URL, rebuild step, or skip-existing behavior is
+allowed by repository policy. The separate GitHub Release publisher deliberately retains no
+`id-token: write` authority.
 
 ## Locked executable dependency environment
 
@@ -81,16 +112,24 @@ This stage therefore does not claim:
 - reproducibility across arbitrary operating systems, Python implementations, builders, or dependency graphs beyond the explicitly exercised clean-runner contract;
 - an independent third-party assertion that the SBOM/license contents are semantically complete or correct beyond the repository's verified generation/policy contract;
 - a cryptographic signature over the GitHub Release database object itself; the claim is instead limited to the attested asset set and canonical release statement;
-- PyPI Trusted Publishing provenance while no PyPI publication path exists.
+- successful PyPI Trusted Publishing merely because the repository workflow is configured; the
+  external PyPI Trusted Publisher registration and an actual publication remain separately verified
+  external states.
 
-PyPI remains conditional: if package publication is later enabled, repository policy must be deliberately extended for OIDC Trusted Publishing. The current release path must not retroactively reinterpret older unsigned material as authenticated evidence.
+Repository-side PyPI Trusted Publishing is configured, but activation remains conditional on the
+external PyPI publisher record. The intended publisher tuple is project
+`qa-automation-ai-agent-evals`, owner `portyu9`, repository
+`qa-automation-ai-agent-evals`, workflow `publish-pypi.yml`, environment `pypi`. Until that
+record is registered and a publication succeeds, the repository must not claim that a PyPI release
+exists. This does not retroactively reinterpret older unsigned material or release-statement/v1 as
+authenticated PyPI evidence.
 
 ## Intended release chain
 
 The target chain remains:
 
-`source commit -> tested build -> retained wheel/sdist -> SBOM -> post-gate CI qualification evidence -> executable compatibility statement -> assurance artifacts -> signed provenance/attestation -> GitHub Release carrying the exact attested asset set -> optional PyPI Trusted Publishing`
+`source commit -> tested build -> retained wheel/sdist -> SBOM -> post-gate CI qualification evidence -> executable compatibility statement -> assurance artifacts -> signed provenance/attestation -> GitHub Release carrying the exact attested asset set -> release-event OIDC verification -> PyPI Trusted Publishing`
 
-The signed-provenance/attestation link covers the six pre-statement retained release subjects plus the canonical release statement on trusted main pushes. The statement binds the expected tag, package compatibility contract, reviewed min/latest snapshot identities, and exact retained subject digests. This is the repository's authenticated GitHub-release asset-set contract; it intentionally does not claim a separate cryptographic signature over GitHub's Release object. Optional PyPI Trusted Publishing remains conditional on a future package-publication path.
+The signed-provenance/attestation link covers the six pre-statement retained release subjects plus the canonical release statement on trusted main pushes. The statement binds the expected tag, package compatibility contract, reviewed min/latest snapshot identities, and exact retained subject digests. This is the repository's authenticated GitHub-release asset-set contract; it intentionally does not claim a separate cryptographic signature over GitHub's Release object. PyPI Trusted Publishing remains conditional on the external publisher registration and an actual successful publication.
 
 The invariant introduced here is still deliberately narrow: the CI run must retain/reverify the tested package bytes, independently reproduce those exact bytes from the same source in a fresh runner, generate a canonical SPDX/runtime-license evidence pair bound to the retained package manifest and checked-in license policy, and independently reverify that evidence in another clean job. Publication consumes only the original retained, qualified bytes, retained supply-chain evidence, retained release statement, and retained provenance bundle from the explicitly validated CI run and existing version tag; the publisher itself never rebuilds, regenerates, re-signs, or broadens release evidence.

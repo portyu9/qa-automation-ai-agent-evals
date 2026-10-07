@@ -83,7 +83,7 @@ def validate() -> None:
 
     require(
         compatibility,
-        f"| Framework package | {contract['version']} source/package metadata; pre-1.0 |",
+        "| Framework package | version from pyproject.toml |",
         label="compatibility matrix",
     )
     require(
@@ -107,14 +107,10 @@ def validate() -> None:
             raise GovernanceDocsError(f"reviewed compatibility snapshot is missing: {lock}")
         require(compatibility, lock, label="compatibility matrix")
 
+    require(changelog, "## Unreleased", label="changelog")
     require(
         changelog,
-        f"## {contract['version']} — repository baseline (not yet published)",
-        label="changelog",
-    )
-    require(
-        changelog,
-        "the repository has no GitHub\nRelease and no PyPI publication",
+        "Hashes are integrity identities, not authentication.",
         label="changelog",
     )
 

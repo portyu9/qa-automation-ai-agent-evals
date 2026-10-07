@@ -9,12 +9,15 @@ import tomllib
 from pathlib import Path
 from typing import Any
 
-SCHEMA_VERSION = "agent-evals/release-statement/v1"
+SCHEMA_VERSION = "agent-evals/release-statement/v2"
+LEGACY_SCHEMA_VERSION = "agent-evals/release-statement/v1"
+SUPPORTED_SCHEMA_VERSIONS = {LEGACY_SCHEMA_VERSION, SCHEMA_VERSION}
 EXPECTED_REF = "refs/heads/main"
 EXPECTED_WORKFLOW = "CI"
 GITHUB_RELEASE_MODE = "attested-retained-assets"
 GITHUB_RELEASE_SIGNATURE_CLAIM = "not-claimed"
-PYPI_TRUSTED_PUBLISHING_MODE = "not-enabled"
+PYPI_TRUSTED_PUBLISHING_MODE = "release-event-oidc-only"
+LEGACY_PYPI_TRUSTED_PUBLISHING_MODE = "not-enabled"
 
 _SHA40 = re.compile(r"^[0-9a-f]{40}$")
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
@@ -267,6 +270,7 @@ def build_statement(
     workflow: str,
     run_id: int,
     run_attempt: int,
+    schema_version: str = SCHEMA_VERSION,
 ) -> dict[str, object]:
     repository = _require_repository(repository)
     commit_sha = _require_sha(commit_sha)
@@ -278,6 +282,13 @@ def build_statement(
     run_attempt = _require_positive_int(run_attempt, "run_attempt")
     if repo_root.is_symlink() or not repo_root.is_dir():
         raise ReleaseStatementError("repo_root must be one real directory")
+    if schema_version not in SUPPORTED_SCHEMA_VERSIONS:
+        raise ReleaseStatementError("unsupported release statement schema")
+    pypi_mode = (
+        LEGACY_PYPI_TRUSTED_PUBLISHING_MODE
+        if schema_version == LEGACY_SCHEMA_VERSION
+        else PYPI_TRUSTED_PUBLISHING_MODE
+    )
 
     package_contract = _load_project(repo_root / "pyproject.toml")
     subjects = _package_subjects(package_dir)
@@ -309,7 +320,7 @@ def build_statement(
     )
 
     return {
-        "schema_version": SCHEMA_VERSION,
+        "schema_version": schema_version,
         "source": {
             "repository": repository,
             "commit_sha": commit_sha,
@@ -324,7 +335,7 @@ def build_statement(
         "publication": {
             "github_release": GITHUB_RELEASE_MODE,
             "github_release_object_signature": GITHUB_RELEASE_SIGNATURE_CLAIM,
-            "pypi_trusted_publishing": PYPI_TRUSTED_PUBLISHING_MODE,
+            "pypi_trusted_publishing": pypi_mode,
         },
     }
 
@@ -344,7 +355,7 @@ def load_statement(path: Path) -> dict[str, object]:
         raise ReleaseStatementError("release statement must be valid UTF-8 JSON") from exc
     if type(parsed) is not dict:
         raise ReleaseStatementError("release statement root must be an object")
-    if parsed.get("schema_version") != SCHEMA_VERSION:
+    if parsed.get("schema_version") not in SUPPORTED_SCHEMA_VERSIONS:
         raise ReleaseStatementError("unsupported release statement schema")
     if raw != _canonical_bytes(parsed):
         raise ReleaseStatementError("release statement is not canonical JSON")
@@ -364,7 +375,10 @@ def verify_statement(
     **kwargs: Any,
 ) -> dict[str, object]:
     actual = load_statement(statement_path)
-    expected = build_statement(**kwargs)
+    schema_version = actual.get("schema_version")
+    if type(schema_version) is not str:
+        raise ReleaseStatementError("release statement schema_version must be text")
+    expected = build_statement(schema_version=schema_version, **kwargs)
     if actual != expected:
         raise ReleaseStatementError("release statement does not match exact retained inputs")
     tag = expected["package_contract"]["expected_tag"]  # type: ignore[index]
@@ -373,6 +387,33 @@ def verify_statement(
             f"requested release tag {expected_tag!r} does not match statement tag {tag!r}"
         )
     return actual
+
+
+def inspect_statement(statement_path: Path) -> dict[str, object]:
+    statement = load_statement(statement_path)
+    source = statement.get("source")
+    package = statement.get("package_contract")
+    publication = statement.get("publication")
+    if type(source) is not dict or type(package) is not dict or type(publication) is not dict:
+        raise ReleaseStatementError("release statement has malformed authority sections")
+    commit_sha = _require_sha(source.get("commit_sha"))
+    run_id = _require_positive_int(source.get("run_id"), "run_id")
+    run_attempt = _require_positive_int(source.get("run_attempt"), "run_attempt")
+    expected_tag = _require_text(package.get("expected_tag"), "package_contract.expected_tag")
+    pypi_mode = _require_text(
+        publication.get("pypi_trusted_publishing"),
+        "publication.pypi_trusted_publishing",
+    )
+    schema_version = _require_text(statement.get("schema_version"), "schema_version")
+    metadata = {
+        "schema_version": schema_version,
+        "commit_sha": commit_sha,
+        "run_id": run_id,
+        "run_attempt": run_attempt,
+        "expected_tag": expected_tag,
+        "pypi_trusted_publishing": pypi_mode,
+    }
+    return metadata
 
 
 def self_test() -> None:
@@ -448,6 +489,10 @@ def self_test() -> None:
         publication = loaded["publication"]
         assert isinstance(publication, dict)
         assert publication["github_release_object_signature"] == "not-claimed"
+        assert publication["pypi_trusted_publishing"] == PYPI_TRUSTED_PUBLISHING_MODE
+        metadata = inspect_statement(statement_path)
+        assert metadata["schema_version"] == SCHEMA_VERSION
+        assert metadata["expected_tag"] == "v1.2.3"
         try:
             verify_statement(
                 statement_path=statement_path,
@@ -459,8 +504,14 @@ def self_test() -> None:
         else:
             raise ReleaseStatementError("self-test accepted a mismatched release tag")
 
+        legacy = build_statement(schema_version=LEGACY_SCHEMA_VERSION, **args)
+        assert legacy["schema_version"] == LEGACY_SCHEMA_VERSION
+        legacy_publication = legacy["publication"]
+        assert isinstance(legacy_publication, dict)
+        assert legacy_publication["pypi_trusted_publishing"] == LEGACY_PYPI_TRUSTED_PUBLISHING_MODE
+
         mutated = statement_path.read_text(encoding="utf-8").replace(
-            '"schema_version":"agent-evals/release-statement/v1"',
+            '"schema_version":"agent-evals/release-statement/v2"',
             '"schema_version":"agent-evals/release-statement/v0"',
         )
         statement_path.write_text(mutated, encoding="utf-8")
@@ -500,6 +551,9 @@ def _parser() -> argparse.ArgumentParser:
     verify.add_argument("--statement", type=Path, required=True)
     verify.add_argument("--expected-tag")
 
+    inspect = sub.add_parser("inspect")
+    inspect.add_argument("--statement", type=Path, required=True)
+
     sub.add_parser("self-test")
     return parser
 
@@ -508,6 +562,18 @@ def main() -> None:
     args = _parser().parse_args()
     if args.command == "self-test":
         self_test()
+        return
+    if args.command == "inspect":
+        metadata = inspect_statement(args.statement)
+        for key in (
+            "schema_version",
+            "commit_sha",
+            "run_id",
+            "run_attempt",
+            "expected_tag",
+            "pypi_trusted_publishing",
+        ):
+            print(f"{key}={metadata[key]}")
         return
     kwargs = {
         "repo_root": args.repo_root,

@@ -111,6 +111,59 @@ def validate_dispatch_event(
     return version_tag, ci_run_id
 
 
+def validate_pypi_release_event(
+    event: dict[str, Any], *, repository: str, workflow_ref: str, event_sha: str
+) -> str:
+    repo = event.get("repository")
+    if event.get("action") != "published":
+        raise ReleaseCandidateError("release event action must be published")
+    if type(repo) is not dict or repo.get("full_name") != repository:
+        raise ReleaseCandidateError("release event repository does not match expected repository")
+    release = event.get("release")
+    if type(release) is not dict:
+        raise ReleaseCandidateError("release event must contain a release object")
+    if release.get("draft") is not False or release.get("prerelease") is not False:
+        raise ReleaseCandidateError(
+            "PyPI publication requires a non-draft non-prerelease GitHub Release"
+        )
+    version_tag = require_tag(release.get("tag_name"))
+    if workflow_ref != f"refs/tags/{version_tag}":
+        raise ReleaseCandidateError("release workflow ref must match the published version tag")
+    require_sha(event_sha, "release event SHA")
+    assets = release.get("assets")
+    if type(assets) is not list or not assets:
+        raise ReleaseCandidateError("published release must contain retained release assets")
+    names: list[str] = []
+    for asset in assets:
+        if type(asset) is not dict or type(asset.get("name")) is not str or not asset["name"]:
+            raise ReleaseCandidateError("release assets must have non-empty names")
+        names.append(asset["name"])
+    if len(names) != len(set(names)):
+        raise ReleaseCandidateError("release asset names must be unique")
+    required = {
+        "artifact-manifest.json",
+        "release-sbom.spdx.json",
+        "release-supply-chain-evidence.json",
+        "ci-qualification-evidence.json",
+        "release-statement.json",
+        "release-provenance.sigstore.json",
+        "subject-checksums.sha256",
+        "bundle-checksum.sha256",
+    }
+    missing = sorted(required - set(names))
+    if missing:
+        raise ReleaseCandidateError(
+            f"published release is missing retained evidence assets: {missing}"
+        )
+    if len([name for name in names if name.endswith(".whl")]) != 1:
+        raise ReleaseCandidateError("published release must contain exactly one wheel")
+    if len([name for name in names if name.endswith(".tar.gz")]) != 1:
+        raise ReleaseCandidateError(
+            "published release must contain exactly one source distribution"
+        )
+    return version_tag
+
+
 def validate_ci_run(
     run: dict[str, Any], *, repository: str, expected_run_id: int
 ) -> tuple[str, int]:
@@ -407,6 +460,62 @@ def validate_candidate(
     )
 
 
+def validate_pypi_release(
+    *,
+    event_path: Path,
+    repository: str,
+    workflow_ref: str,
+    event_sha: str,
+    api_url: str,
+    token: str,
+    output_path: Path,
+) -> None:
+    repository = require_repository(repository)
+    if not token:
+        raise ReleaseCandidateError("GITHUB_TOKEN is required for PyPI release validation")
+    try:
+        event = json.loads(
+            event_path.read_text(encoding="utf-8"),
+            object_pairs_hook=_strict_object,
+        )
+    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+        raise ReleaseCandidateError("release event file is not valid UTF-8 JSON") from exc
+    if type(event) is not dict:
+        raise ReleaseCandidateError("release event root must be an object")
+    version_tag = validate_pypi_release_event(
+        event,
+        repository=repository,
+        workflow_ref=workflow_ref,
+        event_sha=event_sha,
+    )
+    tag_sha = resolve_tag_commit(api_url, repository, version_tag, token)
+    if tag_sha != require_sha(event_sha, "release event SHA"):
+        raise ReleaseCandidateError(
+            "published release event SHA does not match resolved tag commit"
+        )
+    pyproject_bytes = fetch_pyproject(api_url, repository, tag_sha, token)
+    version = validate_version_binding(
+        version_tag=version_tag,
+        ci_sha=tag_sha,
+        tag_sha=tag_sha,
+        pyproject_bytes=pyproject_bytes,
+    )
+    output = {
+        "schema_version": "agent-evals/pypi-release-candidate/v1",
+        "repository": repository,
+        "version": version,
+        "version_tag": version_tag,
+        "commit_sha": tag_sha,
+    }
+    output_path.write_bytes(_canonical_bytes(output))
+    github_output = os.environ.get("GITHUB_OUTPUT")
+    if github_output:
+        with Path(github_output).open("a", encoding="utf-8") as stream:
+            stream.write(f"version={version}\n")
+            stream.write(f"version_tag={version_tag}\n")
+            stream.write(f"commit_sha={tag_sha}\n")
+
+
 def self_test() -> None:
     repo = "owner/repo"
     sha = "a" * 40
@@ -649,6 +758,48 @@ def self_test() -> None:
         else:
             raise ReleaseCandidateError("self-test accepted invalid version/tag/SHA binding")
 
+    release_event = {
+        "action": "published",
+        "repository": {"full_name": repo},
+        "release": {
+            "draft": False,
+            "prerelease": False,
+            "tag_name": "v1.2.3",
+            "assets": [
+                {"name": "example.whl"},
+                {"name": "example.tar.gz"},
+                {"name": "artifact-manifest.json"},
+                {"name": "release-sbom.spdx.json"},
+                {"name": "release-supply-chain-evidence.json"},
+                {"name": "ci-qualification-evidence.json"},
+                {"name": "release-statement.json"},
+                {"name": "release-provenance.sigstore.json"},
+                {"name": "subject-checksums.sha256"},
+                {"name": "bundle-checksum.sha256"},
+            ],
+        },
+    }
+    assert (
+        validate_pypi_release_event(
+            release_event,
+            repository=repo,
+            workflow_ref="refs/tags/v1.2.3",
+            event_sha=sha,
+        )
+        == "v1.2.3"
+    )
+    try:
+        validate_pypi_release_event(
+            dict(release_event, action="edited"),
+            repository=repo,
+            workflow_ref="refs/tags/v1.2.3",
+            event_sha=sha,
+        )
+    except ReleaseCandidateError:
+        pass
+    else:
+        raise ReleaseCandidateError("self-test accepted a non-published release event")
+
     print("release candidate self-test: ok")
 
 
@@ -665,6 +816,15 @@ def _parser() -> argparse.ArgumentParser:
         "--api-url", default=os.environ.get("GITHUB_API_URL", "https://api.github.com")
     )
     validate.add_argument("--output", type=Path, default=Path("validated-release.json"))
+    pypi = sub.add_parser("validate-pypi")
+    pypi.add_argument("--event", type=Path, required=True)
+    pypi.add_argument("--repository", required=True)
+    pypi.add_argument("--workflow-ref", required=True)
+    pypi.add_argument("--event-sha", required=True)
+    pypi.add_argument(
+        "--api-url", default=os.environ.get("GITHUB_API_URL", "https://api.github.com")
+    )
+    pypi.add_argument("--output", type=Path, default=Path("validated-pypi-release.json"))
     return parser
 
 
@@ -673,12 +833,22 @@ def main() -> int:
     try:
         if args.command == "self-test":
             self_test()
-        else:
+        elif args.command == "validate":
             validate_candidate(
                 event_path=args.event,
                 repository=args.repository,
                 workflow_ref=args.workflow_ref,
                 workflow_sha=args.workflow_sha,
+                api_url=args.api_url,
+                token=os.environ.get("GITHUB_TOKEN", ""),
+                output_path=args.output,
+            )
+        else:
+            validate_pypi_release(
+                event_path=args.event,
+                repository=args.repository,
+                workflow_ref=args.workflow_ref,
+                event_sha=args.event_sha,
                 api_url=args.api_url,
                 token=os.environ.get("GITHUB_TOKEN", ""),
                 output_path=args.output,

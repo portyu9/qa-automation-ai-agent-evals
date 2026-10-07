@@ -1,0 +1,59 @@
+name: Prepare release version
+
+on:
+  repository_dispatch:
+    types: [release-preparation]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-version-preparation
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    name: Prepare deterministic version patch
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Checkout exact default-branch preparation logic
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: "3.11"
+      - name: Self-test version preparation
+        run: python .github/scripts/release_version.py self-test
+      - name: Validate request and prepare exact version patch
+        id: plan
+        run: |
+          python .github/scripts/release_version.py prepare \
+            --event "$GITHUB_EVENT_PATH" \
+            --repository "$GITHUB_REPOSITORY" \
+            --workflow-ref "$GITHUB_REF" \
+            --workflow-sha "$GITHUB_SHA" \
+            --output release-version-plan.json
+          git diff --binary -- pyproject.toml > release-version.patch
+          changed="$(git diff --name-only)"
+          case "$changed" in
+            ""|pyproject.toml) ;;
+            *)
+              echo "::error::release preparation changed unexpected files: $changed"
+              exit 1
+              ;;
+          esac
+      - name: Upload deterministic release-preparation result
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-version-${{ steps.plan.outputs.version_tag }}-${{ github.run_id }}
+          path: |
+            release-version-plan.json
+            release-version.patch
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
