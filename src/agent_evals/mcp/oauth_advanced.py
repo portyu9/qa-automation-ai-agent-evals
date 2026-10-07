@@ -163,9 +163,7 @@ class OAuthAdvancedPolicy(BaseModel):
         return sorted(value)
 
     @field_serializer("allowed_sender_bindings", when_used="json")
-    def serialize_allowed_sender_bindings(
-        self, value: frozenset[OAuthSenderBinding]
-    ) -> list[str]:
+    def serialize_allowed_sender_bindings(self, value: frozenset[OAuthSenderBinding]) -> list[str]:
         return sorted(item.value for item in value)
 
     @field_validator("allowed_issuers")
