@@ -153,7 +153,6 @@ def _is_accepted_adr(path: str, policy: Policy) -> bool:
     return match is not None and int(match.group(1)) >= 1
 
 
-
 def _parse_action_change(line: str) -> tuple[str, str, tuple[int, ...]] | None:
     match = _ACTION_LINE.fullmatch(line)
     if match is None:
@@ -217,9 +216,7 @@ def _dependabot_action_pin_exempt(
         raise AdrPolicyError("automation exemption requires canonical base/head SHAs")
 
     governed_changes = [
-        change
-        for change in changes
-        if any(policy.governs(path) for path in change.paths)
+        change for change in changes if any(policy.governs(path) for path in change.paths)
     ]
     if not governed_changes:
         return False
@@ -258,6 +255,7 @@ def _dependabot_action_pin_exempt(
     if result.returncode != 0:
         raise AdrPolicyError("git diff failed while verifying Dependabot workflow patch")
     return _action_pin_patch_is_safe(result.stdout)
+
 
 def _new_adr_paths(
     changes: tuple[Change, ...],
