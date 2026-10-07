@@ -147,7 +147,9 @@ class ContentAddressedEvidenceStore:
     def read(self, logical_sha256: str) -> TrialEvidence:
         manifest, logical = self._decode(logical_sha256)
         try:
-            raw = strict_json_loads(logical, label="content-addressed evidence", require_object=True)
+            raw = strict_json_loads(
+                logical, label="content-addressed evidence", require_object=True
+            )
             evidence = TrialEvidence.model_validate(raw)
         except (StrictJsonError, ValueError) as exc:
             raise EvidenceIntegrityError("content-addressed evidence failed validation") from exc
@@ -174,7 +176,11 @@ class ContentAddressedEvidenceStore:
             raise EvidenceIntegrityError("blob stored length does not match manifest")
         if manifest.logical_bytes > self.max_logical_bytes:
             raise EvidenceIntegrityError("blob logical length exceeds configured ceiling")
-        logical = stored if manifest.compression == "none" else gunzip_bounded(stored, self.max_logical_bytes)
+        logical = (
+            stored
+            if manifest.compression == "none"
+            else gunzip_bounded(stored, self.max_logical_bytes)
+        )
         if len(logical) != manifest.logical_bytes:
             raise EvidenceIntegrityError("blob logical length does not match manifest")
         actual = hashlib.sha256(logical).hexdigest()
