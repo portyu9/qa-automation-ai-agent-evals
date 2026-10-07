@@ -85,8 +85,10 @@ class EvidenceStorePlatformCapabilities(BaseModel):
 def detect_platform_capabilities() -> EvidenceStorePlatformCapabilities:
     """Derive the exact filesystem primitives available to this Python runtime."""
 
-    supports_dir_fd = getattr(os, "supports_dir_fd", set())
-    supports_follow_symlinks = getattr(os, "supports_follow_symlinks", set())
+    supports_dir_fd: set[object] = set(getattr(os, "supports_dir_fd", set()))
+    supports_follow_symlinks: set[object] = set(
+        getattr(os, "supports_follow_symlinks", set())
+    )
     return EvidenceStorePlatformCapabilities(
         os_name=os.name,
         posix=os.name == "posix",
@@ -154,7 +156,12 @@ class EvidenceLockObservation(BaseModel):
             "mtime_ns": mtime_ns,
         }
         return cls(
-            **material,
+            schema_version=_LOCK_OBSERVATION_SCHEMA,
+            record_key=record_key,
+            device=device,
+            inode=inode,
+            size_bytes=size_bytes,
+            mtime_ns=mtime_ns,
             observation_root=_root(_LOCK_OBSERVATION_DOMAIN, material),
         )
 
@@ -199,7 +206,13 @@ class EvidenceLockQuarantineReceipt(BaseModel):
             "observation_root": observation_root,
             "quarantine_name": quarantine_name,
         }
-        return cls(**material, receipt_root=_root(_LOCK_QUARANTINE_DOMAIN, material))
+        return cls(
+            schema_version=_LOCK_QUARANTINE_SCHEMA,
+            record_key=record_key,
+            observation_root=observation_root,
+            quarantine_name=quarantine_name,
+            receipt_root=_root(_LOCK_QUARANTINE_DOMAIN, material),
+        )
 
     @model_validator(mode="after")
     def verify_root(self) -> Self:
