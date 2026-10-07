@@ -60,9 +60,7 @@ class DistributedSideEffectPolicy(BaseModel):
     require_duplicate_rejection: bool = Field(default=True, strict=True)
 
     @field_serializer("required_causes", when_used="json")
-    def serialize_required_causes(
-        self, value: frozenset[SideEffectAttemptCause]
-    ) -> list[str]:
+    def serialize_required_causes(self, value: frozenset[SideEffectAttemptCause]) -> list[str]:
         return sorted(item.value for item in value)
 
     @model_validator(mode="after")
