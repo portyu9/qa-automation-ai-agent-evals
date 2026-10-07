@@ -1021,12 +1021,16 @@ if "release-provenance" in REQUIRED_JOBS:
     fail("release-provenance must not become a PR-required ci-gate dependency")
 
 for workflow_path, source in workflows.items():
-    if workflow_path != ci_path and (
+    if workflow_path not in {ci_path, publish_pypi_path} and (
         "id-token: write" in source
         or "attestations: write" in source
         or "actions/attest@" in source
     ):
-        fail(f"{workflow_path.as_posix()} introduces signing authority outside trusted-main CI")
+        fail(f"{workflow_path.as_posix()} introduces unapproved signing/OIDC authority")
+    if workflow_path == publish_pypi_path and (
+        "attestations: write" in source or "actions/attest@" in source
+    ):
+        fail("publish-pypi may request an OIDC token but must not mint repository attestations")
 
 for workflow_path, source in workflows.items():
     lowered = source.lower()
@@ -1037,10 +1041,10 @@ for workflow_path, source in workflows.items():
         "upload.pypi.org",
         "pypi.org/legacy",
     ):
-        if marker in lowered:
+        if marker in lowered and workflow_path != publish_pypi_path:
             fail(
-                "PyPI publication is intentionally disabled until a dedicated OIDC Trusted "
-                f"Publishing contract is reviewed: {workflow_path.as_posix()}: {marker}"
+                "PyPI publication markers are allowed only in the dedicated OIDC workflow: "
+                f"{workflow_path.as_posix()}: {marker}"
             )
 
 ci_gate = job_block(workflow, "ci-gate", "protected-gate")
