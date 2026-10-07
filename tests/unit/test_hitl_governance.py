@@ -219,6 +219,7 @@ def test_receipt_validation_context_cannot_self_declare_trusted_construction() -
             context={"agent_evals_receipt_construction": True},
         )
 
+
 def test_unordered_governance_material_is_root_stable_and_round_trips() -> None:
     methods = list(ApprovalAuthenticationMethod)
     policy_a = ApprovalGovernancePolicy(
