@@ -1,0 +1,116 @@
+{
+  "schema_version": "agent-evals/repository-governance/v1",
+  "default_branch": "main",
+  "review_policy": {
+    "pull_request_required": true,
+    "required_approvals": 1,
+    "require_code_owner_review": true,
+    "dismiss_stale_reviews_on_push": true,
+    "require_last_push_approval": true,
+    "require_review_thread_resolution": true,
+    "allowed_merge_methods": [
+      "merge"
+    ]
+  },
+  "maintainer_policy": {
+    "minimum_distinct_trust_maintainers": 2,
+    "current_independent_review_state": "blocked-single-maintainer",
+    "codeowner_enforcement_precondition": "at-least-two-distinct-trust-maintainers"
+  },
+  "signed_history_policy": {
+    "decision": "require-signed-commits-on-protected-history",
+    "live_enforcement": "external-admin-required"
+  },
+  "repository_settings_policy": {
+    "auto_merge": "enable-only-after-live-review-controls-are-authoritative",
+    "update_branch": "enable-only-after-live-review-controls-are-authoritative"
+  },
+  "external_admin_prerequisites": {
+    "dependency_graph": {
+      "required": true,
+      "verification": "blocked-admin-surface"
+    },
+    "secret_scanning": {
+      "required": true,
+      "verification": "unverified-admin-surface"
+    },
+    "push_protection": {
+      "required": true,
+      "verification": "unverified-admin-surface"
+    }
+  },
+  "trust_boundaries": [
+    {
+      "path": "/.github/",
+      "owners": [
+        "@portyu9"
+      ]
+    },
+    {
+      "path": "/pyproject.toml",
+      "owners": [
+        "@portyu9"
+      ]
+    },
+    {
+      "path": "/requirements/",
+      "owners": [
+        "@portyu9"
+      ]
+    },
+    {
+      "path": "/src/agent_evals/contracts/",
+      "owners": [
+        "@portyu9"
+      ]
+    },
+    {
+      "path": "/src/agent_evals/evidence/",
+      "owners": [
+        "@portyu9"
+      ]
+    },
+    {
+      "path": "/src/agent_evals/gates/",
+      "owners": [
+        "@portyu9"
+      ]
+    },
+    {
+      "path": "/src/agent_evals/runtime/",
+      "owners": [
+        "@portyu9"
+      ]
+    },
+    {
+      "path": "/src/agent_evals/security/",
+      "owners": [
+        "@portyu9"
+      ]
+    },
+    {
+      "path": "/src/agent_evals/semantic/",
+      "owners": [
+        "@portyu9"
+      ]
+    },
+    {
+      "path": "/docs/SECURITY.md",
+      "owners": [
+        "@portyu9"
+      ]
+    },
+    {
+      "path": "/docs/LIMITATIONS.md",
+      "owners": [
+        "@portyu9"
+      ]
+    }
+  ],
+  "live_enforcement": {
+    "source": "github-ruleset",
+    "ruleset_name": "Protect Main",
+    "verification": "external-admin-surface",
+    "repository_owned_policy_is_not_live_attestation": true
+  }
+}
