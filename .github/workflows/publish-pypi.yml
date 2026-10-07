@@ -54,7 +54,11 @@ jobs:
           gh release download "$VERSION_TAG" --repo "$GITHUB_REPOSITORY" --dir release-assets
       - name: Inspect canonical release statement
         id: statement
-        run: python .github/scripts/release_statement.py inspect --statement release-assets/release-statement.json
+        shell: bash
+        run: |
+          set -euo pipefail
+          python .github/scripts/release_statement.py inspect \
+            --statement release-assets/release-statement.json >> "$GITHUB_OUTPUT"
       - name: Bind release event to attested v2 publication contract
         env:
           EVENT_COMMIT: ${{ steps.candidate.outputs.commit_sha }}
