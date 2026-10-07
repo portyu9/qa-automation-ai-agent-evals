@@ -58,11 +58,16 @@ Repository policy requires full-SHA action pins and rejects drift that reintrodu
 rebuilds packages, or drops tag verification. Ordinary CI self-tests the release-candidate,
 release-version, and canonical release-statement validators.
 
-PyPI publication is a separate authority domain. `Publish package to PyPI` runs only for a
-non-draft, non-prerelease GitHub Release `published` event and splits verification from credential
-authority. The verification job has only `contents: read`, checks out `main` rather than the
-release tag, and treats the published tag/commit only as data. Default-branch code resolves the tag,
-requires package/tag equality, downloads the Release assets, requires release-statement/v2 with
+PyPI publication is a separate authority domain. `Publish package to PyPI` is authorized only
+after a non-draft, non-prerelease GitHub Release exists. An externally published Release can enter
+through the native `release: published` event. When the retained-byte GitHub Release publisher
+creates the Release with `GITHUB_TOKEN`, it emits a default-branch-bound
+`pypi-publish-request` `repository_dispatch` after publication because GitHub suppresses the
+ordinary recursive Release event. The dispatch carries only the validated version tag and release
+commit as data; the verifier fetches the actual published Release and rechecks its retained asset set
+before proceeding. The verification job has only `contents: read`, checks out `main` rather than
+the release tag, and treats the published tag/commit only as data. Default-branch code resolves the
+tag, requires package/tag equality, downloads the Release assets, requires release-statement/v2 with
 `release-event-oidc-only`, materializes only the fixed source-contract files from the attested
 commit, re-verifies package/SBOM/license/CI qualification/release-statement evidence, verifies
 checksum inventories, and cryptographically re-verifies all seven retained subjects against the CI
@@ -128,7 +133,7 @@ authenticated PyPI evidence.
 
 The target chain remains:
 
-`source commit -> tested build -> retained wheel/sdist -> SBOM -> post-gate CI qualification evidence -> executable compatibility statement -> assurance artifacts -> signed provenance/attestation -> GitHub Release carrying the exact attested asset set -> release-event OIDC verification -> PyPI Trusted Publishing`
+`source commit -> tested build -> retained wheel/sdist -> SBOM -> post-gate CI qualification evidence -> executable compatibility statement -> assurance artifacts -> signed provenance/attestation -> GitHub Release carrying the exact attested asset set -> published-release verification (native event or default-branch dispatch handoff) -> PyPI Trusted Publishing`
 
 The signed-provenance/attestation link covers the six pre-statement retained release subjects plus the canonical release statement on trusted main pushes. The statement binds the expected tag, package compatibility contract, reviewed min/latest snapshot identities, and exact retained subject digests. This is the repository's authenticated GitHub-release asset-set contract; it intentionally does not claim a separate cryptographic signature over GitHub's Release object. PyPI Trusted Publishing remains conditional on the external publisher registration and an actual successful publication.
 

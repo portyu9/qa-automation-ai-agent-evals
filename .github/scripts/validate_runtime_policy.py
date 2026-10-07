@@ -499,6 +499,11 @@ for required in (
     "retained-dist/artifact-manifest.json",
     "gh release create",
     "--verify-tag",
+    '"event_type": "pypi-publish-request"',
+    '"version_tag": os.environ["VERSION_TAG"]',
+    '"commit_sha": os.environ["CI_COMMIT_SHA"]',
+    "repos/$GITHUB_REPOSITORY/dispatches",
+    "pypi-publication-request.json",
 ):
     if required not in publish_release:
         fail(f"publish-release workflow is missing required contract text: {required}")
@@ -518,6 +523,10 @@ for retained_path, minimum_count in (
         )
 if publish_release.count("release_candidate.py validate") < 2:
     fail("publish-release must revalidate tag/release state immediately before publication")
+release_create_index = publish_release.find("gh release create")
+pypi_dispatch_index = publish_release.find('"event_type": "pypi-publish-request"')
+if release_create_index < 0 or pypi_dispatch_index <= release_create_index:
+    fail("publish-release must dispatch PyPI verification only after GitHub Release publication")
 for forbidden in ("python -m build", "twine upload", "uv publish", "pypi.org"):
     if forbidden in publish_release.lower():
         fail(f"publish-release workflow contains forbidden release behavior: {forbidden}")
@@ -563,10 +572,18 @@ for required in (
 
 if "name: Publish package to PyPI" not in publish_pypi:
     fail("publish-pypi workflow must use the canonical workflow name")
-if "release:\n    types: [published]" not in publish_pypi:
-    fail("publish-pypi must trigger only from a published GitHub Release")
-if "workflow_dispatch:" in publish_pypi or "repository_dispatch:" in publish_pypi:
-    fail("publish-pypi must not expose manual or repository-dispatch publication entrypoints")
+if (
+    "release:\n    types: [published]" not in publish_pypi
+    or "repository_dispatch:\n    types: [pypi-publish-request]" not in publish_pypi
+):
+    fail(
+        "publish-pypi must accept published releases and the default-branch-bound "
+        "pypi-publish-request handoff"
+    )
+if "workflow_dispatch:" in publish_pypi:
+    fail("publish-pypi must not expose a selectable-ref manual publication entrypoint")
+if "github.event.client_payload" in publish_pypi:
+    fail("publish-pypi must parse dispatch payload only through the event file validator")
 if "permissions:\n  contents: read" not in publish_pypi:
     fail("publish-pypi workflow default authority must remain contents-read only")
 if publish_pypi.count("id-token: write") != 1:
