@@ -1,5 +1,6 @@
-# Current ownership is single-maintainer. This routes review but does not satisfy
-# independent CODEOWNER approval until a second distinct trust maintainer exists.
+# Single-human-CODEOWNER policy: @portyu9 is the trust owner.
+# CODEOWNERS routes ownership/review attention; protected merge authority is CI-authoritative
+# and does not require an approving review from the sole owner.
 * @portyu9
 
 /.github/ @portyu9

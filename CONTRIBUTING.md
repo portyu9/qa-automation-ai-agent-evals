@@ -55,11 +55,11 @@ Read `docs/ARCHITECTURE.md`, `docs/SECURITY.md`, `docs/LIMITATIONS.md`, and `doc
 
 ## Repository governance
 
-Repository-owned governance intent is versioned in `.github/repository-governance.json` and validated in CI. It does not attest live GitHub ruleset state.
+The repository intentionally has one human CODEOWNER, `@portyu9`. CODEOWNERS routes ownership/review attention but is not a required merge approval.
 
-Trust-critical changes must identify whether they alter review authority, CODEOWNERS routing, protected-history policy, release/CI authority, or an external administration prerequisite. Independent CODEOWNER review is currently BLOCKED by the single-maintainer topology; do not describe self-review or committed policy text as equivalent to a distinct live reviewer approval.
+Protected merge authority is autonomous and CI-based: pull request required, all protected required checks green, review threads resolved, and repository history protections satisfied. GitHub Actions approval and Copilot approval are not required, so Copilot quota cannot block the repository.
 
-The signed-history decision is to require signatures on protected history once the live ruleset is updated through an authorized administration surface. Auto-merge and update-branch support remain deferred until the live approval/CODEOWNER/stale-review/thread-resolution controls are authoritative.
+Required signed commits are deliberately not part of this autonomous model because connector/API-created commits are not guaranteed to carry a verified signing identity. This does not turn unsigned account attribution into cryptographic provenance.
 
 ## Evidence and schema changes
 

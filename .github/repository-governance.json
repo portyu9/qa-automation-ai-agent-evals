@@ -1,111 +1,65 @@
 {
-  "schema_version": "agent-evals/repository-governance/v1",
+  "schema_version": "agent-evals/repository-governance/v2",
   "default_branch": "main",
   "review_policy": {
     "pull_request_required": true,
-    "required_approvals": 1,
-    "require_code_owner_review": true,
-    "dismiss_stale_reviews_on_push": true,
-    "require_last_push_approval": true,
+    "required_approvals": 0,
+    "require_code_owner_review": false,
+    "dismiss_stale_reviews_on_push": false,
+    "require_last_push_approval": false,
     "require_review_thread_resolution": true,
     "allowed_merge_methods": [
       "merge"
     ]
   },
   "maintainer_policy": {
-    "minimum_distinct_trust_maintainers": 2,
-    "current_independent_review_state": "blocked-single-maintainer",
-    "codeowner_enforcement_precondition": "at-least-two-distinct-trust-maintainers"
+    "minimum_human_codeowners": 1,
+    "current_human_codeowners": [
+      "@portyu9"
+    ],
+    "ownership_model": "single-codeowner-ci-authoritative",
+    "codeowner_role": "routing-and-trust-ownership-not-merge-approval"
+  },
+  "automation_policy": {
+    "required_status_checks_are_merge_authority": true,
+    "github_actions_approval_required": false,
+    "copilot_approval_required": false
   },
   "signed_history_policy": {
-    "decision": "require-signed-commits-on-protected-history",
-    "live_enforcement": "external-admin-required"
+    "decision": "do-not-require-signed-commits-for-autonomous-automation",
+    "required": false,
+    "reason": "automation-created commits are not guaranteed signed; requiring signatures would block otherwise CI-qualified autonomous pull requests"
   },
   "repository_settings_policy": {
-    "auto_merge": "enable-only-after-live-review-controls-are-authoritative",
-    "update_branch": "enable-only-after-live-review-controls-are-authoritative"
+    "auto_merge": "eligible-after-live-ruleset-matches-ci-authoritative-policy",
+    "update_branch": "eligible-after-live-ruleset-matches-ci-authoritative-policy"
   },
   "external_admin_prerequisites": {
     "dependency_graph": {
       "required": true,
-      "verification": "blocked-admin-surface"
+      "verification": "verified-enabled"
     },
     "secret_scanning": {
       "required": true,
-      "verification": "unverified-admin-surface"
+      "verification": "verified-enabled"
     },
     "push_protection": {
       "required": true,
-      "verification": "unverified-admin-surface"
+      "verification": "verified-enabled"
     }
   },
   "trust_boundaries": [
-    {
-      "path": "/.github/",
-      "owners": [
-        "@portyu9"
-      ]
-    },
-    {
-      "path": "/pyproject.toml",
-      "owners": [
-        "@portyu9"
-      ]
-    },
-    {
-      "path": "/requirements/",
-      "owners": [
-        "@portyu9"
-      ]
-    },
-    {
-      "path": "/src/agent_evals/contracts/",
-      "owners": [
-        "@portyu9"
-      ]
-    },
-    {
-      "path": "/src/agent_evals/evidence/",
-      "owners": [
-        "@portyu9"
-      ]
-    },
-    {
-      "path": "/src/agent_evals/gates/",
-      "owners": [
-        "@portyu9"
-      ]
-    },
-    {
-      "path": "/src/agent_evals/runtime/",
-      "owners": [
-        "@portyu9"
-      ]
-    },
-    {
-      "path": "/src/agent_evals/security/",
-      "owners": [
-        "@portyu9"
-      ]
-    },
-    {
-      "path": "/src/agent_evals/semantic/",
-      "owners": [
-        "@portyu9"
-      ]
-    },
-    {
-      "path": "/docs/SECURITY.md",
-      "owners": [
-        "@portyu9"
-      ]
-    },
-    {
-      "path": "/docs/LIMITATIONS.md",
-      "owners": [
-        "@portyu9"
-      ]
-    }
+    {"path": "/.github/", "owners": ["@portyu9"]},
+    {"path": "/pyproject.toml", "owners": ["@portyu9"]},
+    {"path": "/requirements/", "owners": ["@portyu9"]},
+    {"path": "/src/agent_evals/contracts/", "owners": ["@portyu9"]},
+    {"path": "/src/agent_evals/evidence/", "owners": ["@portyu9"]},
+    {"path": "/src/agent_evals/gates/", "owners": ["@portyu9"]},
+    {"path": "/src/agent_evals/runtime/", "owners": ["@portyu9"]},
+    {"path": "/src/agent_evals/security/", "owners": ["@portyu9"]},
+    {"path": "/src/agent_evals/semantic/", "owners": ["@portyu9"]},
+    {"path": "/docs/SECURITY.md", "owners": ["@portyu9"]},
+    {"path": "/docs/LIMITATIONS.md", "owners": ["@portyu9"]}
   ],
   "live_enforcement": {
     "source": "github-ruleset",

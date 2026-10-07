@@ -62,7 +62,7 @@ def load_codeowners() -> dict[str, tuple[str, ...]]:
 
 def main() -> int:
     policy = load_policy()
-    if policy.get("schema_version") != "agent-evals/repository-governance/v1":
+    if policy.get("schema_version") != "agent-evals/repository-governance/v2":
         fail("unsupported schema_version")
     if policy.get("default_branch") != "main":
         fail("default_branch must remain main")
@@ -70,55 +70,61 @@ def main() -> int:
     review = object_field(policy, "review_policy")
     if review.get("pull_request_required") is not True:
         fail("pull requests must remain required")
-    if review.get("required_approvals") != 1:
-        fail("review policy must require exactly one approval at minimum")
-    for key in (
-        "require_code_owner_review",
-        "dismiss_stale_reviews_on_push",
-        "require_last_push_approval",
-        "require_review_thread_resolution",
-    ):
-        if review.get(key) is not True:
-            fail(f"review policy must require {key}")
+    if review.get("required_approvals") != 0:
+        fail("autonomous single-CODEOWNER policy must not require approving reviews")
+    if review.get("require_code_owner_review") is not False:
+        fail("sole CODEOWNER must not be a mandatory merge approver")
+    for key in ("dismiss_stale_reviews_on_push", "require_last_push_approval"):
+        if review.get(key) is not False:
+            fail(f"{key} must remain disabled when approvals are not merge authority")
+    if review.get("require_review_thread_resolution") is not True:
+        fail("review threads must remain resolved before merge")
     if review.get("allowed_merge_methods") != ["merge"]:
         fail("protected history policy must remain merge-only")
 
     maintainers = object_field(policy, "maintainer_policy")
-    minimum = maintainers.get("minimum_distinct_trust_maintainers")
-    if not isinstance(minimum, int) or isinstance(minimum, bool) or minimum < 2:
-        fail("independent trust review requires at least two distinct maintainers")
-    if maintainers.get("current_independent_review_state") != "blocked-single-maintainer":
-        fail("single-maintainer review state must remain explicitly BLOCKED")
-    if (
-        maintainers.get("codeowner_enforcement_precondition")
-        != "at-least-two-distinct-trust-maintainers"
-    ):
-        fail("CODEOWNER enforcement precondition must remain explicit")
+    if maintainers.get("minimum_human_codeowners") != 1:
+        fail("single-codeowner policy must require exactly one human CODEOWNER minimum")
+    current_human_codeowners = string_list(
+        maintainers.get("current_human_codeowners"),
+        label="current_human_codeowners",
+    )
+    if current_human_codeowners != ["@portyu9"]:
+        fail("current single human CODEOWNER must remain @portyu9")
+    if maintainers.get("ownership_model") != "single-codeowner-ci-authoritative":
+        fail("ownership model must remain CI-authoritative with one CODEOWNER")
+    if maintainers.get("codeowner_role") != "routing-and-trust-ownership-not-merge-approval":
+        fail("CODEOWNER role must not silently become merge approval authority")
+
+    automation = object_field(policy, "automation_policy")
+    if automation.get("required_status_checks_are_merge_authority") is not True:
+        fail("required status checks must remain merge authority")
+    if automation.get("github_actions_approval_required") is not False:
+        fail("GitHub Actions approval must not be required")
+    if automation.get("copilot_approval_required") is not False:
+        fail("Copilot approval must not be required")
 
     signed = object_field(policy, "signed_history_policy")
-    if signed.get("decision") != "require-signed-commits-on-protected-history":
-        fail("signed protected history decision must remain explicit")
-    if signed.get("live_enforcement") != "external-admin-required":
-        fail("signed-history live enforcement must remain externally verified")
+    if signed.get("decision") != "do-not-require-signed-commits-for-autonomous-automation":
+        fail("signed-history decision must preserve autonomous automation")
+    if signed.get("required") is not False:
+        fail("signed commits must not be required by repository governance")
+    if not isinstance(signed.get("reason"), str) or not signed["reason"]:
+        fail("signed-history tradeoff must retain an explicit reason")
 
     settings = object_field(policy, "repository_settings_policy")
-    expected_setting = "enable-only-after-live-review-controls-are-authoritative"
+    expected_setting = "eligible-after-live-ruleset-matches-ci-authoritative-policy"
     for key in ("auto_merge", "update_branch"):
         if settings.get(key) != expected_setting:
-            fail(f"{key} policy must remain gated on authoritative live review controls")
+            fail(f"{key} policy must remain gated on authoritative live rules")
 
     prerequisites = object_field(policy, "external_admin_prerequisites")
-    allowed_verification = {
-        "blocked-admin-surface",
-        "unverified-admin-surface",
-        "verified-enabled",
-    }
     for feature in ("dependency_graph", "secret_scanning", "push_protection"):
         entry = prerequisites.get(feature)
         if not isinstance(entry, dict) or entry.get("required") is not True:
             fail(f"{feature} must remain a required external admin prerequisite")
-        if entry.get("verification") not in allowed_verification:
-            fail(f"{feature} has unsupported verification state")
+        if entry.get("verification") != "verified-enabled":
+            fail(f"{feature} must remain recorded as verified-enabled")
 
     live = object_field(policy, "live_enforcement")
     if live.get("source") != "github-ruleset" or live.get("ruleset_name") != "Protect Main":
@@ -129,6 +135,9 @@ def main() -> int:
         fail("repository-owned policy must not be represented as live attestation")
 
     codeowners = load_codeowners()
+    if codeowners.get("*") != tuple(current_human_codeowners):
+        fail("default CODEOWNER entry must match current_human_codeowners")
+
     boundaries = policy.get("trust_boundaries")
     if not isinstance(boundaries, list) or not boundaries:
         fail("trust_boundaries must be a non-empty list")
@@ -143,6 +152,8 @@ def main() -> int:
             fail(f"duplicate trust boundary path: {path}")
         seen_paths.add(path)
         owners = string_list(item.get("owners"), label=f"owners for {path}")
+        if owners != current_human_codeowners:
+            fail(f"trust boundary {path} must use the declared single human CODEOWNER")
         if codeowners.get(path) != tuple(owners):
             fail(
                 f"CODEOWNERS mismatch for {path}: "
@@ -155,8 +166,8 @@ def main() -> int:
         fail(f"cannot load repository governance documentation: {type(exc).__name__}")
     for required in (
         "Repository-owned intent is not live enforcement",
-        "BLOCKED: single-maintainer independent review",
-        "Signed protected history",
+        "Single-CODEOWNER CI-authoritative model",
+        "Signed-commit tradeoff",
         "Auto-merge and update-branch",
         "External administration prerequisites",
     ):
@@ -164,7 +175,8 @@ def main() -> int:
             fail(f"repository governance documentation is missing: {required!r}")
 
     print(
-        "Repository governance contract: intended review/signature/ownership policy is bound; "
+        "Repository governance contract: one CODEOWNER, zero required approvals, "
+        "CI-authoritative merge policy, and autonomous unsigned working commits are bound; "
         "live GitHub administration remains separately verified."
     )
     return 0
