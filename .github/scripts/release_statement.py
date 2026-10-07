@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import re
 import tempfile
 import tomllib
@@ -413,7 +414,7 @@ def inspect_statement(statement_path: Path) -> dict[str, object]:
         "expected_tag": expected_tag,
         "pypi_trusted_publishing": pypi_mode,
     }
-    github_output = __import__("os").environ.get("GITHUB_OUTPUT")
+    github_output = os.environ.get("GITHUB_OUTPUT")
     if github_output:
         with Path(github_output).open("a", encoding="utf-8") as stream:
             for key, value in metadata.items():
