@@ -313,7 +313,6 @@ def test_replication_receipt_detects_cross_snapshot_tampering() -> None:
         EvidenceReplicationReceipt.model_validate(raw)
 
 
-
 @dataclass
 class _FalseClobberBackend(_MemoryBackend):
     def put_if_absent(self, key: str, content: bytes) -> bool:
