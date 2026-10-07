@@ -64,9 +64,7 @@ def load_policy(path: Path = POLICY_PATH) -> Policy:
     try:
         raw = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, UnicodeError, json.JSONDecodeError) as exc:
-        raise AdrPolicyError(
-            f"cannot load ADR policy: {type(exc).__name__}"
-        ) from exc
+        raise AdrPolicyError(f"cannot load ADR policy: {type(exc).__name__}") from exc
     if type(raw) is not dict:
         raise AdrPolicyError("ADR policy root must be an exact object")
     expected_keys = {
@@ -87,15 +85,9 @@ def load_policy(path: Path = POLICY_PATH) -> Policy:
         raw["governed_exact_paths"],
         label="governed_exact_paths",
     )
-    if not all(
-        item.endswith("/") and not item.startswith("/") for item in prefixes
-    ):
-        raise AdrPolicyError(
-            "governed prefixes must be repository-relative directories"
-        )
-    if not all(
-        not item.endswith("/") and not item.startswith("/") for item in exact_paths
-    ):
+    if not all(item.endswith("/") and not item.startswith("/") for item in prefixes):
+        raise AdrPolicyError("governed prefixes must be repository-relative directories")
+    if not all(not item.endswith("/") and not item.startswith("/") for item in exact_paths):
         raise AdrPolicyError("governed exact paths must be repository-relative files")
     return Policy(
         adr_directory="docs/adr",
@@ -114,26 +106,16 @@ def parse_name_status(text: str) -> tuple[Change, ...]:
         kind = status[:1]
         if kind in {"A", "M", "D", "T"}:
             if len(fields) != 2 or len(status) != 1:
-                raise AdrPolicyError(
-                    f"malformed diff record at line {line_number}"
-                )
+                raise AdrPolicyError(f"malformed diff record at line {line_number}")
             paths = (fields[1],)
         elif kind in {"R", "C"}:
             if len(fields) != 3 or not status[1:].isdigit():
-                raise AdrPolicyError(
-                    f"malformed rename/copy record at line {line_number}"
-                )
+                raise AdrPolicyError(f"malformed rename/copy record at line {line_number}")
             paths = (fields[1], fields[2])
         else:
-            raise AdrPolicyError(
-                f"unsupported diff status at line {line_number}: {status!r}"
-            )
-        if any(
-            not path or path.startswith("/") or "\x00" in path for path in paths
-        ):
-            raise AdrPolicyError(
-                f"invalid repository path at line {line_number}"
-            )
+            raise AdrPolicyError(f"unsupported diff status at line {line_number}: {status!r}")
+        if any(not path or path.startswith("/") or "\x00" in path for path in paths):
+            raise AdrPolicyError(f"invalid repository path at line {line_number}")
         changes.append(Change(status=status, paths=paths))
     return tuple(changes)
 
@@ -165,18 +147,12 @@ def _validate_adr_document(path: str) -> None:
     try:
         content = (ROOT / path).read_text(encoding="utf-8")
     except (OSError, UnicodeError) as exc:
-        raise AdrPolicyError(
-            f"cannot read new ADR {path}: {type(exc).__name__}"
-        ) from exc
+        raise AdrPolicyError(f"cannot read new ADR {path}: {type(exc).__name__}") from exc
     if not content.startswith(f"# ADR {expected_number}: "):
-        raise AdrPolicyError(
-            f"ADR {path} title must bind filename number {expected_number}"
-        )
+        raise AdrPolicyError(f"ADR {path} title must bind filename number {expected_number}")
     for marker in _REQUIRED_ADR_MARKERS:
         if marker not in content:
-            raise AdrPolicyError(
-                f"ADR {path} is missing required marker {marker!r}"
-            )
+            raise AdrPolicyError(f"ADR {path} is missing required marker {marker!r}")
 
 
 def evaluate(
@@ -186,14 +162,7 @@ def evaluate(
     validate_files: bool,
 ) -> None:
     governed = tuple(
-        sorted(
-            {
-                path
-                for change in changes
-                for path in change.paths
-                if policy.governs(path)
-            }
-        )
+        sorted({path for change in changes for path in change.paths if policy.governs(path)})
     )
     if not governed:
         return
@@ -227,9 +196,7 @@ def self_test(policy: Policy) -> None:
     except AdrPolicyError:
         pass
     else:
-        raise AdrPolicyError(
-            "semantic change without a new ADR did not fail closed"
-        )
+        raise AdrPolicyError("semantic change without a new ADR did not fail closed")
 
     evaluate(
         policy,
@@ -244,41 +211,32 @@ def self_test(policy: Policy) -> None:
         evaluate(
             policy,
             parse_name_status(
-                "M\tsrc/agent_evals/evidence/models.py\n"
-                "M\tdocs/adr/0001-existing-decision.md\n"
+                "M\tsrc/agent_evals/evidence/models.py\nM\tdocs/adr/0001-existing-decision.md\n"
             ),
             validate_files=False,
         )
     except AdrPolicyError:
         pass
     else:
-        raise AdrPolicyError(
-            "editing an existing ADR incorrectly satisfied append-only policy"
-        )
+        raise AdrPolicyError("editing an existing ADR incorrectly satisfied append-only policy")
 
     try:
         evaluate(
             policy,
-            parse_name_status(
-                "R100\tdocs/old.md\tsrc/agent_evals/evidence/new.py\n"
-            ),
+            parse_name_status("R100\tdocs/old.md\tsrc/agent_evals/evidence/new.py\n"),
             validate_files=False,
         )
     except AdrPolicyError:
         pass
     else:
-        raise AdrPolicyError(
-            "rename into a governed path did not require a new ADR"
-        )
+        raise AdrPolicyError("rename into a governed path did not require a new ADR")
 
     try:
         parse_name_status("X\tsrc/agent_evals/evidence/models.py\n")
     except AdrPolicyError:
         pass
     else:
-        raise AdrPolicyError(
-            "unknown diff status did not fail closed"
-        )
+        raise AdrPolicyError("unknown diff status did not fail closed")
 
 
 def main() -> int:
@@ -291,32 +249,24 @@ def main() -> int:
         policy = load_policy()
         if args.self_test:
             if args.changed_files is not None:
-                raise AdrPolicyError(
-                    "--self-test and --changed-files are mutually exclusive"
-                )
+                raise AdrPolicyError("--self-test and --changed-files are mutually exclusive")
             self_test(policy)
             print("Semantic ADR policy self-test: PASS")
             return 0
         if args.changed_files is None:
-            raise AdrPolicyError(
-                "--changed-files is required outside --self-test"
-            )
+            raise AdrPolicyError("--changed-files is required outside --self-test")
         try:
             diff_text = args.changed_files.read_text(encoding="utf-8")
         except (OSError, UnicodeError) as exc:
             raise AdrPolicyError(
-                "cannot read changed-file inventory: "
-                f"{type(exc).__name__}"
+                f"cannot read changed-file inventory: {type(exc).__name__}"
             ) from exc
         changes = parse_name_status(diff_text)
         evaluate(policy, changes, validate_files=True)
     except AdrPolicyError as exc:
         fail(str(exc))
 
-    print(
-        "Semantic ADR policy: governed changes have an append-only "
-        "accepted decision record."
-    )
+    print("Semantic ADR policy: governed changes have an append-only accepted decision record.")
     return 0
 
 
