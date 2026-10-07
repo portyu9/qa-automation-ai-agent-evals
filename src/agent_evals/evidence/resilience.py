@@ -317,6 +317,7 @@ def quarantine_record_lock(
             "record lock identity changed during quarantine; refusing active cleanup"
         )
 
+    _fsync_directory(destination.parent)
     source.unlink()
     _fsync_directory(source.parent)
     _fsync_directory(destination.parent)
