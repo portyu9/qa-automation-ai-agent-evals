@@ -2,7 +2,9 @@
 
 This document is the human-readable compatibility view for the current source contract. Executable
 truth remains in pyproject.toml, the checked-in compatibility locks, CI, and the canonical
-agent-evals/release-statement/v1 produced from qualified release artifacts.
+agent-evals/release-statement/v1 produced from qualified release artifacts. CI also runs
+.github/scripts/validate_project_governance_docs.py so the version/Python/OpenAI/MCP rows and all six
+snapshot references cannot silently drift from those executable contracts.
 
 ## Current framework line
 

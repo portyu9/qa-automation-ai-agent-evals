@@ -120,6 +120,14 @@ def parse_name_status(text: str) -> tuple[Change, ...]:
     return tuple(changes)
 
 
+def _is_accepted_adr(path: str, policy: Policy) -> bool:
+    prefix = f"{policy.adr_directory}/"
+    if not path.startswith(prefix):
+        return False
+    match = _ADR_NAME.fullmatch(path)
+    return match is not None and int(match.group(1)) >= 1
+
+
 def _new_adr_paths(
     changes: tuple[Change, ...],
     policy: Policy,
@@ -161,6 +169,24 @@ def evaluate(
     *,
     validate_files: bool,
 ) -> None:
+    mutated_adrs = tuple(
+        sorted(
+            {
+                path
+                for change in changes
+                if change.status != "A"
+                for path in change.paths
+                if _is_accepted_adr(path, policy)
+            }
+        )
+    )
+    if mutated_adrs:
+        raise AdrPolicyError(
+            "accepted ADRs are append-only; add a superseding ADR instead of "
+            "modifying, deleting, renaming, or copying: "
+            + ", ".join(mutated_adrs)
+        )
+
     governed = tuple(
         sorted({path for change in changes for path in change.paths if policy.governs(path)})
     )
@@ -210,15 +236,30 @@ def self_test(policy: Policy) -> None:
     try:
         evaluate(
             policy,
+            parse_name_status("M\tdocs/adr/0001-existing-decision.md\n"),
+            validate_files=False,
+        )
+    except AdrPolicyError:
+        pass
+    else:
+        raise AdrPolicyError("ADR-only rewrite incorrectly bypassed append-only policy")
+
+    try:
+        evaluate(
+            policy,
             parse_name_status(
-                "M\tsrc/agent_evals/evidence/models.py\nM\tdocs/adr/0001-existing-decision.md\n"
+                "M\tsrc/agent_evals/evidence/models.py\n"
+                "M\tdocs/adr/0001-existing-decision.md\n"
+                "A\tdocs/adr/0043-superseding-decision.md\n"
             ),
             validate_files=False,
         )
     except AdrPolicyError:
         pass
     else:
-        raise AdrPolicyError("editing an existing ADR incorrectly satisfied append-only policy")
+        raise AdrPolicyError(
+            "new ADR incorrectly authorized mutation of an accepted ADR"
+        )
 
     try:
         evaluate(

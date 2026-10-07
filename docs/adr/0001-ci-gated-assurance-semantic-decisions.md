@@ -22,11 +22,14 @@ job.
 
 For pull requests, CI computes the exact base-to-head name/status diff. Any change under an enumerated
 assurance-semantic prefix or exact trust/release-governance file requires at least one newly added
-numbered ADR. Existing ADR edits, renames, copies, and free-form exemptions do not satisfy the gate.
-New ADRs use canonical filenames and required decision sections.
+numbered ADR. Accepted ADRs are append-only even when an ADR is the only changed file; edits, deletions, renames,
+or copies fail closed and cannot be authorized by adding another ADR in the same pull request. New
+ADRs use canonical filenames and required decision sections, and free-form exemptions do not exist.
 
-The policy and validator are themselves governed paths. Changing what counts as assurance-semantic
-therefore requires another append-only ADR.
+The policy and validator are themselves governed paths. The governed set also includes the public
+architecture/security/limitations/release-provenance/compatibility/deprecation contracts, so prose
+cannot broaden those assurance claims without a new decision record. Changing what counts as
+assurance-semantic therefore requires another append-only ADR.
 
 ## Consequences
 
@@ -42,8 +45,7 @@ new record rather than rewriting the accepted record.
 The gate strengthens repository decision provenance without changing evaluator authority, evidence
 roots, BLOCKED versus FAIL, release artifact provenance, or live GitHub administration. CI self-tests
 no-ADR failure, successful newly added ADR handling, historical-ADR edits, rename handling, and
-malformed diff status behavior.
-
+malformed diff status behavior, ADR-only rewrites, and attempts to pair an accepted-ADR mutation with\na new ADR.\n
 This ADR also authorizes the #329 governance additions that introduce the policy itself.
 
 ## Non-claims
