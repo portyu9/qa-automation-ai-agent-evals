@@ -369,9 +369,7 @@ class MCPCapabilityExerciseReceipt(BaseModel):
     receipt_root: str = Field(pattern=r"^[0-9a-f]{64}$")
 
     @field_serializer("required_capabilities", when_used="json")
-    def serialize_required_capabilities(
-        self, value: frozenset[MCPCapability]
-    ) -> list[str]:
+    def serialize_required_capabilities(self, value: frozenset[MCPCapability]) -> list[str]:
         return sorted(item.value for item in value)
 
     @classmethod
