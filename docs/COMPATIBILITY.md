@@ -2,7 +2,7 @@
 
 This document is the human-readable compatibility view for the current source contract. Executable
 truth remains in pyproject.toml, the checked-in compatibility locks, CI, and the canonical
-agent-evals/release-statement/v1 produced from qualified release artifacts. CI also runs
+agent-evals/release-statement/v2 produced from qualified release artifacts. CI also runs
 .github/scripts/validate_project_governance_docs.py so the version/Python/OpenAI/MCP rows and all six
 snapshot references cannot silently drift from those executable contracts.
 
@@ -10,7 +10,7 @@ snapshot references cannot silently drift from those executable contracts.
 
 | Surface | Current contract | Executable authority |
 |---|---|---|
-| Framework package | 0.1.0 source/package metadata; pre-1.0 | pyproject.toml |
+| Framework package | version from pyproject.toml | pyproject.toml |
 | Python | >=3.11,<3.15 (3.11, 3.12, 3.13, 3.14) | package metadata; quality on 3.11 + 3.14; compatibility locks |
 | Core runtime | pydantic>=2.12.2,<3, typer>=0.16,<1 | package metadata + core min/latest locks |
 | OpenAI integration | openai-agents==0.22.3 | optional dependency + openai-mcp min/latest CI profile |
@@ -54,10 +54,14 @@ all providers implement equivalent semantics.
 
 ## Release binding
 
-On a qualified trusted-main run, the release statement binds the exact pyproject.toml digest and all
-six compatibility-lock digests to the retained package and provenance subjects. The GitHub Release
-publisher then reverifies that statement before publication. As of 2026-10-07, there is no published
-GitHub Release and no PyPI release, so this document must not be read as a distribution claim.
+On a qualified trusted-main run, release-statement/v2 binds the exact pyproject.toml digest and all
+six compatibility-lock digests to the retained package and provenance subjects, while retaining exact
+verification support for historical v1 statements. The GitHub Release publisher reverifies that
+statement before publication. A separate release-event workflow may publish only the attested wheel
+and sdist through PyPI Trusted Publishing with GitHub OIDC; it executes default-branch code, never
+release-tag code, and re-verifies the retained release evidence first. As of 2026-10-07, there is no
+published GitHub Release or PyPI release, and the external PyPI Trusted Publisher registration has not
+been verified here, so this document must not be read as a distribution claim.
 
 ## Change policy
 
