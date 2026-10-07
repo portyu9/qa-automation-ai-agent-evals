@@ -123,7 +123,9 @@ def validate_pypi_release_event(
     if type(release) is not dict:
         raise ReleaseCandidateError("release event must contain a release object")
     if release.get("draft") is not False or release.get("prerelease") is not False:
-        raise ReleaseCandidateError(\n            "PyPI publication requires a non-draft non-prerelease GitHub Release"\n        )
+        raise ReleaseCandidateError(
+            "PyPI publication requires a non-draft non-prerelease GitHub Release"
+        )
     version_tag = require_tag(release.get("tag_name"))
     if workflow_ref != f"refs/tags/{version_tag}":
         raise ReleaseCandidateError("release workflow ref must match the published version tag")
@@ -150,11 +152,15 @@ def validate_pypi_release_event(
     }
     missing = sorted(required - set(names))
     if missing:
-        raise ReleaseCandidateError(\n            f"published release is missing retained evidence assets: {missing}"\n        )
+        raise ReleaseCandidateError(
+            f"published release is missing retained evidence assets: {missing}"
+        )
     if len([name for name in names if name.endswith(".whl")]) != 1:
         raise ReleaseCandidateError("published release must contain exactly one wheel")
     if len([name for name in names if name.endswith(".tar.gz")]) != 1:
-        raise ReleaseCandidateError(\n            "published release must contain exactly one source distribution"\n        )
+        raise ReleaseCandidateError(
+            "published release must contain exactly one source distribution"
+        )
     return version_tag
 
 
@@ -484,7 +490,9 @@ def validate_pypi_release(
     )
     tag_sha = resolve_tag_commit(api_url, repository, version_tag, token)
     if tag_sha != require_sha(event_sha, "release event SHA"):
-        raise ReleaseCandidateError(\n            "published release event SHA does not match resolved tag commit"\n        )
+        raise ReleaseCandidateError(
+            "published release event SHA does not match resolved tag commit"
+        )
     pyproject_bytes = fetch_pyproject(api_url, repository, tag_sha, token)
     version = validate_version_binding(
         version_tag=version_tag,
