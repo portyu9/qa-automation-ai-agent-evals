@@ -89,6 +89,14 @@ publish_release_path = Path(".github/workflows/publish-release.yml")
 publish_release = workflows.get(publish_release_path)
 if publish_release is None:
     fail("repository must contain .github/workflows/publish-release.yml")
+prepare_release_path = Path(".github/workflows/prepare-release.yml")
+prepare_release = workflows.get(prepare_release_path)
+if prepare_release is None:
+    fail("repository must contain .github/workflows/prepare-release.yml")
+publish_pypi_path = Path(".github/workflows/publish-pypi.yml")
+publish_pypi = workflows.get(publish_pypi_path)
+if publish_pypi is None:
+    fail("repository must contain .github/workflows/publish-pypi.yml")
 license_policy_path = Path(".github/dependency-license-policy.json")
 if not license_policy_path.is_file():
     fail("repository must contain .github/dependency-license-policy.json")
@@ -327,6 +335,8 @@ if "python .github/scripts/validate_workflow_graph.py" not in policy:
     fail("policy job must execute the semantic workflow graph validator")
 if "python .github/scripts/release_candidate.py self-test" not in policy:
     fail("policy job must self-test retained release candidate validation")
+if "python .github/scripts/release_version.py self-test" not in policy:
+    fail("policy job must self-test deterministic release-version preparation")
 if "python .github/scripts/ci_qualification_evidence.py self-test" not in policy:
     fail("policy job must self-test CI qualification evidence")
 if "python .github/scripts/release_statement.py self-test" not in policy:
@@ -511,6 +521,87 @@ if publish_release.count("release_candidate.py validate") < 2:
 for forbidden in ("python -m build", "twine upload", "uv publish", "pypi.org"):
     if forbidden in publish_release.lower():
         fail(f"publish-release workflow contains forbidden release behavior: {forbidden}")
+
+if "name: Prepare release version" not in prepare_release:
+    fail("prepare-release workflow must use the canonical workflow name")
+if (
+    "repository_dispatch:" not in prepare_release
+    or "types: [release-preparation]" not in prepare_release
+):
+    fail("prepare-release must use default-branch-bound release-preparation repository_dispatch")
+if "workflow_dispatch:" in prepare_release or "release:" in prepare_release:
+    fail("prepare-release must not expose selectable-ref or release-event execution surfaces")
+if "permissions:\n  contents: read" not in prepare_release:
+    fail("prepare-release must remain read-only")
+for forbidden in ("contents: write", "pull-requests: write", "id-token: write", "attestations: write"):
+    if forbidden in prepare_release:
+        fail(f"prepare-release must not gain write/signing authority: {forbidden}")
+if "if: github.ref == 'refs/heads/main'" not in prepare_release:
+    fail("prepare-release must fail closed unless repository_dispatch executes on main")
+if "ref: ${{ github.sha }}" not in prepare_release or "persist-credentials: false" not in prepare_release:
+    fail("prepare-release must checkout the exact default-branch dispatch SHA without credentials")
+for required in (
+    "release_version.py self-test",
+    "release_version.py prepare",
+    '--event "$GITHUB_EVENT_PATH"',
+    '--workflow-ref "$GITHUB_REF"',
+    '--workflow-sha "$GITHUB_SHA"',
+    "git diff --binary -- pyproject.toml",
+    "release-version-plan.json",
+    "release-version.patch",
+):
+    if required not in prepare_release:
+        fail(f"prepare-release workflow is missing required contract text: {required}")
+
+if "name: Publish package to PyPI" not in publish_pypi:
+    fail("publish-pypi workflow must use the canonical workflow name")
+if "release:\n    types: [published]" not in publish_pypi:
+    fail("publish-pypi must trigger only from a published GitHub Release")
+if "workflow_dispatch:" in publish_pypi or "repository_dispatch:" in publish_pypi:
+    fail("publish-pypi must not expose manual or repository-dispatch publication entrypoints")
+if "permissions:\n  contents: read\n  id-token: write" not in publish_pypi:
+    fail("publish-pypi must grant only contents-read plus OIDC id-token write authority")
+for forbidden in ("contents: write", "pull-requests: write", "attestations: write"):
+    if forbidden in publish_pypi:
+        fail(f"publish-pypi must not gain unrelated write authority: {forbidden}")
+if "environment: pypi" not in publish_pypi:
+    fail("publish-pypi must bind the Trusted Publisher to the pypi environment")
+if "ref: main" not in publish_pypi or "persist-credentials: false" not in publish_pypi:
+    fail("publish-pypi must execute trusted default-branch code only")
+if "ref: ${{ github.sha }}" in publish_pypi:
+    fail("publish-pypi must never checkout release-tag code under OIDC authority")
+for required in (
+    "release_candidate.py validate-pypi",
+    "release_statement.py inspect",
+    "agent-evals/release-statement/v2",
+    "release-event-oidc-only",
+    "application/vnd.github.raw+json",
+    "package_artifact_manifest.py verify",
+    "release_supply_chain.py verify",
+    "ci_qualification_evidence.py verify",
+    "release_statement.py verify",
+    "gh attestation verify",
+    '--signer-workflow "$GITHUB_REPOSITORY/.github/workflows/ci.yml"',
+    '--source-ref "refs/heads/main"',
+    "pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33",
+    "packages-dir: pypi-dist",
+    "skip-existing: false",
+    "attestations: true",
+):
+    if required not in publish_pypi:
+        fail(f"publish-pypi workflow is missing required contract text: {required}")
+for forbidden in (
+    "password:",
+    "user:",
+    "pypi_api_token",
+    "twine upload",
+    "uv publish",
+    "repository-url:",
+    "skip-existing: true",
+    "python -m build",
+):
+    if forbidden in publish_pypi.lower():
+        fail(f"publish-pypi workflow contains forbidden publication behavior: {forbidden}")
 
 for job, next_job, coverage_profile, coverage_report in (
     ("quality", "compatibility", None, None),
@@ -1004,6 +1095,6 @@ print(
     "runtime policy validated: "
     f"python={','.join(SUPPORTED_PYTHONS)}; quality-endpoints={','.join(QUALITY_PYTHONS)}; requires-python={REQUIRES_PYTHON}; "
     f"runner={RUNNER}; workflows={len(workflows)}; gate=ci-gate+protected-codeql; "
-    "package-artifacts=hashed-locks+minimum-latest-compatibility+retained-reverified-reproduced-with-spdx-license-evidence+signed-ci-qualification+attested-release-statement+trusted-main-oidc-provenance+default-branch-published"
+    "package-artifacts=hashed-locks+minimum-latest-compatibility+retained-reverified-reproduced-with-spdx-license-evidence+signed-ci-qualification+attested-release-statement+trusted-main-oidc-provenance+default-branch-published+pypi-oidc-only"
 )
 sys.exit(0)
