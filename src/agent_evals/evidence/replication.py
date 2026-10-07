@@ -156,6 +156,8 @@ class ReplicaTargetReceipt(BaseModel):
         snapshot: EvidenceBackupSnapshot,
         probe: BackendProbeReceipt,
     ) -> Self:
+        if probe.target_label != target_label:
+            raise ValueError("replica target label does not match backend probe label")
         object_set_root = _object_set_root(snapshot.objects)
         material = {
             "schema_version": _TARGET_SCHEMA,
@@ -255,8 +257,11 @@ class EvidenceReplicationReceipt(BaseModel):
 def create_backup_snapshot(store: ContentAddressedEvidenceStore) -> EvidenceBackupSnapshot:
     """Bind the exact verified envelopes currently reachable from one source store."""
 
+    keys = store.keys()
+    if len(keys) > _MAX_OBJECTS:
+        raise EvidenceIntegrityError("backup snapshot exceeds configured object-count ceiling")
     records: list[BackupObjectRecord] = []
-    for key in store.keys():
+    for key in keys:
         envelope = store.backend.get(key)
         evidence = _verify_exact_envelope(
             key,
@@ -367,6 +372,7 @@ def replicate_backup(
         raise ValueError("minimum_verified_targets must be an exact integer from 1 through 64")
     if type(require_worm) is not bool:
         raise ValueError("require_worm must be an exact boolean")
+    _validate_challenge(challenge)
     if not targets:
         raise ValueError("replication requires at least one target")
     if len(targets) > _MAX_TARGETS:
@@ -374,12 +380,13 @@ def replicate_backup(
     if len(targets) < minimum_verified_targets:
         raise ValueError("configured target count is below the required replication threshold")
 
-    target_items = tuple(sorted(targets.items(), key=lambda item: item[0]))
+    raw_target_items = tuple(targets.items())
+    for label, _ in raw_target_items:
+        _validate_target_label(label)
+    target_items = tuple(sorted(raw_target_items, key=lambda item: item[0]))
     labels = tuple(label for label, _ in target_items)
     if len(set(labels)) != len(labels):
         raise ValueError("replication target labels must be unique")
-    for label in labels:
-        _validate_target_label(label)
 
     snapshot = create_backup_snapshot(source)
     probes = {
@@ -505,9 +512,13 @@ def _validate_target_label(label: str) -> None:
         )
 
 
-def _challenge_digest(target_label: str, challenge: str) -> str:
+def _validate_challenge(challenge: str) -> None:
     if type(challenge) is not str or not challenge or len(challenge.encode("utf-8")) > 512:
         raise ValueError("backend probe challenge must be non-empty and at most 512 UTF-8 bytes")
+
+
+def _challenge_digest(target_label: str, challenge: str) -> str:
+    _validate_challenge(challenge)
     material = {
         "target_label": target_label,
         "challenge": challenge,
