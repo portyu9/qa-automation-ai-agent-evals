@@ -294,9 +294,7 @@ def test_atomic_materialize_failure_boundaries_never_create_ambiguous_bytes(
 ) -> None:
     target = tmp_path / "artifact.bin"
     content = b"immutable-evidence"
-    real_write = store_module.os.write
     real_fsync = store_module.os.fsync
-    real_hardlink = Path.hardlink_to
     real_unlink = Path.unlink
     fsync_calls = 0
     unlink_failed = False
