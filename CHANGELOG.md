@@ -9,7 +9,7 @@ evidence or authority semantics.
 ### Release automation
 
 - Add deterministic default-branch release-version preparation that emits a validated patch artifact without repository write authority.
-- Add a separate PyPI Trusted Publishing workflow that is triggered only by a published GitHub Release, executes default-branch code only, re-verifies the exact attested release subjects, and uses GitHub OIDC instead of a long-lived PyPI token.
+- Add a separate PyPI Trusted Publishing workflow authorized only by a published GitHub Release. Externally created Releases may enter through the `release: published` event; the retained-byte publisher uses a default-branch-bound `pypi-publish-request` handoff after publication because GitHub suppresses ordinary recursive events created by `GITHUB_TOKEN`. Both paths execute trusted default-branch verifier code, re-verify the exact attested release subjects, and use GitHub OIDC instead of a long-lived PyPI token.
 - Version the canonical release statement to v2 for the OIDC-only PyPI publication contract while retaining exact v1 verification semantics.
 
 ### Governance
@@ -22,11 +22,12 @@ evidence or authority semantics.
 
 - Add a durable changelog rather than treating commit history as release notes.
 
-## 0.1.0 — repository baseline (not yet published)
+## 0.1.0 — repository baseline
 
-The current package metadata declares version 0.1.0. As of 2026-10-07, the repository has no GitHub
-Release and no PyPI publication. This section describes the source baseline only; it is not a claim
-that a distributable release has been published.
+The package metadata declares version 0.1.0. On 2026-10-07, `v0.1.0` was published as a GitHub
+Release from exact retained CI-qualified package bytes with retained SBOM, qualification evidence,
+release statement, and reverified GitHub Actions OIDC/Sigstore provenance. PyPI availability remains
+an external publication state that must be verified separately from this changelog.
 
 ### Included in the source baseline
 
@@ -42,8 +43,8 @@ that a distributable release has been published.
 
 ### Non-claims
 
-- A source baseline is not a signed GitHub Release.
-- The repository is not published to PyPI and does not claim PyPI Trusted Publishing.
+- The GitHub Release database object itself is not claimed cryptographically signed; the retained release assets carry the verified provenance described in the release contract.
+- Source/changelog text alone does not establish PyPI publication or Trusted Publisher authentication; those remain externally verified states.
 - Hashes are integrity identities, not authentication.
 - Compatibility claims remain limited to the executable contracts documented in
   docs/COMPATIBILITY.md.
