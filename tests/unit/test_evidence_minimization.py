@@ -141,10 +141,7 @@ def test_operator_paths_use_strict_json_pointer_and_event_wildcard() -> None:
 
     assert prepared.evidence.events[0].payload["person"]["email"] == "[REDACTED:OPERATOR_PII]"
     assert prepared.evidence.events[1].payload["person"]["email"] == "[REDACTED:OPERATOR_PII]"
-    assert (
-        prepared.evidence.final_state["customer/record"]["email"]
-        == "[REDACTED:OPERATOR_PII]"
-    )
+    assert prepared.evidence.final_state["customer/record"]["email"] == "[REDACTED:OPERATOR_PII]"
     assert prepared.evidence.final_output == "[REDACTED:OPERATOR_PII]"
     assert _count(prepared.receipt, SensitiveDataClass.OPERATOR_PII) == 4
     serialized = prepared.evidence.model_dump_json() + prepared.receipt.model_dump_json()
@@ -200,9 +197,7 @@ def test_operator_pii_path_into_authority_event_fails_closed() -> None:
             ),
         )
     )
-    policy = EvidenceMinimizationPolicy(
-        operator_pii_paths=("/events/0/payload/person/email",)
-    )
+    policy = EvidenceMinimizationPolicy(operator_pii_paths=("/events/0/payload/person/email",))
 
     with pytest.raises(EvidenceMinimizationError, match="authority-bearing"):
         minimize_evidence_for_persistence(original, policy=policy)
@@ -251,9 +246,7 @@ def test_redaction_and_traversal_budgets_fail_closed() -> None:
 
 
 def test_minimization_is_deterministic_and_idempotent() -> None:
-    policy = EvidenceMinimizationPolicy(
-        operator_pii_paths=("/final_state/person/email",)
-    )
+    policy = EvidenceMinimizationPolicy(operator_pii_paths=("/final_state/person/email",))
     original = _evidence(
         final_state={
             "person": {"email": "person@example.test"},
@@ -267,16 +260,15 @@ def test_minimization_is_deterministic_and_idempotent() -> None:
 
     assert second.evidence == first.evidence
     assert second.receipt == first.receipt
-    assert policy.policy_id == EvidenceMinimizationPolicy(
-        operator_pii_paths=("/final_state/person/email",)
-    ).policy_id
+    assert (
+        policy.policy_id
+        == EvidenceMinimizationPolicy(operator_pii_paths=("/final_state/person/email",)).policy_id
+    )
 
 
 def test_minimization_receipt_detects_tampering_and_has_no_raw_fingerprint() -> None:
     secret = "ghp_abcdefghijklmnop"
-    prepared = minimize_evidence_for_persistence(
-        _evidence(final_state={"token": secret})
-    )
+    prepared = minimize_evidence_for_persistence(_evidence(final_state={"token": secret}))
     dumped = prepared.receipt.model_dump(mode="json")
     dumped["receipt_root"] = "0" * 64
 
