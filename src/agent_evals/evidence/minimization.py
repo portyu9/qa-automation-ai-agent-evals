@@ -167,9 +167,7 @@ class EvidenceMinimizationReceipt(BaseModel):
         material = {
             "schema_version": _RECEIPT_SCHEMA,
             "policy_id": policy.policy_id,
-            "classifications": [
-                item.model_dump(mode="json") for item in classifications
-            ],
+            "classifications": [item.model_dump(mode="json") for item in classifications],
             "result_evidence_root": result_evidence_root,
         }
         return cls(
@@ -190,14 +188,10 @@ class EvidenceMinimizationReceipt(BaseModel):
         material = {
             "schema_version": self.schema_version,
             "policy_id": self.policy_id,
-            "classifications": [
-                item.model_dump(mode="json") for item in self.classifications
-            ],
+            "classifications": [item.model_dump(mode="json") for item in self.classifications],
             "result_evidence_root": self.result_evidence_root,
         }
-        expected = hashlib.sha256(
-            _RECEIPT_DOMAIN + _canonical_json_bytes(material)
-        ).hexdigest()
+        expected = hashlib.sha256(_RECEIPT_DOMAIN + _canonical_json_bytes(material)).hexdigest()
         if expected != self.receipt_root:
             raise ValueError("evidence minimization receipt root mismatch")
         return self
@@ -312,9 +306,7 @@ def minimize_evidence_for_persistence(
             continue
 
         selected_indexes = (
-            range(len(snapshot.events))
-            if path.event_selector == "*"
-            else (path.event_selector,)
+            range(len(snapshot.events)) if path.event_selector == "*" else (path.event_selector,)
         )
         for index in selected_indexes:
             if index is None or index < 0 or index >= len(snapshot.events):
@@ -433,9 +425,7 @@ def _resolve_child(parent: Any, segment: str) -> Any:
         if index >= len(parent):
             return _MISSING
         return parent[index]
-    raise EvidenceMinimizationError(
-        "operator PII path traverses a non-container JSON value"
-    )
+    raise EvidenceMinimizationError("operator PII path traverses a non-container JSON value")
 
 
 def _replace_child(parent: Any, segment: str, replacement: str) -> None:
@@ -450,9 +440,7 @@ def _replace_child(parent: Any, segment: str, replacement: str) -> None:
             )
         parent[index] = replacement
         return
-    raise EvidenceMinimizationError(
-        "operator PII path cannot replace a non-container JSON value"
-    )
+    raise EvidenceMinimizationError("operator PII path cannot replace a non-container JSON value")
 
 
 def _canonical_list_index(segment: str) -> int | None:
@@ -515,9 +503,7 @@ def _transform_credentials(
 
     if value is None or type(value) in (bool, int, float):
         return value
-    raise EvidenceMinimizationError(
-        "evidence minimization encountered an unsupported JSON value"
-    )
+    raise EvidenceMinimizationError("evidence minimization encountered an unsupported JSON value")
 
 
 def _transform_credential_string(
@@ -551,14 +537,10 @@ def _contains_credential(
         return True
     if isinstance(value, dict):
         return any(
-            _contains_credential(child, key_hint=key, budget=budget)
-            for key, child in value.items()
+            _contains_credential(child, key_hint=key, budget=budget) for key, child in value.items()
         )
     if isinstance(value, list):
-        return any(
-            _contains_credential(child, key_hint=None, budget=budget)
-            for child in value
-        )
+        return any(_contains_credential(child, key_hint=None, budget=budget) for child in value)
     if isinstance(value, str):
         return value == _CREDENTIAL_MARKER or _string_has_credential(value)
     if value is None or type(value) in (bool, int, float):
@@ -578,11 +560,7 @@ def _string_has_credential(value: str) -> bool:
 
 
 def _parse_operator_path(path: str) -> _ParsedPath:
-    if (
-        not path
-        or not path.startswith("/")
-        or len(path.encode("utf-8")) > _MAX_PATH_UTF8_BYTES
-    ):
+    if not path or not path.startswith("/") or len(path.encode("utf-8")) > _MAX_PATH_UTF8_BYTES:
         raise ValueError("operator PII path is malformed or exceeds its byte ceiling")
 
     encoded_segments = path[1:].split("/")
