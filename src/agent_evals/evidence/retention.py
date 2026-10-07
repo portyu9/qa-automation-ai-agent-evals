@@ -51,7 +51,9 @@ class RetentionReferenceSet(BaseModel):
             raise ValueError("evidence reference keys must be canonical sorted unique values")
         for key in self.referenced_sha256:
             validate_blob_key(key)
-        if not hmac.compare_digest(_reference_root(self.referenced_sha256), self.reference_set_root):
+        if not hmac.compare_digest(
+            _reference_root(self.referenced_sha256), self.reference_set_root
+        ):
             raise ValueError("evidence reference-set root mismatch")
         return self
 
@@ -107,7 +109,9 @@ def execute_garbage_collection(
         raise ValueError("reference set changed after garbage-collection planning")
     referenced = set(references.referenced_sha256)
     if referenced.intersection(plan.delete_candidates):
-        raise EvidenceIntegrityError("garbage-collection plan attempts to delete referenced evidence")
+        raise EvidenceIntegrityError(
+            "garbage-collection plan attempts to delete referenced evidence"
+        )
 
     deleted: list[str] = []
     for key in plan.delete_candidates:
