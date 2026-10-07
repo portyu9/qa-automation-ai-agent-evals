@@ -215,13 +215,10 @@ def _dependabot_action_pin_exempt(
     if _SHA.fullmatch(base_sha) is None or _SHA.fullmatch(head_sha) is None:
         raise AdrPolicyError("automation exemption requires canonical base/head SHAs")
 
-    governed_changes = [
-        change for change in changes if any(policy.governs(path) for path in change.paths)
-    ]
-    if not governed_changes:
+    if not changes:
         return False
     workflow_paths: list[str] = []
-    for change in governed_changes:
+    for change in changes:
         if (
             change.status != "M"
             or len(change.paths) != 1
@@ -353,6 +350,24 @@ def self_test(policy: Policy) -> None:
         raise AdrPolicyError("canonical action-pin update was not recognized")
     if _action_pin_patch_is_safe(safe_patch + "+run: echo bypass\n"):
         raise AdrPolicyError("non-action workflow change bypassed action-pin policy")
+    workflow_change = (Change(status="M", paths=(".github/workflows/ci.yml",)),)
+    if _dependabot_action_pin_exempt(
+        policy,
+        workflow_change,
+        actor="portyu9",
+        base_sha="0" * 40,
+        head_sha="1" * 40,
+    ):
+        raise AdrPolicyError("non-Dependabot actor bypassed the ADR requirement")
+    mixed_change = workflow_change + (Change(status="M", paths=("pyproject.toml",)),)
+    if _dependabot_action_pin_exempt(
+        policy,
+        mixed_change,
+        actor=policy.automation_actor,
+        base_sha="0" * 40,
+        head_sha="1" * 40,
+    ):
+        raise AdrPolicyError("mixed Dependabot change bypassed the ADR requirement")
 
     evaluate(
         policy,
