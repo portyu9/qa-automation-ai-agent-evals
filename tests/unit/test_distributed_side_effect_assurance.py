@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import hashlib
+import os
+import subprocess
+import sys
 
 import pytest
 
@@ -180,3 +183,63 @@ def test_timeout_retry_can_be_the_single_successful_commit() -> None:
 
     assert receipt.committed_mutations == 1
     assert receipt.accepted is True
+
+
+def test_unordered_side_effect_policy_is_root_stable_across_json_and_hash_seeds() -> None:
+    causes = list(SideEffectAttemptCause)
+    policy_a = DistributedSideEffectPolicy(required_causes=frozenset(causes))
+    policy_b = DistributedSideEffectPolicy(required_causes=frozenset(reversed(causes)))
+    attempts = (
+        _attempt(
+            index=0,
+            cause=SideEffectAttemptCause.INITIAL,
+            outcome=SideEffectAttemptOutcome.COMMITTED,
+        ),
+    )
+
+    receipt_a = DistributedSideEffectReceipt.create(policy=policy_a, attempts=attempts)
+    receipt_b = DistributedSideEffectReceipt.create(policy=policy_b, attempts=attempts)
+    expected_root = "41121b3e301914ee8e1a1076e6453be72ff8e5f66921d548ab63adc505e21460"
+
+    assert policy_a.model_dump_json() == policy_b.model_dump_json()
+    assert receipt_a.receipt_root == receipt_b.receipt_root == expected_root
+    round_tripped = DistributedSideEffectReceipt.model_validate_json(receipt_a.model_dump_json())
+    assert round_tripped.receipt_root == expected_root
+
+    script = """
+from agent_evals.side_effect.distributed import (
+    DistributedSideEffectAttempt,
+    DistributedSideEffectPolicy,
+    DistributedSideEffectReceipt,
+    SideEffectAttemptCause,
+    SideEffectAttemptOutcome,
+)
+
+attempt = DistributedSideEffectAttempt(
+    operation_identity="a" * 64,
+    idempotency_key_sha256="b" * 64,
+    attempt_id="attempt.0",
+    worker_id="worker-0",
+    delivery_id="delivery-0",
+    cause=SideEffectAttemptCause.INITIAL,
+    outcome=SideEffectAttemptOutcome.COMMITTED,
+    transaction_id="tx-0",
+    mutation_sha256="c" * 64,
+    started_tick=0,
+    completed_tick=1,
+)
+receipt = DistributedSideEffectReceipt.create(
+    policy=DistributedSideEffectPolicy(),
+    attempts=(attempt,),
+)
+print(receipt.receipt_root)
+"""
+    roots = {
+        subprocess.check_output(
+            [sys.executable, "-c", script],
+            env={**os.environ, "PYTHONHASHSEED": seed},
+            text=True,
+        ).strip()
+        for seed in ("1", "2", "31337")
+    }
+    assert roots == {expected_root}

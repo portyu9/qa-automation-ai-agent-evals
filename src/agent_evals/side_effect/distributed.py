@@ -8,7 +8,7 @@ import json
 from enum import StrEnum
 from typing import Literal, Self
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, model_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, field_serializer, model_validator
 
 from agent_evals._receipt_validation import (
     is_receipt_construction,
@@ -58,6 +58,10 @@ class DistributedSideEffectPolicy(BaseModel):
     require_unique_transaction: bool = Field(default=True, strict=True)
     require_unique_delivery_ids: bool = Field(default=True, strict=True)
     require_duplicate_rejection: bool = Field(default=True, strict=True)
+
+    @field_serializer("required_causes", when_used="json")
+    def serialize_required_causes(self, value: frozenset[SideEffectAttemptCause]) -> list[str]:
+        return sorted(item.value for item in value)
 
     @model_validator(mode="after")
     def require_coverage(self) -> Self:

@@ -12,7 +12,15 @@ import json
 from enum import StrEnum
 from typing import Literal, Self
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    ValidationInfo,
+    field_serializer,
+    field_validator,
+    model_validator,
+)
 
 from agent_evals._receipt_validation import (
     is_receipt_construction,
@@ -99,6 +107,10 @@ class OAuthSessionEvent(BaseModel):
     accepted_by_resource: bool = Field(strict=True)
     parent_token_sha256: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
 
+    @field_serializer("scopes", when_used="json")
+    def serialize_scopes(self, value: frozenset[str]) -> list[str]:
+        return sorted(value)
+
     @field_validator("scopes")
     @classmethod
     def validate_scopes(cls, value: frozenset[str]) -> frozenset[str]:
@@ -145,6 +157,14 @@ class OAuthAdvancedPolicy(BaseModel):
     allowed_sender_bindings: frozenset[OAuthSenderBinding] = frozenset(
         {OAuthSenderBinding.DPOP, OAuthSenderBinding.MTLS}
     )
+
+    @field_serializer("allowed_issuers", when_used="json")
+    def serialize_allowed_issuers(self, value: frozenset[str]) -> list[str]:
+        return sorted(value)
+
+    @field_serializer("allowed_sender_bindings", when_used="json")
+    def serialize_allowed_sender_bindings(self, value: frozenset[OAuthSenderBinding]) -> list[str]:
+        return sorted(item.value for item in value)
 
     @field_validator("allowed_issuers")
     @classmethod
@@ -281,6 +301,10 @@ class OAuthAuthorizationEpoch(BaseModel):
     resource_identity: str = Field(min_length=1, max_length=1024)
     operation: str = Field(min_length=1, max_length=256)
     allowed: bool = Field(strict=True)
+
+    @field_serializer("scopes", when_used="json")
+    def serialize_scopes(self, value: frozenset[str]) -> list[str]:
+        return sorted(value)
 
     @field_validator("scopes")
     @classmethod

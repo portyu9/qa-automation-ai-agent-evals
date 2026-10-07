@@ -68,3 +68,18 @@ def test_blocked_chaos_evaluator_uncertainty_remains_distinct_and_blocks_qualifi
     assert receipt.blocked == 1
     assert receipt.subject_failures == 0
     assert receipt.qualification_complete is False
+
+
+def test_unordered_chaos_policy_is_root_stable_and_round_trips() -> None:
+    domains = list(ChaosDomain)
+    policy_a = ChaosPolicy(required_domains=frozenset(domains))
+    policy_b = ChaosPolicy(required_domains=frozenset(reversed(domains)))
+    observations = tuple(_observation(domain, index) for index, domain in enumerate(domains))
+
+    receipt_a = ChaosAssuranceReceipt.create(policy=policy_a, observations=observations)
+    receipt_b = ChaosAssuranceReceipt.create(policy=policy_b, observations=observations)
+
+    assert policy_a.model_dump_json() == policy_b.model_dump_json()
+    assert receipt_a.receipt_root == receipt_b.receipt_root
+    round_tripped = ChaosAssuranceReceipt.model_validate_json(receipt_a.model_dump_json())
+    assert round_tripped.receipt_root == receipt_a.receipt_root

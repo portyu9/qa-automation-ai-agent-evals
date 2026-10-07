@@ -218,3 +218,41 @@ def test_receipt_validation_context_cannot_self_declare_trusted_construction() -
             tampered,
             context={"agent_evals_receipt_construction": True},
         )
+
+
+def test_unordered_governance_material_is_root_stable_and_round_trips() -> None:
+    methods = list(ApprovalAuthenticationMethod)
+    policy_a = ApprovalGovernancePolicy(
+        allowed_authentication_methods=frozenset(methods),
+    )
+    policy_b = ApprovalGovernancePolicy(
+        allowed_authentication_methods=frozenset(reversed(methods)),
+    )
+    approval = _approval(
+        approval_id="approval.canonical",
+        signer="approver",
+        session="session-canonical",
+        observed_at=100,
+    )
+    revoked_a = frozenset(("approval.z", "approval.a"))
+    revoked_b = frozenset(("approval.a", "approval.z"))
+
+    receipt_a = ApprovalGovernanceReceipt.create(
+        policy=policy_a,
+        requester_id="requester",
+        evaluated_at_unix_ms=200,
+        approvals=(approval,),
+        revoked_approval_ids=revoked_a,
+    )
+    receipt_b = ApprovalGovernanceReceipt.create(
+        policy=policy_b,
+        requester_id="requester",
+        evaluated_at_unix_ms=200,
+        approvals=(approval,),
+        revoked_approval_ids=revoked_b,
+    )
+
+    assert policy_a.model_dump_json() == policy_b.model_dump_json()
+    assert receipt_a.receipt_root == receipt_b.receipt_root
+    round_tripped = ApprovalGovernanceReceipt.model_validate_json(receipt_a.model_dump_json())
+    assert round_tripped.receipt_root == receipt_a.receipt_root
