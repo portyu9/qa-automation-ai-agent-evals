@@ -463,3 +463,159 @@ def test_oauth_active_session_authorization_drift_requires_post_contraction_deni
                 ),
             )
         )
+
+def test_unordered_mcp_and_oauth_material_is_canonical_and_root_stable() -> None:
+    endpoint = _endpoint()
+    conditions = list(MCPRemotePolicy().required_conditions)
+    policy_a = MCPRemotePolicy(required_conditions=frozenset(conditions))
+    policy_b = MCPRemotePolicy(required_conditions=frozenset(reversed(conditions)))
+    observations = tuple(
+        _remote_observation(endpoint, condition)
+        for condition in sorted(policy_a.required_conditions, key=lambda item: item.value)
+    )
+    remote_a = MCPRemoteAssuranceReceipt.create(
+        endpoint=endpoint,
+        policy=policy_a,
+        observations=observations,
+    )
+    remote_b = MCPRemoteAssuranceReceipt.create(
+        endpoint=endpoint,
+        policy=policy_b,
+        observations=observations,
+    )
+    assert policy_a.model_dump_json() == policy_b.model_dump_json()
+    assert remote_a.receipt_root == remote_b.receipt_root
+    assert (
+        MCPRemoteAssuranceReceipt.model_validate_json(remote_a.model_dump_json()).receipt_root
+        == remote_a.receipt_root
+    )
+
+    capabilities = list(MCPCapability)
+    snapshot_a = MCPCapabilitySnapshot(
+        server_identity="canonical-mcp",
+        capabilities=frozenset(capabilities),
+        capability_revision="canonical-v1",
+    )
+    snapshot_b = MCPCapabilitySnapshot(
+        server_identity="canonical-mcp",
+        capabilities=frozenset(reversed(capabilities)),
+        capability_revision="canonical-v1",
+    )
+    assert snapshot_a.model_dump_json() == snapshot_b.model_dump_json()
+    assert snapshot_a.identity == snapshot_b.identity
+
+    hostile_conditions = [
+        MCPRemoteCondition.OVERSIZED_RESPONSE,
+        MCPRemoteCondition.HANG_TIMEOUT,
+        MCPRemoteCondition.PROTOCOL_TRICKERY,
+        MCPRemoteCondition.RESOURCE_PRESSURE,
+    ]
+    budget_a = MCPHostileServerBudget(
+        required_conditions=frozenset(hostile_conditions),
+        max_response_bytes=100,
+        max_duration_ms=100,
+        max_protocol_messages=10,
+    )
+    budget_b = MCPHostileServerBudget(
+        required_conditions=frozenset(reversed(hostile_conditions)),
+        max_response_bytes=100,
+        max_duration_ms=100,
+        max_protocol_messages=10,
+    )
+    assert budget_a.model_dump_json() == budget_b.model_dump_json()
+
+    issuers = ["https://idp.example.test", "https://backup-idp.example.test"]
+    bindings = [OAuthSenderBinding.DPOP, OAuthSenderBinding.MTLS]
+    oauth_policy_a = OAuthAdvancedPolicy(
+        allowed_issuers=frozenset(issuers),
+        allowed_sender_bindings=frozenset(bindings),
+        require_key_rotation=False,
+        require_refresh=False,
+        require_revocation_rejection=False,
+        require_replay_rejection=False,
+    )
+    oauth_policy_b = OAuthAdvancedPolicy(
+        allowed_issuers=frozenset(reversed(issuers)),
+        allowed_sender_bindings=frozenset(reversed(bindings)),
+        require_key_rotation=False,
+        require_refresh=False,
+        require_revocation_rejection=False,
+        require_replay_rejection=False,
+    )
+    keysets = (
+        OAuthKeySetSnapshot(
+            issuer="https://idp.example.test",
+            jwks_uri="https://idp.example.test/jwks",
+            key_ids=("kid-a",),
+            epoch=0,
+            verifier_revision="1",
+        ),
+    )
+    event_a = _oauth_event(
+        event_id="event.canonical",
+        kind=OAuthSessionEventKind.INITIAL,
+        epoch=0,
+        token="canonical-token",
+        kid="kid-a",
+    )
+    event_b = event_a.model_copy(update={"scopes": frozenset(("write", "read"))})
+    oauth_a = OAuthAdvancedReceipt.create(
+        policy=oauth_policy_a,
+        keysets=keysets,
+        events=(event_a,),
+    )
+    oauth_b = OAuthAdvancedReceipt.create(
+        policy=oauth_policy_b,
+        keysets=keysets,
+        events=(event_b,),
+    )
+
+    assert oauth_policy_a.model_dump_json() == oauth_policy_b.model_dump_json()
+    assert event_a.model_dump_json() == event_b.model_dump_json()
+    assert oauth_a.receipt_root == oauth_b.receipt_root
+    assert (
+        OAuthAdvancedReceipt.model_validate_json(oauth_a.model_dump_json()).receipt_root
+        == oauth_a.receipt_root
+    )
+
+    drift_a = OAuthAuthorizationDriftReceipt.create(
+        (
+            OAuthAuthorizationEpoch(
+                epoch=0,
+                scopes=frozenset(("write", "read")),
+                resource_identity="tenant/canonical",
+                operation="write",
+                allowed=True,
+            ),
+            OAuthAuthorizationEpoch(
+                epoch=1,
+                scopes=frozenset(("read",)),
+                resource_identity="tenant/canonical",
+                operation="write",
+                allowed=False,
+            ),
+        )
+    )
+    drift_b = OAuthAuthorizationDriftReceipt.create(
+        (
+            OAuthAuthorizationEpoch(
+                epoch=0,
+                scopes=frozenset(("read", "write")),
+                resource_identity="tenant/canonical",
+                operation="write",
+                allowed=True,
+            ),
+            OAuthAuthorizationEpoch(
+                epoch=1,
+                scopes=frozenset(("read",)),
+                resource_identity="tenant/canonical",
+                operation="write",
+                allowed=False,
+            ),
+        )
+    )
+    assert drift_a.receipt_root == drift_b.receipt_root
+    assert (
+        OAuthAuthorizationDriftReceipt.model_validate_json(drift_a.model_dump_json()).receipt_root
+        == drift_a.receipt_root
+    )
