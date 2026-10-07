@@ -93,7 +93,7 @@ class BackendProbeReceipt(BaseModel):
     sentinel_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     read_after_write_observed: Literal[True] = True
     no_clobber_observed: Literal[True] = True
-    deletion_resistance_observed: bool
+    deletion_resistance_observed: bool = Field(strict=True)
     receipt_root: str = Field(pattern=r"^[0-9a-f]{64}$")
 
     @classmethod
@@ -143,7 +143,7 @@ class ReplicaTargetReceipt(BaseModel):
     target_label: str = Field(pattern=r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
     snapshot_root: str = Field(pattern=r"^[0-9a-f]{64}$")
     probe_receipt_root: str = Field(pattern=r"^[0-9a-f]{64}$")
-    worm_observed: bool
+    worm_observed: bool = Field(strict=True)
     verified_objects: int = Field(ge=0, le=_MAX_OBJECTS, strict=True)
     verified_object_set_root: str = Field(pattern=r"^[0-9a-f]{64}$")
     receipt_root: str = Field(pattern=r"^[0-9a-f]{64}$")
@@ -201,7 +201,7 @@ class EvidenceReplicationReceipt(BaseModel):
 
     schema_version: Literal["agent-evals/evidence-replication/v1"] = _REPLICATION_SCHEMA
     snapshot_root: str = Field(pattern=r"^[0-9a-f]{64}$")
-    require_worm: bool
+    require_worm: bool = Field(strict=True)
     minimum_verified_targets: int = Field(ge=1, le=_MAX_TARGETS, strict=True)
     targets: tuple[ReplicaTargetReceipt, ...] = Field(min_length=1, max_length=_MAX_TARGETS)
     receipt_root: str = Field(pattern=r"^[0-9a-f]{64}$")
@@ -393,7 +393,7 @@ def replicate_backup(
         label: probe_backend(
             backend,
             target_label=label,
-            challenge=f"{challenge}:{label}",
+            challenge=challenge,
         )
         for label, backend in target_items
     }
