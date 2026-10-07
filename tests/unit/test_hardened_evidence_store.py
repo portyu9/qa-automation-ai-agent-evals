@@ -116,9 +116,7 @@ def test_hardened_store_artifact_operations_are_anchored_to_directory_fds(
     hardened.read(manifest.record_key)
 
     anchored_names = {
-        str(path)
-        for path, dir_fd in observed
-        if dir_fd is not None and isinstance(path, str)
+        str(path) for path, dir_fd in observed if dir_fd is not None and isinstance(path, str)
     }
     assert manifest.record_key[:2] in anchored_names
     assert f"{manifest.record_key}.lock" in anchored_names
