@@ -14,6 +14,7 @@ from typing import Any
 
 CANDIDATE_SCHEMA = "agent-evals/release-candidate/v1"
 DISPATCH_TYPE = "release-request"
+PYPI_DISPATCH_TYPE = "pypi-publish-request"
 CI_WORKFLOW_NAME = "CI"
 CI_WORKFLOW_PATH = ".github/workflows/ci.yml"
 REPRODUCIBILITY_JOB_NAME = "Reproduce package artifacts independently"
@@ -111,25 +112,18 @@ def validate_dispatch_event(
     return version_tag, ci_run_id
 
 
-def validate_pypi_release_event(
-    event: dict[str, Any], *, repository: str, workflow_ref: str, event_sha: str
+def validate_pypi_release_record(
+    release: dict[str, Any], *, expected_tag: str | None = None
 ) -> str:
-    repo = event.get("repository")
-    if event.get("action") != "published":
-        raise ReleaseCandidateError("release event action must be published")
-    if type(repo) is not dict or repo.get("full_name") != repository:
-        raise ReleaseCandidateError("release event repository does not match expected repository")
-    release = event.get("release")
     if type(release) is not dict:
-        raise ReleaseCandidateError("release event must contain a release object")
+        raise ReleaseCandidateError("published release must be an object")
     if release.get("draft") is not False or release.get("prerelease") is not False:
         raise ReleaseCandidateError(
             "PyPI publication requires a non-draft non-prerelease GitHub Release"
         )
     version_tag = require_tag(release.get("tag_name"))
-    if workflow_ref != f"refs/tags/{version_tag}":
-        raise ReleaseCandidateError("release workflow ref must match the published version tag")
-    require_sha(event_sha, "release event SHA")
+    if expected_tag is not None and version_tag != require_tag(expected_tag):
+        raise ReleaseCandidateError("published release tag does not match requested version tag")
     assets = release.get("assets")
     if type(assets) is not list or not assets:
         raise ReleaseCandidateError("published release must contain retained release assets")
@@ -162,6 +156,55 @@ def validate_pypi_release_event(
             "published release must contain exactly one source distribution"
         )
     return version_tag
+
+
+def validate_pypi_release_event(
+    event: dict[str, Any], *, repository: str, workflow_ref: str, event_sha: str
+) -> tuple[str, str]:
+    repo = event.get("repository")
+    if event.get("action") != "published":
+        raise ReleaseCandidateError("release event action must be published")
+    if type(repo) is not dict or repo.get("full_name") != repository:
+        raise ReleaseCandidateError("release event repository does not match expected repository")
+    release = event.get("release")
+    if type(release) is not dict:
+        raise ReleaseCandidateError("release event must contain a release object")
+    version_tag = validate_pypi_release_record(release)
+    if workflow_ref != f"refs/tags/{version_tag}":
+        raise ReleaseCandidateError("release workflow ref must match the published version tag")
+    return version_tag, require_sha(event_sha, "release event SHA")
+
+
+def validate_pypi_dispatch_event(
+    event: dict[str, Any], *, repository: str, workflow_ref: str, event_sha: str
+) -> tuple[str, str]:
+    repo = event.get("repository")
+    if event.get("action") != PYPI_DISPATCH_TYPE:
+        raise ReleaseCandidateError(
+            "repository_dispatch action must be pypi-publish-request"
+        )
+    if type(repo) is not dict or repo.get("full_name") != repository:
+        raise ReleaseCandidateError(
+            "PyPI repository_dispatch repository does not match expected repository"
+        )
+    if workflow_ref != f"refs/heads/{DEFAULT_BRANCH}":
+        raise ReleaseCandidateError(
+            "PyPI repository_dispatch must execute on the default branch ref"
+        )
+    require_sha(event_sha, "PyPI dispatch workflow SHA")
+    payload = event.get("client_payload")
+    if type(payload) is not dict:
+        raise ReleaseCandidateError(
+            "PyPI repository_dispatch client_payload must be an object"
+        )
+    _require_exact_keys(
+        payload,
+        {"version_tag", "commit_sha"},
+        "PyPI publication request payload",
+    )
+    return require_tag(payload["version_tag"]), require_sha(
+        payload["commit_sha"], "PyPI requested commit SHA"
+    )
 
 
 def validate_ci_run(
@@ -360,6 +403,18 @@ def fetch_pyproject(api_url: str, repository: str, commit_sha: str, token: str) 
     return data
 
 
+def fetch_release(
+    api_url: str, repository: str, version_tag: str, token: str
+) -> dict[str, Any]:
+    encoded = urllib.parse.quote(require_tag(version_tag), safe="")
+    release = _request_json(
+        _api_url(api_url, repository, f"releases/tags/{encoded}"),
+        token,
+    )
+    assert release is not None
+    return release
+
+
 def require_release_absent(api_url: str, repository: str, version_tag: str, token: str) -> None:
     encoded = urllib.parse.quote(require_tag(version_tag), safe="")
     existing = _request_json(
@@ -479,19 +534,39 @@ def validate_pypi_release(
             object_pairs_hook=_strict_object,
         )
     except (OSError, UnicodeError, json.JSONDecodeError) as exc:
-        raise ReleaseCandidateError("release event file is not valid UTF-8 JSON") from exc
-    if type(event) is not dict:
-        raise ReleaseCandidateError("release event root must be an object")
-    version_tag = validate_pypi_release_event(
-        event,
-        repository=repository,
-        workflow_ref=workflow_ref,
-        event_sha=event_sha,
-    )
-    tag_sha = resolve_tag_commit(api_url, repository, version_tag, token)
-    if tag_sha != require_sha(event_sha, "release event SHA"):
         raise ReleaseCandidateError(
-            "published release event SHA does not match resolved tag commit"
+            "PyPI publication event file is not valid UTF-8 JSON"
+        ) from exc
+    if type(event) is not dict:
+        raise ReleaseCandidateError("PyPI publication event root must be an object")
+
+    action = event.get("action")
+    if action == "published":
+        version_tag, expected_commit_sha = validate_pypi_release_event(
+            event,
+            repository=repository,
+            workflow_ref=workflow_ref,
+            event_sha=event_sha,
+        )
+    elif action == PYPI_DISPATCH_TYPE:
+        version_tag, expected_commit_sha = validate_pypi_dispatch_event(
+            event,
+            repository=repository,
+            workflow_ref=workflow_ref,
+            event_sha=event_sha,
+        )
+    else:
+        raise ReleaseCandidateError(
+            "PyPI publication requires a published release event or pypi-publish-request"
+        )
+
+    published_release = fetch_release(api_url, repository, version_tag, token)
+    validate_pypi_release_record(published_release, expected_tag=version_tag)
+
+    tag_sha = resolve_tag_commit(api_url, repository, version_tag, token)
+    if tag_sha != expected_commit_sha:
+        raise ReleaseCandidateError(
+            "published release tag commit does not match the authorized publication commit"
         )
     pyproject_bytes = fetch_pyproject(api_url, repository, tag_sha, token)
     version = validate_version_binding(
@@ -786,7 +861,7 @@ def self_test() -> None:
             workflow_ref="refs/tags/v1.2.3",
             event_sha=sha,
         )
-        == "v1.2.3"
+        == ("v1.2.3", sha)
     )
     try:
         validate_pypi_release_event(
@@ -799,6 +874,61 @@ def self_test() -> None:
         pass
     else:
         raise ReleaseCandidateError("self-test accepted a non-published release event")
+
+    pypi_dispatch_event = {
+        "action": PYPI_DISPATCH_TYPE,
+        "repository": {"full_name": repo},
+        "client_payload": {"version_tag": "v1.2.3", "commit_sha": sha},
+    }
+    assert validate_pypi_dispatch_event(
+        pypi_dispatch_event,
+        repository=repo,
+        workflow_ref="refs/heads/main",
+        event_sha=sha,
+    ) == ("v1.2.3", sha)
+    invalid_pypi_dispatches = (
+        dict(pypi_dispatch_event, action="other"),
+        dict(pypi_dispatch_event, repository={"full_name": "other/repo"}),
+        dict(
+            pypi_dispatch_event,
+            client_payload={"version_tag": "v1.2.3", "commit_sha": sha, "extra": 1},
+        ),
+        dict(
+            pypi_dispatch_event,
+            client_payload={"version_tag": "1.2.3", "commit_sha": sha},
+        ),
+        dict(
+            pypi_dispatch_event,
+            client_payload={"version_tag": "v1.2.3", "commit_sha": "bad"},
+        ),
+    )
+    for mutated in invalid_pypi_dispatches:
+        try:
+            validate_pypi_dispatch_event(
+                mutated,
+                repository=repo,
+                workflow_ref="refs/heads/main",
+                event_sha=sha,
+            )
+        except ReleaseCandidateError:
+            pass
+        else:
+            raise ReleaseCandidateError(
+                "self-test accepted invalid PyPI repository_dispatch event"
+            )
+    try:
+        validate_pypi_dispatch_event(
+            pypi_dispatch_event,
+            repository=repo,
+            workflow_ref="refs/heads/feature",
+            event_sha=sha,
+        )
+    except ReleaseCandidateError:
+        pass
+    else:
+        raise ReleaseCandidateError(
+            "self-test accepted non-default-branch PyPI dispatch"
+        )
 
     print("release candidate self-test: ok")
 
