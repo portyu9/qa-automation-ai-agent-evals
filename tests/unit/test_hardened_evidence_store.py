@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import pytest
@@ -8,7 +9,11 @@ import pytest
 from agent_evals.evidence.hardened_store import HardenedPosixEvidenceStore
 from agent_evals.evidence.models import TrialEvidence
 from agent_evals.evidence.resilience import detect_platform_capabilities
-from agent_evals.evidence.store import EvidenceIntegrityError, LocalEvidenceStore
+from agent_evals.evidence.store import (
+    EvidenceIntegrityError,
+    LocalEvidenceStore,
+    evidence_record_key,
+)
 
 SUBJECT = "a" * 64
 SCENARIO = "b" * 64
@@ -93,7 +98,7 @@ def test_hardened_store_artifact_operations_are_anchored_to_directory_fds(
     def checked_open(
         path: object,
         flags: int,
-        mode: int = 0o777,
+        mode: int = 0o600,
         *,
         dir_fd: int | None = None,
     ) -> int:
