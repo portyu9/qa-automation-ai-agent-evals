@@ -90,9 +90,7 @@ def test_operational_summary_keeps_health_signals_separate_from_subject_reliabil
             reason=OperationalReason.PRECONDITION,
         )
     )
-    aggregator.record(
-        _event(kind=OperationalEventKind.EVALUATOR_ERROR, observed_at_unix_ms=1_003)
-    )
+    aggregator.record(_event(kind=OperationalEventKind.EVALUATOR_ERROR, observed_at_unix_ms=1_003))
     aggregator.record(
         OperationalEvent(
             kind=OperationalEventKind.JUDGE_ABSTENTION,
@@ -156,9 +154,7 @@ def test_opentelemetry_hook_uses_fixed_metric_labels_and_span_only_correlations(
     span_calls: list[tuple[str, dict[str, str | int | bool]]] = []
 
     hook = OpenTelemetryHook(
-        counter_hook=lambda name, amount, attrs: metric_calls.append(
-            (name, amount, dict(attrs))
-        ),
+        counter_hook=lambda name, amount, attrs: metric_calls.append((name, amount, dict(attrs))),
         span_hook=lambda name, attrs: span_calls.append((name, dict(attrs))),
     )
     event = _event(
