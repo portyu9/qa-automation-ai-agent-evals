@@ -57,8 +57,11 @@ class EvidenceStorePlatformCapabilities(BaseModel):
     o_directory: bool
     o_nofollow: bool
     open_dir_fd: bool
+    mkdir_dir_fd: bool
     stat_dir_fd: bool
+    stat_nofollow: bool
     link_dir_fd: bool
+    link_nofollow: bool
     unlink_dir_fd: bool
     rename_dir_fd: bool
 
@@ -69,8 +72,11 @@ class EvidenceStorePlatformCapabilities(BaseModel):
             and self.o_directory
             and self.o_nofollow
             and self.open_dir_fd
+            and self.mkdir_dir_fd
             and self.stat_dir_fd
+            and self.stat_nofollow
             and self.link_dir_fd
+            and self.link_nofollow
             and self.unlink_dir_fd
             and self.rename_dir_fd
         )
@@ -80,14 +86,18 @@ def detect_platform_capabilities() -> EvidenceStorePlatformCapabilities:
     """Derive the exact filesystem primitives available to this Python runtime."""
 
     supports_dir_fd = getattr(os, "supports_dir_fd", set())
+    supports_follow_symlinks = getattr(os, "supports_follow_symlinks", set())
     return EvidenceStorePlatformCapabilities(
         os_name=os.name,
         posix=os.name == "posix",
         o_directory=bool(getattr(os, "O_DIRECTORY", 0)),
         o_nofollow=bool(getattr(os, "O_NOFOLLOW", 0)),
         open_dir_fd=os.open in supports_dir_fd,
+        mkdir_dir_fd=os.mkdir in supports_dir_fd,
         stat_dir_fd=os.stat in supports_dir_fd,
+        stat_nofollow=os.stat in supports_follow_symlinks,
         link_dir_fd=os.link in supports_dir_fd,
+        link_nofollow=os.link in supports_follow_symlinks,
         unlink_dir_fd=os.unlink in supports_dir_fd,
         rename_dir_fd=os.rename in supports_dir_fd,
     )
@@ -106,7 +116,7 @@ def require_platform_mode(
     ):
         raise EvidenceStoreError(
             "hardened_posix evidence-store mode requires POSIX O_DIRECTORY/O_NOFOLLOW "
-            "and dir_fd support for open/stat/link/unlink/rename"
+            "and dir_fd/no-follow support for open/mkdir/stat/link/unlink/rename"
         )
     return capabilities
 
