@@ -6,7 +6,9 @@ on:
     paths:
       - ".github/scripts/check_deterministic_performance.py"
       - ".github/workflows/deterministic-performance.yml"
+      - "src/agent_evals/assurance/report.py"
       - "src/agent_evals/evidence/models.py"
+      - "src/agent_evals/evidence/store.py"
       - "src/agent_evals/statistics/**"
   schedule:
     - cron: "11 9 * * 6"
