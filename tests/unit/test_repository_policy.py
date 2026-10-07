@@ -16,6 +16,7 @@ def _policy_workspace(tmp_path: Path) -> Path:
     (workspace / ".github/workflows").mkdir(parents=True)
     (workspace / ".github/coverage").mkdir(parents=True)
     (workspace / ".github/scripts").mkdir(parents=True)
+    (workspace / "docs").mkdir(parents=True)
     (workspace / "requirements/locks").mkdir(parents=True)
     (workspace / "requirements/compatibility").mkdir(parents=True)
     (workspace / "src/agent_evals").mkdir(parents=True)
@@ -31,6 +32,19 @@ def _policy_workspace(tmp_path: Path) -> Path:
     shutil.copy2(
         _PROJECT_ROOT / ".github/scripts/validate_dependency_compatibility.py",
         workspace / ".github/scripts/validate_dependency_compatibility.py",
+    )
+    shutil.copy2(
+        _PROJECT_ROOT / ".github/scripts/validate_governance_policy.py",
+        workspace / ".github/scripts/validate_governance_policy.py",
+    )
+    shutil.copy2(
+        _PROJECT_ROOT / ".github/repository-governance.json",
+        workspace / ".github/repository-governance.json",
+    )
+    shutil.copy2(_PROJECT_ROOT / ".github/CODEOWNERS", workspace / ".github/CODEOWNERS")
+    shutil.copy2(
+        _PROJECT_ROOT / "docs/REPOSITORY_GOVERNANCE.md",
+        workspace / "docs/REPOSITORY_GOVERNANCE.md",
     )
     for lock in (_PROJECT_ROOT / "requirements/locks").glob("*.txt"):
         shutil.copy2(lock, workspace / "requirements/locks" / lock.name)
