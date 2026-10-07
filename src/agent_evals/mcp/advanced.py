@@ -20,7 +20,15 @@ from enum import StrEnum
 from typing import Literal, Self
 from urllib.parse import urlsplit
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    ValidationInfo,
+    field_serializer,
+    field_validator,
+    model_validator,
+)
 
 from agent_evals._receipt_validation import (
     is_receipt_construction,
@@ -160,6 +168,12 @@ class MCPRemotePolicy(BaseModel):
     )
     require_tls_on_healthy: bool = Field(default=True, strict=True)
     require_dns_on_healthy: bool = Field(default=True, strict=True)
+
+    @field_serializer("required_conditions", when_used="json")
+    def serialize_required_conditions(
+        self, value: frozenset[MCPRemoteCondition]
+    ) -> list[str]:
+        return sorted(item.value for item in value)
 
     @model_validator(mode="after")
     def require_healthy_baseline(self) -> Self:
@@ -313,6 +327,10 @@ class MCPCapabilitySnapshot(BaseModel):
     capabilities: frozenset[MCPCapability]
     capability_revision: str = Field(min_length=1, max_length=128)
 
+    @field_serializer("capabilities", when_used="json")
+    def serialize_capabilities(self, value: frozenset[MCPCapability]) -> list[str]:
+        return sorted(item.value for item in value)
+
     @property
     def identity(self) -> str:
         return _domain_root(
@@ -351,6 +369,12 @@ class MCPCapabilityExerciseReceipt(BaseModel):
     exercised_capabilities: tuple[MCPCapability, ...]
     accepted: bool = Field(strict=True)
     receipt_root: str = Field(pattern=r"^[0-9a-f]{64}$")
+
+    @field_serializer("required_capabilities", when_used="json")
+    def serialize_required_capabilities(
+        self, value: frozenset[MCPCapability]
+    ) -> list[str]:
+        return sorted(item.value for item in value)
 
     @classmethod
     def create(
@@ -648,6 +672,12 @@ class MCPHostileServerBudget(BaseModel):
     max_response_bytes: int = Field(default=2 * 1024 * 1024, ge=1, le=64 * 1024 * 1024, strict=True)
     max_duration_ms: int = Field(default=5_000, ge=1, le=120_000, strict=True)
     max_protocol_messages: int = Field(default=1_000, ge=1, le=100_000, strict=True)
+
+    @field_serializer("required_conditions", when_used="json")
+    def serialize_required_conditions(
+        self, value: frozenset[MCPRemoteCondition]
+    ) -> list[str]:
+        return sorted(item.value for item in value)
 
     @model_validator(mode="after")
     def validate_required_conditions(self) -> Self:
