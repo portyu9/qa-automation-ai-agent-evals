@@ -23,8 +23,10 @@ def object_field(value: dict[str, object], key: str) -> dict[str, object]:
 
 
 def string_list(value: object, *, label: str) -> list[str]:
-    if not isinstance(value, list) or not value or not all(
-        isinstance(item, str) and item for item in value
+    if (
+        not isinstance(value, list)
+        or not value
+        or not all(isinstance(item, str) and item for item in value)
     ):
         fail(f"{label} must be a non-empty string list")
     return value
