@@ -119,6 +119,7 @@ def test_vector_and_lexical_modes_require_only_their_owned_score_domains() -> No
         is True
     )
 
+
 def test_unordered_retrieval_material_is_root_stable_and_round_trips() -> None:
     collections = ["knowledge", "archive"]
     labels = ["support", "public"]
