@@ -91,6 +91,7 @@ class BackendProbeReceipt(BaseModel):
     schema_version: Literal["agent-evals/evidence-backend-probe/v1"] = _PROBE_SCHEMA
     target_label: str = Field(pattern=r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
     sentinel_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    sentinel_envelope_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     read_after_write_observed: Literal[True] = True
     no_clobber_observed: Literal[True] = True
     deletion_resistance_observed: bool = Field(strict=True)
@@ -102,12 +103,14 @@ class BackendProbeReceipt(BaseModel):
         *,
         target_label: str,
         sentinel_sha256: str,
+        sentinel_envelope_sha256: str,
         deletion_resistance_observed: bool,
     ) -> Self:
         material = {
             "schema_version": _PROBE_SCHEMA,
             "target_label": target_label,
             "sentinel_sha256": sentinel_sha256,
+            "sentinel_envelope_sha256": sentinel_envelope_sha256,
             "read_after_write_observed": True,
             "no_clobber_observed": True,
             "deletion_resistance_observed": deletion_resistance_observed,
@@ -115,6 +118,7 @@ class BackendProbeReceipt(BaseModel):
         return cls(
             target_label=target_label,
             sentinel_sha256=sentinel_sha256,
+            sentinel_envelope_sha256=sentinel_envelope_sha256,
             deletion_resistance_observed=deletion_resistance_observed,
             receipt_root=_root(_PROBE_DOMAIN, material),
         )
@@ -125,6 +129,7 @@ class BackendProbeReceipt(BaseModel):
             "schema_version": self.schema_version,
             "target_label": self.target_label,
             "sentinel_sha256": self.sentinel_sha256,
+            "sentinel_envelope_sha256": self.sentinel_envelope_sha256,
             "read_after_write_observed": self.read_after_write_observed,
             "no_clobber_observed": self.no_clobber_observed,
             "deletion_resistance_observed": self.deletion_resistance_observed,
@@ -241,7 +246,9 @@ class EvidenceReplicationReceipt(BaseModel):
         if any(item.snapshot_root != self.snapshot_root for item in self.targets):
             raise ValueError("replica target receipt binds a different backup snapshot")
         if self.require_worm and any(not item.worm_observed for item in self.targets):
-            raise ValueError("WORM-required replication contains a target without observed resistance")
+            raise ValueError(
+                "WORM-required replication contains a target without observed resistance"
+            )
         material = {
             "schema_version": self.schema_version,
             "snapshot_root": self.snapshot_root,
@@ -262,7 +269,7 @@ def create_backup_snapshot(store: ContentAddressedEvidenceStore) -> EvidenceBack
         raise EvidenceIntegrityError("backup snapshot exceeds configured object-count ceiling")
     records: list[BackupObjectRecord] = []
     for key in keys:
-        envelope = store.backend.get(key)
+        envelope = _backend_get(store.backend, key, operation="backup source")
         evidence = _verify_exact_envelope(
             key,
             envelope,
@@ -303,8 +310,12 @@ def probe_backend(
     probe_store = ContentAddressedEvidenceStore(backend, compression="none")
     manifest = probe_store.write(sentinel)
     key = manifest.logical_sha256
-    envelope = backend.get(key)
-    verified = _verify_exact_envelope(key, envelope, max_logical_bytes=probe_store.max_logical_bytes)
+    envelope = _backend_get(backend, key, operation="backend probe")
+    verified = _verify_exact_envelope(
+        key,
+        envelope,
+        max_logical_bytes=probe_store.max_logical_bytes,
+    )
     if verified != sentinel.snapshot():
         raise EvidenceIntegrityError("backend probe read-after-write changed sentinel evidence")
 
@@ -314,10 +325,13 @@ def probe_backend(
         raise EvidenceIntegrityError("backend put_if_absent must return an exact boolean")
     if created_conflict:
         raise EvidenceIntegrityError("backend violated no-clobber semantics for an existing key")
-    if backend.get(key) != envelope:
+    if _backend_get(backend, key, operation="no-clobber probe") != envelope:
         raise EvidenceIntegrityError("backend changed existing bytes during no-clobber probe")
 
-    deleted = backend.delete(key)
+    try:
+        deleted = backend.delete(key)
+    except Exception as exc:
+        raise EvidenceIntegrityError("backend deletion probe failed without an observation") from exc
     if type(deleted) is not bool:
         raise EvidenceIntegrityError("backend delete must return an exact boolean")
     if deleted:
@@ -334,12 +348,11 @@ def probe_backend(
                 "backend delete reported success but changed sentinel bytes remain readable"
             )
     else:
-        try:
-            remaining = backend.get(key)
-        except Exception as exc:
-            raise EvidenceIntegrityError(
-                "backend refused deletion but sentinel readback failed"
-            ) from exc
+        remaining = _backend_get(
+            backend,
+            key,
+            operation="post-delete WORM probe",
+        )
         if remaining != envelope:
             raise EvidenceIntegrityError(
                 "backend refused deletion but exact sentinel bytes were not preserved"
@@ -350,6 +363,7 @@ def probe_backend(
     return BackendProbeReceipt.create(
         target_label=target_label,
         sentinel_sha256=key,
+        sentinel_envelope_sha256=hashlib.sha256(envelope).hexdigest(),
         deletion_resistance_observed=deletion_resistant,
     )
 
@@ -368,7 +382,10 @@ def replicate_backup(
     requirement that is not observed fails before evidence replication begins.
     """
 
-    if type(minimum_verified_targets) is not int or not 1 <= minimum_verified_targets <= _MAX_TARGETS:
+    if (
+        type(minimum_verified_targets) is not int
+        or not 1 <= minimum_verified_targets <= _MAX_TARGETS
+    ):
         raise ValueError("minimum_verified_targets must be an exact integer from 1 through 64")
     if type(require_worm) is not bool:
         raise ValueError("require_worm must be an exact boolean")
@@ -434,7 +451,11 @@ def _replicate_snapshot_to_target(
     target: EvidenceBlobBackend,
 ) -> None:
     for record in snapshot.objects:
-        envelope = source.backend.get(record.logical_sha256)
+        envelope = _backend_get(
+            source.backend,
+            record.logical_sha256,
+            operation="replication source",
+        )
         if len(envelope) != record.envelope_bytes:
             raise EvidenceIntegrityError("source envelope length changed after backup snapshot")
         if not hmac.compare_digest(
@@ -453,7 +474,11 @@ def _replicate_snapshot_to_target(
         created = target.put_if_absent(record.logical_sha256, envelope)
         if type(created) is not bool:
             raise EvidenceIntegrityError("target put_if_absent must return an exact boolean")
-        readback = target.get(record.logical_sha256)
+        readback = _backend_get(
+            target,
+            record.logical_sha256,
+            operation="replica readback",
+        )
         if readback != envelope:
             if created:
                 raise EvidenceIntegrityError("replica readback differs from copied source envelope")
@@ -491,6 +516,21 @@ class _ReadOnlyEnvelopeBackend:
         raise RuntimeError("read-only envelope verifier cannot delete")
 
 
+def _backend_get(
+    backend: EvidenceBlobBackend,
+    key: str,
+    *,
+    operation: str,
+) -> bytes:
+    try:
+        content = backend.get(key)
+    except Exception as exc:
+        raise EvidenceIntegrityError(f"{operation} backend read failed") from exc
+    if type(content) is not bytes:
+        raise EvidenceIntegrityError(f"{operation} backend read must return exact bytes")
+    return content
+
+
 def _verify_exact_envelope(
     key: str,
     envelope: bytes,
@@ -513,7 +553,13 @@ def _validate_target_label(label: str) -> None:
 
 
 def _validate_challenge(challenge: str) -> None:
-    if type(challenge) is not str or not challenge or len(challenge.encode("utf-8")) > 512:
+    if type(challenge) is not str or not challenge:
+        raise ValueError("backend probe challenge must be non-empty and at most 512 UTF-8 bytes")
+    try:
+        encoded = challenge.encode("utf-8")
+    except UnicodeEncodeError as exc:
+        raise ValueError("backend probe challenge must be valid UTF-8 text") from exc
+    if len(encoded) > 512:
         raise ValueError("backend probe challenge must be non-empty and at most 512 UTF-8 bytes")
 
 
