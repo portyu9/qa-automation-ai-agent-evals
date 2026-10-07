@@ -46,12 +46,12 @@ class _MemoryBackend(EvidenceBlobBackend):
 
     def put_if_absent(self, key: str, content: bytes) -> bool:
         self.put_calls += 1
+        if self.non_bool_put_call == self.put_calls:
+            return 1  # type: ignore[return-value]
         if key in self.objects:
             return False
         if self.drop_put_call == self.put_calls:
             return True
-        if self.non_bool_put_call == self.put_calls:
-            return 1  # type: ignore[return-value]
         stored = bytes(content)
         if self.corrupt_put_call == self.put_calls:
             stored += b"controlled-corruption"
