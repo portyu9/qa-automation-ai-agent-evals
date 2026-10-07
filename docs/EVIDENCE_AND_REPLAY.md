@@ -111,6 +111,24 @@ The store is designed to fail closed rather than guess whether interrupted evide
 
 A stale lock or partial record requires explicit operator review. The store does not silently delete, repair, or overwrite ambiguous evidence.
 
+### Platform modes and hostile-local-filesystem hardening
+
+`LocalEvidenceStore` is the portable default. It uses bounded regular-file reads, no-follow flags where the platform exposes them, no-clobber publication, replacement-lock identity checks, and directory durability sync where available. Those controls are strong local integrity checks, but ordinary path-based operations still depend on the host filesystem resolving each path consistently.
+
+`HardenedPosixEvidenceStore` is an opt-in mode for POSIX runtimes that expose `O_DIRECTORY`, `O_NOFOLLOW`, and the required `dir_fd`/no-follow forms of open, mkdir, stat, link, unlink, and rename. It preserves the exact portable record key, manifest bytes, canonical payload bytes, and `TrialEvidence/v2` root semantics, while anchoring record-bucket and artifact operations to already-opened directory descriptors. If those primitives are not available, explicitly requesting hardened mode fails closed rather than silently falling back to portable semantics.
+
+This reduces path re-resolution / local TOCTOU exposure. It does **not** establish authenticated writer identity, distributed locking, NFS/object-store linearizability, remote attestation, formal crash consistency for arbitrary filesystems, or Windows ACL equivalence to POSIX mode bits.
+
+### Audited lock inspection and quarantine
+
+Stale-looking locks are not deleted automatically. Operators can use:
+
+1. `agent-evals store lock-inspect <root> <record-key>` to obtain a versioned observation bound to the exact local device/inode/size/mtime facts and an `observation_root`;
+2. independently decide whether recovery is appropriate; age, PID, inode, and timestamps are observations only and do not authenticate the writer or prove staleness;
+3. `agent-evals store lock-quarantine <root> <record-key> --confirm-observation-root <root>` to request recovery of that exact reviewed observation.
+
+Quarantine immediately re-observes the active lock, refuses cleanup if identity changed, hard-links the exact inode into a private no-clobber audit quarantine, verifies source/destination identity, then removes the active lock path and durability-syncs both directories. The resulting quarantine receipt is an integrity/audit record, not proof of who created the lock.
+
 ## Read verification
 
 `LocalEvidenceStore.read()` does not trust a filename just because it exists. It verifies the record in layers:
