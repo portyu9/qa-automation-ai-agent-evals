@@ -28,9 +28,7 @@ class GovernanceDocsError(ValueError):
 
 def exact_pin(dependencies: object, package: str) -> str:
     if not isinstance(dependencies, list):
-        raise GovernanceDocsError(
-            f"optional dependency set for {package} must be a list"
-        )
+        raise GovernanceDocsError(f"optional dependency set for {package} must be a list")
     prefix = package + "=="
     matches = [
         item[len(prefix) :]
@@ -38,9 +36,7 @@ def exact_pin(dependencies: object, package: str) -> str:
         if isinstance(item, str) and item.startswith(prefix)
     ]
     if len(matches) != 1 or not matches[0]:
-        raise GovernanceDocsError(
-            f"{package} must have exactly one exact optional-dependency pin"
-        )
+        raise GovernanceDocsError(f"{package} must have exactly one exact optional-dependency pin")
     return matches[0]
 
 
@@ -48,9 +44,7 @@ def load_contract() -> dict[str, str]:
     try:
         data = tomllib.loads(PYPROJECT.read_text(encoding="utf-8"))
     except (OSError, UnicodeError, tomllib.TOMLDecodeError) as exc:
-        raise GovernanceDocsError(
-            f"cannot load pyproject.toml: {type(exc).__name__}"
-        ) from exc
+        raise GovernanceDocsError(f"cannot load pyproject.toml: {type(exc).__name__}") from exc
     project = data.get("project")
     if not isinstance(project, dict):
         raise GovernanceDocsError("[project] table is missing")
@@ -73,9 +67,7 @@ def load_contract() -> dict[str, str]:
 
 def require(text: str, token: str, *, label: str) -> None:
     if token not in text:
-        raise GovernanceDocsError(
-            f"{label} is missing executable binding {token!r}"
-        )
+        raise GovernanceDocsError(f"{label} is missing executable binding {token!r}")
 
 
 def validate() -> None:
@@ -112,9 +104,7 @@ def validate() -> None:
 
     for lock in COMPATIBILITY_LOCKS:
         if not (ROOT / lock).is_file():
-            raise GovernanceDocsError(
-                f"reviewed compatibility snapshot is missing: {lock}"
-            )
+            raise GovernanceDocsError(f"reviewed compatibility snapshot is missing: {lock}")
         require(compatibility, lock, label="compatibility matrix")
 
     require(
@@ -171,9 +161,7 @@ def main() -> int:
             validate()
         return 0
     except GovernanceDocsError as exc:
-        raise SystemExit(
-            f"project governance docs contract failed: {exc}"
-        ) from exc
+        raise SystemExit(f"project governance docs contract failed: {exc}") from exc
 
 
 if __name__ == "__main__":

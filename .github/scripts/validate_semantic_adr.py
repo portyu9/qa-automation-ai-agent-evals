@@ -183,8 +183,7 @@ def evaluate(
     if mutated_adrs:
         raise AdrPolicyError(
             "accepted ADRs are append-only; add a superseding ADR instead of "
-            "modifying, deleting, renaming, or copying: "
-            + ", ".join(mutated_adrs)
+            "modifying, deleting, renaming, or copying: " + ", ".join(mutated_adrs)
         )
 
     governed = tuple(
@@ -257,9 +256,7 @@ def self_test(policy: Policy) -> None:
     except AdrPolicyError:
         pass
     else:
-        raise AdrPolicyError(
-            "new ADR incorrectly authorized mutation of an accepted ADR"
-        )
+        raise AdrPolicyError("new ADR incorrectly authorized mutation of an accepted ADR")
 
     try:
         evaluate(
