@@ -128,6 +128,34 @@ def test_lock_quarantine_refuses_confirmation_mismatch_and_changed_lock(
     assert paths.lock.read_bytes() == b"replacement"
 
 
+def test_lock_recovery_roots_have_stable_nul_domain_separation() -> None:
+    observation = EvidenceLockObservation.create(
+        record_key="a" * 64,
+        device=1,
+        inode=2,
+        size_bytes=3,
+        mtime_ns=4,
+    )
+    assert (
+        observation.observation_root
+        == "6abfd55ed35c54033756fc4f5d9bf2ff6443340f4fe180bbfe8153bca6e00ccb"
+    )
+
+    from agent_evals.evidence.resilience import EvidenceLockQuarantineReceipt
+
+    receipt = EvidenceLockQuarantineReceipt.create(
+        record_key="a" * 64,
+        observation_root=observation.observation_root,
+        quarantine_name=(
+            "a" * 64 + "." + observation.observation_root[:16] + ".lock"
+        ),
+    )
+    assert (
+        receipt.receipt_root
+        == "e062f639d4f9b07498eb05fe1426e1a421c2d798d3fb3890affef1346df8f8fa"
+    )
+
+
 def test_lock_observation_root_detects_tampering(tmp_path: Path) -> None:
     store = LocalEvidenceStore(tmp_path / "store")
     key = evidence_record_key(_evidence())
