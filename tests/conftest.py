@@ -31,7 +31,7 @@ def _network_mode(node: pytest.Node) -> str:
     live = node.get_closest_marker("live") is not None
     loopback = node.get_closest_marker("network_loopback") is not None
     if live and loopback:
-        raise pytest.UsageError("live and network_loopback are mutually exclusive network authorities")
+        raise pytest.UsageError(\n            "live and network_loopback are mutually exclusive network authorities"\n        )
     if live:
         return "live"
     if loopback:
