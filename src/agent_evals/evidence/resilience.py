@@ -126,9 +126,7 @@ class EvidenceLockObservation(BaseModel):
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    schema_version: Literal["agent-evals/evidence-lock-observation/v1"] = (
-        _LOCK_OBSERVATION_SCHEMA
-    )
+    schema_version: Literal["agent-evals/evidence-lock-observation/v1"] = _LOCK_OBSERVATION_SCHEMA
     record_key: str = Field(pattern=r"^[0-9a-f]{64}$")
     device: int = Field(ge=0, strict=True)
     inode: int = Field(ge=0, strict=True)
@@ -181,9 +179,7 @@ class EvidenceLockQuarantineReceipt(BaseModel):
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    schema_version: Literal["agent-evals/evidence-lock-quarantine/v1"] = (
-        _LOCK_QUARANTINE_SCHEMA
-    )
+    schema_version: Literal["agent-evals/evidence-lock-quarantine/v1"] = _LOCK_QUARANTINE_SCHEMA
     record_key: str = Field(pattern=r"^[0-9a-f]{64}$")
     observation_root: str = Field(pattern=r"^[0-9a-f]{64}$")
     quarantine_name: str = Field(min_length=1, max_length=256)
@@ -244,9 +240,9 @@ def inspect_record_lock(
             current = path.lstat()
         except OSError as exc:
             raise EvidenceIntegrityError("cannot revalidate record lock path") from exc
-        if (
-            not stat.S_ISREG(current.st_mode)
-            or (current.st_dev, current.st_ino) != (metadata.st_dev, metadata.st_ino)
+        if not stat.S_ISREG(current.st_mode) or (current.st_dev, current.st_ino) != (
+            metadata.st_dev,
+            metadata.st_ino,
         ):
             raise EvidenceIntegrityError(
                 "record lock identity changed during inspection; refusing observation"
