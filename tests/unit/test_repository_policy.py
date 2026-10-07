@@ -60,6 +60,14 @@ def _policy_workspace(tmp_path: Path) -> Path:
         workspace / ".github/workflows/publish-release.yml",
     )
     shutil.copy2(
+        _PROJECT_ROOT / ".github/workflows/prepare-release.yml",
+        workspace / ".github/workflows/prepare-release.yml",
+    )
+    shutil.copy2(
+        _PROJECT_ROOT / ".github/workflows/publish-pypi.yml",
+        workspace / ".github/workflows/publish-pypi.yml",
+    )
+    shutil.copy2(
         _PROJECT_ROOT / ".github/dependency-license-policy.json",
         workspace / ".github/dependency-license-policy.json",
     )
@@ -126,7 +134,7 @@ def test_policy_accepts_pinned_action_in_second_workflow(tmp_path: Path) -> None
     result = _run_policy(workspace)
 
     assert result.returncode == 0, result.stderr
-    assert "workflows=5" in result.stdout
+    assert "workflows=7" in result.stdout
 
 
 def test_policy_rejects_missing_reproducible_package_comparison(tmp_path: Path) -> None:
@@ -414,6 +422,65 @@ def test_policy_rejects_pypi_publication_without_trusted_publishing_contract(
 
     assert result.returncode != 0
     assert "forbidden release behavior: twine upload" in result.stderr
+
+
+def test_policy_rejects_pypi_oidc_in_verification_job(tmp_path: Path) -> None:
+    workspace = _policy_workspace(tmp_path)
+    workflow = workspace / ".github/workflows/publish-pypi.yml"
+    source = workflow.read_text(encoding="utf-8")
+    marker = "  verify:\n"
+    assert marker in source
+    workflow.write_text(
+        source.replace(marker, marker + "    permissions:\n      id-token: write\n", 1),
+        encoding="utf-8",
+    )
+
+    result = _run_policy(workspace)
+
+    assert result.returncode != 0
+    assert "verification job must not receive PyPI environment/OIDC authority" in result.stderr
+
+
+def test_policy_rejects_repository_checkout_in_pypi_oidc_job(tmp_path: Path) -> None:
+    workspace = _policy_workspace(tmp_path)
+    workflow = workspace / ".github/workflows/publish-pypi.yml"
+    source = workflow.read_text(encoding="utf-8")
+    marker = "    steps:\n      - name: Download exact verified distributions\n"
+    assert source.count(marker) == 1
+    forbidden_checkout = (
+        "    steps:\n"
+        "      - name: Forbidden checkout under OIDC\n"
+        "        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1\n"
+        "        with:\n"
+        "          persist-credentials: false\n"
+        "      - name: Download exact verified distributions\n"
+    )
+    workflow.write_text(
+        source.replace(marker, forbidden_checkout, 1),
+        encoding="utf-8",
+    )
+
+    result = _run_policy(workspace)
+
+    assert result.returncode != 0
+    assert "must not checkout or execute repository code" in result.stderr
+
+
+def test_policy_rejects_pypi_token_input(tmp_path: Path) -> None:
+    workspace = _policy_workspace(tmp_path)
+    workflow = workspace / ".github/workflows/publish-pypi.yml"
+    source = workflow.read_text(encoding="utf-8")
+    marker = "          packages-dir: pypi-dist\n"
+    assert marker in source
+    workflow.write_text(
+        source.replace(marker, marker + "          password: ${{ secrets.PYPI_API_TOKEN }}\n", 1),
+        encoding="utf-8",
+    )
+
+    result = _run_policy(workspace)
+
+    assert result.returncode != 0
+    assert "forbidden publication behavior: password:" in result.stderr
 
 
 def test_policy_rejects_provenance_signing_outside_trusted_main_push(tmp_path: Path) -> None:
