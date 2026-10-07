@@ -18,6 +18,13 @@ Tracks #192 item(s):
 - [ ] Or: it does alter them, and the PR includes an explicit schema/version transition plus old/new compatibility tests and documentation.
 - [ ] Persisted historical evidence is not silently reinterpreted under an unchanged schema identity.
 
+## Architecture decision record
+
+- [ ] No governed assurance-semantic path is changed.
+- [ ] Or: this PR adds a new numbered ADR under docs/adr/ describing the decision, consequences,
+      assurance impact, and non-claims.
+- [ ] I did not edit/reuse an old ADR as a substitute for a new governed decision.
+
 ## Security review
 
 - [ ] No secrets, credentials, private production payloads, or sensitive user data are added to tests/docs/logs.

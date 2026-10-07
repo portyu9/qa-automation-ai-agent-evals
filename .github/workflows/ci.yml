@@ -49,6 +49,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          fetch-depth: 0
           persist-credentials: false
       - name: Set up Python
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
@@ -58,6 +59,27 @@ jobs:
         run: python .github/scripts/validate_runtime_policy.py
       - name: Validate repository governance contract
         run: python .github/scripts/validate_governance_policy.py
+      - name: Self-test assurance-semantic ADR policy
+        run: python .github/scripts/validate_semantic_adr.py --self-test
+      - name: Self-test public project-governance documentation bindings
+        run: python .github/scripts/validate_project_governance_docs.py --self-test
+      - name: Validate public project-governance documentation bindings
+        run: python .github/scripts/validate_project_governance_docs.py
+      - name: Require ADR for assurance-semantic pull-request changes
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_ACTOR: ${{ github.actor }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --name-status "$BASE_SHA...$HEAD_SHA" > "$RUNNER_TEMP/semantic-adr-changes.txt"
+          python .github/scripts/validate_semantic_adr.py \
+            --changed-files "$RUNNER_TEMP/semantic-adr-changes.txt" \
+            --actor "$PR_ACTOR" \
+            --base-sha "$BASE_SHA" \
+            --head-sha "$HEAD_SHA"
       - name: Validate mandatory security scanner stack
         run: python .github/scripts/validate_security_stack.py
       - name: Install exact hash-checked semantic parser tools
