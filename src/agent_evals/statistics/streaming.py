@@ -51,8 +51,7 @@ class StreamingBinaryAggregator:
         combined = self.trials + other.trials
         if combined > MAX_STATISTICAL_TRIALS:
             raise ValueError(
-                f"merged aggregate exceeds maximum statistical trial count "
-                f"{MAX_STATISTICAL_TRIALS}"
+                f"merged aggregate exceeds maximum statistical trial count {MAX_STATISTICAL_TRIALS}"
             )
         self.trials = combined
         self.passes += other.passes
