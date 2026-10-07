@@ -4,11 +4,10 @@ import hashlib
 from dataclasses import dataclass, field
 from typing import Literal
 
-import agent_evals.evidence.replication as replication_module
-
 import pytest
 from pydantic import ValidationError
 
+import agent_evals.evidence.replication as replication_module
 from agent_evals.evidence.blob_store import ContentAddressedEvidenceStore, EvidenceBlobBackend
 from agent_evals.evidence.models import TrialEvidence
 from agent_evals.evidence.replication import (
