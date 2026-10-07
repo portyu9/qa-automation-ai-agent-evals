@@ -13,7 +13,7 @@ import json
 from enum import StrEnum
 from typing import Literal, Self
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, model_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, field_serializer, model_validator
 
 from agent_evals._receipt_validation import (
     is_receipt_construction,
@@ -163,6 +163,12 @@ class ApprovalGovernancePolicy(BaseModel):
         ApprovalAuthenticationMethod
     )
 
+    @field_serializer("allowed_authentication_methods", when_used="json")
+    def serialize_allowed_authentication_methods(
+        self, value: frozenset[ApprovalAuthenticationMethod]
+    ) -> list[str]:
+        return sorted(item.value for item in value)
+
 
 class ApprovalGovernanceReceipt(BaseModel):
     """Integrity-bound human approval policy evaluation for one exact invocation."""
@@ -179,6 +185,10 @@ class ApprovalGovernanceReceipt(BaseModel):
     effective_signers: tuple[str, ...]
     accepted: bool = Field(strict=True)
     receipt_root: str = Field(pattern=r"^[0-9a-f]{64}$")
+
+    @field_serializer("revoked_approval_ids", when_used="json")
+    def serialize_revoked_approval_ids(self, value: frozenset[str]) -> list[str]:
+        return sorted(value)
 
     @classmethod
     def create(
