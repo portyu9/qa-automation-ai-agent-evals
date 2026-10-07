@@ -81,6 +81,21 @@ def test_default_policy_preserves_unclassified_trial_evidence_root() -> None:
     assert _count(prepared.receipt, SensitiveDataClass.OPERATOR_PII) == 0
 
 
+def test_benign_token_metric_keys_are_not_treated_as_credentials() -> None:
+    original = _evidence(
+        final_state={
+            "output_tokens": 17,
+            "token_count": 23,
+            "tokenizer": "cl100k_base",
+        }
+    )
+
+    prepared = minimize_evidence_for_persistence(original)
+
+    assert prepared.evidence == original.snapshot()
+    assert _count(prepared.receipt, SensitiveDataClass.CREDENTIAL) == 0
+
+
 @pytest.mark.parametrize(
     "key",
     [
