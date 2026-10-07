@@ -11,6 +11,7 @@ from agent_evals.evidence import store as store_module
 from agent_evals.evidence.models import TrialEvidence
 from agent_evals.evidence.resilience import (
     EvidenceLockObservation,
+    EvidenceLockQuarantineReceipt,
     EvidenceStorePlatformCapabilities,
     EvidenceStorePlatformMode,
     detect_platform_capabilities,
@@ -140,8 +141,6 @@ def test_lock_recovery_roots_have_stable_nul_domain_separation() -> None:
         observation.observation_root
         == "6abfd55ed35c54033756fc4f5d9bf2ff6443340f4fe180bbfe8153bca6e00ccb"
     )
-
-    from agent_evals.evidence.resilience import EvidenceLockQuarantineReceipt
 
     receipt = EvidenceLockQuarantineReceipt.create(
         record_key="a" * 64,
