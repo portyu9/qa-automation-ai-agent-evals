@@ -8,7 +8,15 @@ import json
 from enum import StrEnum
 from typing import Literal, Self
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    ValidationInfo,
+    field_serializer,
+    field_validator,
+    model_validator,
+)
 
 from agent_evals._receipt_validation import (
     is_receipt_construction,
@@ -67,6 +75,10 @@ class RetrievalPipelinePolicy(BaseModel):
     require_reranker: bool = Field(default=False, strict=True)
     require_citations: bool = Field(default=True, strict=True)
 
+    @field_serializer("allowed_collections", "required_labels", when_used="json")
+    def serialize_string_sets(self, value: frozenset[str]) -> list[str]:
+        return sorted(value)
+
     @field_validator("allowed_collections", "required_labels")
     @classmethod
     def validate_labels(cls, value: frozenset[str]) -> frozenset[str]:
@@ -97,6 +109,10 @@ class RetrievedDocumentObservation(BaseModel):
     rerank_score: int | None = Field(default=None, ge=-(2**63), le=2**63 - 1, strict=True)
     content_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     citation_uri: str | None = Field(default=None, min_length=1, max_length=4096)
+
+    @field_serializer("labels", when_used="json")
+    def serialize_labels(self, value: frozenset[str]) -> list[str]:
+        return sorted(value)
 
     @field_validator("labels")
     @classmethod
