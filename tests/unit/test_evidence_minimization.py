@@ -395,32 +395,22 @@ def test_content_addressed_store_minimizes_before_content_key_or_backend_write()
 
 def test_policy_rejects_non_materialized_over_budget_and_non_string_paths() -> None:
     with pytest.raises(ValidationError, match="bounded materialized collection"):
-        EvidenceMinimizationPolicy.model_validate(
-            {"operator_pii_paths": "/final_state/email"}
-        )
+        EvidenceMinimizationPolicy.model_validate({"operator_pii_paths": "/final_state/email"})
 
     with pytest.raises(ValidationError, match="path count"):
         EvidenceMinimizationPolicy(
-            operator_pii_paths=tuple(
-                f"/final_state/field{index}" for index in range(65)
-            )
+            operator_pii_paths=tuple(f"/final_state/field{index}" for index in range(65))
         )
 
     with pytest.raises(ValidationError, match="exact strings"):
-        EvidenceMinimizationPolicy.model_validate(
-            {"operator_pii_paths": ["/final_state/email", 7]}
-        )
+        EvidenceMinimizationPolicy.model_validate({"operator_pii_paths": ["/final_state/email", 7]})
 
     with pytest.raises(ValidationError, match="unique"):
-        EvidenceMinimizationPolicy(
-            operator_pii_paths=("/final_state/email", "/final_state/email")
-        )
+        EvidenceMinimizationPolicy(operator_pii_paths=("/final_state/email", "/final_state/email"))
 
 
 def test_receipt_rejects_noncanonical_classification_order() -> None:
-    prepared = minimize_evidence_for_persistence(
-        _evidence(final_state={"api_key": "secret-value"})
-    )
+    prepared = minimize_evidence_for_persistence(_evidence(final_state={"api_key": "secret-value"}))
     dumped = prepared.receipt.model_dump(mode="json")
     dumped["classifications"] = list(reversed(dumped["classifications"]))
 
@@ -435,9 +425,7 @@ def test_minimizer_rejects_trial_and_policy_subclasses() -> None:
     class DerivedPolicy(EvidenceMinimizationPolicy):
         pass
 
-    derived_evidence = DerivedEvidence.model_validate(
-        _evidence().model_dump(mode="python")
-    )
+    derived_evidence = DerivedEvidence.model_validate(_evidence().model_dump(mode="python"))
 
     with pytest.raises(TypeError, match="exact TrialEvidence"):
         minimize_evidence_for_persistence(derived_evidence)
@@ -486,9 +474,7 @@ def test_missing_and_out_of_range_declared_paths_are_deterministic_noops() -> No
 
 
 def test_declared_paths_support_list_replacement_and_fail_on_bad_container_shape() -> None:
-    valid_policy = EvidenceMinimizationPolicy(
-        operator_pii_paths=("/final_state/people/0/email",)
-    )
+    valid_policy = EvidenceMinimizationPolicy(operator_pii_paths=("/final_state/people/0/email",))
     prepared = minimize_evidence_for_persistence(
         _evidence(final_state={"people": [{"email": "person@example.test"}]}),
         policy=valid_policy,
@@ -505,18 +491,14 @@ def test_declared_paths_support_list_replacement_and_fail_on_bad_container_shape
 
     out_of_range = minimize_evidence_for_persistence(
         _evidence(final_state={"people": [{"email": "person@example.test"}]}),
-        policy=EvidenceMinimizationPolicy(
-            operator_pii_paths=("/final_state/people/4/email",)
-        ),
+        policy=EvidenceMinimizationPolicy(operator_pii_paths=("/final_state/people/4/email",)),
     )
     assert _count(out_of_range.receipt, SensitiveDataClass.OPERATOR_PII) == 0
 
     with pytest.raises(EvidenceMinimizationError, match="non-container"):
         minimize_evidence_for_persistence(
             _evidence(final_state={"person": "scalar"}),
-            policy=EvidenceMinimizationPolicy(
-                operator_pii_paths=("/final_state/person/email",)
-            ),
+            policy=EvidenceMinimizationPolicy(operator_pii_paths=("/final_state/person/email",)),
         )
 
 
@@ -531,9 +513,7 @@ def test_operator_pii_parent_conflicts_with_nested_credentials(target: object) -
     with pytest.raises(EvidenceMinimizationError, match="conflicts with credential"):
         minimize_evidence_for_persistence(
             _evidence(final_state={"profile": target}),
-            policy=EvidenceMinimizationPolicy(
-                operator_pii_paths=("/final_state/profile",)
-            ),
+            policy=EvidenceMinimizationPolicy(operator_pii_paths=("/final_state/profile",)),
         )
 
 
