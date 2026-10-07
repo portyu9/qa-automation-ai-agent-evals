@@ -73,7 +73,8 @@ class GarbageCollectionPlan(BaseModel):
         references: RetentionReferenceSet,
     ) -> Self:
         referenced = set(references.referenced_sha256)
-        candidates = tuple(key for key in store.keys() if key not in referenced)
+        stored_keys = store.keys()
+        candidates = tuple(key for key in stored_keys if key not in referenced)
         return cls(
             reference_set_root=references.reference_set_root,
             delete_candidates=candidates,
