@@ -69,6 +69,17 @@ A green current-head test suite is not sufficient if the change can reinterpret 
 
 When changing canonical identity material, add golden/compatibility tests and document the identity-domain transition.
 
+## Architecture decision records
+
+Changes under the governed assurance-semantic paths in .github/semantic-adr-policy.json must add a
+new numbered ADR under docs/adr/. CI compares the exact pull-request base/head diff and enforces this
+rule. Editing or renaming an existing ADR does not satisfy the gate, and there is no free-form
+self-declared exemption for a governed path.
+
+Use docs/adr/0000-template.md. Supersede an accepted decision with a new ADR rather than rewriting
+history. An ADR records the repository decision and its non-claims; it does not replace executable
+tests, CI qualification, external administration verification, or cryptographic provenance.
+
 ## Pull requests
 
 Keep PRs narrowly scoped. Include tests for behavior-bearing changes and update documentation when a claim, non-claim, schema, trust boundary, or operator contract changes.
