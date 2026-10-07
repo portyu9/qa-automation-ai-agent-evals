@@ -90,6 +90,8 @@ jobs:
         run: python .github/scripts/validate_workflow_graph.py
       - name: Self-test retained release candidate validation
         run: python .github/scripts/release_candidate.py self-test
+      - name: Self-test deterministic release-version preparation
+        run: python .github/scripts/release_version.py self-test
       - name: Self-test release SPDX and license evidence
         run: python .github/scripts/release_supply_chain.py self-test
       - name: Self-test CI qualification evidence
