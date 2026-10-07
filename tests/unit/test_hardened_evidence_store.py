@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 
 from agent_evals.evidence.hardened_store import HardenedPosixEvidenceStore
+from agent_evals.evidence.minimization import EvidenceMinimizationPolicy
 from agent_evals.evidence.models import TrialEvidence
 from agent_evals.evidence.resilience import detect_platform_capabilities
 from agent_evals.evidence.store import (
@@ -55,6 +56,37 @@ def test_hardened_store_preserves_portable_manifest_and_payload_identity(tmp_pat
     assert (hardened_bucket / f"{key}.manifest.json").read_bytes() == (
         portable_bucket / f"{key}.manifest.json"
     ).read_bytes()
+
+
+def test_hardened_store_minimizes_before_anchored_persistence(tmp_path: Path) -> None:
+    secret = "ghp_abcdefghijklmnop"
+    policy = EvidenceMinimizationPolicy(operator_pii_paths=("/final_state/person/email",))
+    hardened = HardenedPosixEvidenceStore(
+        tmp_path / "hardened",
+        minimization_policy=policy,
+    )
+    item = TrialEvidence(
+        trial_id="hardened-minimization",
+        subject_identity=SUBJECT,
+        scenario_identity=SCENARIO,
+        final_state={
+            "person": {"email": "person@example.test"},
+            "api_key": secret,
+        },
+    )
+
+    manifest, receipt = hardened.write_with_receipt(item)
+    stored = hardened.read(manifest.record_key).evidence
+    payload_path = (
+        hardened.root / "records" / manifest.record_key[:2] / f"{manifest.record_key}.evidence.json"
+    )
+    persisted = payload_path.read_bytes()
+
+    assert secret.encode() not in persisted
+    assert b"person@example.test" not in persisted
+    assert stored.final_state["api_key"] == "[REDACTED:CREDENTIAL]"
+    assert stored.final_state["person"]["email"] == "[REDACTED:OPERATOR_PII]"
+    assert stored.evidence_root == receipt.result_evidence_root
 
 
 def test_hardened_store_rejects_symlink_record_bucket(tmp_path: Path) -> None:
