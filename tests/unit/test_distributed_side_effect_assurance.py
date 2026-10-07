@@ -184,6 +184,7 @@ def test_timeout_retry_can_be_the_single_successful_commit() -> None:
     assert receipt.committed_mutations == 1
     assert receipt.accepted is True
 
+
 def test_unordered_side_effect_policy_is_root_stable_across_json_and_hash_seeds() -> None:
     causes = list(SideEffectAttemptCause)
     policy_a = DistributedSideEffectPolicy(required_causes=frozenset(causes))
