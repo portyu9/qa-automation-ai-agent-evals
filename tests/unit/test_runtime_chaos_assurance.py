@@ -69,6 +69,7 @@ def test_blocked_chaos_evaluator_uncertainty_remains_distinct_and_blocks_qualifi
     assert receipt.subject_failures == 0
     assert receipt.qualification_complete is False
 
+
 def test_unordered_chaos_policy_is_root_stable_and_round_trips() -> None:
     domains = list(ChaosDomain)
     policy_a = ChaosPolicy(required_domains=frozenset(domains))
