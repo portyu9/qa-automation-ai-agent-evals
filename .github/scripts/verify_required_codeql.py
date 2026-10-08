@@ -248,21 +248,27 @@ def self_test() -> None:
 
     scheduled = dict(canonical, head_branch="main", event="push")
     for event in ("push", "workflow_dispatch"):
-        if select_codeql_run(
-            [dict(scheduled, event=event)],
-            subject_sha=sha,
-            branch="main",
-            trigger_event="schedule",
-        ) is None:
+        if (
+            select_codeql_run(
+                [dict(scheduled, event=event)],
+                subject_sha=sha,
+                branch="main",
+                trigger_event="schedule",
+            )
+            is None
+        ):
             raise GateError(f"self-test rejected exact-subject {event} evidence for scheduled CI")
 
     for event in ("pull_request", "schedule"):
-        if select_codeql_run(
-            [dict(scheduled, event=event)],
-            subject_sha=sha,
-            branch="main",
-            trigger_event="schedule",
-        ) is not None:
+        if (
+            select_codeql_run(
+                [dict(scheduled, event=event)],
+                subject_sha=sha,
+                branch="main",
+                trigger_event="schedule",
+            )
+            is not None
+        ):
             raise GateError(
                 f"self-test accepted non-post-merge {event} CodeQL evidence for scheduled CI"
             )
