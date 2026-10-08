@@ -41,7 +41,7 @@ def allowed_events(trigger_event: str) -> set[str]:
     if trigger_event == "workflow_dispatch":
         return {"push", "workflow_dispatch"}
     if trigger_event == "schedule":
-        return {"push", "workflow_dispatch", "schedule"}
+        return {"push", "workflow_dispatch"}
     raise GateError(f"unsupported CI trigger event for protected gate: {trigger_event}")
 
 
@@ -243,11 +243,11 @@ def self_test() -> None:
 
     if allowed_events("workflow_dispatch") != {"push", "workflow_dispatch"}:
         raise GateError("self-test rejected governed post-merge CodeQL event set")
-    if allowed_events("schedule") != {"push", "workflow_dispatch", "schedule"}:
-        raise GateError("self-test rejected scheduled CI CodeQL event set")
+    if allowed_events("schedule") != {"push", "workflow_dispatch"}:
+        raise GateError("self-test rejected scheduled CI post-merge CodeQL event set")
 
     scheduled = dict(canonical, head_branch="main", event="push")
-    for event in ("push", "workflow_dispatch", "schedule"):
+    for event in ("push", "workflow_dispatch"):
         if select_codeql_run(
             [dict(scheduled, event=event)],
             subject_sha=sha,
@@ -256,13 +256,31 @@ def self_test() -> None:
         ) is None:
             raise GateError(f"self-test rejected exact-subject {event} evidence for scheduled CI")
 
-    if select_codeql_run(
-        [dict(scheduled, event="pull_request")],
-        subject_sha=sha,
-        branch="main",
-        trigger_event="schedule",
-    ) is not None:
-        raise GateError("self-test accepted pull-request CodeQL evidence for scheduled CI")
+    for event in ("pull_request", "schedule"):
+        if select_codeql_run(
+            [dict(scheduled, event=event)],
+            subject_sha=sha,
+            branch="main",
+            trigger_event="schedule",
+        ) is not None:
+            raise GateError(
+                f"self-test accepted non-post-merge {event} CodeQL evidence for scheduled CI"
+            )
+
+    try:
+        select_codeql_run(
+            [
+                dict(scheduled, event="push"),
+                dict(scheduled, id=102, event="workflow_dispatch"),
+            ],
+            subject_sha=sha,
+            branch="main",
+            trigger_event="schedule",
+        )
+    except GateError:
+        pass
+    else:
+        raise GateError("self-test accepted ambiguous scheduled-CI post-merge CodeQL evidence")
 
     try:
         allowed_events("unknown")
