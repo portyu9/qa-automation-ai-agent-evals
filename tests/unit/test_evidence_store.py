@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 from pathlib import Path
+from typing import cast
 
 import pytest
 
@@ -77,6 +78,16 @@ def test_store_enforces_operator_redaction_ceiling_before_persistence(tmp_path: 
         store.write_with_receipt(original)
     assert not tuple(store.root.rglob("*.evidence.json"))
     assert not tuple(store.root.rglob("*.manifest.json"))
+
+
+def test_invalid_minimization_policy_has_exact_fail_closed_diagnostic(tmp_path: Path) -> None:
+    """Reject an alien policy object before creating the store or persisting evidence."""
+    root = tmp_path / "invalid-policy"
+    with pytest.raises(
+        TypeError, match=r"^minimization_policy must be an exact EvidenceMinimizationPolicy$"
+    ):
+        LocalEvidenceStore(root, minimization_policy=cast(EvidenceMinimizationPolicy, object()))
+    assert not root.exists()
 
 
 def test_record_key_is_path_safe_even_when_trial_id_is_hostile(tmp_path: Path) -> None:
