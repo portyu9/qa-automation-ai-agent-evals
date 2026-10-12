@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 
+from agent_evals.evidence.minimization import EvidenceMinimizationError, EvidenceMinimizationPolicy
 from agent_evals.evidence.models import EvidenceEvent, EvidenceKind, TrialEvidence
 from agent_evals.evidence.store import (
     EvidenceConflictError,
@@ -58,6 +59,24 @@ def test_store_round_trip_manifest_and_idempotent_write(tmp_path: Path) -> None:
     assert loaded.manifest.evidence_root == original.evidence_root
     assert loaded.manifest.payload_bytes > 0
     assert len(loaded.manifest.payload_sha256) == 64
+
+
+def test_store_enforces_operator_redaction_ceiling_before_persistence(tmp_path: Path) -> None:
+    """A caller's stricter minimization policy must reach the persistence boundary.
+
+    Two credential fields under a one-redaction ceiling cannot be silently
+    downgraded to the default policy, even though that default can redact both.
+    No payload or manifest may be committed on policy failure.
+    """
+    original = evidence(state={"api_key": "alpha-secret", "password": "beta-secret"})
+    policy = EvidenceMinimizationPolicy(max_redactions=1)
+    store = LocalEvidenceStore(tmp_path / "evidence", minimization_policy=policy)
+
+    assert store.minimization_policy == policy
+    with pytest.raises(EvidenceMinimizationError, match="redaction ceiling"):
+        store.write_with_receipt(original)
+    assert not tuple(store.root.rglob("*.evidence.json"))
+    assert not tuple(store.root.rglob("*.manifest.json"))
 
 
 def test_record_key_is_path_safe_even_when_trial_id_is_hostile(tmp_path: Path) -> None:
