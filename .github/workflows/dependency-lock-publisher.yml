@@ -46,4 +46,5 @@ jobs:
       - name: Revalidate signed source, lock contents, and atomically publish
         env:
           GITHUB_TOKEN: ${{ github.token }}
+          DEPENDABOT_OWNER_TOKEN: ${{ secrets.DEPENDABOT_OWNER_TOKEN }}
         run: python .github/scripts/dependency_lock_publisher.py --artifact-root lock-artifacts
