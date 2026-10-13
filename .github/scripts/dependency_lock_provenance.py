@@ -11,10 +11,15 @@ from pathlib import Path
 from typing import Any
 
 from dependency_governance import (
-    GitHubApi, PolicyBlock, _repo_text_at_sha, validate_pyproject_dependency_semantics,
+    GitHubApi,
+    PolicyBlock,
+    _repo_text_at_sha,
+    validate_pyproject_dependency_semantics,
 )
 from dependency_lock_publisher import (
-    COMMIT_MESSAGE, expected_paths, validate_artifacts,
+    COMMIT_MESSAGE,
+    expected_paths,
+    validate_artifacts,
 )
 
 PUBLISHER_LOGIN = "github-actions[bot]"
