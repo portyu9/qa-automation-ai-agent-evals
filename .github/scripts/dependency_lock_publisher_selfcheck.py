@@ -12,7 +12,6 @@ from pathlib import Path
 import validate_ci_locks as snapshot_policy
 import validate_dependency_compatibility as compatibility_policy
 from dependency_governance import GovernanceError, PolicyBlock, load_config
-from generate_ci_lock import _normalize_header
 from dependency_lock_provenance import validate_published_pip_chain
 from dependency_lock_publisher import (
     MAX_LOCK_BYTES,
@@ -21,6 +20,7 @@ from dependency_lock_publisher import (
     validate_artifacts,
     validate_run,
 )
+from generate_ci_lock import _normalize_header
 
 
 def assert_refused(action, *arguments) -> None:  # type: ignore[no-untyped-def]
