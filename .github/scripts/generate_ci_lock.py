@@ -188,6 +188,7 @@ def _normalize_header(
             f"# Profile: {profile}",
             f"# Boundary: {boundary}",
             f"# Python: {sys.version_info.major}.{sys.version_info.minor}",
+            "# Artifact-Selection: linux-x86_64",
             f"# Input-SHA256: {input_digest}",
             "# Compiler: pip==25.3; pip-tools==7.5.2",
             "# Regeneration contract: CI_DEPENDENCY_LOCKS.md",

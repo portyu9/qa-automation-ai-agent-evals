@@ -3,10 +3,14 @@
 
 from __future__ import annotations
 
+import re
 import shutil
 import tempfile
+import tomllib
 from pathlib import Path
 
+import validate_ci_locks as snapshot_policy
+import validate_dependency_compatibility as compatibility_policy
 from dependency_governance import GovernanceError, PolicyBlock, load_config
 from dependency_lock_provenance import validate_published_pip_chain
 from dependency_lock_publisher import (
@@ -16,6 +20,7 @@ from dependency_lock_publisher import (
     validate_artifacts,
     validate_run,
 )
+from generate_ci_lock import _normalize_header
 
 
 def assert_refused(action, *arguments) -> None:  # type: ignore[no-untyped-def]
@@ -66,6 +71,52 @@ class FakeApi:
         return self.data[path]
 
 
+def _manifest_for_committed_lock_fixture() -> str:
+    """Align this historical fixture with committed trusted locks, not a pending bot manifest.
+
+    A canonical Dependabot pip PR legitimately changes pyproject.toml before
+    publishing its new lock graph. The positive self-test must use the old
+    committed lock graph's own direct pins; the production validator continues
+    to validate generated artifacts against the *exact PR source manifest*.
+    """
+    manifest = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
+    project = tomllib.loads(manifest)["project"]
+    accepted_pins = snapshot_policy.parse_lock(
+        ROOT / "requirements/locks/openai-mcp-py311.txt", "3.11"
+    )
+    for requirements in project.get("optional-dependencies", {}).values():
+        for requirement in requirements:
+            required_pin = snapshot_policy.exact_pin(requirement)
+            name = snapshot_policy.requirement_name(requirement)
+            if required_pin is None or name not in accepted_pins:
+                continue
+            fixture_pin = f"{name}=={accepted_pins[name]}"
+            if required_pin == fixture_pin:
+                continue
+            literal = f'"{requirement}"'
+            if manifest.count(literal) != 1:
+                raise AssertionError(f"ambiguous direct-pin fixture for {name}")
+            aligned = re.sub(r"==[^,;\s]+", f"=={accepted_pins[name]}", requirement, count=1)
+            manifest = manifest.replace(literal, f'"{aligned}"', 1)
+    return manifest
+
+
+def test_compatibility_artifact_selection_header() -> None:
+    with tempfile.TemporaryDirectory() as directory:
+        output = Path(directory) / "fixture.txt"
+        output.write_text("sample==1.0 \\\n    --hash=sha256:" + "a" * 64 + "\n", encoding="utf-8")
+        _normalize_header(output, profile="core", boundary="minimum", input_digest="b" * 64)
+        content = output.read_text(encoding="utf-8")
+        header = compatibility_policy.parse_header(content, filename=output.name)
+        assert header["Artifact-Selection"] == "linux-x86_64"
+        assert header["Input-SHA256"] == "b" * 64
+        assert header["Boundary"] == "minimum"
+        assert_refused(
+            lambda data: compatibility_policy.parse_header(data, filename=output.name),
+            content.replace("# Artifact-Selection: linux-x86_64\n", ""),
+        )
+
+
 def test_lock_artifact_validator() -> None:
     expected = expected_paths()
     assert len(expected) == 12
@@ -76,7 +127,7 @@ def test_lock_artifact_validator() -> None:
             folder = root / f"lock-{stem}"
             folder.mkdir()
             shutil.copyfile(ROOT / path, folder / f"{stem}.txt")
-        manifest = (ROOT / "pyproject.toml").read_text()
+        manifest = _manifest_for_committed_lock_fixture()
         actual = validate_artifacts(root, manifest)
         assert set(actual) == {path for path, _ in expected.values()}
         assert all(100 < len(data) < MAX_LOCK_BYTES for data in actual.values())
@@ -86,13 +137,16 @@ def test_lock_artifact_validator() -> None:
         assert_refused(validate_artifacts, root, manifest)
         extra.rmdir()
 
-        wrong_manifest = manifest.replace("mcp==2.2.0", "mcp==99.0.0")
+        committed_mcp = snapshot_policy.parse_lock(
+            ROOT / "requirements/locks/mcp-py311.txt", "3.11"
+        )["mcp"]
+        wrong_manifest = manifest.replace(f"mcp=={committed_mcp}", "mcp==99.0.0")
         assert wrong_manifest != manifest
         assert_refused(validate_artifacts, root, wrong_manifest)
 
         lock = root / "lock-mcp-py311" / "mcp-py311.txt"
         saved = lock.read_bytes()
-        lock.write_bytes(saved.replace(b"mcp==2.2.0", b"mcp==99.0.0"))
+        lock.write_bytes(saved.replace(f"mcp=={committed_mcp}".encode(), b"mcp==99.0.0"))
         assert lock.read_bytes() != saved
         assert_refused(validate_artifacts, root, manifest)
         lock.write_bytes(saved)
@@ -162,6 +216,7 @@ def test_canonical_publisher_refusals() -> None:
 
 
 if __name__ == "__main__":
+    test_compatibility_artifact_selection_header()
     test_lock_artifact_validator()
     test_canonical_publisher_refusals()
     print("dependency lock publisher self-check passed")
