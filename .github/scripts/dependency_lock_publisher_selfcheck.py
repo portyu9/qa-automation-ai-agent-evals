@@ -7,7 +7,7 @@ import shutil
 import tempfile
 from pathlib import Path
 
-from dependency_governance import PolicyBlock, load_config
+from dependency_governance import GovernanceError, PolicyBlock, load_config
 from dependency_lock_publisher import (
     MAX_LOCK_BYTES, ROOT, expected_paths, validate_artifacts, validate_run,
 )
@@ -17,7 +17,7 @@ from dependency_lock_provenance import validate_published_pip_chain
 def assert_refused(action, *arguments) -> None:  # type: ignore[no-untyped-def]
     try:
         action(*arguments)
-    except (PolicyBlock, ValueError, OSError, KeyError):
+    except (GovernanceError, PolicyBlock, ValueError, OSError, KeyError):
         return
     raise AssertionError("security regression: invalid evidence was accepted")
 
