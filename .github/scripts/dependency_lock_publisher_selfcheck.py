@@ -143,7 +143,7 @@ def test_canonical_publisher_refusals() -> None:
         ],
         base,
         child,
-        config
+        config,
     )
     event = {
         "workflow_run": {
