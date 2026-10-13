@@ -96,9 +96,7 @@ def _manifest_for_committed_lock_fixture() -> str:
             literal = f'"{requirement}"'
             if manifest.count(literal) != 1:
                 raise AssertionError(f"ambiguous direct-pin fixture for {name}")
-            aligned = re.sub(
-                r"==[^,;\s]+", f"=={accepted_pins[name]}", requirement, count=1
-            )
+            aligned = re.sub(r"==[^,;\s]+", f"=={accepted_pins[name]}", requirement, count=1)
             manifest = manifest.replace(literal, f'"{aligned}"', 1)
     return manifest
 
@@ -107,9 +105,7 @@ def test_compatibility_artifact_selection_header() -> None:
     with tempfile.TemporaryDirectory() as directory:
         output = Path(directory) / "fixture.txt"
         output.write_text("sample==1.0 \\\n    --hash=sha256:" + "a" * 64 + "\n", encoding="utf-8")
-        _normalize_header(
-            output, profile="core", boundary="minimum", input_digest="b" * 64
-        )
+        _normalize_header(output, profile="core", boundary="minimum", input_digest="b" * 64)
         content = output.read_text(encoding="utf-8")
         header = compatibility_policy.parse_header(content, filename=output.name)
         assert header["Artifact-Selection"] == "linux-x86_64"
@@ -150,9 +146,7 @@ def test_lock_artifact_validator() -> None:
 
         lock = root / "lock-mcp-py311" / "mcp-py311.txt"
         saved = lock.read_bytes()
-        lock.write_bytes(
-            saved.replace(f"mcp=={committed_mcp}".encode(), b"mcp==99.0.0")
-        )
+        lock.write_bytes(saved.replace(f"mcp=={committed_mcp}".encode(), b"mcp==99.0.0"))
         assert lock.read_bytes() != saved
         assert_refused(validate_artifacts, root, manifest)
         lock.write_bytes(saved)
