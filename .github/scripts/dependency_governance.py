@@ -130,6 +130,7 @@ def validate_config(config: dict[str, Any]) -> list[str]:
         ".github/scripts/dependency_governance.py",
         ".github/scripts/dependency_governance_selfcheck.py",
         ".github/scripts/dependency_lock_publisher.py",
+        ".github/scripts/dependency_lock_publisher_selfcheck.py",
         ".github/scripts/dependency_lock_provenance.py",
         ".github/workflows/dependency-lock-publisher.yml",
         ".github/workflows/dependency-locks.yml",
