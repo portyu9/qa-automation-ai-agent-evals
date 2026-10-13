@@ -97,7 +97,7 @@ def _manifest_for_committed_lock_fixture() -> str:
             if manifest.count(literal) != 1:
                 raise AssertionError(f"ambiguous direct-pin fixture for {name}")
             aligned = re.sub(
-                r"==[^,;\\s]+", f"=={accepted_pins[name]}", requirement, count=1
+                r"==[^,;\s]+", f"=={accepted_pins[name]}", requirement, count=1
             )
             manifest = manifest.replace(literal, f'"{aligned}"', 1)
     return manifest
@@ -116,8 +116,8 @@ def test_compatibility_artifact_selection_header() -> None:
         assert header["Input-SHA256"] == "b" * 64
         assert header["Boundary"] == "minimum"
         assert_refused(
-            compatibility_policy.parse_header,
-            content.replace("# Artifact-Selection: linux-x86_64\\n", ""),
+            lambda data: compatibility_policy.parse_header(data, filename=output.name),
+            content.replace("# Artifact-Selection: linux-x86_64\n", ""),
         )
 
 
