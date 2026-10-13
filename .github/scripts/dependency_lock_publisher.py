@@ -194,7 +194,18 @@ def publish(api: GitHubApi, pull: dict[str, Any], source: str, branch: str, file
     ref = api.get(ref_path)
     if ((ref or {}).get("object") or {}).get("sha") != source:
         raise GovernanceError("branch ref changed before lock publisher publication")
-    api.request("PATCH", ref_path, {"sha": commit_sha, "force": False})
+    # GitHub Actions creates the signed child, but only the authenticated
+    # repository owner advances the ref so required pull_request checks rerun.
+    owner = os.environ.get("DEPENDABOT_OWNER_TOKEN", "")
+    if not owner:
+        raise GovernanceError("owner-authorized publication token is not configured")
+    identity = api.request("GET", "https://api.github.com/user", token=owner)
+    if identity.get("login") != "portyu9" or identity.get("id") != 35150859:
+        raise GovernanceError("publisher ref update token is not the configured owner identity")
+    latest_ref = api.get(ref_path)
+    if ((latest_ref or {}).get("object") or {}).get("sha") != source:
+        raise GovernanceError("Dependabot ref changed before owner-authorized publication")
+    api.request("PATCH", ref_path, {"sha": commit_sha, "force": False}, token=owner)
     return commit_sha
 
 
