@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Fail-closed dependency lock publisher + governor regression tests."""
+
 from __future__ import annotations
 
 import shutil
@@ -106,7 +107,8 @@ def test_canonical_publisher_refusals() -> None:
     api = FakeApi()
     source, child, base = api.source, api.child, api.base
     pull = {
-        "number": 341, "commits": 2,
+        "number": 341,
+        "commits": 2,
         "head": {"ref": "dependabot/pip/routine-dependencies", "sha": child},
     }
     commits = [{"sha": source}, {"sha": child}]
@@ -119,35 +121,37 @@ def test_canonical_publisher_refusals() -> None:
     # fail independently of any generated lock graph.
     actor = api.data[f"/commits/{child}"]["author"]
     actor["id"] = 1
-    assert_refused(
-        validate_published_pip_chain, api, pull, commits, files, base, child, config
-    )
+    assert_refused(validate_published_pip_chain, api, pull, commits, files, base, child, config)
     actor["id"] = 41898282
     api.data[f"/commits/{child}"]["commit"]["verification"]["verified"] = False
-    assert_refused(
-        validate_published_pip_chain, api, pull, commits, files, base, child, config
-    )
+    assert_refused(validate_published_pip_chain, api, pull, commits, files, base, child, config)
     api.data[f"/commits/{child}"]["commit"]["verification"]["verified"] = True
     api.data[f"/commits/{child}"]["parents"] = [{"sha": "f" * 40}]
-    assert_refused(
-        validate_published_pip_chain, api, pull, commits, files, base, child, config
-    )
+    assert_refused(validate_published_pip_chain, api, pull, commits, files, base, child, config)
     api.data[f"/commits/{child}"]["parents"] = [{"sha": source}]
     api.data[f"/commits/{child}"]["files"].append({"filename": ".github/workflows/ci.yml"})
-    assert_refused(
-        validate_published_pip_chain, api, pull, commits, files, base, child, config
-    )
+    assert_refused(validate_published_pip_chain, api, pull, commits, files, base, child, config)
     api.data[f"/commits/{child}"]["files"].pop()
     assert_refused(
-        validate_published_pip_chain, api, pull, commits, [
+        validate_published_pip_chain,
+        api,
+        pull,
+        commits,
+        [
             {"filename": "pyproject.toml", "status": "modified"},
             {"filename": ".github/dependency-governance.json", "status": "modified"},
-        ], base, child, config
+        ],
+        base,
+        child,
+        config
     )
     event = {
         "workflow_run": {
-            "name": "dependency-locks", "path": ".github/workflows/dependency-locks.yml",
-            "event": "pull_request", "status": "completed", "conclusion": "success",
+            "name": "dependency-locks",
+            "path": ".github/workflows/dependency-locks.yml",
+            "event": "pull_request",
+            "status": "completed",
+            "conclusion": "success",
             "head_repository": {"full_name": api.repository},
             "head_branch": "dependabot/pip/routine-dependencies",
             "head_sha": child,
