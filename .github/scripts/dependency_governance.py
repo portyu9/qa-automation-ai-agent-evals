@@ -367,10 +367,15 @@ def validate_pr_identity(
 
 def validate_commits(api: GitHubApi, number: int, config: dict[str, Any]) -> None:
     commits = api.list_all(f"/pulls/{number}/commits", max_pages=2)
-    if len(commits) != 1:
+    if len(commits) not in {1, 2}:
         raise PolicyBlock(
-            f"automatic governance requires exactly one Dependabot commit, found {len(commits)}"
+            f"automatic governance requires canonical Dependabot or trusted publisher chain, found {len(commits)}"
         )
+    # In the two-commit case, the first commit retains the canonical Dependabot
+    # signature checks below; the second is separately proved against the
+    # accepted-main trusted publisher contract and every exact lock blob.
+    if len(commits) == 2 and (commits[1].get("sha") or "") == (commits[0].get("sha") or ""):
+        raise PolicyBlock("publisher and Dependabot source cannot have identical SHA")
     row = commits[0]
     author = row.get("author") or {}
     committer = row.get("committer") or {}
@@ -647,6 +652,7 @@ def validate_change_semantics(
     base_sha: str,
     head_sha: str,
     config: dict[str, Any],
+    pull: dict[str, Any] | None = None,
 ) -> str:
     paths = [str(row["filename"]) for row in files]
     if paths and all(
@@ -658,6 +664,25 @@ def validate_change_semantics(
         # one-for-one immutable action-pin validator below.
         validate_action_semantics(files)
         return "github-actions"
+    # This single narrowly scoped protected-path exception is not authority
+    # to edit control-plane code. It proves the signed original one-file bot
+    # commit and a separate, verified GitHub Actions publisher child against
+    # both accepted lock policy validators, before considering green checks.
+    from dependency_lock_publisher import expected_paths
+    published_paths = {item[0] for item in expected_paths().values()}
+    names = set(paths)
+    if (
+        config["pipMode"] == "exact-subject-green"
+        and "pyproject.toml" in names
+        and len(names) > 1
+        and names.issubset({"pyproject.toml", *published_paths})
+    ):
+        if pull is None:
+            raise PolicyBlock("trusted lock publisher chain requires bound PR context")
+        from dependency_lock_provenance import validate_published_pip_chain
+        commits = api.list_all(f"/pulls/{pull['number']}/commits", max_pages=2)
+        validate_published_pip_chain(api, pull, commits, files, base_sha, head_sha, config)
+        return "pip"
     require_unprotected_non_action_scope(files, config)
     if config["pipMode"] == "exact-subject-green" and set(paths) == set(config["pipManifestPaths"]):
         validate_pip_semantics(api, files, base_sha, head_sha, config)
@@ -718,7 +743,7 @@ def assess(
     head_sha, base_sha, number = validate_pr_identity(api, pr, config)
     validate_commits(api, number, config)
     files = changed_files(api, number, config)
-    ecosystem = validate_change_semantics(api, files, base_sha, head_sha, config)
+    ecosystem = validate_change_semantics(api, files, base_sha, head_sha, config, pr)
     merge_sha = verify_merge_subject(api, pr, number, head_sha, base_sha)
     if require_checks:
         require_green_checks(api, head_sha, config)
@@ -1017,7 +1042,7 @@ def _request_stale_dependabot_refresh(
         )
     validate_commits(api, number, config)
     files = changed_files(api, number, config)
-    validate_change_semantics(api, files, base_sha, head_sha, config)
+    validate_change_semantics(api, files, base_sha, head_sha, config, pr)
     fresh = api.get(f"/pulls/{number}")
     if require_sha(((fresh or {}).get("head") or {}).get("sha"), "fresh head SHA") != head_sha:
         raise PolicyBlock("Dependabot head changed before owner-authenticated refresh")
