@@ -674,6 +674,7 @@ def validate_change_semantics(
     # commit and a separate, verified GitHub Actions publisher child against
     # both accepted lock policy validators, before considering green checks.
     from dependency_lock_publisher import expected_paths
+
     published_paths = {item[0] for item in expected_paths().values()}
     names = set(paths)
     if (
@@ -685,6 +686,7 @@ def validate_change_semantics(
         if pull is None:
             raise PolicyBlock("trusted lock publisher chain requires bound PR context")
         from dependency_lock_provenance import validate_published_pip_chain
+
         commits = api.list_all(f"/pulls/{pull['number']}/commits", max_pages=2)
         validate_published_pip_chain(api, pull, commits, files, base_sha, head_sha, config)
         return "pip"
