@@ -5,7 +5,7 @@ name: dependency-lock-publisher
 # data after source SHA, signed author, path and workflow-run verification.
 # zizmor: ignore[dangerous-triggers] -- intentional trusted publisher bridge
 on:
-  workflow_run:
+  workflow_run: # zizmor: ignore[dangerous-triggers] -- default-branch-only publisher, signed bot-source and artifact validation
     workflows: [dependency-locks]
     types: [completed]
 
