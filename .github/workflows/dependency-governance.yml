@@ -9,6 +9,11 @@ on:
       - '.github/security-scanners.json'
       - '.github/scripts/dependency_governance.py'
       - '.github/scripts/dependency_governance_selfcheck.py'
+      - '.github/scripts/dependency_lock_publisher.py'
+      - '.github/scripts/dependency_lock_publisher_selfcheck.py'
+      - '.github/scripts/dependency_lock_provenance.py'
+      - '.github/workflows/dependency-lock-publisher.yml'
+      - '.github/workflows/dependency-locks.yml'
       - '.github/scripts/dependency_recovery.py'
       - '.github/scripts/dependency_recovery_selfcheck.py'
       - '.github/scripts/validate_codeql_sarif.py'
@@ -74,6 +79,9 @@ jobs:
           python -m compileall -q
           .github/scripts/dependency_governance.py
           .github/scripts/dependency_governance_selfcheck.py
+          .github/scripts/dependency_lock_publisher.py
+          .github/scripts/dependency_lock_publisher_selfcheck.py
+          .github/scripts/dependency_lock_provenance.py
           .github/scripts/dependency_recovery.py
           .github/scripts/dependency_recovery_selfcheck.py
           .github/scripts/validate_codeql_sarif.py
@@ -88,6 +96,7 @@ jobs:
       - name: Exercise fail-closed policy self-checks
         run: |
           python .github/scripts/dependency_governance_selfcheck.py
+          python .github/scripts/dependency_lock_publisher_selfcheck.py
           python .github/scripts/dependency_recovery_selfcheck.py
           python .github/scripts/validate_codeql_sarif_selfcheck.py
           python .github/scripts/validate_security_stack.py

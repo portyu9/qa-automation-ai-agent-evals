@@ -1,0 +1,54 @@
+name: dependency-lock-publisher
+
+# This workflow_run bridge is privileged by design, but executes only accepted-main
+# trusted code. The downloaded untrusted artifacts are validated strictly as
+# data after source SHA, signed author, path and workflow-run verification.
+# zizmor: ignore[dangerous-triggers] -- intentional trusted publisher bridge
+on:
+  workflow_run: # zizmor: ignore[dangerous-triggers] -- default-branch-only publisher, signed bot-source and artifact validation
+    workflows: [dependency-locks]
+    types: [completed]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dependency-lock-publisher-${{ github.event.workflow_run.head_branch || github.run_id }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: publish-verified-hash-locks
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'pull_request' &&
+      startsWith(github.event.workflow_run.head_branch, 'dependabot/pip/')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    permissions:
+      actions: read
+      contents: write
+      pull-requests: read
+    steps:
+      - name: Checkout only accepted main publisher and governance code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+      - name: Set up Python 3.11 for trusted publisher
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.11'
+      - name: Download only completed isolated hash-lock artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_RUN_ID: ${{ github.event.workflow_run.id }}
+        run: |
+          set -euo pipefail
+          mkdir -p lock-artifacts
+          gh run download "$SOURCE_RUN_ID" --dir lock-artifacts --pattern 'lock-*'
+      - name: Revalidate signed source, lock contents, and atomically publish
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          DEPENDABOT_OWNER_TOKEN: ${{ secrets.DEPENDABOT_OWNER_TOKEN }}
+        run: python .github/scripts/dependency_lock_publisher.py --artifact-root lock-artifacts
