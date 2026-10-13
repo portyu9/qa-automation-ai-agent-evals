@@ -3,6 +3,7 @@
 This module runs from accepted main. It never executes code from a pull request
 or an artifact; the derived lock graph is parsed by existing strict validators.
 """
+
 from __future__ import annotations
 
 import re
@@ -41,9 +42,11 @@ def validate_published_pip_chain(
     allowed_paths = {"pyproject.toml"} | {p for p, _ in expected_locks}
     names = {str(row.get("filename") or "") for row in files}
     if (
-        len(commits) != 2 or pull.get("commits") != 2
+        len(commits) != 2
+        or pull.get("commits") != 2
         or not str((pull.get("head") or {}).get("ref") or "").startswith("dependabot/pip/")
-        or names - allowed_paths or "pyproject.toml" not in names
+        or names - allowed_paths
+        or "pyproject.toml" not in names
     ):
         raise PolicyBlock("only exact signed bot source + trusted derived lock chain can qualify")
     source_sha = str(commits[0].get("sha") or "")
@@ -62,7 +65,9 @@ def validate_published_pip_chain(
         or len(source.get("parents") or []) != 1
         or (source["parents"][0] or {}).get("sha") != base_sha
     ):
-        raise PolicyBlock("canonical Dependabot source must change only the manifest on current main")
+        raise PolicyBlock(
+            "canonical Dependabot source must change only the manifest on current main"
+        )
     # The main governor already independently checks the first bot commit's
     # verified signature, author, committer, Signed-off-by, and update classes.
     git = child.get("commit") or {}
@@ -119,4 +124,6 @@ def validate_published_pip_chain(
         try:
             validate_artifacts(root, head_manifest)
         except (ValueError, OSError, KeyError) as exc:
-            raise PolicyBlock(f"published lock graph fails exact validated contract: {exc}") from exc
+            raise PolicyBlock(
+                f"published lock graph fails exact validated contract: {exc}"
+            ) from exc
