@@ -6,6 +6,7 @@ from accepted main, revalidates canonical Dependabot provenance, parses artifact
 as data, exercises both existing lock validators and binds the exact source SHA
 into one GitHub-signed publisher child commit. Never executes artifact contents.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -76,7 +77,9 @@ def validate_run(api: GitHubApi, event: dict[str, Any]) -> tuple[dict[str, Any],
         or len(associations) != 1
         or not isinstance(associations[0].get("number"), int)
     ):
-        raise GovernanceError("lock publisher requires one successful canonical read-only PR workflow")
+        raise GovernanceError(
+            "lock publisher requires one successful canonical read-only PR workflow"
+        )
     number = associations[0]["number"]
     pull = api.get(f"/pulls/{number}")
     if not isinstance(pull, dict):
@@ -93,7 +96,9 @@ def validate_run(api: GitHubApi, event: dict[str, Any]) -> tuple[dict[str, Any],
     config = load_config()
     source = assess(api, pull, config, require_checks=False)
     if source["ecosystem"] != "pip" or source["files"] != ["pyproject.toml"]:
-        raise GovernanceError("lock publisher only accepts canonical signed pyproject-only Dependabot source")
+        raise GovernanceError(
+            "lock publisher only accepts canonical signed pyproject-only Dependabot source"
+        )
     return pull, require_sha(source["headSha"], "source head"), branch
 
 
@@ -111,9 +116,11 @@ def validate_artifacts(
         folder = root / f"lock-{stem}"
         file = folder / f"{stem}.txt"
         if (
-            not folder.is_dir() or folder.is_symlink()
+            not folder.is_dir()
+            or folder.is_symlink()
             or [p.name for p in folder.iterdir()] != [file.name]
-            or not file.is_file() or file.is_symlink()
+            or not file.is_file()
+            or file.is_symlink()
         ):
             raise GovernanceError(f"unsafe or incomplete lock artifact: {stem}")
         size = file.stat().st_size
@@ -158,11 +165,16 @@ def validate_artifacts(
             compatibility_policy.validate()
         finally:
             snapshot_policy.ROOT, snapshot_policy.LOCK_DIR = old_snapshot_root, old_snapshot_dir
-            compatibility_policy.ROOT, compatibility_policy.LOCK_DIR = old_compat_root, old_compat_dir
+            compatibility_policy.ROOT, compatibility_policy.LOCK_DIR = (
+                old_compat_root,
+                old_compat_dir,
+            )
     return payloads
 
 
-def publish(api: GitHubApi, pull: dict[str, Any], source: str, branch: str, files: dict[str, bytes]) -> str:
+def publish(
+    api: GitHubApi, pull: dict[str, Any], source: str, branch: str, files: dict[str, bytes]
+) -> str:
     # Revalidate after expensive artifact processing; do not repair stale heads
     # or an unrelated PR, and never force-update a Dependabot branch.
     fresh = api.get(f"/pulls/{pull['number']}")
@@ -174,13 +186,21 @@ def publish(api: GitHubApi, pull: dict[str, Any], source: str, branch: str, file
     tree_sha = require_sha((source_commit.get("tree") or {}).get("sha"), "source tree")
     entries = []
     for path, data in sorted(files.items()):
-        blob = api.post("/git/blobs", {
-            "content": base64.b64encode(data).decode("ascii"), "encoding": "base64",
-        })
-        entries.append({
-            "path": path, "mode": "100644", "type": "blob",
-            "sha": require_sha((blob or {}).get("sha"), f"blob {path}"),
-        })
+        blob = api.post(
+            "/git/blobs",
+            {
+                "content": base64.b64encode(data).decode("ascii"),
+                "encoding": "base64",
+            },
+        )
+        entries.append(
+            {
+                "path": path,
+                "mode": "100644",
+                "type": "blob",
+                "sha": require_sha((blob or {}).get("sha"), f"blob {path}"),
+            }
+        )
     tree = api.post("/git/trees", {"base_tree": tree_sha, "tree": entries})
     new_tree = require_sha((tree or {}).get("sha"), "published tree")
     message = (
@@ -188,9 +208,14 @@ def publish(api: GitHubApi, pull: dict[str, Any], source: str, branch: str, file
         f"Generated from Dependabot source head {source} by trusted default-branch "
         "dependency-lock-publisher."
     )
-    commit = api.post("/git/commits", {
-        "message": message, "tree": new_tree, "parents": [source],
-    })
+    commit = api.post(
+        "/git/commits",
+        {
+            "message": message,
+            "tree": new_tree,
+            "parents": [source],
+        },
+    )
     commit_sha = require_sha((commit or {}).get("sha"), "publisher child")
     if SAFE_BRANCH.fullmatch(branch) is None:
         raise GovernanceError("invalid Dependabot branch identity")
@@ -242,11 +267,16 @@ def main() -> int:
     pull, source, branch = validate_run(api, event)
     # Source bytes are read only after exact verified bot provenance.
     from dependency_governance import _repo_text_at_sha
+
     source_manifest = _repo_text_at_sha(api, "pyproject.toml", source)
     files = validate_artifacts(args.artifact_root, source_manifest)
     new_sha = publish(api, pull, source, branch, files)
-    print(json.dumps({"pr": pull["number"], "source": source, "child": new_sha,
-                      "profiles": len(files)}, sort_keys=True))
+    print(
+        json.dumps(
+            {"pr": pull["number"], "source": source, "child": new_sha, "profiles": len(files)},
+            sort_keys=True,
+        )
+    )
     return 0
 
 
