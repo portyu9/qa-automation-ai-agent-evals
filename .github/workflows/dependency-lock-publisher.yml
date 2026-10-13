@@ -1,5 +1,9 @@
 name: dependency-lock-publisher
 
+# This workflow_run bridge is privileged by design, but executes only accepted-main
+# trusted code. The downloaded untrusted artifacts are validated strictly as
+# data after source SHA, signed author, path and workflow-run verification.
+# zizmor: ignore[dangerous-triggers] -- intentional trusted publisher bridge
 on:
   workflow_run:
     workflows: [dependency-locks]
