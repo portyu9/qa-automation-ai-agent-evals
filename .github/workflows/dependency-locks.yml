@@ -1,0 +1,72 @@
+name: dependency-locks
+
+on:
+  pull_request:
+    paths:
+      - 'pyproject.toml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dependency-locks-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  compile:
+    name: Hash lock ${{ matrix.name }}
+    if: >-
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.user.login == 'dependabot[bot]' &&
+      startsWith(github.event.pull_request.head.ref, 'dependabot/pip/')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {name: core-py311, python: '3.11', profile: core, boundary: snapshot}
+          - {name: core-py312, python: '3.12', profile: core, boundary: snapshot}
+          - {name: core-py313, python: '3.13', profile: core, boundary: snapshot}
+          - {name: core-py314, python: '3.14', profile: core, boundary: snapshot}
+          - {name: mcp-py311, python: '3.11', profile: mcp, boundary: snapshot}
+          - {name: openai-mcp-py311, python: '3.11', profile: openai-mcp, boundary: snapshot}
+          - {name: core-minimum-py311, python: '3.11', profile: core, boundary: minimum}
+          - {name: core-latest-py314, python: '3.14', profile: core, boundary: latest}
+          - {name: mcp-minimum-py311, python: '3.11', profile: mcp, boundary: minimum}
+          - {name: mcp-latest-py314, python: '3.14', profile: mcp, boundary: latest}
+          - {name: openai-mcp-minimum-py311, python: '3.11', profile: openai-mcp, boundary: minimum}
+          - {name: openai-mcp-latest-py314, python: '3.14', profile: openai-mcp, boundary: latest}
+    steps:
+      - name: Checkout untrusted PR merge candidate without credentials
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up target interpreter
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Install pinned maintenance compiler
+        run: |
+          python -m pip install --disable-pip-version-check --no-input pip==25.3 pip-tools==7.5.2
+      - name: Generate only the selected SHA-256-locked profile
+        env:
+          PROFILE: ${{ matrix.profile }}
+          BOUNDARY: ${{ matrix.boundary }}
+          PROFILE_NAME: ${{ matrix.name }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p generated
+          args=(--profile "$PROFILE" --output "generated/${PROFILE_NAME}.txt")
+          if [[ "$BOUNDARY" != "snapshot" ]]; then args+=(--boundary "$BOUNDARY"); fi
+          python .github/scripts/generate_ci_lock.py "${args[@]}"
+          grep -q -- '--hash=sha256:' "generated/${PROFILE_NAME}.txt"
+      - name: Upload a single isolated lock artifact
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: lock-${{ matrix.name }}
+          path: generated/${{ matrix.name }}.txt
+          if-no-files-found: error
+          retention-days: 1
+          overwrite: false
