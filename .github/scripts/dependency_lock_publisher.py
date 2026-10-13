@@ -200,7 +200,11 @@ def publish(api: GitHubApi, pull: dict[str, Any], source: str, branch: str, file
     if not owner:
         raise GovernanceError("owner-authorized publication token is not configured")
     identity = api.request("GET", "https://api.github.com/user", token=owner)
-    if identity.get("login") != "portyu9" or identity.get("id") != 35150859:
+    trusted = load_config()
+    if (
+        identity.get("login") != trusted["ownerApprovalLogin"]
+        or identity.get("id") != trusted["ownerApprovalUserId"]
+    ):
         raise GovernanceError("publisher ref update token is not the configured owner identity")
     latest_ref = api.get(ref_path)
     if ((latest_ref or {}).get("object") or {}).get("sha") != source:
