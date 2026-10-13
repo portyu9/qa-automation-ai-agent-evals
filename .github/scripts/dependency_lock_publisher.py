@@ -22,7 +22,11 @@ from typing import Any
 import validate_ci_locks as snapshot_policy
 import validate_dependency_compatibility as compatibility_policy
 from dependency_governance import (
-    GitHubApi, GovernanceError, PolicyBlock, assess, load_config,
+    GitHubApi,
+    GovernanceError,
+    PolicyBlock,
+    assess,
+    load_config,
 )
 
 ROOT = Path(__file__).resolve().parents[2]
