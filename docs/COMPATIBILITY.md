@@ -3,7 +3,7 @@
 This document is the human-readable compatibility view for the current source contract. Executable
 truth remains in pyproject.toml, the checked-in compatibility locks, CI, and the canonical
 agent-evals/release-statement/v2 produced from qualified release artifacts. CI also runs
-.github/scripts/validate_project_governance_docs.py so the version/Python/OpenAI/MCP rows and all six
+.github/scripts/validate_project_governance_docs.py so the version/Python/OpenAI/MCP source bindings and all six
 snapshot references cannot silently drift from those executable contracts.
 
 ## Current framework line
@@ -13,8 +13,8 @@ snapshot references cannot silently drift from those executable contracts.
 | Framework package | version from pyproject.toml | pyproject.toml |
 | Python | >=3.11,<3.15 (3.11, 3.12, 3.13, 3.14) | package metadata; quality on 3.11 + 3.14; compatibility locks |
 | Core runtime | pydantic>=2.12.2,<3, typer>=0.16,<1 | package metadata + core min/latest locks |
-| OpenAI integration | openai-agents==0.22.3 | optional dependency + openai-mcp min/latest CI profile |
-| MCP integration | mcp==2.2.0 plus declared HTTP/ASGI ranges | optional dependency + mcp and openai-mcp min/latest CI profiles |
+| OpenAI integration | exact openai-agents pin from pyproject.toml (optional-dependencies.openai) | optional dependency + openai-mcp min/latest CI profile |
+| MCP integration | exact mcp pin from pyproject.toml (optional-dependencies.mcp) plus declared HTTP/ASGI ranges | optional dependency + mcp and openai-mcp min/latest CI profiles |
 
 The six release-bound compatibility snapshots are:
 

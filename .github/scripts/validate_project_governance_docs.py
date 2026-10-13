@@ -93,12 +93,12 @@ def validate() -> None:
     )
     require(
         compatibility,
-        f"| OpenAI integration | openai-agents=={contract['openai_agents']} |",
+        "| OpenAI integration | exact openai-agents pin from pyproject.toml (optional-dependencies.openai) |",
         label="compatibility matrix",
     )
     require(
         compatibility,
-        f"| MCP integration | mcp=={contract['mcp']} plus declared HTTP/ASGI ranges |",
+        "| MCP integration | exact mcp pin from pyproject.toml (optional-dependencies.mcp) plus declared HTTP/ASGI ranges |",
         label="compatibility matrix",
     )
 
