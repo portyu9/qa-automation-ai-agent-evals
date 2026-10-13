@@ -2,14 +2,17 @@
 """Fail-closed dependency lock publisher + governor regression tests."""
 from __future__ import annotations
 
-import json
 import shutil
 import tempfile
 from pathlib import Path
 
 from dependency_governance import GovernanceError, PolicyBlock, load_config
 from dependency_lock_publisher import (
-    MAX_LOCK_BYTES, ROOT, expected_paths, validate_artifacts, validate_run,
+    MAX_LOCK_BYTES,
+    ROOT,
+    expected_paths,
+    validate_artifacts,
+    validate_run,
 )
 from dependency_lock_provenance import validate_published_pip_chain
 
