@@ -33,12 +33,10 @@ BASELINE_COMMIT = "ac0680f130e5ce17fd85de587d95b8728347ba4e"
 # waivers or trusted install declarations; source install authority remains
 # independently enforced by validate_workflow_pip_installs.py.
 _LOCAL_SOURCE_PIP = (
-    "python -m pip install --disable-pip-version-check "
-    "--no-deps --no-build-isolation ."
+    "python -m pip install --disable-pip-version-check --no-deps --no-build-isolation ."
 )
 _LOCAL_SDIST_PIP = (
-    "python -m pip install --disable-pip-version-check "
-    "--no-deps --no-build-isolation dist/*.tar.gz"
+    "python -m pip install --disable-pip-version-check --no-deps --no-build-isolation dist/*.tar.gz"
 )
 _RETAINED_SDIST_PIP = (
     "python -m pip install --disable-pip-version-check "
@@ -67,11 +65,7 @@ class ScorecardError(ValueError):
 def _pinned_finding_identity(result: dict[str, Any]) -> tuple[str, str]:
     """Require authentic Scorecard evidence identifying *which* pip command."""
     locations = result.get("locations")
-    if (
-        not isinstance(locations, list)
-        or len(locations) != 1
-        or not isinstance(locations[0], dict)
-    ):
+    if not isinstance(locations, list) or len(locations) != 1 or not isinstance(locations[0], dict):
         raise ScorecardError("PinnedDependencies finding must have one source location")
     physical = locations[0].get("physicalLocation")
     if not isinstance(physical, dict):
@@ -198,12 +192,14 @@ def self_test() -> None:
         }
         if name == "PinnedDependenciesID":
             path, snippet = reviewed_sources[index % len(reviewed_sources)]
-            result["locations"] = [{
-                "physicalLocation": {
-                    "artifactLocation": {"uri": path},
-                    "region": {"snippet": {"text": snippet}},
+            result["locations"] = [
+                {
+                    "physicalLocation": {
+                        "artifactLocation": {"uri": path},
+                        "region": {"snippet": {"text": snippet}},
+                    }
                 }
-            }]
+            ]
         return result
 
     def make(counts: dict[str, int]) -> dict[str, Any]:
