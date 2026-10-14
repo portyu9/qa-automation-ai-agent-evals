@@ -33,3 +33,20 @@ def test_scorecard_missing_evidence_still_fails_closed() -> None:
     assert f"          path: {SARIF_PATH}\n" in workflow
     assert "          if-no-files-found: error\n" in workflow
     assert '          publish_results: "false"\n' in workflow
+
+
+def test_scorecard_workflow_change_triggers_live_main_scan() -> None:
+    workflow = WORKFLOW.read_text(encoding="utf-8")
+    # Post-merge self-changes must exercise the real Scorecard implementation;
+    # untrusted pull_request code must not inherit security-events: write.
+    assert workflow.startswith("name: OpenSSF Scorecard\n\non:\n")
+    assert (
+        '  push:\n'
+        '    branches: [main]\n'
+        '    paths:\n'
+        '      - ".github/workflows/security-scorecard.yml"\n'
+    ) in workflow
+    assert '  schedule:\n    - cron: "41 8 * * 2"\n' in workflow
+    assert "  workflow_dispatch:\n" in workflow
+    assert "  pull_request:\n" not in workflow
+    assert "      security-events: write\n" in workflow
