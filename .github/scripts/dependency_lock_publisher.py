@@ -47,9 +47,9 @@ def publisher_commit_message(source: str) -> str:
     if SHA.fullmatch(source) is None:
         raise GovernanceError("lock publisher commit subject must be a canonical SHA")
     return (
-        f"{COMMIT_MESSAGE}\\n\\n"
+        f"{COMMIT_MESSAGE}\n\n"
         f"Generated from Dependabot source head {source} by trusted default-branch "
-        f"dependency-lock-publisher.\\n\\n{DEPENDABOT_REBASE_MARKER}"
+        f"dependency-lock-publisher.\n\n{DEPENDABOT_REBASE_MARKER}"
     )
 
 
