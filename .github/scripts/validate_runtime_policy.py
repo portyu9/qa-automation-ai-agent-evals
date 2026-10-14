@@ -249,6 +249,42 @@ for required in (
         fail(f"deep-fuzz workflow is missing required contract text: {required}")
 if "\npush:" in deep_fuzz or "\n  push:" in deep_fuzz:
     fail("deep-fuzz workflow must not run on every push")
+if "pull_request_target:" in deep_fuzz:
+    fail("native fuzz must never execute with pull_request_target authority")
+
+# Dedicated native coverage job remains isolated from the 3.11 Hypothesis lane.
+# A dead Atheris marker must never substitute for real libFuzzer execution.
+native_fuzz = job_block(deep_fuzz, "atheris-strict-json", None)
+for required in (
+    "name: Native Atheris / strict JSON / Python 3.14",
+    "runs-on: ubuntu-24.04",
+    "timeout-minutes: 20",
+    "permissions:\n      contents: read",
+    'python-version: "3.14"',
+    "ref: ${{ env.EXACT_COMMIT }}",
+    "persist-credentials: false",
+    "requirements/locks/core-py314.txt",
+    "requirements/locks/atheris-py314.txt",
+    "--require-hashes",
+    "--no-deps --no-build-isolation .",
+    "python -m pip check",
+    'test "$(git rev-parse HEAD)" = "$EXACT_COMMIT"',
+    "atheris-evidence/commit.txt",
+    "atheris-evidence/seed.txt",
+    "timeout --signal=TERM --kill-after=10s 180s",
+    "python tests/fuzz/atheris_strict_json.py atheris-evidence/corpus",
+    "-atheris_runs=5000",
+    "-max_len=4096",
+    "atheris-evidence/crashes/",
+    "atheris-evidence/run.log",
+    "if: always()",
+    "if-no-files-found: error",
+    "retention-days: 21",
+):
+    if required not in native_fuzz:
+        fail(f"native Atheris coverage-fuzz contract lost: {required}")
+if "security-events: write" in native_fuzz or "id-token: write" in native_fuzz:
+    fail("native Atheris coverage-fuzz job must remain read-only")
 
 deep_mutation_path = Path(".github/workflows/deep-mutation.yml")
 deep_mutation = workflows.get(deep_mutation_path)
