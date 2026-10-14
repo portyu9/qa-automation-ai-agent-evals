@@ -70,8 +70,9 @@ def classify(command: str, workflow: str) -> str:
             raise PipInstallPolicyError(f"{workflow}: missing reviewed requirement path")
         requirement = args[pos + 1]
         allowed = (
-            requirement.startswith("requirements/locks/")
-            or requirement.startswith("requirements/compatibility/")
+            re.fullmatch(r"requirements/locks/[A-Za-z0-9_-]+\\.txt", requirement)
+            or re.fullmatch(r"requirements/compatibility/[A-Za-z0-9_-]+\\.txt", requirement)
+            or requirement == "requirements/locks/core-py${lock_suffix}.txt"
             or re.fullmatch(r"requirements/compiler/bootstrap-py3(?:11|12|13|14)\.txt", requirement)
             or requirement == 'requirements/compiler/bootstrap-py${short}.txt'
             or (
@@ -156,6 +157,7 @@ def self_test() -> None:
         "python -m pip install --no-deps https://example.org/pkg.whl",
         "python -m pip install --require-hashes -r https://example.org/unsafe.txt",
         "python -m pip install --require-hashes -r requirements/platform/unknown.txt",
+        "python -m pip install --require-hashes -r requirements/locks/../../../evil.txt",
         "python -m pip install --require-hashes -r requirements/locks/core-py311.txt --no-deps",
         "python -m pip install --trusted-host attacker.example -r requirements/locks/core-py311.txt",
         "pip install --require-hashes -r requirements/locks/core-py311.txt",
