@@ -140,7 +140,7 @@ def classify(raw: Any) -> dict[str, Any]:
                     identity, 0
                 ):
                     raise ScorecardError(
-                        f"new or increased PinnedDependencies pipCommand identity: {identity!r}"
+                        f"new or increased PinnedDependenciesID pipCommand identity: {identity!r}"
                     )
             counts[rid] += 1
         observed_runs += 1
