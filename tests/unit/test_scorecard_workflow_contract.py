@@ -27,10 +27,18 @@ def test_scorecard_missing_evidence_still_fails_closed() -> None:
     workflow = WORKFLOW.read_text(encoding="utf-8")
     scan = workflow.index("      - name: Run OpenSSF Scorecard\n")
     upload = workflow.index("      - name: Upload Scorecard SARIF to code scanning\n")
+    classify = workflow.index(
+        "      - name: Classify genuine SARIF against accepted security posture baseline\n"
+    )
     retention = workflow.index("      - name: Retain Scorecard evidence\n")
-    assert scan < upload < retention
+    assert scan < upload < classify < retention
+    assert "        if: always()\n" in workflow[classify:retention]
     assert f"          sarif_file: {SARIF_PATH}\n" in workflow
-    assert f"          path: {SARIF_PATH}\n" in workflow
+    assert (
+        "          path: |\n"
+        f"            {SARIF_PATH}\n"
+        "            reports/security/scorecard-triage.json\n"
+    ) in workflow
     assert "          if-no-files-found: error\n" in workflow
     assert '          publish_results: "false"\n' in workflow
 
