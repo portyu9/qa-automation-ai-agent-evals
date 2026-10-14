@@ -201,16 +201,15 @@ def _validate_permissions(workflow: dict[str, Any], *, path: Path) -> None:
             raise WorkflowPolicyError(
                 f"{path}: privileged job {job_id!r} lost its accepted trust guard"
             )
-        if path.name in {
+        if "pull_request" in triggers and path.name in {
             "security-scorecard.yml",
             "publish-pypi.yml",
             "publish-release.yml",
             "dependency-lock-publisher.yml",
         }:
-            if "pull_request" in triggers:
-                raise WorkflowPolicyError(
-                    f"{path}: trusted publication or SARIF job may not run on PR code"
-                )
+            raise WorkflowPolicyError(
+                f"{path}: trusted publication or SARIF job may not run on PR code"
+            )
         if path.name == "dependency-lock-publisher.yml":
             if set(triggers) != {"workflow_run"}:
                 raise WorkflowPolicyError(
