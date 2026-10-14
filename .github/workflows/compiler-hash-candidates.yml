@@ -1,0 +1,60 @@
+name: Review-only compiler hash candidates
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/compiler-hash-candidates.yml"
+      - "requirements/compiler/bootstrap.in"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: compiler-candidates-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  resolve:
+    name: Compiler candidate / Python ${{ matrix.python }}
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.11", "3.12", "3.13", "3.14"]
+    steps:
+      - name: Checkout review-only generator with no credentials
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up target Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Resolve review-only candidate (NOT a trusted bootstrap)
+        env:
+          PY_VERSION: ${{ matrix.python }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Unhashed resolution is permitted ONLY in this ephemeral, unprivileged
+          # candidate producer. This workflow MUST be removed before PR merge.
+          python -m pip install --disable-pip-version-check --no-input pip==25.3 pip-tools==7.5.2
+          mkdir -p candidates
+          short="${PY_VERSION//./}"
+          python -m piptools compile --generate-hashes --resolver=backtracking \
+            --allow-unsafe --no-emit-index-url --no-emit-trusted-host \
+            --output-file "candidates/compiler-py${short}.txt" \
+            requirements/compiler/bootstrap.in
+          grep -q -- "--hash=sha256:" "candidates/compiler-py${short}.txt"
+          printf 'START-COMPILER-LOCK-PY%s\n' "${short}"
+          cat "candidates/compiler-py${short}.txt"
+          printf 'END-COMPILER-LOCK-PY%s\n' "${short}"
+      - name: Retain candidate for independent review
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: review-only-compiler-py${{ matrix.python }}
+          path: candidates
+          if-no-files-found: error
+          retention-days: 1
