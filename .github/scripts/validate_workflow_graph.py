@@ -487,7 +487,7 @@ jobs:
             ("      issues: read", "      issues: none"),
             ("      pull-requests: read", "      pull-requests: none"),
             ("      security-events: write", "      security-events: read"),
-            ("  push:\\n    branches: [main]", "  pull_request:\\n    branches: [main]"),
+            ("  push:\n    branches: [main]", "  pull_request:\n    branches: [main]"),
         )
         for original, malicious in scorecard_mutations:
             if source_scorecard.count(original) != 1:
