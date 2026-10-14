@@ -14,9 +14,11 @@ import validate_dependency_compatibility as compatibility_policy
 from dependency_governance import GovernanceError, PolicyBlock, load_config
 from dependency_lock_provenance import validate_published_pip_chain
 from dependency_lock_publisher import (
+    DEPENDABOT_REBASE_MARKER,
     MAX_LOCK_BYTES,
     ROOT,
     expected_paths,
+    publisher_commit_message,
     validate_artifacts,
     validate_run,
 )
@@ -56,11 +58,7 @@ class FakeApi:
                     },
                     "committer": {"name": "GitHub", "email": "noreply@github.com"},
                     "verification": {"verified": True, "reason": "valid", "signature": "signed"},
-                    "message": (
-                        "chore: publish trusted Dependabot dependency lock graph\n\n"
-                        f"Generated from Dependabot source head {self.source} by trusted default-branch "
-                        "dependency-lock-publisher."
-                    ),
+                    "message": publisher_commit_message(self.source),
                 },
                 "parents": [{"sha": self.source}],
                 "files": [{"filename": "requirements/locks/mcp-py311.txt"}],
@@ -177,6 +175,16 @@ def test_canonical_publisher_refusals() -> None:
     actor["id"] = 1
     assert_refused(validate_published_pip_chain, api, pull, commits, files, base, child, config)
     actor["id"] = 41898282
+    published = api.data[f"/commits/{child}"]["commit"]
+    signed_message = published["message"]
+    assert signed_message.endswith("\n\n" + DEPENDABOT_REBASE_MARKER)
+    assert signed_message.count(DEPENDABOT_REBASE_MARKER) == 1
+    published["message"] = signed_message.removesuffix("\n\n" + DEPENDABOT_REBASE_MARKER)
+    assert_refused(validate_published_pip_chain, api, pull, commits, files, base, child, config)
+    published["message"] = signed_message
+    published["message"] += " unreviewed"
+    assert_refused(validate_published_pip_chain, api, pull, commits, files, base, child, config)
+    published["message"] = signed_message
     api.data[f"/commits/{child}"]["commit"]["verification"]["verified"] = False
     assert_refused(validate_published_pip_chain, api, pull, commits, files, base, child, config)
     api.data[f"/commits/{child}"]["commit"]["verification"]["verified"] = True
