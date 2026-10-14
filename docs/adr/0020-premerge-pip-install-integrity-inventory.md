@@ -4,7 +4,7 @@
 **Date:** 2026-10-14
 **Supersedes:** None
 
-## Problem and historical preflight
+## Context
 
 Authentic GitHub Code Scanning Scorecard on accepted
 `main@f519d90594d2d3cde107374632532a5065db98c3` reported
@@ -69,6 +69,15 @@ heuristics remain recorded; this validator provides pre-merge
 claim. The remaining ruleset human-review, SAST history, fuzzing
 recognition, repository age and Best Practices enrollment require their
 own evidence and sometimes administrator/human involvement.
+
+## Assurance impact
+
+This control adds an independently executed, non-compensatory pre-merge CI
+qualification: a single invalid pip install command fails the required
+Repository policy job, then the required aggregate CI gate. Hash
+identity and local-artifact provenance remain separate from evaluator
+judgment, release attestation, and CodeQL security scan authority.
+It never converts absent or unverified evidence into a passing result.
 
 ## Non-claims
 
