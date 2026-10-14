@@ -123,20 +123,20 @@ def self_test() -> None:
         original = target.read_text(encoding="utf-8")
         example = HASH.search(original)
         assert example is not None
-        for corrupt in (
+        for mutation_index, corrupt in enumerate((
             original.replace(example.group(0), "", 1),
             original.replace("pip-tools==7.5.2", "pip-tools==7.5.1", 1),
             original.replace("# Python: 3.11", "# Python: 3.14", 1),
             original.replace("wheel==0.48.0", "wheel==0.48.1", 1),
             original + "\n--extra-index-url https://unsafe.example\n",
-        ):
+        )):
             target.write_text(corrupt, encoding="utf-8")
             try:
                 validate(root)
             except CompilerBootstrapError:
                 pass
             else:
-                raise AssertionError("compiler bootstrap accepted corrupted locked evidence")
+                raise AssertionError(f"compiler bootstrap accepted corrupted locked evidence mutation={mutation_index}")
         target.write_text(original, encoding="utf-8")
         workflow_text = workflow.read_text(encoding="utf-8")
         for corrupt in (
