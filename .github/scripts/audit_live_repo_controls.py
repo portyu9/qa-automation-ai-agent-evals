@@ -65,7 +65,11 @@ def inspect(repo: Any, ruleset: Any) -> dict[str, Any]:
             raise DriftError(f"repository {key}: expected {expected!r}, got {repo.get(key)!r}")
     if ruleset.get("id") != RULESET_ID or ruleset.get("enforcement") != "active":
         raise DriftError("Protect Main ruleset must be active and exact-ID")
-    if ruleset.get("bypass_actors") != []:
+    # The read-only Actions token may omit administrator-only bypass actors.
+    # Omission cannot be treated as an observed empty list or a real bypass.
+    bypass = ruleset.get("bypass_actors")
+    bypass_unobservable = bypass is None
+    if not bypass_unobservable and bypass != []:
         raise DriftError("main ruleset must not grant bypass actors")
     conditions = require_object(ruleset.get("conditions"), "ruleset conditions")
     refs = require_object(conditions.get("ref_name"), "ruleset refs")
@@ -119,7 +123,12 @@ def inspect(repo: Any, ruleset: Any) -> dict[str, Any]:
             if unavailable_admin_fields
             else "PASS"
         ),
-        "ruleset_controls": "PASS",
+        "ruleset_controls": (
+            "BLOCKED: GitHub Actions token cannot independently read bypass_actors"
+            if bypass_unobservable
+            else "PASS"
+        ),
+        "verified_rule_checks": "PASS",
         "repo": REPO,
         "ruleset_id": RULESET_ID,
         "protected_checks": len(found),
@@ -199,6 +208,33 @@ def self_test() -> None:
         raise DriftError("fixture misclassified missing human review as PASS")
     if inspect(repo, ruleset)["merge_controls"] != "PASS":
         raise DriftError("fully readable compliant GitHub merge settings did not PASS")
+    if inspect(repo, ruleset)["ruleset_controls"] != "PASS":
+        raise DriftError("fully observed no-bypass ruleset incorrectly classified")
+    for sentinel in (None, "omit"):
+        partial_rules = json.loads(json.dumps(ruleset))
+        if sentinel is None:
+            partial_rules["bypass_actors"] = None
+        else:
+            partial_rules.pop("bypass_actors")
+        report = inspect(repo, partial_rules)
+        if not report["ruleset_controls"].startswith("BLOCKED:"):
+            raise DriftError("unobservable bypass actors were falsely accepted as PASS")
+        if report["verified_rule_checks"] != "PASS":
+            raise DriftError("admin-only field masked other verified rule checks")
+        partial_repo = dict(repo)
+        partial_repo.pop("allow_auto_merge")
+        mixed = inspect(partial_repo, partial_rules)
+        if not mixed["merge_controls"].startswith("BLOCKED:"):
+            raise DriftError("independent missing settings were falsely accepted")
+        if not mixed["ruleset_controls"].startswith("BLOCKED:"):
+            raise DriftError("independent missing bypass field was falsely accepted")
+        partial_rules["bypass_actors"] = [{"actor_id": 1}]
+        try:
+            inspect(repo, partial_rules)
+        except DriftError:
+            pass
+        else:
+            raise DriftError("explicit bypass actor slipped past blocked-field handling")
     for missing in (
         "allow_auto_merge",
         "allow_update_branch",
@@ -280,6 +316,12 @@ def main() -> int:
                     "::warning::Live repository admin settings are BLOCKED from "
                     "this read-only token; do not interpret the audit job as "
                     "a PASS for unverified administrator controls."
+                )
+            if outcome["ruleset_controls"].startswith("BLOCKED"):
+                print(
+                    "::warning::Ruleset bypass-actor administration is BLOCKED "
+                    "from this read-only token; verified protected checks "
+                    "do not establish the absent no-bypass assertion."
                 )
             if args.output is not None:
                 args.output.parent.mkdir(parents=True, exist_ok=True)
