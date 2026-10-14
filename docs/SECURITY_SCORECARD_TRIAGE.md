@@ -53,9 +53,12 @@ required checks and consider adding `CodeQL` (defense in depth, already indirect
 from GitHub Actions. Configure **Require code scanning results** for CodeQL
 at an appropriate vulnerability threshold when supported. Make sure those
 checks execute on all eligible PRs, including fork PRs, before requiring
-them globally. The current CodeQL job intentionally skips untrusted forks;
-its event/permission design needs a verified read-only analysis path before
-forked PRs can satisfy a mandatory CodeQL requirement.
+them globally. The CodeQL fork-PR skip was removed and protected by adversarial
+semantic-policy tests in merged PR #361 / ADR 0021; analysis now uses
+unprivileged `pull_request` with no PR SARIF upload and local zero-alert
+enforcement. A **genuine external-fork PR end-to-end test** is still required
+before directly requiring a CodeQL job on every possible fork PR; the
+existing `Package integrity` bridge remains protected and fail-closed.
 
 Require an independent human reviewer if a qualified second contributor is
 available. An author cannot self-approve, and neither GitHub Actions nor an
@@ -121,3 +124,13 @@ single-maintainer repo can deadlock otherwise safe PRs. Keep findings
 and live ruleset check proves them resolved. General-purpose agent
 autofixing of arbitrary Scorecard alerts is **not** implemented by
 the bounded Dependabot recovery controller.
+
+## Latest governance and security preconditions (2026-10-14)
+
+The independent authentic Scorecard [main run 38619334215](https://github.com/portyu9/qa-automation-ai-agent-evals/actions/runs/38619334215) was parsed from SARIF job `116042455263` on `main@6aec0e3a4e97e380b0a724fde790a4888f7fc9ac`. It has **24 genuine findings**: 18 `PinnedDependenciesID` checked-out source or independently verified retained release artifacts, one each `BranchProtectionID`, `CodeReviewID`, `SASTID`, `FuzzingID`, `MaintainedID`, `CIIBestPracticesID`. No `VulnerabilitiesID` finding. These are **not** 24 confirmed exploitable vulnerabilities, and none is dismissed or suppressed merely to make the UI green.
+
+Actual native merge-only GitHub auto-merge is proven on protected, fully green PRs #362 and #363; this does **not** prove an independently reviewed signed Dependabot PR or a genuine external fork. The new live governance monitor on this accepted main returned a false violation because the unprivileged GitHub Actions API response omits the privileged `bypass_actors` field, even though a separate owner-connected ruleset read confirms no bypass actors. Paired PR #364 preserves the real distinction: missing admin field is **BLOCKED**, explicit unsafe actor is **FAIL**, observed required checks can still be independently **PASS**. A successful reporting workflow is not blanket assurance when its report contains BLOCKED.
+
+A separate genuine PR dependency-review job 116035090773 found the GitHub dependency graph compare returned HTTP 403/404, so dependency review was **BLOCKED**. That status alone does **not** establish whether the graph is disabled or just inaccessible to the job token. Before PR #364 the committed governance JSON incorrectly declared dependency graph, secret scanning, and push protection all `verified-enabled` while the scanner JSON disagreed. Both sources now say **`unverified-admin-surface`** pending authenticated admin evidence; required CI tests prohibit promoting repository-owned declarations to self-authenticated claims. Private vulnerability reporting is **owner-reported enabled** but the connected administrator-only feature API is unavailable; do not mark it independently verified or claim a tested report URL without actual proof.
+
+The user explicitly prefers single-CODEOWNER autonomous CI authority. A green bot reviewer or programmable owner-token `APPROVE` is **not independent human code review** and cannot meet the Scorecard `CodeReviewID` criterion. The repo is too young for Maintained's age-based assessment; OpenSSF Best Practices enrollment is external. Do not replace `BLOCKED` with `PASS`, untrustworthy self-attestations, fabricated historic fuzz/SAST runs, or fake zero-alert SARIF.
