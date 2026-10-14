@@ -16,13 +16,9 @@ ROOT = Path(__file__).resolve().parents[2]
 CLASSIFIER = ROOT / ".github/scripts/classify_scorecard_sarif.py"
 CURRENT_MAIN = "ac0680f130e5ce17fd85de587d95b8728347ba4e"
 
-SOURCE_PIP = (
-    "python -m pip install --disable-pip-version-check "
-    "--no-deps --no-build-isolation ."
-)
+SOURCE_PIP = "python -m pip install --disable-pip-version-check --no-deps --no-build-isolation ."
 DIST_PIP = (
-    "python -m pip install --disable-pip-version-check "
-    "--no-deps --no-build-isolation dist/*.tar.gz"
+    "python -m pip install --disable-pip-version-check --no-deps --no-build-isolation dist/*.tar.gz"
 )
 RETAINED_PIP = (
     "python -m pip install --disable-pip-version-check "
@@ -49,9 +45,7 @@ REVIEWED_PIP_IDENTITIES = {
 def _sarif(counts: dict[str, int], rule_ids: set[str]) -> dict[str, Any]:
     rules = sorted(rule_ids)
     pip_locations = [
-        identity
-        for identity, quantity in REVIEWED_PIP_IDENTITIES.items()
-        for _ in range(quantity)
+        identity for identity, quantity in REVIEWED_PIP_IDENTITIES.items() for _ in range(quantity)
     ]
 
     def finding(rid: str, index: int) -> dict[str, Any]:
@@ -62,12 +56,14 @@ def _sarif(counts: dict[str, int], rule_ids: set[str]) -> dict[str, Any]:
         }
         if rid == "PinnedDependenciesID":
             path, snippet = pip_locations[index % len(pip_locations)]
-            result["locations"] = [{
-                "physicalLocation": {
-                    "artifactLocation": {"uri": path},
-                    "region": {"snippet": {"text": snippet}},
+            result["locations"] = [
+                {
+                    "physicalLocation": {
+                        "artifactLocation": {"uri": path},
+                        "region": {"snippet": {"text": snippet}},
+                    }
                 }
-            }]
+            ]
         return result
 
     return {
