@@ -1,6 +1,6 @@
 # ADR 0015: Guard workflow write authority without weakening supply-chain evidence
 
-**Status:** Proposed
+**Status:** Accepted
 **Date:** 2026-10-14
 **Supersedes:** None
 
