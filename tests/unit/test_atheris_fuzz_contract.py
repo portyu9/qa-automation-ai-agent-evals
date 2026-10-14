@@ -67,7 +67,7 @@ def test_native_atheris_job_preserves_exact_subject_and_evidence() -> None:
         "requirements/locks/core-py314.txt",
         "requirements/locks/atheris-py314.txt",
         "--require-hashes",
-        "--no-deps --no-build-isolation .",
+        "PYTHONPATH: src",
         "python -m pip check",
         'test "$(git rev-parse HEAD)" = "$EXACT_COMMIT"',
         "-atheris_runs=5000",
