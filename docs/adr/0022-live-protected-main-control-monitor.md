@@ -46,7 +46,17 @@ security-stack gate requires the actual scheduled monitor be present.
 All seven existing protected required contexts and the independent
 `Package integrity` bridge remain unchanged.
 
-## Separate assessment claims
+## Assurance impact
+
+The new monitor introduces **observation-only authority**, not merger
+privilege. A failure on live remote drift is reported as FAIL by the
+scheduled monitor, while the separate unfilled human-review requirement
+is explicitly BLOCKED and cannot be compensated by successful CI.
+No additional write-capable workflow token, new privileged trigger,
+branch protection bypass, or source/evidence acceptance path is added.
+Historical artifacts retain their exact prior meaning.
+
+## Non-claims
 
 The live monitor explicitly records `human_review_scorecard=BLOCKED`
 while the ruleset requires zero approvals. A user-toggled reviewer count
@@ -64,7 +74,7 @@ age-restricted Maintained, and Best Practices enrollment). The live
 monitor must not dismiss, suppress or reclassify these alerts and
 must not turn `BLOCKED` into `FAIL` or `PASS` silently.
 
-## Evidence and merge semantics
+## Consequences
 
 Every GitHub API response is evidence of **a point-in-time live read**,
 not a cryptographic attestation of a repository's historical state or a
