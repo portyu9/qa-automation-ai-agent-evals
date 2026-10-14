@@ -100,7 +100,9 @@ def classify_authenticated_pip_subject(subject: dict[str, Any]) -> str:
         and set(files) == published_files
     ):
         return "already-published"
-    raise GovernanceError("lock publisher requires signed manifest source or fully verified lock child")
+    raise GovernanceError(
+        "lock publisher requires signed manifest source or fully verified lock child"
+    )
 
 
 def validate_run(api: GitHubApi, event: dict[str, Any]) -> tuple[dict[str, Any], str, str, str]:
