@@ -226,9 +226,7 @@ def _validate_scorecard_read_contract(workflow: dict[str, Any], *, path: Path) -
     if path.name != "security-scorecard.yml":
         return
     triggers = workflow.get("on")
-    if not isinstance(triggers, dict) or set(triggers) != {
-        "push", "schedule", "workflow_dispatch"
-    }:
+    if not isinstance(triggers, dict) or set(triggers) != {"push", "schedule", "workflow_dispatch"}:
         raise WorkflowPolicyError(
             f"{path}: Scorecard must stay on trusted-main push/schedule/dispatch"
         )
@@ -475,9 +473,7 @@ jobs:
 
         # A Scorecard run with no read access to checks can produce misleading
         # 0/N SAST history; disallow that invisible regression (and new writes).
-        source_scorecard = (WORKFLOW_DIR / "security-scorecard.yml").read_text(
-            encoding="utf-8"
-        )
+        source_scorecard = (WORKFLOW_DIR / "security-scorecard.yml").read_text(encoding="utf-8")
         candidate_scorecard = root / "security-scorecard.yml"
         candidate_scorecard.write_text(source_scorecard, encoding="utf-8")
         validate_workflow(candidate_scorecard)
