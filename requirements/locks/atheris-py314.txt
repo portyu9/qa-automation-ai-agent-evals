@@ -1,0 +1,8 @@
+# Reviewed optional native coverage-guided fuzzer runtime; not a supported package extra.
+# Python: 3.14
+# Platform: Linux x86_64, manylinux2014; no CPython 3.11 wheel in this release.
+# Source: https://pypi.org/project/atheris/3.1.0/ (released 2026-06-17)
+# PyPI metadata reports Twine upload, NOT a Trusted Publisher. Hash != authentication.
+# Exact CPython 3.14 manylinux2014 x86_64 wheel digest; no sdist fallback accepted.
+atheris==3.1.0 \
+    --hash=sha256:315a0b5c819852b1ffe1ca72efc389c7724881f2c33e4aacb8c6bcec49bd5011
