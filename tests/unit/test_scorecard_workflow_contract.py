@@ -41,9 +41,9 @@ def test_scorecard_workflow_change_triggers_live_main_scan() -> None:
     # untrusted pull_request code must not inherit security-events: write.
     assert workflow.startswith("name: OpenSSF Scorecard\n\non:\n")
     assert (
-        '  push:\n'
-        '    branches: [main]\n'
-        '    paths:\n'
+        "  push:\n"
+        "    branches: [main]\n"
+        "    paths:\n"
         '      - ".github/workflows/security-scorecard.yml"\n'
     ) in workflow
     assert '  schedule:\n    - cron: "41 8 * * 2"\n' in workflow
