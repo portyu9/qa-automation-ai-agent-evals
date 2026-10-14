@@ -70,8 +70,8 @@ def classify(command: str, workflow: str) -> str:
             raise PipInstallPolicyError(f"{workflow}: missing reviewed requirement path")
         requirement = args[pos + 1]
         allowed = (
-            re.fullmatch(r"requirements/locks/[A-Za-z0-9_-]+\\.txt", requirement)
-            or re.fullmatch(r"requirements/compatibility/[A-Za-z0-9_-]+\\.txt", requirement)
+            re.fullmatch(r"requirements/locks/[A-Za-z0-9_-]+\.txt", requirement)
+            or re.fullmatch(r"requirements/compatibility/[A-Za-z0-9_-]+\.txt", requirement)
             or requirement == "requirements/locks/core-py${lock_suffix}.txt"
             or re.fullmatch(r"requirements/compiler/bootstrap-py3(?:11|12|13|14)\.txt", requirement)
             or requirement == 'requirements/compiler/bootstrap-py${short}.txt'
