@@ -3,6 +3,7 @@
 This is a *post-merge posture regression monitor*, not a vulnerability-clearance
 attestation, an independent scanner, or an authentication authority.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -111,22 +112,33 @@ def classify(raw: Any) -> dict[str, Any]:
 
 def self_test() -> None:
     expected = set(MAX_EXISTING)
+
     def make(counts: dict[str, int]) -> dict[str, Any]:
         rule_ids = sorted(expected | set(counts))
         return {
             "version": "2.1.0",
-            "runs": [{
-                "tool": {"driver": {
-                    "name": "Scorecard", "semanticVersion": "v5.5.0",
-                    "rules": [{"id": name} for name in rule_ids],
-                }},
-                "results": [
-                    {"ruleId": name, "ruleIndex": rule_ids.index(name),
-                     "message": {"text": "genuine finding fixture"}}
-                    for name, qty in counts.items() for _ in range(qty)
-                ],
-            }],
+            "runs": [
+                {
+                    "tool": {
+                        "driver": {
+                            "name": "Scorecard",
+                            "semanticVersion": "v5.5.0",
+                            "rules": [{"id": name} for name in rule_ids],
+                        }
+                    },
+                    "results": [
+                        {
+                            "ruleId": name,
+                            "ruleIndex": rule_ids.index(name),
+                            "message": {"text": "genuine finding fixture"},
+                        }
+                        for name, qty in counts.items()
+                        for _ in range(qty)
+                    ],
+                }
+            ],
         }
+
     baseline = make(MAX_EXISTING)
     if classify(baseline)["reported_findings"] != 24:
         raise ScorecardError("known 24-finding reference classification failed")
@@ -135,6 +147,7 @@ def self_test() -> None:
     if classify(make({"PinnedDependenciesID": 17}))["classification"] != "FINDINGS_OPEN":
         raise ScorecardError("reduced-count reference classification failed")
     import copy
+
     malicious: list[dict[str, Any]] = []
     malicious.append(make({"PinnedDependenciesID": 19}))
     malicious.append(make({"UnknownNewCheckID": 1}))
@@ -217,18 +230,27 @@ def main() -> int:
         content = args.sarif.read_bytes()
         raw = json.loads(content)
         report = emit_report(
-            args.report, raw,
+            args.report,
+            raw,
             input_sha256=hashlib.sha256(content).hexdigest(),
         )
     except (OSError, UnicodeError, json.JSONDecodeError, ScorecardError) as exc:
         if not args.report.exists():
             args.report.parent.mkdir(parents=True, exist_ok=True)
-            args.report.write_text(json.dumps({
-                "schema_version": "agent-evals/scorecard-posture/v1",
-                "classification": "FAIL",
-                "error": f"{type(exc).__name__}: {exc}",
-                "non_claim": "Missing or invalid SARIF must not be called clean.",
-            }, sort_keys=True, indent=2) + "\n", encoding="utf-8")
+            args.report.write_text(
+                json.dumps(
+                    {
+                        "schema_version": "agent-evals/scorecard-posture/v1",
+                        "classification": "FAIL",
+                        "error": f"{type(exc).__name__}: {exc}",
+                        "non_claim": "Missing or invalid SARIF must not be called clean.",
+                    },
+                    sort_keys=True,
+                    indent=2,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
         print(f"Scorecard SARIF posture gate: FAIL: {exc}")
         return 1
     print(
