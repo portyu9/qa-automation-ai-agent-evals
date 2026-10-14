@@ -192,6 +192,16 @@ def validate_artifacts(
             file = tmp / destination
             file.parent.mkdir(parents=True, exist_ok=True)
             file.write_bytes(data)
+        # Dependabot may only publish the original twelve generated artifacts.
+        # The separate native fuzz runtime is maintainer-owned and must never
+        # be taken from an untrusted bot PR or added to the publishing payload.
+        # Stage its exact trusted-branch lock solely for full-repo validation.
+        fuzz_tool_lock = trusted_project_root / "requirements/locks/atheris-py314.txt"
+        if not fuzz_tool_lock.is_file() or fuzz_tool_lock.is_symlink():
+            raise GovernanceError("trusted optional Atheris lock is missing or unsafe")
+        checked_tool_lock = tmp / "requirements/locks/atheris-py314.txt"
+        checked_tool_lock.parent.mkdir(parents=True, exist_ok=True)
+        checked_tool_lock.write_bytes(fuzz_tool_lock.read_bytes())
         old_snapshot_root, old_snapshot_dir = snapshot_policy.ROOT, snapshot_policy.LOCK_DIR
         old_compat_root, old_compat_dir = compatibility_policy.ROOT, compatibility_policy.LOCK_DIR
         try:

@@ -14,6 +14,11 @@ EXPECTED = {
     "mcp-py311.txt": ("3.11", ("dev", "mcp")),
     "openai-mcp-py311.txt": ("3.11", ("dev", "openai", "mcp")),
 }
+ATHERIS_LOCK = "atheris-py314.txt"
+ATHERIS_VERSION = "3.1.0"
+# Audited PyPI CPython 3.14 Linux x86_64 wheel digest, NOT publisher authentication.
+ATHERIS_WHEEL_SHA256 = "315a0b5c819852b1ffe1ca72efc389c7724881f2c33e4aacb8c6bcec49bd5011"
+
 HASH_RE = re.compile(r"--hash=sha256:[0-9a-f]{64}(?:\s|$)")
 PIN_RE = re.compile(r"^([A-Za-z0-9_.-]+)==([^\s\\;]+)(?:\s*;.*)?(?:\s*\\)?$")
 REQ_NAME_RE = re.compile(r"^([A-Za-z0-9_.-]+)")
@@ -98,11 +103,25 @@ def parse_lock(path: Path, expected_python: str) -> dict[str, str]:
 
 def validate() -> None:
     actual = {path.name for path in LOCK_DIR.glob("*.txt") if path.is_file()}
-    if actual != set(EXPECTED):
+    expected_files = set(EXPECTED) | {ATHERIS_LOCK}
+    if actual != expected_files:
         raise LockPolicyError(
-            f"lock profile set mismatch: missing={sorted(set(EXPECTED) - actual)}, "
-            f"extra={sorted(actual - set(EXPECTED))}"
+            f"lock profile set mismatch: missing={sorted(expected_files - actual)}, "
+            f"extra={sorted(actual - expected_files)}"
         )
+    # This isolated optional Linux wheel does NOT alter any public package extras,
+    # transitive dependency projection, or minimum Python compatibility claim.
+    atheris = parse_lock(LOCK_DIR / ATHERIS_LOCK, "3.14")
+    if atheris != {"atheris": ATHERIS_VERSION}:
+        raise LockPolicyError("Atheris fuzz lock must contain only the exact audited version")
+    atheris_text = (LOCK_DIR / ATHERIS_LOCK).read_text(encoding="utf-8")
+    if (
+        atheris_text.count("--hash=sha256:") != 1
+        or f"--hash=sha256:{ATHERIS_WHEEL_SHA256}" not in atheris_text
+    ):
+        raise LockPolicyError("Atheris wheel digest does not match audited CPython 3.14 artifact")
+    if any(token in atheris_text for token in (" --index-url", " --extra-index-url", " @ ")):
+        raise LockPolicyError("Atheris fuzz dependency source must not be substituted")
 
     parsed: dict[str, dict[str, str]] = {}
     for filename, (python_version, extras) in EXPECTED.items():
@@ -140,7 +159,8 @@ def validate() -> None:
     print(
         "CI lock policy validated: "
         "core=py311,py312,py313,py314; optional=mcp-py311,openai-mcp-py311; "
-        "hashes=sha256; package-ranges=preserved-in-pyproject"
+        "hashes=sha256; optional-fuzz=atheris-py314-linux-x86_64; "
+        "package-ranges=preserved-in-pyproject"
     )
 
 
