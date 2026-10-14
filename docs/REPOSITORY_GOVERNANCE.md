@@ -63,17 +63,43 @@ Auto-merge and update-branch are eligible once the live ruleset matches this CI-
 
 ## External administration prerequisites
 
-The following administration-surface prerequisites were point-in-time verified enabled on 2026-10-07:
+The repository **requires** the following external administration features but does
+**not** currently claim that their enablement is independently authenticated:
 
-- dependency graph;
-- secret scanning;
-- push protection;
-- review-thread resolution;
-- the seven protected required status contexts.
+- dependency graph: **UNVERIFIED**; an actual PR
+  `dependency-graph/compare` probe returned HTTP 403/404 and dependency
+  review was explicitly **BLOCKED**, not PASS. Access denial does not
+  by itself establish whether the feature is switched off;
+- secret scanning: **UNVERIFIED** from the limited connector surface;
+- push protection: **UNVERIFIED** from the limited connector surface.
 
-Required signed commits were also verified enabled on 2026-10-07, but the repository policy now requires that rule to be disabled to support autonomous CI-qualified changes. The live ruleset must be re-read after that owner-admin mutation.
+These states are recorded consistently across
+`.github/repository-governance.json` and
+`.github/security-scanners.json`. The required CI policy
+`.github/scripts/validate_governance_policy.py` rejects invented
+`verified-enabled` declarations and contradictions, including when
+two mutable checked-in policies try to assert the same unsupported
+claim. Changing the status requires an **independent authorized
+GitHub administrator read**, recorded with date and scope; repository
+JSON is *not* that evidence.
 
-Where the connected automation surface cannot mutate an administration setting, owner-authorized CLI/API administration is used and then independently re-read.
+Separate, authenticated GitHub API reads have verified the active
+Protect Main ruleset, required review-thread resolution, all seven
+protected GitHub Actions status contexts, deletion and
+non-fast-forward protections, and merge-only history as of
+2026-10-14. Native auto-merge and branch updates are on, with squash
+and rebase disabled. These are **point-in-time** observations, not
+cryptographically authenticated assurances from checked-in policy.
+The scoped read-only Actions token omits some administrator fields;
+the live audit reports those as **BLOCKED**, never PASS.
+
+Required signed commits are intentionally **not** part of the
+current live ruleset, because connector-created working commits are
+not guaranteed signed. Do not confuse unsigned GitHub commit identity
+with provenance authentication or the signed Dependabot-specific
+prerequisite. Whenever the connector cannot mutate or independently
+observe an administrator setting, owner-authorized CLI/API
+administration and a separate verified result are necessary.
 
 ## Change control
 
