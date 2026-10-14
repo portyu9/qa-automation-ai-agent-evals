@@ -139,6 +139,8 @@ def main() -> int:
         "dependency review": "actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294",
         "semantic workflow security gate": "python .github/scripts/validate_workflow_graph.py",
         "workflow security gate self-test": "python .github/scripts/validate_workflow_graph.py --self-test",
+        "workflow pip install integrity gate": "python .github/scripts/validate_workflow_pip_installs.py",
+        "workflow pip install negative tests": "python .github/scripts/validate_workflow_pip_installs.py --self-test",
         "independent Security success bridge": "--workflow security",
         "protected Security gate": "Require independent exact-subject Security workflow and job success",
         "compiler bootstrap policy": "python .github/scripts/validate_compiler_bootstrap.py",
