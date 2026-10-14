@@ -544,7 +544,10 @@ def self_test() -> None:
 
     queued = dict(canonical, id=103, status="queued", conclusion=None)
     with (
-        patch(__name__ + ".fetch_runs", side_effect=[[canonical, queued], [canonical, dict(canonical, id=103)]]),
+        patch(
+            __name__ + ".fetch_runs",
+            side_effect=[[canonical, queued], [canonical, dict(canonical, id=103)]],
+        ),
         patch(__name__ + ".time.sleep"),
     ):
         seen = wait_for_success(
@@ -555,7 +558,7 @@ def self_test() -> None:
             token="fake",
             attempts=2,
             delay_seconds=0,
-            )
+        )
     if seen != [canonical, dict(canonical, id=103)]:
         raise GateError("self-test selected a green subset while another run was pending")
     with (
@@ -563,7 +566,7 @@ def self_test() -> None:
         patch(__name__ + ".time.sleep"),
     ):
         try:
-        wait_for_success(
+            wait_for_success(
                 repository="owner/repo",
                 subject_sha=sha,
                 branch="feature",
