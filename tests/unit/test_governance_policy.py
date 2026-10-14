@@ -125,3 +125,40 @@ def test_governance_policy_rejects_codeowner_drift(tmp_path: Path) -> None:
 
     assert result.returncode != 0
     assert "CODEOWNERS mismatch for /.github/" in result.stderr
+
+
+def test_governance_policy_rejects_contradictory_admin_feature_claim(tmp_path: Path) -> None:
+    workspace = _workspace(tmp_path)
+    path, policy = _load_policy(workspace)
+    prerequisites = policy["external_admin_prerequisites"]
+    assert isinstance(prerequisites, dict)
+    dependency = prerequisites["dependency_graph"]
+    assert isinstance(dependency, dict)
+    dependency["verification"] = "verified-enabled"
+    path.write_text(json.dumps(policy, indent=2) + "\n", encoding="utf-8")
+
+    result = _run(workspace)
+
+    assert result.returncode != 0
+    assert "dependency_graph contradicts scanner's verification claim" in result.stderr
+
+
+def test_governance_policy_rejects_matching_unproven_enabled_claim(tmp_path: Path) -> None:
+    workspace = _workspace(tmp_path)
+    path, policy = _load_policy(workspace)
+    prerequisites = policy["external_admin_prerequisites"]
+    assert isinstance(prerequisites, dict)
+    feature = prerequisites["push_protection"]
+    assert isinstance(feature, dict)
+    feature["verification"] = "verified-enabled"
+    path.write_text(json.dumps(policy, indent=2) + "\n", encoding="utf-8")
+
+    scanner_path = workspace / ".github/security-scanners.json"
+    scanner = json.loads(scanner_path.read_text(encoding="utf-8"))
+    scanner["repository_security_features"]["push_protection"]["verification"] = "verified-enabled"
+    scanner_path.write_text(json.dumps(scanner, indent=2) + "\n", encoding="utf-8")
+
+    result = _run(workspace)
+
+    assert result.returncode != 0
+    assert "requires independent live administrator evidence" in result.stderr
