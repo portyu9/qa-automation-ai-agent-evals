@@ -26,7 +26,7 @@ result also cannot prove that repository governance is secure.
 
 The `Protect Main` ruleset previously required `Quality / Python 3.11`,
 `Quality / Python 3.14`, three MCP checks, `OpenAI adapter / deterministic SDK`,
-and `Package integrity`, but **not** `CodeQL` or `security-gate`. Its
+and `Package integrity`, but **not directly** `CodeQL` or `security-gate`. Importantly, the required `Package integrity` check already calls `verify_required_codeql.py` and requires exact-subject CodeQL workflow success; directly requiring the `CodeQL` context would be defense in depth. Its
 required approving review count was zero. Those are GitHub-hosted ruleset
 settings; editing a YAML file does not change them.
 
@@ -48,7 +48,7 @@ fail-closed dependency precondition checks.
 ## Administrator follow-through
 
 In GitHub **Settings → Rules → Rulesets → Protect Main**, preserve the existing
-required checks and add `CodeQL` and `security-gate` as *required* checks
+required checks and consider adding `CodeQL` (defense in depth, already indirectly gated by `Package integrity`) and `security-gate` as *required* checks
 from GitHub Actions. Configure **Require code scanning results** for CodeQL
 at an appropriate vulnerability threshold when supported. Make sure those
 checks execute on all eligible PRs, including fork PRs, before requiring
