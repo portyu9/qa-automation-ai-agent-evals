@@ -31,4 +31,4 @@ A fail-closed observational gate strengthens *detection of posture drift*, not c
 - `FINDINGS_OPEN` is never `PASS` for security posture; a green workflow means successful classification with no unreviewed increase.
 - A zero-result SARIF does not establish absence of vulnerabilities; scanner errors cannot be silently represented as zero.
 - Checks-in-repository do not independently attest GitHub admin controls, true qualified human review or SAST/Fuzzing detector support.
-- Existing local-source/retained-distribution smoke tests, exact hashed third-party dependency installs, BL0CKED non-claims and authentic alert state are unchanged.
+- Existing local-source/retained-distribution smoke tests, exact hashed third-party dependency installs, BLOCKED non-claims and authentic alert state are unchanged.
