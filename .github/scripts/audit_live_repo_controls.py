@@ -99,7 +99,9 @@ def inspect(repo: Any, ruleset: Any) -> dict[str, Any]:
             raise DriftError(f"invalid integration binding for {name!r}")
         found[name] = integration
     if not REQUIRED_CHECKS.issubset(found):
-        raise DriftError(f"required check contexts missing {sorted(REQUIRED_CHECKS - found.keys())}")
+        raise DriftError(
+            f"required check contexts missing {sorted(REQUIRED_CHECKS - found.keys())}"
+        )
     for name in REQUIRED_CHECKS:
         if found[name] != GITHUB_ACTIONS_ID:
             raise DriftError(f"protected check {name!r} lost its Actions integration binding")
@@ -202,7 +204,9 @@ def self_test() -> None:
     for mutate in (
         lambda r: r["rules"][2]["parameters"].update({"allowed_merge_methods": ["squash"]}),
         lambda r: r["rules"][2]["parameters"].update({"required_review_thread_resolution": False}),
-        lambda r: r["rules"][3]["parameters"].update({"strict_required_status_checks_policy": False}),
+        lambda r: r["rules"][3]["parameters"].update(
+            {"strict_required_status_checks_policy": False}
+        ),
         lambda r: r["rules"][3]["parameters"]["required_status_checks"].pop(),
         lambda r: r["rules"][3]["parameters"]["required_status_checks"][0].update(
             {"integration_id": 100}
@@ -234,9 +238,7 @@ def main() -> int:
             if os.getenv("GITHUB_REF") != "refs/heads/main":
                 raise DriftError("live audit must execute on main, never untrusted PR code")
             token = os.getenv("GITHUB_TOKEN", "")
-            outcome = inspect(
-                fetch_json("", token), fetch_json(f"/rulesets/{RULESET_ID}", token)
-            )
+            outcome = inspect(fetch_json("", token), fetch_json(f"/rulesets/{RULESET_ID}", token))
             print(json.dumps(outcome, sort_keys=True))
     except DriftError as exc:
         print(f"live repository governance audit FAILED: {exc}")
