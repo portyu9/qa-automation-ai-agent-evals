@@ -81,6 +81,10 @@ def test_native_atheris_job_preserves_exact_subject_and_evidence() -> None:
     ):
         assert needle in workflow, f"native fuzz security contract missing: {needle}"
     assert workflow.count("  atheris-strict-json:") == 1
+    native_job = workflow.split("  atheris-strict-json:\n", maxsplit=1)[1]
+    assert "--no-deps --no-build-isolation ." not in native_job
+    assert "continue-on-error:" not in native_job
+    assert "|| true" not in native_job
     assert "import atheris" in harness
     assert "atheris.Setup(sys.argv, test_one_input)" in harness
     assert "atheris.Fuzz()" in harness
