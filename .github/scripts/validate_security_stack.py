@@ -171,7 +171,9 @@ def main() -> int:
         "read-only token": "  contents: read",
         "no credential persistence": "persist-credentials: false",
         "dedicated monitor self-test": "python3 .github/scripts/audit_live_repo_controls.py --self-test",
-        "actual GitHub API attestation": "python3 .github/scripts/audit_live_repo_controls.py --live",
+        "actual GitHub API attestation": "python3 .github/scripts/audit_live_repo_controls.py",
+        "distinguish blocked admin controls": "--live --output reports/security/live-governance.json",
+        "retained live settings evidence": "Retain live governance audit evidence",
         "read-only Github API token": "GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}",
         "canonical owner-only monitor": "github.repository == 'portyu9/qa-automation-ai-agent-evals'",
     }

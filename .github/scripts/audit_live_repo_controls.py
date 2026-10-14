@@ -13,6 +13,7 @@ import json
 import os
 import urllib.error
 import urllib.request
+from pathlib import Path
 from typing import Any
 
 REPO = "portyu9/qa-automation-ai-agent-evals"
@@ -53,7 +54,13 @@ def inspect(repo: Any, ruleset: Any) -> dict[str, Any]:
         "allow_squash_merge": False,
         "allow_rebase_merge": False,
     }
+    unavailable_admin_fields: list[str] = []
     for key, expected in expected_repo.items():
+        # Ordinary GITHUB_TOKEN API responses can omit administration-only flags.
+        # Missing is BLOCKED (not PASS, not a contradictory live setting).
+        if key.startswith("allow_") and repo.get(key) is None:
+            unavailable_admin_fields.append(key)
+            continue
         if repo.get(key) != expected:
             raise DriftError(f"repository {key}: expected {expected!r}, got {repo.get(key)!r}")
     if ruleset.get("id") != RULESET_ID or ruleset.get("enforcement") != "active":
@@ -106,7 +113,13 @@ def inspect(repo: Any, ruleset: Any) -> dict[str, Any]:
         if found[name] != GITHUB_ACTIONS_ID:
             raise DriftError(f"protected check {name!r} lost its Actions integration binding")
     return {
-        "merge_controls": "PASS",
+        "merge_controls": (
+            "BLOCKED: GitHub Actions token cannot independently read "
+            + ", ".join(unavailable_admin_fields)
+            if unavailable_admin_fields
+            else "PASS"
+        ),
+        "ruleset_controls": "PASS",
         "repo": REPO,
         "ruleset_id": RULESET_ID,
         "protected_checks": len(found),
@@ -184,6 +197,26 @@ def self_test() -> None:
     }
     if inspect(repo, ruleset)["human_review_scorecard"].startswith("PASS"):
         raise DriftError("fixture misclassified missing human review as PASS")
+    if inspect(repo, ruleset)["merge_controls"] != "PASS":
+        raise DriftError("fully readable compliant GitHub merge settings did not PASS")
+    for missing in (
+        "allow_auto_merge",
+        "allow_update_branch",
+        "allow_merge_commit",
+        "allow_squash_merge",
+        "allow_rebase_merge",
+    ):
+        for sentinel in (None, "omit"):
+            partial = dict(repo)
+            if sentinel is None:
+                partial[missing] = None
+            else:
+                partial.pop(missing)
+            result = inspect(partial, ruleset)
+            if not result["merge_controls"].startswith("BLOCKED:"):
+                raise DriftError("unobservable admin-only field was falsely reported as PASS")
+            if result["ruleset_controls"] != "PASS":
+                raise DriftError("unobservable repository field erased verified ruleset evidence")
     cases = [
         (dict(repo, allow_squash_merge=True), ruleset),
         (dict(repo, allow_auto_merge=False), ruleset),
@@ -226,6 +259,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--self-test", action="store_true")
     parser.add_argument("--live", action="store_true")
+    parser.add_argument("--output", type=Path)
     args = parser.parse_args()
     if args.self_test == args.live:
         parser.error("specify exactly one of --self-test or --live")
@@ -239,9 +273,25 @@ def main() -> int:
                 raise DriftError("live audit must execute on main, never untrusted PR code")
             token = os.getenv("GITHUB_TOKEN", "")
             outcome = inspect(fetch_json("", token), fetch_json(f"/rulesets/{RULESET_ID}", token))
-            print(json.dumps(outcome, sort_keys=True))
+            report = json.dumps(outcome, sort_keys=True)
+            print(report)
+            if outcome["merge_controls"].startswith("BLOCKED"):
+                print(
+                    "::warning::Live repository admin settings are BLOCKED from "
+                    "this read-only token; do not interpret the audit job as "
+                    "a PASS for unverified administrator controls."
+                )
+            if args.output is not None:
+                args.output.parent.mkdir(parents=True, exist_ok=True)
+                args.output.write_text(report + "\n", encoding="utf-8")
     except DriftError as exc:
         print(f"live repository governance audit FAILED: {exc}")
+        if args.live and args.output is not None:
+            args.output.parent.mkdir(parents=True, exist_ok=True)
+            args.output.write_text(
+                json.dumps({"merge_controls": "FAIL", "error": str(exc)}, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
         return 1
     return 0
 
