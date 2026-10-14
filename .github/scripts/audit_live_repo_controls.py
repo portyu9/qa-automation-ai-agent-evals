@@ -199,8 +199,13 @@ def self_test() -> None:
         raise DriftError("fixture misclassified missing human review as PASS")
     if inspect(repo, ruleset)["merge_controls"] != "PASS":
         raise DriftError("fully readable compliant GitHub merge settings did not PASS")
-    for missing in ("allow_auto_merge", "allow_update_branch", "allow_merge_commit",
-                    "allow_squash_merge", "allow_rebase_merge"):
+    for missing in (
+        "allow_auto_merge",
+        "allow_update_branch",
+        "allow_merge_commit",
+        "allow_squash_merge",
+        "allow_rebase_merge",
+    ):
         for sentinel in (None, "omit"):
             partial = dict(repo)
             if sentinel is None:
@@ -284,8 +289,7 @@ def main() -> int:
         if args.live and args.output is not None:
             args.output.parent.mkdir(parents=True, exist_ok=True)
             args.output.write_text(
-                json.dumps({"merge_controls": "FAIL", "error": str(exc)}, sort_keys=True)
-                + "\n",
+                json.dumps({"merge_controls": "FAIL", "error": str(exc)}, sort_keys=True) + "\n",
                 encoding="utf-8",
             )
         return 1
