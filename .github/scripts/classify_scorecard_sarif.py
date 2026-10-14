@@ -14,18 +14,19 @@ from collections import Counter
 from pathlib import Path
 from typing import Any
 
-# Observed in genuine Scorecard 5.5.0 SARIF from accepted main 23f5ffa9...
+# Observed in genuine Scorecard v5.5.0 SARIF on accepted main ac0680f1... .
+# The formerly open FuzzingID was cleared by a real Atheris campaign.
 # Counts are *maxima*, not assurances of acceptable residual risk.
 MAX_EXISTING: dict[str, int] = {
     "BranchProtectionID": 1,
     "CIIBestPracticesID": 1,
     "CodeReviewID": 1,
-    "FuzzingID": 1,
+    "FuzzingID": 0,
     "MaintainedID": 1,
     "PinnedDependenciesID": 18,
     "SASTID": 1,
 }
-BASELINE_COMMIT = "23f5ffa9b1f9ee461bc37c8b2f0d481e5bc02335"
+BASELINE_COMMIT = "ac0680f130e5ce17fd85de587d95b8728347ba4e"
 
 
 class ScorecardError(ValueError):
@@ -140,8 +141,12 @@ def self_test() -> None:
         }
 
     baseline = make(MAX_EXISTING)
-    if classify(baseline)["reported_findings"] != 24:
-        raise ScorecardError("known 24-finding reference classification failed")
+    if BASELINE_COMMIT != "ac0680f130e5ce17fd85de587d95b8728347ba4e":
+        raise ScorecardError("Fuzzing clearance baseline commit drifted")
+    if MAX_EXISTING.get("FuzzingID") != 0:
+        raise ScorecardError("previously cleared Fuzzing finding is no longer fail-closed")
+    if classify(baseline)["reported_findings"] != 23:
+        raise ScorecardError("accepted-main 23-finding reference classification failed")
     if classify(make({}))["classification"] != "NO_REPORTED_FINDINGS":
         raise ScorecardError("empty result classification failed")
     if classify(make({"PinnedDependenciesID": 17}))["classification"] != "FINDINGS_OPEN":
@@ -150,6 +155,12 @@ def self_test() -> None:
 
     malicious: list[dict[str, Any]] = []
     malicious.append(make({"PinnedDependenciesID": 19}))
+    malicious.append(make({"FuzzingID": 1}))
+    # A previously fixed warning must also fail when it reappears in a
+    # separate SARIF run, even if the initial run matches accepted main.
+    split_run = copy.deepcopy(baseline)
+    split_run["runs"].extend(make({"FuzzingID": 1})["runs"])
+    malicious.append(split_run)
     malicious.append(make({"UnknownNewCheckID": 1}))
     bad = copy.deepcopy(baseline)
     bad["runs"] = []
