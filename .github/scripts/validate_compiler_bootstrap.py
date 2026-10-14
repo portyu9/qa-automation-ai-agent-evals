@@ -40,9 +40,13 @@ def validate(root: Path = ROOT) -> None:
     workflow = root / ".github" / "workflows" / "dependency-locks.yml"
     expected = {"bootstrap.in", *(f"bootstrap-py{py}.txt" for py in PYTHONS)}
     actual = {path.name for path in compiler_dir.iterdir() if path.is_file()}
-    _require(actual == expected, f"compiler bootstrap file inventory drift: {sorted(actual ^ expected)}")
+    _require(
+        actual == expected, f"compiler bootstrap file inventory drift: {sorted(actual ^ expected)}"
+    )
     source = (compiler_dir / "bootstrap.in").read_text(encoding="utf-8")
-    direct = [line.strip() for line in source.splitlines() if line.strip() and not line.startswith("#")]
+    direct = [
+        line.strip() for line in source.splitlines() if line.strip() and not line.startswith("#")
+    ]
     _require(
         direct == [f"pip=={GENERATOR_ENV['pip']}", f"pip-tools=={GENERATOR_ENV['pip-tools']}"],
         "maintenance compiler direct requirements drift",
@@ -88,7 +92,9 @@ def validate(root: Path = ROOT) -> None:
                 f"{file.name}: {name} contains malformed or unsupported hash",
             )
         for forbidden in ("--extra-index-url", "--trusted-host", "--no-deps", "\n-e ", " @ file:"):
-            _require(forbidden not in data, f"{file.name}: forbidden dependency source {forbidden!r}")
+            _require(
+                forbidden not in data, f"{file.name}: forbidden dependency source {forbidden!r}"
+            )
 
     text = workflow.read_text(encoding="utf-8")
     _require(
@@ -96,17 +102,16 @@ def validate(root: Path = ROOT) -> None:
         "dependency-locks must have exactly one compiler install operation",
     )
     _require(
-        "--require-hashes \\\n            -r \"requirements/compiler/bootstrap-py${short}.txt\"" in text,
+        '--require-hashes \\\n            -r "requirements/compiler/bootstrap-py${short}.txt"'
+        in text,
         "dependency-locks must install exact target-Python compiler hash lock",
     )
     _require(
-        "short=\"${TARGET_PYTHON//./}\"" in text
-        and "TARGET_PYTHON: ${{ matrix.python }}" in text,
+        'short="${TARGET_PYTHON//./}"' in text and "TARGET_PYTHON: ${{ matrix.python }}" in text,
         "dependency-locks compiler lock must bind to matrix interpreter",
     )
     _require(
-        "version(\"pip\") == \"25.3\"" in text
-        and "version(\"pip-tools\") == \"7.5.2\"" in text,
+        'version("pip") == "25.3"' in text and 'version("pip-tools") == "7.5.2"' in text,
         "dependency-locks must verify both compiler runtime identities",
     )
     for forbidden in ("pip==25.3 pip-tools==7.5.2", "--no-deps", "--trusted-host"):
@@ -127,26 +132,32 @@ def self_test() -> None:
         original = target.read_text(encoding="utf-8")
         example = HASH.search(original)
         assert example is not None
-        for mutation_index, corrupt in enumerate((
-            original.replace(example.group(0), "", 1),
-            original.replace("pip-tools==7.5.2", "pip-tools==7.5.1", 1),
-            original.replace("\npip-tools==7.5.2", "\npip-tools==7.5.1", 1),
-            original.replace("# Python: 3.11", "# Python: 3.14", 1),
-            original.replace("wheel==0.48.0", "wheel==0.48.1", 1),
-            original + "\n--extra-index-url https://unsafe.example\n",
-        )):
+        for mutation_index, corrupt in enumerate(
+            (
+                original.replace(example.group(0), "", 1),
+                original.replace("pip-tools==7.5.2", "pip-tools==7.5.1", 1),
+                original.replace("\npip-tools==7.5.2", "\npip-tools==7.5.1", 1),
+                original.replace("# Python: 3.11", "# Python: 3.14", 1),
+                original.replace("wheel==0.48.0", "wheel==0.48.1", 1),
+                original + "\n--extra-index-url https://unsafe.example\n",
+            )
+        ):
             target.write_text(corrupt, encoding="utf-8")
             try:
                 validate(root)
             except CompilerBootstrapError:
                 pass
             else:
-                raise AssertionError(f"compiler bootstrap accepted corrupted locked evidence mutation={mutation_index}")
+                raise AssertionError(
+                    f"compiler bootstrap accepted corrupted locked evidence mutation={mutation_index}"
+                )
         target.write_text(original, encoding="utf-8")
         workflow_text = workflow.read_text(encoding="utf-8")
         for corrupt in (
             workflow_text.replace("--require-hashes", "--no-deps", 1),
-            workflow_text.replace("TARGET_PYTHON: ${{ matrix.python }}", "TARGET_PYTHON: '3.11'", 1),
+            workflow_text.replace(
+                "TARGET_PYTHON: ${{ matrix.python }}", "TARGET_PYTHON: '3.11'", 1
+            ),
             workflow_text + "\npython -m pip install pip-tools==7.5.2\n",
         ):
             workflow.write_text(corrupt, encoding="utf-8")
