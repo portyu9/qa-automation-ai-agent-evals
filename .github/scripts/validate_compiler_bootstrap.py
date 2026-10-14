@@ -63,6 +63,10 @@ def validate(root: Path = ROOT) -> None:
             "# Input: requirements/compiler/bootstrap.in\n" in data,
             f"{file.name}: input identity missing",
         )
+        _require(
+            "# Compiler: pip==25.3; pip-tools==7.5.2\n" in data,
+            f"{file.name}: compiler provenance header drift",
+        )
         try:
             pins = parse_lock(file, version)
         except LockPolicyError as exc:
@@ -126,6 +130,7 @@ def self_test() -> None:
         for mutation_index, corrupt in enumerate((
             original.replace(example.group(0), "", 1),
             original.replace("pip-tools==7.5.2", "pip-tools==7.5.1", 1),
+            original.replace("\npip-tools==7.5.2", "\npip-tools==7.5.1", 1),
             original.replace("# Python: 3.11", "# Python: 3.14", 1),
             original.replace("wheel==0.48.0", "wheel==0.48.1", 1),
             original + "\n--extra-index-url https://unsafe.example\n",
