@@ -1125,6 +1125,8 @@ if "verify_required_codeql.py --self-test" not in protected_gate:
     fail("protected-gate must self-test the exact-subject CodeQL bridge")
 if "python .github/scripts/verify_required_codeql.py" not in protected_gate:
     fail("protected-gate must enforce exact-subject CodeQL success")
+if "python .github/scripts/verify_required_codeql.py --workflow security" not in protected_gate:
+    fail("protected-gate must enforce exact-subject independent Security success")
 for expression in (
     "github.event.pull_request.head.sha || github.sha",
     "github.event.pull_request.head.ref || github.ref_name",
@@ -1146,7 +1148,7 @@ if not any(action.startswith("actions/download-artifact@") for action in ci_acti
 print(
     "runtime policy validated: "
     f"python={','.join(SUPPORTED_PYTHONS)}; quality-endpoints={','.join(QUALITY_PYTHONS)}; requires-python={REQUIRES_PYTHON}; "
-    f"runner={RUNNER}; workflows={len(workflows)}; gate=ci-gate+protected-codeql; "
+    f"runner={RUNNER}; workflows={len(workflows)}; gate=ci-gate+protected-codeql+security; "
     "package-artifacts=hashed-locks+minimum-latest-compatibility+retained-reverified-reproduced-with-spdx-license-evidence+signed-ci-qualification+attested-release-statement+trusted-main-oidc-provenance+default-branch-published+pypi-oidc-only"
 )
 sys.exit(0)

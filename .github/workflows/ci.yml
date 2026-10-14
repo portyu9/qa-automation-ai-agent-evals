@@ -1377,4 +1377,17 @@ jobs:
             --subject-sha "$SUBJECT_SHA" \
             --branch "$SUBJECT_BRANCH" \
             --trigger-event "$TRIGGER_EVENT"
+      - name: Self-test exact-subject Security bridge
+        run: python .github/scripts/verify_required_codeql.py --self-test
+      - name: Require independent exact-subject Security workflow and job success
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SUBJECT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          SUBJECT_BRANCH: ${{ github.event.pull_request.head.ref || github.ref_name }}
+          TRIGGER_EVENT: ${{ github.event_name }}
+        run: |
+          python .github/scripts/verify_required_codeql.py --workflow security \
+            --subject-sha "$SUBJECT_SHA" \
+            --branch "$SUBJECT_BRANCH" \
+            --trigger-event "$TRIGGER_EVENT"
 
