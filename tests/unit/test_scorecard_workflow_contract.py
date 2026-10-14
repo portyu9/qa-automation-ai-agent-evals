@@ -15,9 +15,11 @@ def test_scorecard_container_has_prepared_output_directory() -> None:
     scan = "      - name: Run OpenSSF Scorecard\n"
     assert workflow.count(prepare) == 1
     assert workflow.count(scan) == 1
-    assert workflow.index("      - name: Checkout exact monitored subject\n") < workflow.index(
-        prepare
-    ) < workflow.index(scan)
+    assert (
+        workflow.index("      - name: Checkout exact monitored subject\n")
+        < workflow.index(prepare)
+        < workflow.index(scan)
+    )
     assert f"          results_file: {SARIF_PATH}\n" in workflow
 
 
@@ -30,4 +32,4 @@ def test_scorecard_missing_evidence_still_fails_closed() -> None:
     assert f"          sarif_file: {SARIF_PATH}\n" in workflow
     assert f"          path: {SARIF_PATH}\n" in workflow
     assert "          if-no-files-found: error\n" in workflow
-    assert "          publish_results: \"false\"\n" in workflow
+    assert '          publish_results: "false"\n' in workflow
