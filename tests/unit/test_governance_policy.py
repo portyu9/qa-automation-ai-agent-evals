@@ -19,6 +19,10 @@ def _workspace(tmp_path: Path) -> Path:
         _PROJECT_ROOT / ".github/repository-governance.json",
         workspace / ".github/repository-governance.json",
     )
+    shutil.copy2(
+        _PROJECT_ROOT / ".github/security-scanners.json",
+        workspace / ".github/security-scanners.json",
+    )
     shutil.copy2(_PROJECT_ROOT / ".github/CODEOWNERS", workspace / ".github/CODEOWNERS")
     shutil.copy2(
         _PROJECT_ROOT / "docs/REPOSITORY_GOVERNANCE.md",
