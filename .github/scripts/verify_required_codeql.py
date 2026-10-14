@@ -543,9 +543,27 @@ def self_test() -> None:
     from unittest.mock import patch
 
     queued = dict(canonical, id=103, status="queued", conclusion=None)
-    with patch(__name__ + ".fetch_runs", side_effect=[[canonical, queued], [canonical, dict(canonical, id=103)]]):
-        with patch(__name__ + ".time.sleep"):
-            seen = wait_for_success(
+    with (
+        patch(__name__ + ".fetch_runs", side_effect=[[canonical, queued], [canonical, dict(canonical, id=103)]]),
+        patch(__name__ + ".time.sleep"),
+    ):
+        seen = wait_for_success(
+            repository="owner/repo",
+            subject_sha=sha,
+            branch="feature",
+            trigger_event="pull_request",
+            token="fake",
+            attempts=2,
+            delay_seconds=0,
+            )
+    if seen != [canonical, dict(canonical, id=103)]:
+        raise GateError("self-test selected a green subset while another run was pending")
+    with (
+        patch(__name__ + ".fetch_runs", return_value=[canonical, queued]),
+        patch(__name__ + ".time.sleep"),
+    ):
+        try:
+        wait_for_success(
                 repository="owner/repo",
                 subject_sha=sha,
                 branch="feature",
@@ -554,24 +572,10 @@ def self_test() -> None:
                 attempts=2,
                 delay_seconds=0,
             )
-    if seen != [canonical, dict(canonical, id=103)]:
-        raise GateError("self-test selected a green subset while another run was pending")
-    with patch(__name__ + ".fetch_runs", return_value=[canonical, queued]):
-        with patch(__name__ + ".time.sleep"):
-            try:
-                wait_for_success(
-                    repository="owner/repo",
-                    subject_sha=sha,
-                    branch="feature",
-                    trigger_event="pull_request",
-                    token="fake",
-                    attempts=2,
-                    delay_seconds=0,
-                )
-            except GateError:
-                pass
-            else:
-                raise GateError("self-test accepted an unfinished same-SHA run")
+        except GateError:
+            pass
+        else:
+            raise GateError("self-test accepted an unfinished same-SHA run")
 
     runs = [security, dict(security, id=103, run_attempt=2)]
     def good_jobs(_repository: str, _token: str, *, run_id: int, attempt: int) -> list[dict[str, Any]]:
