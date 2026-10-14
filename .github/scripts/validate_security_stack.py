@@ -141,6 +141,8 @@ def main() -> int:
         "workflow security gate self-test": "python .github/scripts/validate_workflow_graph.py --self-test",
         "independent Security success bridge": "--workflow security",
         "protected Security gate": "Require independent exact-subject Security workflow and job success",
+        "compiler bootstrap policy": "python .github/scripts/validate_compiler_bootstrap.py",
+        "compiler bootstrap negative tests": "python .github/scripts/validate_compiler_bootstrap.py --self-test",
         "dependency review gate": "- dependency-review",
         "dependency review BLOCKED classifier": "blocked-admin-prerequisite",
         "dependency graph capability probe": "dependency-graph/compare/",
