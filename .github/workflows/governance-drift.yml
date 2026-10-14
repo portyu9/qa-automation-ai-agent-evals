@@ -1,0 +1,33 @@
+name: Live governance drift
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "23 7 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: live-governance-${{ github.repository }}
+  cancel-in-progress: false
+
+jobs:
+  audit:
+    name: Live protected-main controls
+    if: github.repository == 'portyu9/qa-automation-ai-agent-evals'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Checkout trusted main governance monitor
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Self-test live controls audit
+        run: python3 .github/scripts/audit_live_repo_controls.py --self-test
+      - name: Require authenticated current GitHub merge authority
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python3 .github/scripts/audit_live_repo_controls.py --live

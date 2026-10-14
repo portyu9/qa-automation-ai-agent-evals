@@ -11,6 +11,7 @@ ROOT = Path(__file__).resolve().parents[2]
 CODEQL_WORKFLOW = ROOT / ".github" / "workflows" / "codeql.yml"
 CI_WORKFLOW = ROOT / ".github" / "workflows" / "ci.yml"
 SCORECARD_WORKFLOW = ROOT / ".github" / "workflows" / "security-scorecard.yml"
+GOVERNANCE_DRIFT_WORKFLOW = ROOT / ".github" / "workflows" / "governance-drift.yml"
 SCANNER_POLICY = ROOT / ".github" / "security-scanners.json"
 
 CODEQL_BY_SUFFIX = {
@@ -65,6 +66,7 @@ def main() -> int:
     workflow_text = CODEQL_WORKFLOW.read_text(encoding="utf-8")
     ci_workflow_text = CI_WORKFLOW.read_text(encoding="utf-8")
     scorecard_workflow_text = SCORECARD_WORKFLOW.read_text(encoding="utf-8")
+    governance_drift_workflow_text = GOVERNANCE_DRIFT_WORKFLOW.read_text(encoding="utf-8")
     discovered_codeql: set[str] = set()
 
     try:
@@ -141,6 +143,7 @@ def main() -> int:
         "workflow security gate self-test": "python .github/scripts/validate_workflow_graph.py --self-test",
         "workflow pip install integrity gate": "python .github/scripts/validate_workflow_pip_installs.py",
         "workflow pip install negative tests": "python .github/scripts/validate_workflow_pip_installs.py --self-test",
+        "live governance negative fixtures": "python .github/scripts/audit_live_repo_controls.py --self-test",
         "independent Security success bridge": "--workflow security",
         "protected Security gate": "Require independent exact-subject Security workflow and job success",
         "compiler bootstrap policy": "python .github/scripts/validate_compiler_bootstrap.py",
@@ -161,6 +164,20 @@ def main() -> int:
     for name, needle in scorecard_contracts.items():
         if needle not in scorecard_workflow_text:
             errors.append(f"Scorecard workflow is missing {name}")
+
+    governance_drift_contracts = {
+        "trusted main push trigger": "branches: [main]",
+        "scheduled governance recheck": 'cron: "23 7 * * *"',
+        "read-only token": "  contents: read",
+        "no credential persistence": "persist-credentials: false",
+        "dedicated monitor self-test": "python3 .github/scripts/audit_live_repo_controls.py --self-test",
+        "actual GitHub API attestation": "python3 .github/scripts/audit_live_repo_controls.py --live",
+        "read-only Github API token": "GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}",
+        "canonical owner-only monitor": "github.repository == 'portyu9/qa-automation-ai-agent-evals'",
+    }
+    for name, needle in governance_drift_contracts.items():
+        if needle not in governance_drift_workflow_text:
+            errors.append(f"governance monitor lost {name}")
 
     for path in files:
         suffix = path.suffix.lower()
