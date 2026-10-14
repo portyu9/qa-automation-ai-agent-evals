@@ -101,6 +101,7 @@ jobs:
     env:
       EXACT_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
       FUZZ_SEED: ${{ github.run_id }}
+      PYTHONPATH: src
     steps:
       - name: Checkout exact subject commit
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -118,7 +119,6 @@ jobs:
         run: |
           python -m pip install --disable-pip-version-check --require-hashes -r requirements/locks/core-py314.txt
           python -m pip install --disable-pip-version-check --require-hashes -r requirements/locks/atheris-py314.txt
-          python -m pip install --disable-pip-version-check --no-deps --no-build-isolation .
           python -m pip check
 
       - name: Bind native fuzz evidence and seed to exact subject
