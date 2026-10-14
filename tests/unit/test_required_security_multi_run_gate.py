@@ -34,9 +34,7 @@ def _run(run_id: int = 1, *, status: str = "completed", conclusion: str | None =
 
 
 def _select(rows):
-    return module.select_codeql_runs(
-        rows, subject_sha=SHA, branch="main", trigger_event="push"
-    )
+    return module.select_codeql_runs(rows, subject_sha=SHA, branch="main", trigger_event="push")
 
 
 def test_qualifies_all_distinct_same_subject_successes_in_canonical_order():
@@ -64,9 +62,7 @@ def test_single_good_run_cannot_override_unqualified_second_run(second):
 def test_pending_peer_does_not_qualify_until_every_peer_succeeds():
     pending = _run(2, status="queued", conclusion=None)
     with (
-        patch.object(
-            module, "fetch_runs", side_effect=[[_run(1), pending], [_run(1), _run(2)]]
-        ),
+        patch.object(module, "fetch_runs", side_effect=[[_run(1), pending], [_run(1), _run(2)]]),
         patch.object(module.time, "sleep") as sleeper,
     ):
         receipts = module.wait_for_success(
