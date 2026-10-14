@@ -48,7 +48,7 @@ def allowed_events(trigger_event: str) -> set[str]:
     raise GateError(f"unsupported CI trigger event for protected gate: {trigger_event}")
 
 
-def select_codeql_run(
+def select_codeql_runs(
     rows: list[dict[str, Any]],
     *,
     subject_sha: str,
@@ -56,7 +56,7 @@ def select_codeql_run(
     trigger_event: str,
     required_workflow_name: str = WORKFLOW_NAME,
     required_workflow_path: str = WORKFLOW_PATH,
-) -> dict[str, Any] | None:
+) -> list[dict[str, Any]]:
     if (required_workflow_name, required_workflow_path) not in {
         (WORKFLOW_NAME, WORKFLOW_PATH),
         (SECURITY_WORKFLOW_NAME, SECURITY_WORKFLOW_PATH),
@@ -67,6 +67,7 @@ def select_codeql_run(
         raise GateError("subject branch must be a non-empty canonical ref name")
     events = allowed_events(trigger_event)
     candidates: list[dict[str, Any]] = []
+    run_ids: set[int] = set()
 
     for row in rows:
         if (
@@ -84,6 +85,9 @@ def select_codeql_run(
         conclusion = row.get("conclusion")
         if not isinstance(run_id, int) or isinstance(run_id, bool) or run_id < 1:
             raise GateError(f"exact-subject {required_workflow_name} run has invalid run id")
+        if run_id in run_ids:
+            raise GateError(f"duplicate exact-subject {required_workflow_name} run id: {run_id}")
+        run_ids.add(run_id)
         if not isinstance(attempt, int) or isinstance(attempt, bool) or attempt < 1:
             raise GateError(f"exact-subject {required_workflow_name} run has invalid run_attempt")
         if status not in ACTIVE_STATUSES | {"completed"}:
@@ -100,12 +104,8 @@ def select_codeql_run(
             )
         candidates.append(row)
 
-    if len(candidates) > 1:
-        run_ids = sorted(int(row["id"]) for row in candidates)
-        raise GateError(
-            f"ambiguous exact-subject {required_workflow_name} evidence for {subject_sha}: run ids {run_ids}"
-        )
-    return candidates[0] if candidates else None
+    # Never select a convenient green subset; every matched run is an obligation.
+    return sorted(candidates, key=lambda row: row["id"])
 
 
 def fetch_runs(repository: str, subject_sha: str, token: str) -> list[dict[str, Any]]:
@@ -144,8 +144,11 @@ def fetch_runs(repository: str, subject_sha: str, token: str) -> list[dict[str, 
     if not isinstance(payload, dict):
         raise GateError("GitHub Actions API payload must be an object")
     rows = payload.get("workflow_runs")
+    count = payload.get("total_count")
     if not isinstance(rows, list) or not all(isinstance(row, dict) for row in rows):
         raise GateError("GitHub Actions API workflow_runs must be an object list")
+    if not isinstance(count, int) or isinstance(count, bool) or count != len(rows):
+        raise GateError("GitHub Actions API workflow_runs response is truncated or invalid")
     return rows
 
 
@@ -160,7 +163,7 @@ def wait_for_success(
     delay_seconds: float,
     required_workflow_name: str = WORKFLOW_NAME,
     required_workflow_path: str = WORKFLOW_PATH,
-) -> dict[str, Any]:
+) -> list[dict[str, Any]]:
     if attempts < 1:
         raise GateError("attempts must be >= 1")
     if delay_seconds < 0:
@@ -178,7 +181,7 @@ def wait_for_success(
             time.sleep(delay_seconds)
             continue
 
-        run = select_codeql_run(
+        runs = select_codeql_runs(
             rows,
             subject_sha=subject_sha,
             branch=branch,
@@ -186,15 +189,15 @@ def wait_for_success(
             required_workflow_name=required_workflow_name,
             required_workflow_path=required_workflow_path,
         )
-        if run is not None and run["status"] == "completed":
-            return run
+        if runs and all(run["status"] == "completed" for run in runs):
+            return runs
         if attempt < attempts:
             time.sleep(delay_seconds)
 
     if last_transient is not None:
         raise last_transient
     raise GateError(
-        f"exact-subject {required_workflow_name} success did not register before "
+        f"all exact-subject {required_workflow_name} successes did not register before "
         "the bounded gate timeout"
     )
 
