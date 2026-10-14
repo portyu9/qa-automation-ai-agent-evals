@@ -17,6 +17,7 @@ from dependency_lock_publisher import (
     DEPENDABOT_REBASE_MARKER,
     MAX_LOCK_BYTES,
     ROOT,
+    classify_authenticated_pip_subject,
     expected_paths,
     publisher_commit_message,
     validate_artifacts,
@@ -155,6 +156,33 @@ def test_lock_artifact_validator() -> None:
         assert_refused(validate_artifacts, root, manifest)
 
 
+def test_publisher_disposition_for_authenticated_exact_subject() -> None:
+    # This classification is called ONLY after the live governor has verified
+    # signed bot source, signed child provenance, SHA-bound merge ref, and all
+    # twelve current-head lock artifacts. No input from the workflow event can
+    # independently assert that it has already published.
+    direct = {"ecosystem": "pip", "files": ["pyproject.toml"]}
+    assert classify_authenticated_pip_subject(direct) == "publish"
+
+    derived_paths = sorted(destination for destination, _ in expected_paths().values())
+    assert len(derived_paths) == 12
+    full = {"ecosystem": "pip", "files": ["pyproject.toml", *derived_paths]}
+    assert classify_authenticated_pip_subject(full) == "already-published"
+
+    invalid = [
+        {"ecosystem": "github-actions", "files": full["files"]},
+        {"ecosystem": "pip", "files": derived_paths},
+        {"ecosystem": "pip", "files": ["pyproject.toml", *derived_paths[:-1]]},
+        {"ecosystem": "pip", "files": ["pyproject.toml", *derived_paths, derived_paths[0]]},
+        {"ecosystem": "pip", "files": ["pyproject.toml", *derived_paths, "docs/ADR.md"]},
+        {"ecosystem": "pip", "files": ["pyproject.toml", ".github/workflows/ci.yml"]},
+        {"ecosystem": "pip", "files": None},
+        {"ecosystem": "pip", "files": []},
+    ]
+    for candidate in invalid:
+        assert_refused(classify_authenticated_pip_subject, candidate)
+
+
 def test_canonical_publisher_refusals() -> None:
     api = FakeApi()
     source, child, base = api.source, api.child, api.base
@@ -226,5 +254,6 @@ def test_canonical_publisher_refusals() -> None:
 if __name__ == "__main__":
     test_compatibility_artifact_selection_header()
     test_lock_artifact_validator()
+    test_publisher_disposition_for_authenticated_exact_subject()
     test_canonical_publisher_refusals()
     print("dependency lock publisher self-check passed")

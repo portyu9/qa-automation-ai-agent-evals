@@ -78,7 +78,34 @@ def require_sha(value: Any, reason: str) -> str:
     return value
 
 
-def validate_run(api: GitHubApi, event: dict[str, Any]) -> tuple[dict[str, Any], str, str]:
+def classify_authenticated_pip_subject(subject: dict[str, Any]) -> str:
+    """Classify only AFTER the governor has verified the exact signed PR chain.
+
+    A successful read-only compiler also runs on the trusted publisher's
+    newly generated child. That child must be an authenticated no-op, not
+    another write attempt or a misleading red privileged workflow.
+    """
+    if subject.get("ecosystem") != "pip":
+        raise GovernanceError("lock publisher accepts only canonical pip updates")
+    files = subject.get("files")
+    if files == ["pyproject.toml"]:
+        return "publish"
+    published_files = {"pyproject.toml"} | {
+        destination for destination, _ in expected_paths().values()
+    }
+    if (
+        isinstance(files, list)
+        and len(files) == len(published_files)
+        and all(isinstance(path, str) for path in files)
+        and set(files) == published_files
+    ):
+        return "already-published"
+    raise GovernanceError(
+        "lock publisher requires signed manifest source or fully verified lock child"
+    )
+
+
+def validate_run(api: GitHubApi, event: dict[str, Any]) -> tuple[dict[str, Any], str, str, str]:
     run = event.get("workflow_run") or {}
     associations = run.get("pull_requests") or []
     if (
@@ -109,11 +136,8 @@ def validate_run(api: GitHubApi, event: dict[str, Any]) -> tuple[dict[str, Any],
         raise GovernanceError("read-only lock workflow run does not bind the current Dependabot PR")
     config = load_config()
     source = assess(api, pull, config, require_checks=False)
-    if source["ecosystem"] != "pip" or source["files"] != ["pyproject.toml"]:
-        raise GovernanceError(
-            "lock publisher only accepts canonical signed pyproject-only Dependabot source"
-        )
-    return pull, require_sha(source["headSha"], "source head"), branch
+    disposition = classify_authenticated_pip_subject(source)
+    return pull, require_sha(source["headSha"], "source head"), branch, disposition
 
 
 def validate_artifacts(
@@ -274,7 +298,18 @@ def main() -> int:
     if repository != config["repository"]:
         raise GovernanceError("publisher repository does not match accepted policy")
     api = GitHubApi(os.environ.get("GITHUB_TOKEN", ""), repository)
-    pull, source, branch = validate_run(api, event)
+    pull, source, branch, disposition = validate_run(api, event)
+    if disposition == "already-published":
+        # assess() above already checked canonical source/child signatures, parent
+        # graph, all twelve exact locks, the immutable manifest and merge ref.
+        # No owner token, privileged write or new child is attempted.
+        print(
+            json.dumps(
+                {"pr": pull["number"], "head": source, "state": disposition},
+                sort_keys=True,
+            )
+        )
+        return 0
     # Source bytes are read only after exact verified bot provenance.
     from dependency_governance import _repo_text_at_sha
 
