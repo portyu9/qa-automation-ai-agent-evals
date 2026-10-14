@@ -1,6 +1,13 @@
 name: OpenSSF Scorecard
 
 on:
+  # Verify Scorecard's real SARIF creation on the accepted main revision
+  # whenever the Scorecard workflow itself changes. Do not grant PR code
+  # the security-events:write permission required for SARIF publication.
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/security-scorecard.yml"
   schedule:
     - cron: "41 8 * * 2"
   workflow_dispatch:
