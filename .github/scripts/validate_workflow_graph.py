@@ -156,9 +156,7 @@ def _validate_permissions(workflow: dict[str, Any], *, path: Path) -> None:
     """Require workflow-wide read-only authority and audited job-specific write exceptions."""
     permissions = workflow.get("permissions")
     if not isinstance(permissions, dict) or permissions.get("contents") != "read":
-        raise WorkflowPolicyError(
-            f"{path}: workflow must default to explicit contents: read"
-        )
+        raise WorkflowPolicyError(f"{path}: workflow must default to explicit contents: read")
     for name, level in permissions.items():
         if not isinstance(name, str) or level not in {"read", "none"}:
             raise WorkflowPolicyError(
@@ -179,9 +177,7 @@ def _validate_permissions(workflow: dict[str, Any], *, path: Path) -> None:
                 raise WorkflowPolicyError(
                     f"{path}: job {job_id!r} has an invalid permission declaration"
                 )
-        writes = frozenset(
-            name for name, level in job_permissions.items() if level == "write"
-        )
+        writes = frozenset(name for name, level in job_permissions.items() if level == "write")
         if not writes:
             continue
 
@@ -193,9 +189,7 @@ def _validate_permissions(workflow: dict[str, Any], *, path: Path) -> None:
             )
         triggers = workflow.get("on")
         if not isinstance(triggers, dict) or "pull_request_target" in triggers:
-            raise WorkflowPolicyError(
-                f"{path}: privileged job must have explicit safe triggers"
-            )
+            raise WorkflowPolicyError(f"{path}: privileged job must have explicit safe triggers")
         expected_guard = _TRUSTED_JOB_GUARDS.get((path.name, job_id))
         if expected_guard is not None and job.get("if") != expected_guard:
             raise WorkflowPolicyError(
@@ -225,10 +219,7 @@ def _validate_permissions(workflow: dict[str, Any], *, path: Path) -> None:
                     raise WorkflowPolicyError(
                         f"{path}: privileged lock publisher lost source filtering"
                     )
-        if (
-            path.name == "publish-release.yml"
-            and set(triggers) != {"repository_dispatch"}
-        ):
+        if path.name == "publish-release.yml" and set(triggers) != {"repository_dispatch"}:
             raise WorkflowPolicyError(
                 f"{path}: privileged release publication must use only repository_dispatch"
             )
