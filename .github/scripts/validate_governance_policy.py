@@ -44,9 +44,7 @@ def load_policy() -> dict[str, object]:
     return raw
 
 
-def verify_admin_feature_claims(
-    prerequisites: object, scanner_features: object
-) -> None:
+def verify_admin_feature_claims(prerequisites: object, scanner_features: object) -> None:
     """Do not turn checked-in intent into a live GitHub administrator attestation."""
     if not isinstance(prerequisites, dict) or not isinstance(scanner_features, dict):
         fail("administrator features and scanner policy must both be objects")
@@ -82,10 +80,7 @@ def load_scanner_feature_policy() -> object:
 
 def self_test() -> int:
     names = ("dependency_graph", "secret_scanning", "push_protection")
-    source = {
-        key: {"required": True, "verification": "unverified-admin-surface"}
-        for key in names
-    }
+    source = {key: {"required": True, "verification": "unverified-admin-surface"} for key in names}
     verify_admin_feature_claims(source, source)
     for key in names:
         mutations = (
@@ -95,7 +90,10 @@ def self_test() -> int:
                 {**source, key: {"required": True, "verification": "verified-enabled"}},
                 {**source, key: {"required": True, "verification": "verified-enabled"}},
             ),
-            ({**source, key: {"required": False, "verification": "unverified-admin-surface"}}, source),
+            (
+                {**source, key: {"required": False, "verification": "unverified-admin-surface"}},
+                source,
+            ),
             ({**source, key: None}, source),
         )
         for governance, scanner in mutations:
