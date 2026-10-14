@@ -83,6 +83,35 @@ rules control merging. Tests prove that a locally supplied malformed or
 weakened configuration fails; a real post-merge workflow must separately
 demonstrate GitHub authentication and rule evaluation.
 
+
+## Accepted-main access limitation and bounded amendment
+
+The first genuine post-merge monitor job, [38617543213](https://github.com/portyu9/qa-automation-ai-agent-evals/actions/runs/38617543213),
+proved that the read-only GitHub Actions `GITHUB_TOKEN` cannot read the
+repository's `allow_auto_merge` administrator setting even though the
+connected owner-authenticated API verified it enabled. The initial
+implementation misclassified the field's absence as **FAIL (disabled)**.
+That overstates what the runtime knows and conflates inaccessible
+administrative evidence with a contradictory setting.
+
+The runtime now distinguishes three noncompensatory states: an explicit,
+readable compliant value is **PASS**; an explicit, readable conflicting
+value is **FAIL**; a missing or null admin-only field is **BLOCKED**.
+In the latter case `merge_controls` explicitly contains `BLOCKED`
+rather than a false pass, and `ruleset_controls` is separately
+`PASS` only after exact enforcement, bypass, PR and status-check
+identities are inspected. A successful *report-generation job* is
+**not** a pass of the recorded admin-control sub-assessment.
+Negative fixtures require unreadable fields to remain BLOCKED and
+reject any observed relaxation. Monitoring stays unprivileged; no
+admin PAT, self-declared trust, or credential escalation is introduced.
+
+The user separately reports enabling GitHub private vulnerability
+reporting, but that feature is not exposed by this read-only app and
+is not falsely marked API-verified. A subsequent observed real scan
+and a qualified GitHub PR event, not this ADR, are the acceptance
+evidence for any Scorecard alert closure.
+
 Use the actual native auto-merge facility on the real reviewable PR
 once the first required checks are running. A native merge is proven
 only by GitHub's `auto_merge` request, successful completion and
