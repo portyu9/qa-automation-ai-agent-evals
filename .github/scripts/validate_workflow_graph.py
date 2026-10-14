@@ -21,6 +21,35 @@ ROOT = Path(__file__).resolve().parents[2]
 WORKFLOW_DIR = ROOT / ".github" / "workflows"
 _SHA = re.compile(r"^[0-9a-f]{40}$")
 
+# Validator-owned exceptions: narrowly scoped writes needed by trusted workflows.
+# This is not a permission granted by the workflow declaring itself trusted.
+# Any new entry requires review of triggers, source trust, and allowed API effects.
+_TRUSTED_JOB_WRITES: dict[str, dict[str, frozenset[str]]] = {
+    "ci.yml": {
+        "release-provenance": frozenset({"id-token", "attestations", "artifact-metadata"}),
+    },
+    "codeql.yml": {"codeql": frozenset({"security-events"})},
+    "security-scorecard.yml": {"scorecard": frozenset({"security-events"})},
+    "dependency-governance.yml": {
+        "govern": frozenset({"actions", "contents", "issues", "pull-requests"}),
+    },
+    "dependency-lock-publisher.yml": {"publish": frozenset({"contents"})},
+    "publish-release.yml": {"publish": frozenset({"contents"})},
+    "publish-pypi.yml": {"publish": frozenset({"id-token"})},
+}
+
+# Exact guards protect the trust transitions that justify the elevated tokens.
+_TRUSTED_JOB_GUARDS: dict[tuple[str, str], str] = {
+    ("ci.yml", "release-provenance"):
+        "github.event_name == 'push' && github.ref == 'refs/heads/main'",
+    ("codeql.yml", "codeql"):
+        "github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository",
+    ("dependency-governance.yml", "govern"):
+        "github.event_name != 'pull_request'",
+    ("publish-release.yml", "publish"):
+        "github.ref == 'refs/heads/main'",
+}
+
 
 class WorkflowPolicyError(ValueError):
     """Raised when a workflow violates the repository semantic graph contract."""
@@ -122,6 +151,78 @@ def _validate_runner(value: Any, *, path: Path, job_id: str) -> None:
                 reject_floating(item)
 
 
+def _validate_permissions(workflow: dict[str, Any], *, path: Path) -> None:
+    """Require workflow-wide read-only authority and audited job-specific write exceptions."""
+    permissions = workflow.get("permissions")
+    if not isinstance(permissions, dict) or permissions.get("contents") != "read":
+        raise WorkflowPolicyError(
+            f"{path}: workflow must default to explicit contents: read"
+        )
+    for name, level in permissions.items():
+        if not isinstance(name, str) or level not in {"read", "none"}:
+            raise WorkflowPolicyError(
+                f"{path}: workflow-wide permission {name!r} must not have write access"
+            )
+
+    jobs = workflow["jobs"]
+    for job_id, job in jobs.items():
+        if not isinstance(job, dict):
+            continue  # The job-shape validator reports this separately.
+        job_permissions = job.get("permissions", {})
+        if not isinstance(job_permissions, dict):
+            raise WorkflowPolicyError(
+                f"{path}: job {job_id!r} permissions must be an explicit mapping"
+            )
+        for name, level in job_permissions.items():
+            if not isinstance(name, str) or level not in {"read", "write", "none"}:
+                raise WorkflowPolicyError(
+                    f"{path}: job {job_id!r} has an invalid permission declaration"
+                )
+        writes = frozenset(name for name, level in job_permissions.items() if level == "write")
+        if not writes:
+            continue
+
+        allowed = _TRUSTED_JOB_WRITES.get(path.name, {}).get(job_id, frozenset())
+        if not writes.issubset(allowed):
+            raise WorkflowPolicyError(
+                f"{path}: job {job_id!r} requests unapproved write capabilities "
+                f"{sorted(writes - allowed)}"
+            )
+        triggers = workflow.get("on")
+        if not isinstance(triggers, dict) or "pull_request_target" in triggers:
+            raise WorkflowPolicyError(
+                f"{path}: privileged job must have explicit safe triggers"
+            )
+        expected_guard = _TRUSTED_JOB_GUARDS.get((path.name, job_id))
+        if expected_guard is not None and job.get("if") != expected_guard:
+            raise WorkflowPolicyError(
+                f"{path}: privileged job {job_id!r} lost its accepted trust guard"
+            )
+        if path.name in {"security-scorecard.yml", "publish-pypi.yml",
+                         "publish-release.yml", "dependency-lock-publisher.yml"}:
+            if "pull_request" in triggers:
+                raise WorkflowPolicyError(
+                    f"{path}: trusted publication or SARIF job may not run on PR code"
+                )
+        if path.name == "dependency-lock-publisher.yml":
+            if set(triggers) != {"workflow_run"}:
+                raise WorkflowPolicyError(
+                    f"{path}: privileged lock publisher must use only workflow_run"
+                )
+            condition = str(job.get("if", ""))
+            for required in ("workflow_run.conclusion == 'success'",
+                             "workflow_run.event == 'pull_request'",
+                             "workflow_run.head_branch, 'dependabot/pip/'"):
+                if required not in condition:
+                    raise WorkflowPolicyError(
+                        f"{path}: privileged lock publisher lost source filtering"
+                    )
+        if path.name == "publish-release.yml" and set(triggers) != {"repository_dispatch"}:
+            raise WorkflowPolicyError(
+                f"{path}: privileged release publication must use only repository_dispatch"
+            )
+
+
 def validate_workflow(path: Path) -> None:
     workflow = _load_workflow(path)
     if not isinstance(workflow.get("name"), str) or not workflow["name"].strip():
@@ -132,6 +233,8 @@ def validate_workflow(path: Path) -> None:
     jobs = workflow.get("jobs")
     if not isinstance(jobs, dict) or not jobs:
         raise WorkflowPolicyError(f"{path}: workflow must declare at least one job")
+
+    _validate_permissions(workflow, path=path)
 
     graph: dict[str, tuple[str, ...]] = {}
     job_ids = set(jobs)
@@ -207,6 +310,8 @@ def _self_test() -> None:
 name: Good
 on:
   pull_request:
+permissions:
+  contents: read
 jobs:
   lint:
     runs-on: ubuntu-24.04
@@ -272,8 +377,67 @@ jobs:
     steps: []
 """,
         }
+        fixtures.update({
+            "workflow-wide-write.yml": """
+name: Unsafe workflow token
+on: workflow_dispatch
+permissions:
+  contents: write
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    steps: []
+""",
+            "unapproved-job-write.yml": """
+name: Unsafe job token
+on: workflow_dispatch
+permissions:
+  contents: read
+jobs:
+  test:
+    permissions:
+      contents: write
+    runs-on: ubuntu-24.04
+    steps: []
+""",
+        })
+        trusted_release = root / "publish-release.yml"
+        trusted_release.write_text(
+            """name: Trusted release
+on:
+  repository_dispatch:
+permissions:
+  contents: read
+jobs:
+  publish:
+    if: github.ref == 'refs/heads/main'
+    permissions:
+      contents: write
+    runs-on: ubuntu-24.04
+    steps: []
+""",
+            encoding="utf-8",
+        )
+        validate_workflow(trusted_release)
+        trusted_release.write_text(
+            trusted_release.read_text(encoding="utf-8").replace(
+                "github.ref == 'refs/heads/main'",
+                "github.event_name == 'pull_request'",
+            ),
+            encoding="utf-8",
+        )
+        try:
+            validate_workflow(trusted_release)
+        except WorkflowPolicyError:
+            pass
+        else:
+            raise AssertionError("privileged release without main guard unexpectedly passed")
+
         for name, source in fixtures.items():
             path = root / name
+            # Preserve the intended negative test rather than rejecting only a missing default.
+            if "permissions:" not in source:
+                source = source.replace("jobs:", "permissions:\\n  contents: read\\njobs:", 1)
             path.write_text(source.lstrip(), encoding="utf-8")
             try:
                 validate_workflow(path)
