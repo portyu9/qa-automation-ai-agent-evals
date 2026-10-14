@@ -25,3 +25,14 @@ Passing parser tests proves only that the desired permissions are declared and p
 - **Positive:** a trusted-main Scorecard run receives documented read-only visibility into checks, issues, and pull-request metadata; structural policy tests catch accidental read-scope loss or write/trigger escalation before merge.
 - **Tradeoff:** a small increase in metadata visibility for the existing Scorecard observer, with no additional mutation authority. The upload action still has precisely the prior job-only security-events write permission.
 - **Limitations:** token availability, GitHub check-history data, detector behavior and scanner timing are external. The genuine SARIF result decides whether SAST recognition improves; absent recognition remains an open finding. No automatic suppression or synthetic check history is allowed.
+
+## Assurance impact
+
+The only security authority change is **read-only discovery** within the already trusted-main Scorecard observer. Read access cannot approve, merge, dismiss, mutate source, or upload SARIF. The previously authorized job-only `security-events:write` remains restricted to a workflow that never runs untrusted PR code. The CI semantic validator locks the read surface and exact trigger to prevent either accidental observation loss or token privilege creep. Existing CodeQL, Security, protected Package integrity, dependencies, release attestation and review-governance controls remain unchanged.
+
+## Non-claims
+
+- Explicit read scopes do not guarantee the Scorecard SAST detector will recognize CodeQL check history; only authentic post-merge SARIF confirms that.
+- CodeQL's genuine zero-alert gate does not prove an absence of all vulnerabilities.
+- Scanner read access is not independent human review and does not close BranchProtection, CodeReview, Fuzzing, Maintained, Best Practices or PinnedDependencies warnings.
+- No source-owned policy declaration authenticates unobservable GitHub administrator settings, and no BLOCKED observation becomes PASS merely because a scheduled workflow completes.
