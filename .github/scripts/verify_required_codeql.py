@@ -1,4 +1,4 @@
-"""Require exact-subject CodeQL success before the protected aggregate gate passes."""
+"""Require independent CodeQL and Security evidence for the protected aggregate gate."""
 
 from __future__ import annotations
 
@@ -16,6 +16,9 @@ SHA = re.compile(r"^[0-9a-f]{40}$")
 REPOSITORY = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
 WORKFLOW_NAME = "CodeQL"
 WORKFLOW_PATH = ".github/workflows/codeql.yml"
+SECURITY_WORKFLOW_NAME = "Security"
+SECURITY_WORKFLOW_PATH = ".github/workflows/security.yml"
+SECURITY_REQUIRED_JOBS = frozenset({"Security scanners", "security-gate"})
 ACTIVE_STATUSES = {"queued", "in_progress", "requested", "waiting", "pending"}
 
 
@@ -51,7 +54,14 @@ def select_codeql_run(
     subject_sha: str,
     branch: str,
     trigger_event: str,
+    required_workflow_name: str = WORKFLOW_NAME,
+    required_workflow_path: str = WORKFLOW_PATH,
 ) -> dict[str, Any] | None:
+    if (required_workflow_name, required_workflow_path) not in {
+        (WORKFLOW_NAME, WORKFLOW_PATH),
+        (SECURITY_WORKFLOW_NAME, SECURITY_WORKFLOW_PATH),
+    }:
+        raise GateError("unapproved security workflow identity")
     subject_sha = require_sha(subject_sha)
     if not branch or branch.strip() != branch:
         raise GateError("subject branch must be a non-empty canonical ref name")
@@ -60,8 +70,8 @@ def select_codeql_run(
 
     for row in rows:
         if (
-            row.get("name") != WORKFLOW_NAME
-            or row.get("path") != WORKFLOW_PATH
+            row.get("name") != required_workflow_name
+            or row.get("path") != required_workflow_path
             or row.get("head_sha") != subject_sha
             or row.get("head_branch") != branch
             or row.get("event") not in events
@@ -73,21 +83,21 @@ def select_codeql_run(
         status = row.get("status")
         conclusion = row.get("conclusion")
         if not isinstance(run_id, int) or isinstance(run_id, bool) or run_id < 1:
-            raise GateError("exact-subject CodeQL run has invalid run id")
+            raise GateError(f"exact-subject {required_workflow_name} run has invalid run id")
         if not isinstance(attempt, int) or isinstance(attempt, bool) or attempt < 1:
-            raise GateError("exact-subject CodeQL run has invalid run_attempt")
+            raise GateError(f"exact-subject {required_workflow_name} run has invalid run_attempt")
         if status not in ACTIVE_STATUSES | {"completed"}:
-            raise GateError(f"exact-subject CodeQL run has invalid status: {status!r}")
+            raise GateError(f"exact-subject {required_workflow_name} run has invalid status: {status!r}")
         if status == "completed" and conclusion != "success":
-            raise GateError(f"exact-subject CodeQL run completed non-successfully: {conclusion!r}")
+            raise GateError(f"exact-subject {required_workflow_name} run completed non-successfully: {conclusion!r}")
         if status != "completed" and conclusion is not None:
-            raise GateError("non-terminal exact-subject CodeQL run unexpectedly has a conclusion")
+            raise GateError(f"non-terminal exact-subject {required_workflow_name} run unexpectedly has a conclusion")
         candidates.append(row)
 
     if len(candidates) > 1:
         run_ids = sorted(int(row["id"]) for row in candidates)
         raise GateError(
-            f"ambiguous exact-subject CodeQL evidence for {subject_sha}: run ids {run_ids}"
+            f"ambiguous exact-subject {required_workflow_name} evidence for {subject_sha}: run ids {run_ids}"
         )
     return candidates[0] if candidates else None
 
@@ -142,6 +152,8 @@ def wait_for_success(
     token: str,
     attempts: int,
     delay_seconds: float,
+    required_workflow_name: str = WORKFLOW_NAME,
+    required_workflow_path: str = WORKFLOW_PATH,
 ) -> dict[str, Any]:
     if attempts < 1:
         raise GateError("attempts must be >= 1")
@@ -165,6 +177,8 @@ def wait_for_success(
             subject_sha=subject_sha,
             branch=branch,
             trigger_event=trigger_event,
+            required_workflow_name=required_workflow_name,
+            required_workflow_path=required_workflow_path,
         )
         if run is not None and run["status"] == "completed":
             return run
@@ -173,7 +187,92 @@ def wait_for_success(
 
     if last_transient is not None:
         raise last_transient
-    raise GateError("exact-subject CodeQL success did not register before the bounded gate timeout")
+    raise GateError(
+        f"exact-subject {required_workflow_name} success did not register before "
+        "the bounded gate timeout"
+    )
+
+
+def fetch_security_jobs(
+    repository: str, token: str, *, run_id: int, attempt: int
+) -> list[dict[str, Any]]:
+    """Read the two independently executed Security jobs from the exact successful run."""
+    if REPOSITORY.fullmatch(repository) is None or not token:
+        raise GateError("Security job verification requires repository and Actions read token")
+    if (
+        not isinstance(run_id, int)
+        or isinstance(run_id, bool)
+        or run_id < 1
+        or not isinstance(attempt, int)
+        or isinstance(attempt, bool)
+        or attempt < 1
+    ):
+        raise GateError("Security job verification requires canonical run/attempt ids")
+    url = (
+        f"https://api.github.com/repos/{repository}/actions/runs/{run_id}"
+        f"/attempts/{attempt}/jobs?per_page=100"
+    )
+    request = urllib.request.Request(
+        url,
+        headers={
+            "Accept": "application/vnd.github+json",
+            "Authorization": f"Bearer {token}",
+            "User-Agent": "qa-automation-required-security-jobs",
+            "X-GitHub-Api-Version": "2022-11-28",
+        },
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=20) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        if exc.code in {429, 500, 502, 503, 504}:
+            raise TransientApiError(f"Security jobs API transient HTTP {exc.code}") from exc
+        raise GateError(f"Security jobs API rejected evidence query: HTTP {exc.code}") from exc
+    except urllib.error.URLError as exc:
+        raise TransientApiError(f"Security jobs API transport failure: {exc.reason}") from exc
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise GateError("Security jobs API returned malformed JSON") from exc
+    if not isinstance(payload, dict):
+        raise GateError("Security jobs API payload must be an object")
+    jobs = payload.get("jobs")
+    count = payload.get("total_count")
+    if (
+        not isinstance(jobs, list)
+        or not all(isinstance(job, dict) for job in jobs)
+        or not isinstance(count, int)
+        or isinstance(count, bool)
+        or count != len(jobs)
+    ):
+        raise GateError("Security jobs API returned invalid or truncated evidence")
+    return jobs
+
+
+def require_security_job_success(
+    jobs: list[dict[str, Any]], *, run_id: int, attempt: int
+) -> None:
+    """Reject skipped, failed, or missing scanners and the final security-gate."""
+    observed: set[str] = set()
+    for job in jobs:
+        if not isinstance(job, dict):
+            raise GateError("Security jobs evidence contains a non-object")
+        name = job.get("name")
+        if name not in SECURITY_REQUIRED_JOBS:
+            continue
+        if name in observed:
+            raise GateError(f"duplicate security job evidence: {name}")
+        observed.add(name)
+        if (
+            job.get("run_id") != run_id
+            or job.get("run_attempt") != attempt
+            or job.get("status") != "completed"
+            or job.get("conclusion") != "success"
+        ):
+            raise GateError(f"required Security job did not succeed: {name}")
+    if observed != SECURITY_REQUIRED_JOBS:
+        raise GateError(
+            f"Security job evidence missing required jobs: "
+            f"{sorted(SECURITY_REQUIRED_JOBS - observed)}"
+        )
 
 
 def self_test() -> None:
@@ -295,12 +394,107 @@ def self_test() -> None:
     else:
         raise GateError("self-test accepted unsupported CI trigger")
 
-    print("required CodeQL gate self-test: ok")
+    security = dict(
+        canonical,
+        name=SECURITY_WORKFLOW_NAME,
+        path=SECURITY_WORKFLOW_PATH,
+    )
+    if (
+        select_codeql_run(
+            [security],
+            subject_sha=sha,
+            branch="feature",
+            trigger_event="pull_request",
+            required_workflow_name=SECURITY_WORKFLOW_NAME,
+            required_workflow_path=SECURITY_WORKFLOW_PATH,
+        )
+        != security
+    ):
+        raise GateError("self-test rejected exact-subject Security workflow")
+    for unsafe in (
+        dict(security, head_sha="2" * 40),
+        dict(security, head_branch="wrong"),
+        dict(security, path=WORKFLOW_PATH),
+        dict(security, event="push"),
+    ):
+        if (
+            select_codeql_run(
+                [unsafe],
+                subject_sha=sha,
+                branch="feature",
+                trigger_event="pull_request",
+                required_workflow_name=SECURITY_WORKFLOW_NAME,
+                required_workflow_path=SECURITY_WORKFLOW_PATH,
+            )
+            is not None
+        ):
+            raise GateError("self-test accepted mismatched Security workflow")
+    for invalid in (
+        dict(security, conclusion="failure"),
+        dict(security, conclusion="cancelled"),
+        dict(security, status="in_progress", conclusion="success"),
+    ):
+        try:
+            select_codeql_run(
+                [invalid],
+                subject_sha=sha,
+                branch="feature",
+                trigger_event="pull_request",
+                required_workflow_name=SECURITY_WORKFLOW_NAME,
+                required_workflow_path=SECURITY_WORKFLOW_PATH,
+            )
+        except GateError:
+            pass
+        else:
+            raise GateError("self-test accepted unqualified Security workflow")
+    try:
+        select_codeql_run(
+            [security, dict(security, id=103)],
+            subject_sha=sha,
+            branch="feature",
+            trigger_event="pull_request",
+            required_workflow_name=SECURITY_WORKFLOW_NAME,
+            required_workflow_path=SECURITY_WORKFLOW_PATH,
+        )
+    except GateError:
+        pass
+    else:
+        raise GateError("self-test accepted ambiguous Security runs")
+
+    security_jobs = [
+        {
+            "name": name,
+            "run_id": 101,
+            "run_attempt": 1,
+            "status": "completed",
+            "conclusion": "success",
+        }
+        for name in sorted(SECURITY_REQUIRED_JOBS)
+    ]
+    require_security_job_success(security_jobs, run_id=101, attempt=1)
+    for altered in (
+        [dict(security_jobs[0], conclusion="failure"), security_jobs[1]],
+        [dict(security_jobs[0], conclusion="skipped"), security_jobs[1]],
+        [dict(security_jobs[0], run_id=102), security_jobs[1]],
+        [dict(security_jobs[0], run_attempt=2), security_jobs[1]],
+        [dict(security_jobs[0], status="queued"), security_jobs[1]],
+        security_jobs[:1],
+        [security_jobs[0], security_jobs[0], security_jobs[1]],
+    ):
+        try:
+            require_security_job_success(altered, run_id=101, attempt=1)
+        except GateError:
+            pass
+        else:
+            raise GateError("self-test accepted unsafe Security job evidence")
+
+    print("required CodeQL and Security gates self-test: ok")
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("--self-test", action="store_true")
+    parser.add_argument("--workflow", choices=("codeql", "security"), default="codeql")
     parser.add_argument("--repository", default=os.environ.get("GITHUB_REPOSITORY", ""))
     parser.add_argument("--subject-sha", default="")
     parser.add_argument("--branch", default="")
@@ -316,17 +510,33 @@ def main() -> int:
         self_test()
         return 0
 
+    security = args.workflow == "security"
+    workflow_name = SECURITY_WORKFLOW_NAME if security else WORKFLOW_NAME
+    workflow_path = SECURITY_WORKFLOW_PATH if security else WORKFLOW_PATH
+    token = os.environ.get("GITHUB_TOKEN", "")
     run = wait_for_success(
         repository=args.repository,
         subject_sha=args.subject_sha,
         branch=args.branch,
         trigger_event=args.trigger_event,
-        token=os.environ.get("GITHUB_TOKEN", ""),
+        token=token,
         attempts=args.attempts,
         delay_seconds=args.delay_seconds,
+        required_workflow_name=workflow_name,
+        required_workflow_path=workflow_path,
     )
+    if security:
+        jobs = fetch_security_jobs(
+            args.repository,
+            token,
+            run_id=run["id"],
+            attempt=run["run_attempt"],
+        )
+        require_security_job_success(
+            jobs, run_id=run["id"], attempt=run["run_attempt"]
+        )
     print(
-        "protected CodeQL gate accepted exact-subject evidence: "
+        f"protected {workflow_name} gate accepted exact-subject evidence: "
         f"run={run['id']} attempt={run['run_attempt']} sha={run['head_sha']}"
     )
     return 0
