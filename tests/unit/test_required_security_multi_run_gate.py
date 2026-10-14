@@ -63,12 +63,21 @@ def test_single_good_run_cannot_override_unqualified_second_run(second):
 
 def test_pending_peer_does_not_qualify_until_every_peer_succeeds():
     pending = _run(2, status="queued", conclusion=None)
-    with patch.object(module, "fetch_runs", side_effect=[[_run(1), pending], [_run(1), _run(2)]]):
-        with patch.object(module.time, "sleep") as sleeper:
-            receipts = module.wait_for_success(
-                repository="owner/repo", subject_sha=SHA, branch="main",
-                trigger_event="push", token="fake", attempts=2, delay_seconds=0
-            )
+    with (
+        patch.object(
+            module, "fetch_runs", side_effect=[[_run(1), pending], [_run(1), _run(2)]]
+        ),
+        patch.object(module.time, "sleep") as sleeper,
+    ):
+        receipts = module.wait_for_success(
+            repository="owner/repo",
+            subject_sha=SHA,
+            branch="main",
+            trigger_event="push",
+            token="fake",
+            attempts=2,
+            delay_seconds=0,
+        )
     assert [run["id"] for run in receipts] == [1, 2]
     assert sleeper.call_count == 1
 
@@ -76,13 +85,15 @@ def test_pending_peer_does_not_qualify_until_every_peer_succeeds():
 @pytest.mark.parametrize("count", [None, -1, True, 0, 2, 101])
 def test_actions_api_rejects_missing_invalid_or_truncated_run_sets(count):
     payload = {"total_count": count, "workflow_runs": [_run(1)]}
-    with patch.object(
-        module.urllib.request,
-        "urlopen",
-        return_value=io.BytesIO(json.dumps(payload).encode("utf-8")),
+    with (
+        patch.object(
+            module.urllib.request,
+            "urlopen",
+            return_value=io.BytesIO(json.dumps(payload).encode("utf-8")),
+        ),
+        pytest.raises(module.GateError, match="truncated or invalid"),
     ):
-        with pytest.raises(module.GateError, match="truncated or invalid"):
-            module.fetch_runs("owner/repo", SHA, "fake-token")
+        module.fetch_runs("owner/repo", SHA, "fake-token")
 
 
 def test_actions_api_accepts_complete_run_snapshot():
