@@ -605,7 +605,7 @@ def test_policy_rejects_publish_workflow_minting_fresh_attestation(tmp_path: Pat
     workspace = _policy_workspace(tmp_path)
     workflow = workspace / ".github/workflows/publish-release.yml"
     source = workflow.read_text(encoding="utf-8")
-    anchor = "permissions:\n  actions: read\n  contents: write\n"
+    anchor = "permissions:\n  actions: read\n  contents: read\n"
     assert anchor in source
     workflow.write_text(
         source.replace(anchor, anchor + "  id-token: write\n", 1),

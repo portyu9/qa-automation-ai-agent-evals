@@ -6,7 +6,7 @@ on:
 
 permissions:
   actions: read
-  contents: write
+  contents: read
 
 concurrency:
   group: retained-release-publication
@@ -15,6 +15,10 @@ concurrency:
 jobs:
   publish:
     name: Publish exact CI-tested artifacts
+    # Only the authenticated main release publisher needs repository write access.
+    permissions:
+      actions: read
+      contents: write
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     timeout-minutes: 12
