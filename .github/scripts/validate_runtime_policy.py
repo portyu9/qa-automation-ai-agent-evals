@@ -266,7 +266,7 @@ for required in (
     "requirements/locks/core-py314.txt",
     "requirements/locks/atheris-py314.txt",
     "--require-hashes",
-    "--no-deps --no-build-isolation .",
+    "PYTHONPATH: src",
     "python -m pip check",
     'test "$(git rev-parse HEAD)" = "$EXACT_COMMIT"',
     "atheris-evidence/commit.txt",
