@@ -1,6 +1,6 @@
 # ADR 0027: Native Atheris fuzzing with honest Scorecard detector qualification
 
-**Status:** Proposed; acceptance requires exact-head CI, real native campaign and post-merge Scorecard observation.
+**Status:** Accepted; implementation qualification requires exact-head CI, a real native campaign and post-merge Scorecard observation.
 
 ## Context
 
