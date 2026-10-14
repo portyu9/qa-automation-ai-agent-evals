@@ -86,6 +86,8 @@ jobs:
             --head-sha "$HEAD_SHA"
       - name: Validate mandatory security scanner stack
         run: python .github/scripts/validate_security_stack.py
+      - name: Self-test authentic Scorecard SARIF posture classifier
+        run: python .github/scripts/classify_scorecard_sarif.py --self-test
       - name: Install exact hash-checked semantic parser tools
         run: python -m pip install --disable-pip-version-check --require-hashes -r requirements/locks/core-py311.txt
       - name: Self-test semantic workflow graph validator
