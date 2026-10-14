@@ -18,8 +18,8 @@ from dependency_governance import (
     validate_pyproject_dependency_semantics,
 )
 from dependency_lock_publisher import (
-    COMMIT_MESSAGE,
     expected_paths,
+    publisher_commit_message,
     validate_artifacts,
 )
 
@@ -76,11 +76,7 @@ def validate_published_pip_chain(
     verification = git.get("verification") or {}
     actor = child.get("author") or {}
     committer = child.get("committer") or {}
-    expected_message = (
-        f"{COMMIT_MESSAGE}\n\n"
-        f"Generated from Dependabot source head {source_sha} by trusted default-branch "
-        "dependency-lock-publisher."
-    )
+    expected_message = publisher_commit_message(source_sha)
     if (
         actor.get("login") != PUBLISHER_LOGIN
         or actor.get("id") != PUBLISHER_USER_ID

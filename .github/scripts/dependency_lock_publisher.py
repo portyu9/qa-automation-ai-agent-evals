@@ -34,9 +34,23 @@ ROOT = Path(__file__).resolve().parents[2]
 WORKFLOW_NAME = "dependency-locks"
 WORKFLOW_PATH = ".github/workflows/dependency-locks.yml"
 COMMIT_MESSAGE = "chore: publish trusted Dependabot dependency lock graph"
+# GitHub Dependabot will not rebase a bot PR after a trusted publisher adds
+# commits unless those derived commits explicitly opt in to replacement.
+DEPENDABOT_REBASE_MARKER = "[dependabot skip]"
 MAX_LOCK_BYTES = 4 * 1024 * 1024
 SHA = re.compile(r"[0-9a-f]{40}")
 SAFE_BRANCH = re.compile(r"dependabot/pip/[A-Za-z0-9._/-]+")
+
+
+def publisher_commit_message(source: str) -> str:
+    """Bind a verified bot source to a discardable, narrowly trusted lock child."""
+    if SHA.fullmatch(source) is None:
+        raise GovernanceError("lock publisher commit subject must be a canonical SHA")
+    return (
+        f"{COMMIT_MESSAGE}\n\n"
+        f"Generated from Dependabot source head {source} by trusted default-branch "
+        f"dependency-lock-publisher.\n\n{DEPENDABOT_REBASE_MARKER}"
+    )
 
 
 def expected_paths() -> dict[str, tuple[str, str]]:
@@ -203,11 +217,7 @@ def publish(
         )
     tree = api.post("/git/trees", {"base_tree": tree_sha, "tree": entries})
     new_tree = require_sha((tree or {}).get("sha"), "published tree")
-    message = (
-        f"{COMMIT_MESSAGE}\n\n"
-        f"Generated from Dependabot source head {source} by trusted default-branch "
-        "dependency-lock-publisher."
-    )
+    message = publisher_commit_message(source)
     commit = api.post(
         "/git/commits",
         {
