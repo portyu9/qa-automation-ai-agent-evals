@@ -25,6 +25,12 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      # The Scorecard Docker action writes directly into the bind-mounted
+      # workspace and does not create intermediate host directories.
+      # Prepare the destination before invoking it; never fabricate a SARIF
+      # result or turn a missing result into a successful scan.
+      - name: Prepare Scorecard SARIF destination
+        run: mkdir -p reports/security
       - name: Run OpenSSF Scorecard
         uses: ossf/scorecard-action@2d1146689b8cda280b9bc96326124645441f03bc # v2.4.4
         with:
