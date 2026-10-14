@@ -40,7 +40,7 @@ EXPECTED_LOCAL = {
         "retained-dist/*.whl": 4,
         "retained-dist/*.tar.gz": 1,
     },
-    "deep-fuzz.yml": {".": 2},
+    "deep-fuzz.yml": {".": 1},
     "deep-mutation.yml": {".": 1},
     "deep-property-stress.yml": {".": 1},
     "deterministic-performance.yml": {".": 1},
