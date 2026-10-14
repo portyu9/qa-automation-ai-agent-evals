@@ -54,6 +54,27 @@ unsafe actor always fails, even if some unrelated field is blocked.
 All other observed unsafe rules, changes to credential boundaries,
 and incomplete protected status contracts continue to fail closed.
 
+### Administrator feature claims require separate live verification
+
+A second source-of-truth contradiction was identified in #349:
+`.github/repository-governance.json` asserted that the GitHub
+dependency graph, secret scanning, and push protection were
+`verified-enabled`, while the scanner policy classified dependency
+graph as disabled and the other two as unverified. A genuine PR
+`dependency-graph/compare` probe returned HTTP 403/404 and correctly
+reported dependency review **BLOCKED**. That error does **not**
+distinguish a disabled feature from a token authorization limitation.
+
+Until administrator-authorized GitHub API evidence is independently
+collected, both checked-in feature inventories now use
+`unverified-admin-surface`. A mandatory CI semantic verifier checks
+the two sources agree and, with negative fixtures, rejects even a
+*matching* `verified-enabled` assertion because agreement between two
+writable repository files is not verification. Only a future
+explicitly reviewed, independently evidenced governance transition
+may change those truthful provisional states. The local source
+declarations cannot grant themselves administrator trust.
+
 ## Consequences
 
 The read-only accepted-main monitor can provide useful authenticated
@@ -66,6 +87,8 @@ No existing protected check, CodeQL zero-alert qualifier, Security
 bridge, source-package evidence verifier, branch deletion protection or
 PR approval decision is weakened. The broader Scorecard 24-alert
 inventory remains unchanged unless an authentic scan proves otherwise.
+A blocked dependency-graph API precondition cannot be converted to a
+successful dependency review merely by changing repository metadata.
 
 ## Assurance impact
 
