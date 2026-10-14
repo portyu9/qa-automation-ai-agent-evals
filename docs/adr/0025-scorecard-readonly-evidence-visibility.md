@@ -19,3 +19,9 @@ Extend the repository-owned semantic YAML workflow validator to require the exac
 ## Verification and non-claims
 
 Passing parser tests proves only that the desired permissions are declared and protected against regression. A successful Scorecard job **does not** prove its SAST detector recognizes every actual CodeQL commit. After merge, review exact-head CodeQL, Security, CI and authentic Scorecard SARIF. Record whether `SASTID` recognition changed; do not dismiss #27 or #349 on inference. The 18 local-source Scorecard PinnedDependencies detector findings, human reviewer governance, fuzz integration, age-based Maintained and external OpenSSF Best Practices enrollment remain independent open items. Do not downgrade BLOCKED to PASS or treat a hash as publisher authentication.
+
+## Consequences
+
+- **Positive:** a trusted-main Scorecard run receives documented read-only visibility into checks, issues, and pull-request metadata; structural policy tests catch accidental read-scope loss or write/trigger escalation before merge.
+- **Tradeoff:** a small increase in metadata visibility for the existing Scorecard observer, with no additional mutation authority. The upload action still has precisely the prior job-only security-events write permission.
+- **Limitations:** token availability, GitHub check-history data, detector behavior and scanner timing are external. The genuine SARIF result decides whether SAST recognition improves; absent recognition remains an open finding. No automatic suppression or synthetic check history is allowed.
