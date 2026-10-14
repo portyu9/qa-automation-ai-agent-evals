@@ -100,6 +100,10 @@ jobs:
         run: python .github/scripts/release_statement.py self-test
       - name: Validate repository-owned CI locks
         run: python .github/scripts/validate_ci_locks.py
+      - name: Self-test hash-verified maintenance compiler policy
+        run: python .github/scripts/validate_compiler_bootstrap.py --self-test
+      - name: Validate hash-verified maintenance compiler closures
+        run: python .github/scripts/validate_compiler_bootstrap.py
       - name: Self-test compatibility lock compactor
         run: python .github/scripts/compact_compatibility_lock.py --self-test
       - name: Self-test dependency compatibility policy
