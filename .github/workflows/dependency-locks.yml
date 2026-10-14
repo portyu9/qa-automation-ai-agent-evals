@@ -46,9 +46,16 @@ jobs:
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: ${{ matrix.python }}
-      - name: Install pinned maintenance compiler
+      - name: Install SHA-256-verified maintenance compiler
+        env:
+          TARGET_PYTHON: ${{ matrix.python }}
+        shell: bash
         run: |
-          python -m pip install --disable-pip-version-check --no-input pip==25.3 pip-tools==7.5.2
+          set -euo pipefail
+          short="${TARGET_PYTHON//./}"
+          python -m pip install --disable-pip-version-check --no-input --require-hashes \
+            -r "requirements/compiler/bootstrap-py${short}.txt"
+          python -c 'from importlib.metadata import version; assert version("pip") == "25.3"; assert version("pip-tools") == "7.5.2"'
       - name: Generate only the selected SHA-256-locked profile
         env:
           PROFILE: ${{ matrix.profile }}

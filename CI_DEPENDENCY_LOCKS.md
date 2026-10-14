@@ -36,7 +36,18 @@ Retained wheels are installed with `--no-deps`; retained source distributions ad
 
 ## Maintenance
 
-`.github/scripts/generate_ci_lock.py` is a maintenance helper, not a release authority. Regeneration is performed under the target interpreter using the pinned maintenance compiler combination `pip==25.3` and `pip-tools==7.5.2`, one profile at a time. A regenerated lock is not accepted merely because a resolver produced it: it remains a code-reviewed repository change and must pass the lock validator plus the exact-head CI/CodeQL gates.
+`.github/scripts/generate_ci_lock.py` is a maintenance helper, not a release authority. Regeneration is performed under the target interpreter using the pinned maintenance compiler combination `pip==25.3` and `pip-tools==7.5.2`, one profile at a time. **Unlike the original version-only compiler bootstrap, the accepted maintenance workflow must first install the complete, separately reviewed compiler closure with `--require-hashes`.** Files `requirements/compiler/bootstrap-py311.txt` through `bootstrap-py314.txt` bind the interpreter and contain exact versions and SHA-256 package-file hashes for all eight compiler/transitive dependencies. `requirements/compiler/bootstrap.in` records the two direct compiler inputs **for review and generation only**, not for executable installation.
+
+Example maintenance compiler bootstrap on Python 3.11:
+
+```bash
+python -m pip install --disable-pip-version-check --no-input --require-hashes -r requirements/compiler/bootstrap-py311.txt
+python -c 'from importlib.metadata import version; assert version("pip") == "25.3"; assert version("pip-tools") == "7.5.2"'
+```
+
+The compiler policy `.github/scripts/validate_compiler_bootstrap.py` checks the four-file inventory, interpreter/source binding, eight-package complete transitive pin set, exact compiler versions, hash syntax, and absence of unhashed fallback in `dependency-locks.yml`. Its negative self-tests and validation execute in the required CI policy job; removing them is a merge-policy regression. The initial candidates originated from an unprivileged, read-only, no-secret PR-only generator, which **must be deleted before merging the compiler-lock PR**. A generated lock is never accepted merely because a resolver produced it; exact reviewed bytes and all protected CI/security gates are still required. These hashes prove integrity of individual distribution bytes, **not their publisher's identity, safety, or provenance**.
+
+A regenerated lock is not accepted merely because a resolver produced it: it remains a code-reviewed repository change and must pass the lock validator plus the exact-head CI/CodeQL gates.
 
 The generator intentionally derives direct inputs from `pyproject.toml`, the selected optional extras, the PEP 517 build requirements, and `requirements-dev-ci-build.txt`. The latter remains an input manifest for the build frontend; workflows do not install it directly.
 

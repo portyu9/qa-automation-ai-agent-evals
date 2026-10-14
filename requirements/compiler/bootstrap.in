@@ -1,0 +1,4 @@
+# Review-only direct compiler dependencies. Do not install this manifest.
+# The executable dependency-locks workflow must consume reviewed --require-hashes closures.
+pip==25.3
+pip-tools==7.5.2
