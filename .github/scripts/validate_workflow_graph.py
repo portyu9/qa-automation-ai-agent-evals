@@ -396,6 +396,54 @@ jobs:
             encoding="utf-8",
         )
         validate_workflow(good)
+        # The actual pinned CodeQL workflow is a validated positive fixture;
+        # each one-line trust regression must fail independently.
+        source_codeql = (WORKFLOW_DIR / "codeql.yml").read_text(encoding="utf-8")
+        candidate_codeql = root / "codeql.yml"
+        candidate_codeql.write_text(source_codeql, encoding="utf-8")
+        validate_workflow(candidate_codeql)
+        changes = (
+            (
+                "    permissions:\n      actions: read",
+                "    if: github.event_name != 'pull_request'\n    permissions:\n      actions: read",
+            ),
+            (
+                "  pull_request:\n",
+                "  pull_request_target:\n",
+            ),
+            (
+                "          upload: ${{ github.event_name == 'pull_request' && 'never' || 'always' }}",
+                "          upload: always",
+            ),
+            (
+                "      - name: Enforce zero CodeQL alerts\n",
+                "      - name: Enforce zero CodeQL alerts\n        if: github.event_name != 'pull_request'\n",
+            ),
+            (
+                'run: python3 .github/scripts/validate_codeql_sarif.py "$SARIF_DIR"',
+                "run: echo pretend-sarif-gate",
+            ),
+            (
+                "          persist-credentials: false",
+                "          persist-credentials: true",
+            ),
+            (
+                "      - name: Analyze\n",
+                "      - name: Analyze\n        if: github.event_name != 'pull_request'\n",
+            ),
+        )
+        for original, malicious in changes:
+            if source_codeql.count(original) != 1:
+                raise WorkflowPolicyError("CodeQL negative-test fixture drift")
+            candidate_codeql.write_text(
+                source_codeql.replace(original, malicious), encoding="utf-8"
+            )
+            try:
+                validate_workflow(candidate_codeql)
+            except WorkflowPolicyError:
+                continue
+            raise WorkflowPolicyError("fork CodeQL privilege or bypass mutation was accepted")
+
 
         fixtures = {
             "dangling.yml": """
