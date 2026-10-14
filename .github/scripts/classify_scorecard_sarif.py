@@ -28,9 +28,58 @@ MAX_EXISTING: dict[str, int] = {
 }
 BASELINE_COMMIT = "ac0680f130e5ce17fd85de587d95b8728347ba4e"
 
+# Exact (path, source command) identities emitted by genuine accepted-main
+# Scorecard SARIF job 116162840782. These are maximum *warning identities*, not
+# waivers or trusted install declarations; source install authority remains
+# independently enforced by validate_workflow_pip_installs.py.
+_LOCAL_SOURCE_PIP = (
+    "python -m pip install --disable-pip-version-check --no-deps --no-build-isolation ."
+)
+_LOCAL_SDIST_PIP = (
+    "python -m pip install --disable-pip-version-check --no-deps --no-build-isolation dist/*.tar.gz"
+)
+_RETAINED_SDIST_PIP = (
+    "python -m pip install --disable-pip-version-check "
+    "--no-deps --no-build-isolation retained-dist/*.tar.gz"
+)
+REVIEWED_PINNED_FINDING_IDENTITIES: dict[tuple[str, str], int] = {
+    (".github/workflows/ci.yml", _LOCAL_SOURCE_PIP): 7,
+    (".github/workflows/ci.yml", _LOCAL_SDIST_PIP): 1,
+    (".github/workflows/ci.yml", _RETAINED_SDIST_PIP): 1,
+    (".github/workflows/deep-fuzz.yml", _LOCAL_SOURCE_PIP): 1,
+    (".github/workflows/deep-mutation.yml", _LOCAL_SOURCE_PIP): 1,
+    (".github/workflows/deep-property-stress.yml", _LOCAL_SOURCE_PIP): 1,
+    (".github/workflows/deterministic-performance.yml", _LOCAL_SOURCE_PIP): 1,
+    (".github/workflows/free-threaded-probe.yml", _LOCAL_SOURCE_PIP): 1,
+    (".github/workflows/live-provider-canary.yml", _LOCAL_SOURCE_PIP): 1,
+    (".github/workflows/platform-smoke.yml", _LOCAL_SOURCE_PIP): 1,
+    (".github/workflows/publish-release.yml", _RETAINED_SDIST_PIP): 1,
+    (".github/workflows/security.yml", _LOCAL_SOURCE_PIP): 1,
+}
+
 
 class ScorecardError(ValueError):
     """Unreliable SARIF evidence or a newly observed posture finding."""
+
+
+def _pinned_finding_identity(result: dict[str, Any]) -> tuple[str, str]:
+    """Require authentic Scorecard evidence identifying *which* pip command."""
+    locations = result.get("locations")
+    if not isinstance(locations, list) or len(locations) != 1 or not isinstance(locations[0], dict):
+        raise ScorecardError("PinnedDependencies finding must have one source location")
+    physical = locations[0].get("physicalLocation")
+    if not isinstance(physical, dict):
+        raise ScorecardError("PinnedDependencies source location is missing")
+    artifact = physical.get("artifactLocation")
+    region = physical.get("region")
+    if not isinstance(artifact, dict) or not isinstance(region, dict):
+        raise ScorecardError("PinnedDependencies path or source region is missing")
+    snippet = region.get("snippet")
+    path = artifact.get("uri")
+    source = snippet.get("text") if isinstance(snippet, dict) else None
+    if not isinstance(path, str) or not isinstance(source, str) or not path or not source:
+        raise ScorecardError("PinnedDependencies lacks exact source path or pip command")
+    return path, source
 
 
 def classify(raw: Any) -> dict[str, Any]:
@@ -39,7 +88,10 @@ def classify(raw: Any) -> dict[str, Any]:
     runs = raw.get("runs")
     if not isinstance(runs, list) or not runs:
         raise ScorecardError("Scorecard SARIF must contain at least one run")
+    if sum(REVIEWED_PINNED_FINDING_IDENTITIES.values()) != MAX_EXISTING["PinnedDependenciesID"]:
+        raise ScorecardError("reviewed local-install inventory and rule maxima disagree")
     counts: Counter[str] = Counter()
+    pinned_identities: Counter[tuple[str, str]] = Counter()
     declared: set[str] = set()
     observed_runs = 0
     for run in runs:
@@ -81,6 +133,15 @@ def classify(raw: Any) -> dict[str, Any]:
                 or rules[index].get("id") != rid
             ):
                 raise ScorecardError("Scorecard finding rule index does not match declared rule")
+            if rid == "PinnedDependenciesID":
+                identity = _pinned_finding_identity(result)
+                pinned_identities[identity] += 1
+                if pinned_identities[identity] > REVIEWED_PINNED_FINDING_IDENTITIES.get(
+                    identity, 0
+                ):
+                    raise ScorecardError(
+                        f"new or increased PinnedDependenciesID pipCommand identity: {identity!r}"
+                    )
             counts[rid] += 1
         observed_runs += 1
     if not set(MAX_EXISTING).issubset(declared):
@@ -102,6 +163,8 @@ def classify(raw: Any) -> dict[str, Any]:
         "reported_findings": total,
         "counts": dict(sorted(counts.items())),
         "baseline_maxima": dict(sorted(MAX_EXISTING.items())),
+        "reviewed_pip_identity_maxima": len(REVIEWED_PINNED_FINDING_IDENTITIES),
+        "observed_pip_identities": len(pinned_identities),
         "non_claims": [
             "Workflow success does not imply zero vulnerabilities.",
             "Known Scorecard warnings remain genuine and are neither dismissed nor filtered.",
@@ -113,6 +176,31 @@ def classify(raw: Any) -> dict[str, Any]:
 
 def self_test() -> None:
     expected = set(MAX_EXISTING)
+    reviewed_sources = [
+        identity
+        for identity, count in REVIEWED_PINNED_FINDING_IDENTITIES.items()
+        for _ in range(count)
+    ]
+    if len(reviewed_sources) != 18:
+        raise ScorecardError("reviewed local pip identities are not the genuine 18")
+
+    def make_result(name: str, index: int, rule_ids: list[str]) -> dict[str, Any]:
+        result: dict[str, Any] = {
+            "ruleId": name,
+            "ruleIndex": rule_ids.index(name),
+            "message": {"text": "genuine finding fixture"},
+        }
+        if name == "PinnedDependenciesID":
+            path, snippet = reviewed_sources[index % len(reviewed_sources)]
+            result["locations"] = [
+                {
+                    "physicalLocation": {
+                        "artifactLocation": {"uri": path},
+                        "region": {"snippet": {"text": snippet}},
+                    }
+                }
+            ]
+        return result
 
     def make(counts: dict[str, int]) -> dict[str, Any]:
         rule_ids = sorted(expected | set(counts))
@@ -128,13 +216,9 @@ def self_test() -> None:
                         }
                     },
                     "results": [
-                        {
-                            "ruleId": name,
-                            "ruleIndex": rule_ids.index(name),
-                            "message": {"text": "genuine finding fixture"},
-                        }
+                        make_result(name, index, rule_ids)
                         for name, qty in counts.items()
-                        for _ in range(qty)
+                        for index in range(qty)
                     ],
                 }
             ],
@@ -155,6 +239,44 @@ def self_test() -> None:
 
     malicious: list[dict[str, Any]] = []
     malicious.append(make({"PinnedDependenciesID": 19}))
+    # Replacing one existing local warning with a new third-party command must
+    # fail even when the total Scorecard finding count is unchanged at 23.
+    new_path = copy.deepcopy(baseline)
+    first_pip = next(
+        result
+        for result in new_path["runs"][0]["results"]
+        if result["ruleId"] == "PinnedDependenciesID"
+    )
+    first_pip["locations"][0]["physicalLocation"]["artifactLocation"]["uri"] = (
+        ".github/workflows/unreviewed.yml"
+    )
+    malicious.append(new_path)
+    changed_snippet = copy.deepcopy(baseline)
+    first_pip = next(
+        result
+        for result in changed_snippet["runs"][0]["results"]
+        if result["ruleId"] == "PinnedDependenciesID"
+    )
+    first_pip["locations"][0]["physicalLocation"]["region"]["snippet"]["text"] = (
+        "python -m pip install malicious==99.0"
+    )
+    malicious.append(changed_snippet)
+    absent_location = copy.deepcopy(baseline)
+    first_pip = next(
+        result
+        for result in absent_location["runs"][0]["results"]
+        if result["ruleId"] == "PinnedDependenciesID"
+    )
+    first_pip.pop("locations")
+    malicious.append(absent_location)
+    excess_identity = copy.deepcopy(baseline)
+    pip_results = [
+        result
+        for result in excess_identity["runs"][0]["results"]
+        if result["ruleId"] == "PinnedDependenciesID"
+    ]
+    pip_results[-1]["locations"] = copy.deepcopy(pip_results[0]["locations"])
+    malicious.append(excess_identity)
     malicious.append(make({"FuzzingID": 1}))
     # A previously fixed warning must also fail when it reappears in a
     # separate SARIF run, even if the initial run matches accepted main.
