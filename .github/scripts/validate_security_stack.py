@@ -160,6 +160,8 @@ def main() -> int:
         "pinned Scorecard action": "ossf/scorecard-action@2d1146689b8cda280b9bc96326124645441f03bc",
         "scheduled Scorecard trigger": 'cron: "41 8 * * 2"',
         "Scorecard SARIF upload": "github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2",
+        "post-merge genuine SARIF posture regression gate": "python3 .github/scripts/classify_scorecard_sarif.py reports/security/scorecard.sarif --report reports/security/scorecard-triage.json",
+        "retained triage evidence": "reports/security/scorecard-triage.json",
     }
     for name, needle in scorecard_contracts.items():
         if needle not in scorecard_workflow_text:
