@@ -91,3 +91,64 @@ jobs:
           if-no-files-found: error
           include-hidden-files: true
           retention-days: 21
+
+  atheris-strict-json:
+    name: Native Atheris / strict JSON / Python 3.14
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    env:
+      EXACT_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
+      FUZZ_SEED: ${{ github.run_id }}
+    steps:
+      - name: Checkout exact subject commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ env.EXACT_COMMIT }}
+          persist-credentials: false
+
+      - name: Set up Python 3.14 for pinned Atheris native wheel
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: "3.14"
+          cache: pip
+
+      - name: Install verified Python 3.14 core and isolated Atheris
+        run: |
+          python -m pip install --disable-pip-version-check --require-hashes -r requirements/locks/core-py314.txt
+          python -m pip install --disable-pip-version-check --require-hashes -r requirements/locks/atheris-py314.txt
+          python -m pip install --disable-pip-version-check --no-deps --no-build-isolation .
+          python -m pip check
+
+      - name: Bind native fuzz evidence and seed to exact subject
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXACT_COMMIT"
+          mkdir -p atheris-evidence/corpus atheris-evidence/crashes
+          cp tests/fuzz/corpus/strict-json/*.json atheris-evidence/corpus/
+          printf '%s\n' "$EXACT_COMMIT" > atheris-evidence/commit.txt
+          printf '%s\n' "$FUZZ_SEED" > atheris-evidence/seed.txt
+          python -c 'from importlib.metadata import version; assert version("atheris") == "3.1.0"' 
+          sha256sum requirements/locks/atheris-py314.txt > atheris-evidence/lock.sha256
+          printf '%s\n' "linux-x86_64/cpython-3.14/atheris-3.1.0; 5000 bounded mutations" > atheris-evidence/scope.txt
+
+      - name: Run native coverage-guided Atheris campaign
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout --signal=TERM --kill-after=10s 180s \
+            python tests/fuzz/atheris_strict_json.py atheris-evidence/corpus \
+              -atheris_runs=5000 -max_len=4096 -seed="$FUZZ_SEED" \
+              -artifact_prefix=atheris-evidence/crashes/ \
+            2>&1 | tee atheris-evidence/run.log
+
+      - name: Retain exact-subject Atheris corpus and crash evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: atheris-strict-json-${{ env.EXACT_COMMIT }}
+          path: atheris-evidence/
+          if-no-files-found: error
+          retention-days: 21
