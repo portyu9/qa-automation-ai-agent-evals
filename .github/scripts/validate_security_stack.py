@@ -137,6 +137,8 @@ def main() -> int:
         "zizmor version": 'version: "1.30.1"',
         "Actions security gate": "- actions-security",
         "dependency review": "actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294",
+        "semantic workflow security gate": "python .github/scripts/validate_workflow_graph.py",
+        "workflow security gate self-test": "python .github/scripts/validate_workflow_graph.py --self-test",
         "dependency review gate": "- dependency-review",
         "dependency review BLOCKED classifier": "blocked-admin-prerequisite",
         "dependency graph capability probe": "dependency-graph/compare/",
