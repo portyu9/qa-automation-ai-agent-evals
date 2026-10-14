@@ -43,10 +43,6 @@ _TRUSTED_JOB_GUARDS: dict[tuple[str, str], str] = {
     ("ci.yml", "release-provenance"): (
         "github.event_name == 'push' && github.ref == 'refs/heads/main'"
     ),
-    ("codeql.yml", "codeql"): (
-        "github.event_name != 'pull_request' || "
-        "github.event.pull_request.head.repo.full_name == github.repository"
-    ),
     ("dependency-governance.yml", "govern"): "github.event_name != 'pull_request'",
     ("publish-release.yml", "publish"): "github.ref == 'refs/heads/main'",
 }
@@ -225,6 +221,77 @@ def _validate_permissions(workflow: dict[str, Any], *, path: Path) -> None:
             )
 
 
+
+def _validate_codeql_fork_contract(workflow: dict[str, Any], *, path: Path) -> None:
+    """Prevent untrusted fork PR code gaining authority or evading the zero-alert scan."""
+    if path.name != "codeql.yml":
+        return
+    triggers = workflow.get("on")
+    if (
+        not isinstance(triggers, dict)
+        or "pull_request" not in triggers
+        or "pull_request_target" in triggers
+        or "workflow_run" in triggers
+    ):
+        raise WorkflowPolicyError(f"{path}: fork CodeQL must use unprivileged pull_request")
+    jobs = workflow.get("jobs")
+    if not isinstance(jobs, dict) or set(jobs) != {"codeql"}:
+        raise WorkflowPolicyError(f"{path}: expected one CodeQL analysis job")
+    job = jobs["codeql"]
+    if not isinstance(job, dict) or "if" in job:
+        raise WorkflowPolicyError(f"{path}: CodeQL job must never skip external fork PRs")
+    if job.get("permissions") != {
+        "actions": "read",
+        "contents": "read",
+        "security-events": "write",
+    }:
+        raise WorkflowPolicyError(f"{path}: CodeQL job token authority drift")
+    steps = job.get("steps")
+    if not isinstance(steps, list):
+        raise WorkflowPolicyError(f"{path}: CodeQL analysis steps are missing")
+    named = {
+        step.get("name"): step
+        for step in steps
+        if isinstance(step, dict) and isinstance(step.get("name"), str)
+    }
+    if len(named) != len(steps):
+        raise WorkflowPolicyError(f"{path}: CodeQL analysis steps must be uniquely named")
+    expected = {
+        "Checkout exact analysis subject",
+        "Validate zero-alert gate implementation",
+        "Initialize CodeQL",
+        "Analyze",
+        "Enforce zero CodeQL alerts",
+        "Upload CodeQL SARIF evidence",
+    }
+    if set(named) != expected:
+        raise WorkflowPolicyError(f"{path}: CodeQL analysis step inventory drift")
+    if named["Checkout exact analysis subject"].get("with") != {
+        "persist-credentials": False
+    }:
+        raise WorkflowPolicyError(f"{path}: untrusted CodeQL checkout must not persist token")
+    if named["Analyze"].get("with", {}).get("upload") != (
+        "${{ github.event_name == 'pull_request' && 'never' || 'always' }}"
+    ):
+        raise WorkflowPolicyError(f"{path}: fork and internal PR CodeQL uploads must be disabled")
+    if named["Analyze"].get("id") != "analyze-source":
+        raise WorkflowPolicyError(f"{path}: CodeQL SARIF output binding drift")
+    if "if" in named["Analyze"] or "if" in named["Enforce zero CodeQL alerts"]:
+        raise WorkflowPolicyError(f"{path}: CodeQL scan/gate steps must never be skipped")
+    if named["Enforce zero CodeQL alerts"].get("run") != (
+        'python3 .github/scripts/validate_codeql_sarif.py "$SARIF_DIR"'
+    ):
+        raise WorkflowPolicyError(f"{path}: local zero-alert CodeQL veto cannot be bypassed")
+    if named["Enforce zero CodeQL alerts"].get("env", {}).get("SARIF_DIR") != (
+        "${{ steps.analyze-source.outputs.sarif-output }}"
+    ):
+        raise WorkflowPolicyError(f"{path}: CodeQL verifier must consume current run SARIF")
+    if named["Upload CodeQL SARIF evidence"].get("if") != "always()":
+        raise WorkflowPolicyError(f"{path}: forensic CodeQL SARIF must be retained on failure")
+    if "secrets." in path.read_text(encoding="utf-8"):
+        raise WorkflowPolicyError(f"{path}: untrusted fork CodeQL must never access secrets")
+
+
 def validate_workflow(path: Path) -> None:
     workflow = _load_workflow(path)
     if not isinstance(workflow.get("name"), str) or not workflow["name"].strip():
@@ -236,6 +303,7 @@ def validate_workflow(path: Path) -> None:
     if not isinstance(jobs, dict) or not jobs:
         raise WorkflowPolicyError(f"{path}: workflow must declare at least one job")
 
+    _validate_codeql_fork_contract(workflow, path=path)
     _validate_permissions(workflow, path=path)
 
     graph: dict[str, tuple[str, ...]] = {}
