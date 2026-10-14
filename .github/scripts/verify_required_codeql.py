@@ -87,11 +87,17 @@ def select_codeql_run(
         if not isinstance(attempt, int) or isinstance(attempt, bool) or attempt < 1:
             raise GateError(f"exact-subject {required_workflow_name} run has invalid run_attempt")
         if status not in ACTIVE_STATUSES | {"completed"}:
-            raise GateError(f"exact-subject {required_workflow_name} run has invalid status: {status!r}")
+            raise GateError(
+                f"exact-subject {required_workflow_name} run has invalid status: {status!r}"
+            )
         if status == "completed" and conclusion != "success":
-            raise GateError(f"exact-subject {required_workflow_name} run completed non-successfully: {conclusion!r}")
+            raise GateError(
+                f"exact-subject {required_workflow_name} run completed non-successfully: {conclusion!r}"
+            )
         if status != "completed" and conclusion is not None:
-            raise GateError(f"non-terminal exact-subject {required_workflow_name} run unexpectedly has a conclusion")
+            raise GateError(
+                f"non-terminal exact-subject {required_workflow_name} run unexpectedly has a conclusion"
+            )
         candidates.append(row)
 
     if len(candidates) > 1:
@@ -247,9 +253,7 @@ def fetch_security_jobs(
     return jobs
 
 
-def require_security_job_success(
-    jobs: list[dict[str, Any]], *, run_id: int, attempt: int
-) -> None:
+def require_security_job_success(jobs: list[dict[str, Any]], *, run_id: int, attempt: int) -> None:
     """Reject skipped, failed, or missing scanners and the final security-gate."""
     observed: set[str] = set()
     for job in jobs:
@@ -532,9 +536,7 @@ def main() -> int:
             run_id=run["id"],
             attempt=run["run_attempt"],
         )
-        require_security_job_success(
-            jobs, run_id=run["id"], attempt=run["run_attempt"]
-        )
+        require_security_job_success(jobs, run_id=run["id"], attempt=run["run_attempt"])
     print(
         f"protected {workflow_name} gate accepted exact-subject evidence: "
         f"run={run['id']} attempt={run['run_attempt']} sha={run['head_sha']}"
