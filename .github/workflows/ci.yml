@@ -57,6 +57,8 @@ jobs:
           python-version: "3.11"
       - name: Validate runtime and CI support contract
         run: python .github/scripts/validate_runtime_policy.py
+      - name: Self-test admin feature claim consistency and unverified preconditions
+        run: python .github/scripts/validate_governance_policy.py --self-test
       - name: Validate repository governance contract
         run: python .github/scripts/validate_governance_policy.py
       - name: Self-test live GitHub merge-authority drift monitor
