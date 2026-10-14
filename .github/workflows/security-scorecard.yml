@@ -50,6 +50,10 @@ jobs:
         with:
           sarif_file: reports/security/scorecard.sarif
           category: openssf-scorecard
+      # This observes raw scanner findings without suppressing SARIF. A new or
+      # increased category fails the monitor but must not block SARIF retention.
+      - name: Classify genuine SARIF against accepted security posture baseline
+        run: python3 .github/scripts/classify_scorecard_sarif.py reports/security/scorecard.sarif --report reports/security/scorecard-triage.json
       - name: Retain Scorecard evidence
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
