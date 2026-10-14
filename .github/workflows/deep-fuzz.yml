@@ -129,7 +129,8 @@ jobs:
           mkdir -p atheris-evidence/corpus atheris-evidence/crashes
           cp tests/fuzz/corpus/strict-json/*.json atheris-evidence/corpus/
           printf '%s\n' "$EXACT_COMMIT" > atheris-evidence/commit.txt
-          printf '%s\n' "$FUZZ_SEED" > atheris-evidence/seed.txt
+          printf '%s\n' "$FUZZ_SEED" > atheris-evidence/github-run-id.txt
+          printf '%s\n' "$((FUZZ_SEED % 2147483647))" > atheris-evidence/seed.txt
           python -c 'from importlib.metadata import version; assert version("atheris") == "3.1.0"' 
           sha256sum requirements/locks/atheris-py314.txt > atheris-evidence/lock.sha256
           printf '%s\n' "linux-x86_64/cpython-3.14/atheris-3.1.0; 5000 bounded mutations" > atheris-evidence/scope.txt
@@ -140,7 +141,7 @@ jobs:
           set -euo pipefail
           timeout --signal=TERM --kill-after=10s 180s \
             python tests/fuzz/atheris_strict_json.py atheris-evidence/corpus \
-              -atheris_runs=5000 -max_len=4096 -seed="$FUZZ_SEED" \
+              -atheris_runs=5000 -max_len=4096 -seed="$(cat atheris-evidence/seed.txt)" \
               -artifact_prefix=atheris-evidence/crashes/ \
             2>&1 | tee atheris-evidence/run.log
 
