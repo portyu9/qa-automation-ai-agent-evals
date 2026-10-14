@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import argparse
 import json
 from pathlib import Path
 
@@ -9,6 +10,7 @@ ROOT = Path(__file__).resolve().parents[2]
 POLICY_PATH = ROOT / ".github" / "repository-governance.json"
 CODEOWNERS_PATH = ROOT / ".github" / "CODEOWNERS"
 GOVERNANCE_DOC = ROOT / "docs" / "REPOSITORY_GOVERNANCE.md"
+SCANNER_POLICY_PATH = ROOT / ".github" / "security-scanners.json"
 
 
 def fail(message: str) -> None:
@@ -42,6 +44,68 @@ def load_policy() -> dict[str, object]:
     return raw
 
 
+def verify_admin_feature_claims(prerequisites: object, scanner_features: object) -> None:
+    """Do not turn checked-in intent into a live GitHub administrator attestation."""
+    if not isinstance(prerequisites, dict) or not isinstance(scanner_features, dict):
+        fail("administrator features and scanner policy must both be objects")
+    for feature in ("dependency_graph", "secret_scanning", "push_protection"):
+        entry = prerequisites.get(feature)
+        scanner = scanner_features.get(feature)
+        if not isinstance(entry, dict) or entry.get("required") is not True:
+            fail(f"{feature} must remain a required external admin prerequisite")
+        if not isinstance(scanner, dict) or scanner.get("required") is not True:
+            fail(f"{feature} must remain a required security scanner precondition")
+        observed = scanner.get("verification")
+        asserted = entry.get("verification")
+        if observed != asserted:
+            fail(f"{feature} contradicts scanner's verification claim")
+        if asserted != "unverified-admin-surface":
+            fail(
+                f"{feature} requires independent live administrator evidence; "
+                "repository-written assertions are not an authentication channel"
+            )
+
+
+def load_scanner_feature_policy() -> object:
+    try:
+        policy = json.loads(SCANNER_POLICY_PATH.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+        fail(f"cannot load mandatory scanner feature preconditions: {type(exc).__name__}")
+    if not isinstance(policy, dict):
+        fail("mandatory scanner feature preconditions need an object")
+    if policy.get("schema_version") != "agent-evals/security-scanners/v1":
+        fail("scanner feature policy schema drift")
+    return policy.get("repository_security_features")
+
+
+def self_test() -> int:
+    names = ("dependency_graph", "secret_scanning", "push_protection")
+    source = {key: {"required": True, "verification": "unverified-admin-surface"} for key in names}
+    verify_admin_feature_claims(source, source)
+    for key in names:
+        mutations = (
+            ({**source, key: {"required": True, "verification": "verified-enabled"}}, source),
+            (source, {**source, key: {"required": True, "verification": "verified-enabled"}}),
+            (
+                {**source, key: {"required": True, "verification": "verified-enabled"}},
+                {**source, key: {"required": True, "verification": "verified-enabled"}},
+            ),
+            (
+                {**source, key: {"required": False, "verification": "unverified-admin-surface"}},
+                source,
+            ),
+            ({**source, key: None}, source),
+        )
+        for governance, scanner in mutations:
+            try:
+                verify_admin_feature_claims(governance, scanner)
+            except SystemExit:
+                continue
+            fail(f"admin precondition negative fixture accepted for {key}")
+    print("Repository administrator verification non-claim self-tests passed")
+    return 0
+
+
 def load_codeowners() -> dict[str, tuple[str, ...]]:
     entries: dict[str, tuple[str, ...]] = {}
     try:
@@ -61,6 +125,11 @@ def load_codeowners() -> dict[str, tuple[str, ...]]:
 
 
 def main() -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--self-test", action="store_true")
+    args = parser.parse_args()
+    if args.self_test:
+        return self_test()
     policy = load_policy()
     if policy.get("schema_version") != "agent-evals/repository-governance/v2":
         fail("unsupported schema_version")
@@ -119,12 +188,7 @@ def main() -> int:
             fail(f"{key} policy must remain gated on authoritative live rules")
 
     prerequisites = object_field(policy, "external_admin_prerequisites")
-    for feature in ("dependency_graph", "secret_scanning", "push_protection"):
-        entry = prerequisites.get(feature)
-        if not isinstance(entry, dict) or entry.get("required") is not True:
-            fail(f"{feature} must remain a required external admin prerequisite")
-        if entry.get("verification") != "verified-enabled":
-            fail(f"{feature} must remain recorded as verified-enabled")
+    verify_admin_feature_claims(prerequisites, load_scanner_feature_policy())
 
     live = object_field(policy, "live_enforcement")
     if live.get("source") != "github-ruleset" or live.get("ruleset_name") != "Protect Main":
@@ -177,7 +241,7 @@ def main() -> int:
     print(
         "Repository governance contract: one CODEOWNER, zero required approvals, "
         "CI-authoritative merge policy, and autonomous unsigned working commits are bound; "
-        "live GitHub administration remains separately verified."
+        "live admin-only security features remain BLOCKED pending independent verification."
     )
     return 0
 

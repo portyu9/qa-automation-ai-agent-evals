@@ -37,29 +37,84 @@
   "external_admin_prerequisites": {
     "dependency_graph": {
       "required": true,
-      "verification": "verified-enabled"
+      "verification": "unverified-admin-surface"
     },
     "secret_scanning": {
       "required": true,
-      "verification": "verified-enabled"
+      "verification": "unverified-admin-surface"
     },
     "push_protection": {
       "required": true,
-      "verification": "verified-enabled"
+      "verification": "unverified-admin-surface"
     }
   },
   "trust_boundaries": [
-    {"path": "/.github/", "owners": ["@portyu9"]},
-    {"path": "/pyproject.toml", "owners": ["@portyu9"]},
-    {"path": "/requirements/", "owners": ["@portyu9"]},
-    {"path": "/src/agent_evals/contracts/", "owners": ["@portyu9"]},
-    {"path": "/src/agent_evals/evidence/", "owners": ["@portyu9"]},
-    {"path": "/src/agent_evals/gates/", "owners": ["@portyu9"]},
-    {"path": "/src/agent_evals/runtime/", "owners": ["@portyu9"]},
-    {"path": "/src/agent_evals/security/", "owners": ["@portyu9"]},
-    {"path": "/src/agent_evals/semantic/", "owners": ["@portyu9"]},
-    {"path": "/docs/SECURITY.md", "owners": ["@portyu9"]},
-    {"path": "/docs/LIMITATIONS.md", "owners": ["@portyu9"]}
+    {
+      "path": "/.github/",
+      "owners": [
+        "@portyu9"
+      ]
+    },
+    {
+      "path": "/pyproject.toml",
+      "owners": [
+        "@portyu9"
+      ]
+    },
+    {
+      "path": "/requirements/",
+      "owners": [
+        "@portyu9"
+      ]
+    },
+    {
+      "path": "/src/agent_evals/contracts/",
+      "owners": [
+        "@portyu9"
+      ]
+    },
+    {
+      "path": "/src/agent_evals/evidence/",
+      "owners": [
+        "@portyu9"
+      ]
+    },
+    {
+      "path": "/src/agent_evals/gates/",
+      "owners": [
+        "@portyu9"
+      ]
+    },
+    {
+      "path": "/src/agent_evals/runtime/",
+      "owners": [
+        "@portyu9"
+      ]
+    },
+    {
+      "path": "/src/agent_evals/security/",
+      "owners": [
+        "@portyu9"
+      ]
+    },
+    {
+      "path": "/src/agent_evals/semantic/",
+      "owners": [
+        "@portyu9"
+      ]
+    },
+    {
+      "path": "/docs/SECURITY.md",
+      "owners": [
+        "@portyu9"
+      ]
+    },
+    {
+      "path": "/docs/LIMITATIONS.md",
+      "owners": [
+        "@portyu9"
+      ]
+    }
   ],
   "live_enforcement": {
     "source": "github-ruleset",

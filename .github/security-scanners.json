@@ -48,7 +48,7 @@
   "repository_security_features": {
     "dependency_graph": {
       "required": true,
-      "verification": "verified-disabled"
+      "verification": "unverified-admin-surface"
     },
     "secret_scanning": {
       "required": true,
@@ -62,6 +62,6 @@
   "non_claims": [
     "Scanner success is not evidence of absence of vulnerabilities.",
     "Secret scanning and push protection are not claimed enabled until verified through an authorized repository-administration surface.",
-    "Dependency review is BLOCKED, not PASS or FAIL, while the repository dependency graph remains disabled."
+    "Dependency review is BLOCKED, not PASS or FAIL, whenever the live dependency-graph compare API returns 403/404; that response alone does not prove the feature is disabled."
   ]
 }
