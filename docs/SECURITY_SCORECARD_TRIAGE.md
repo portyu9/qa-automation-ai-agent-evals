@@ -112,9 +112,11 @@ when making those bounded owner-authorized review actions. This is
 **not independent human review**; automated GitHub reviewer identity
 must not be described as a second qualified maintainer.
 
-Actual repository metadata currently reports `allow_auto_merge=false`
-and `allow_update_branch=false`. These native GitHub settings are
-different from the specialized Dependabot governance config's
+At this **earlier** live snapshot, repository metadata reported
+`allow_auto_merge=false` and `allow_update_branch=false`. This was
+**superseded later on 2026-10-14**, as independently reverified in the
+23-finding checkpoint below. These native GitHub settings are distinct
+from the specialized Dependabot governance config's
 `automergeEnabled=true` script setting. The live ruleset still requires
 zero approvals, no stale-review dismissal and no last-push approval.
 Changing those controls needs an authorized independent human reviewer
@@ -134,3 +136,72 @@ Actual native merge-only GitHub auto-merge is proven on protected, fully green P
 A separate genuine PR dependency-review job 116035090773 found the GitHub dependency graph compare returned HTTP 403/404, so dependency review was **BLOCKED**. That status alone does **not** establish whether the graph is disabled or just inaccessible to the job token. Before PR #364 the committed governance JSON incorrectly declared dependency graph, secret scanning, and push protection all `verified-enabled` while the scanner JSON disagreed. Both sources now say **`unverified-admin-surface`** pending authenticated admin evidence; required CI tests prohibit promoting repository-owned declarations to self-authenticated claims. Private vulnerability reporting is **owner-reported enabled** but the connected administrator-only feature API is unavailable; do not mark it independently verified or claim a tested report URL without actual proof.
 
 The user explicitly prefers single-CODEOWNER autonomous CI authority. A green bot reviewer or programmable owner-token `APPROVE` is **not independent human code review** and cannot meet the Scorecard `CodeReviewID` criterion. The repo is too young for Maintained's age-based assessment; OpenSSF Best Practices enrollment is external. Do not replace `BLOCKED` with `PASS`, untrustworthy self-attestations, fabricated historic fuzz/SAST runs, or fake zero-alert SARIF.
+
+## Accepted-main 23-finding checkpoint: genuine native fuzz recognition (2026-10-14)
+
+**Latest independently observed scanner evidence** is accepted
+`main@973f8ee5167a7d66c4b884de8f356da21d8d67ed`, protected
+[PR #367](https://github.com/portyu9/qa-automation-ai-agent-evals/pull/367)
+and genuine [OpenSSF Scorecard run 38652619678](https://github.com/portyu9/qa-automation-ai-agent-evals/actions/runs/38652619678),
+job `116154802875`. The authentic OpenSSF Scorecard v5.5.0 SARIF reports
+**23 actual security-posture findings** across all `runs` and `results`:
+
+| SARIF rule | Actual findings | Current interpretation |
+| --- | ---: | --- |
+| `PinnedDependenciesID` | 18 | Existing local source/artifact `--no-deps` pipCommand heuristics remain; independently audited remote wheel and third-party installs are hash locked. |
+| `BranchProtectionID` | 1 | Live ruleset still lacks independent required human approvals and related stale/last-push controls. |
+| `CodeReviewID` | 1 | Native CI-authoritative autonomous merging is not independently qualified human code review. |
+| `SASTID` | 1 | CodeQL genuine same-head scans succeed, but the upstream Scorecard historical checker still shows `0/30` recognized app-based checks. |
+| `MaintainedID` | 1 | Repository age/activity scoring cannot be fabricated or accelerated by commits. |
+| `CIIBestPracticesID` | 1 | Maintainer-controlled OpenSSF Best Practices enrollment and assessment remain unverified. |
+| `FuzzingID` | **0** | **New actual Atheris/libFuzzer native Python campaign recognized by latest Scorecard SARIF.** |
+
+The independent fail-closed classifier recorded
+`Scorecard SARIF: FINDINGS_OPEN, real findings=23, baseline maxima=24; no alerts were suppressed`.
+The original raw SARIF and separate triage JSON were retained as artifact
+`11934932955`, `openssf-scorecard-38652619678`. This is a real one-finding
+reduction from the previous **24-finding SARIF checkpoint**, not a
+suppression, waiver, forged historic scan, or global claim of security.
+
+**Qualification evidence:** PR #367's exact head
+`e33d1742311096cc124c057083f99e8faee882d4`
+passed real read-only `Deep fuzz assurance` for both the pre-existing
+Hypothesis/MCP protocol campaign and a *new* Atheris 3.1.0 Python 3.14 Linux
+coverage-guided campaign against the strict JSON trust boundary. The Atheris
+job `116153915792` in
+[run 38652271559](https://github.com/portyu9/qa-automation-ai-agent-evals/actions/runs/38652271559)
+shows native mutations/coverage feedback, `Done 5000 in 0 second(s)`,
+`cov:71 ft:212` and retained exact-head corpus/crash/seed/log evidence
+artifact `11934952498`. The third-party Atheris wheel was independently
+pinned to its exact PyPI SHA-256; **hash does not authenticate the publisher**.
+This coverage campaign does not imply no vulnerabilities or complete protocol
+coverage. The new job imports checked-out source by `PYTHONPATH=src`
+rather than introducing another unpinned local `pip install .` Scorecard
+heuristic. Repository installer/permission/lock policies remain fail-closed.
+
+**Code Scanning UI status is a separate observation:** the connected GitHub
+app cannot read the `/code-scanning/alerts` REST endpoint. Therefore, while
+the latest genuine SARIF has **no FuzzingID** result, the particular GitHub
+Code Scanning alert's resolved/closed state has **not been independently
+verified through the UI/API**. Inspect
+[Security → Code scanning](https://github.com/portyu9/qa-automation-ai-agent-evals/security/code-scanning)
+or use `gh api repos/portyu9/qa-automation-ai-agent-evals/code-scanning/alerts/28`
+under maintainer permissions; do not manually dismiss it to improve a count.
+Issue #349 remains open for the **23 reported findings**, independent from
+the Code Scanning UI's possibly different open-alert count.
+
+**Live setting update, superseding earlier snapshots:** a connected
+read of repository metadata on 2026-10-14 independently confirmed
+`allow_auto_merge=true`, `allow_update_branch=true`,
+`allow_merge_commit=true`, `allow_squash_merge=false`, and
+`allow_rebase_merge=false`. Protected PR #367 merged with the native
+`MERGE` method only after all required CI/CodeQL/Security checks and both
+fuzz campaigns succeeded. The optional deep-mutation job was **still
+in progress at the merge decision**, so no independent success is claimed
+for it at that checkpoint. Enabling the native setting is **not** broad
+unconditional automatic approval of arbitrary PRs. Actual independent human
+review, authenticated first eligible Dependabot lifecycle, fork PR end-to-end
+tests and admin-only observability remain incomplete under #360.
+
+This section updates the **live** evidence while preserving the old 30- and
+24-finding baselines above as accurately dated historical snapshots.
