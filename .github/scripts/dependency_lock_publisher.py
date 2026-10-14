@@ -90,7 +90,9 @@ def classify_authenticated_pip_subject(subject: dict[str, Any]) -> str:
     files = subject.get("files")
     if files == ["pyproject.toml"]:
         return "publish"
-    published_files = {"pyproject.toml", *(destination for destination, _ in expected_paths().values())}
+    published_files = {"pyproject.toml"} | {
+        destination for destination, _ in expected_paths().values()
+    }
     if (
         isinstance(files, list)
         and len(files) == len(published_files)
