@@ -17,16 +17,29 @@ from pathlib import Path
 from validate_workflow_graph import _load_workflow
 
 ROOT = Path(__file__).resolve().parents[2]
-PIP = re.compile(r"(?<![\w-])(?:(?:python(?:3(?:\.\d+)?)?\s+-m\s+)|(?:uv\s+))?pip(?:3)?\s+install\b")
+PIP = re.compile(
+    r"(?<![\w-])(?:(?:python(?:3(?:\.\d+)?)?\s+-m\s+)|(?:uv\s+))?pip(?:3)?\s+install\b"
+)
 CANONICAL = re.compile(r"^python -m pip install\s+")
 APPROVED_FLAGS = {"--disable-pip-version-check", "--no-input"}
-LOCAL_TARGETS = {".", "dist/*.whl", "dist/*.tar.gz", "retained-dist/*.whl", "retained-dist/*.tar.gz"}
+LOCAL_TARGETS = {
+    ".",
+    "dist/*.whl",
+    "dist/*.tar.gz",
+    "retained-dist/*.whl",
+    "retained-dist/*.tar.gz",
+}
 
 # Validator-owned exact inventory: new local package installation paths require policy
 # review, rather than declaring themselves trusted within a workflow.
 EXPECTED_LOCAL = {
-    "ci.yml": {".": 7, "dist/*.whl": 1, "dist/*.tar.gz": 1,
-               "retained-dist/*.whl": 4, "retained-dist/*.tar.gz": 1},
+    "ci.yml": {
+        ".": 7,
+        "dist/*.whl": 1,
+        "dist/*.tar.gz": 1,
+        "retained-dist/*.whl": 4,
+        "retained-dist/*.tar.gz": 1,
+    },
     "deep-fuzz.yml": {".": 1},
     "deep-mutation.yml": {".": 1},
     "deep-property-stress.yml": {".": 1},
@@ -56,15 +69,27 @@ def classify(command: str, workflow: str) -> str:
     if not args:
         raise PipInstallPolicyError(f"{workflow}: empty pip install")
     options = [value for value in args if value.startswith("-")]
-    for unsafe in ("--extra-index-url", "--index-url", "--trusted-host", "--find-links",
-                   "--editable", "--pre", "--no-index", "--no-build-isolation="):
+    for unsafe in (
+        "--extra-index-url",
+        "--index-url",
+        "--trusted-host",
+        "--find-links",
+        "--editable",
+        "--pre",
+        "--no-index",
+        "--no-build-isolation=",
+    ):
         if any(option == unsafe or option.startswith(unsafe + "=") for option in options):
-            raise PipInstallPolicyError(f"{workflow}: unsupported package acquisition flag {unsafe}")
+            raise PipInstallPolicyError(
+                f"{workflow}: unsupported package acquisition flag {unsafe}"
+            )
     if "--require-hashes" in args:
         if "--no-deps" in args or "--no-build-isolation" in args:
             raise PipInstallPolicyError(f"{workflow}: mixed hashed dependency and local install")
         if args.count("-r") != 1:
-            raise PipInstallPolicyError(f"{workflow}: hashed install must use one reviewed -r input")
+            raise PipInstallPolicyError(
+                f"{workflow}: hashed install must use one reviewed -r input"
+            )
         pos = args.index("-r")
         if pos + 1 >= len(args):
             raise PipInstallPolicyError(f"{workflow}: missing reviewed requirement path")
@@ -74,7 +99,7 @@ def classify(command: str, workflow: str) -> str:
             or re.fullmatch(r"requirements/compatibility/[A-Za-z0-9_-]+\.txt", requirement)
             or requirement == "requirements/locks/core-py${lock_suffix}.txt"
             or re.fullmatch(r"requirements/compiler/bootstrap-py3(?:11|12|13|14)\.txt", requirement)
-            or requirement == 'requirements/compiler/bootstrap-py${short}.txt'
+            or requirement == "requirements/compiler/bootstrap-py${short}.txt"
             or (
                 workflow == "platform-smoke.yml"
                 and requirement == "requirements/platform/windows-core-py314-supplement.txt"
@@ -90,14 +115,20 @@ def classify(command: str, workflow: str) -> str:
         raise PipInstallPolicyError(f"{workflow}: third-party install lacks SHA-256 requirements")
     targets = [a for a in args if not a.startswith("-")]
     if len(targets) != 1 or targets[0] not in LOCAL_TARGETS:
-        raise PipInstallPolicyError(f"{workflow}: --no-deps is only for reviewed local artifact tests")
+        raise PipInstallPolicyError(
+            f"{workflow}: --no-deps is only for reviewed local artifact tests"
+        )
     target = targets[0]
     if set(args) - APPROVED_FLAGS - {"--no-deps", "--no-build-isolation", target}:
         raise PipInstallPolicyError(f"{workflow}: unsupported local installer arguments")
     if target == "." and "--no-build-isolation" not in args:
-        raise PipInstallPolicyError(f"{workflow}: local source install requires --no-build-isolation")
+        raise PipInstallPolicyError(
+            f"{workflow}: local source install requires --no-build-isolation"
+        )
     if target.endswith(".tar.gz") and "--no-build-isolation" not in args:
-        raise PipInstallPolicyError(f"{workflow}: retained sdist install needs --no-build-isolation")
+        raise PipInstallPolicyError(
+            f"{workflow}: retained sdist install needs --no-build-isolation"
+        )
     return target
 
 
@@ -126,18 +157,20 @@ def validate(root: Path = ROOT) -> tuple[int, int]:
                 normalized = re.sub(r"\\\s*\n\s*", " ", run)
                 for line in normalized.splitlines():
                     for match in PIP.finditer(line):
-                        cmd = line[match.start():].strip()
+                        cmd = line[match.start() :].strip()
                         kind = classify(cmd, path.name)
                         count += 1
                         if kind == "hashed-closure":
                             hashed += 1
                         else:
                             found[(path.name, kind)] += 1
-    expected = Counter({
-        (path, target): amount
-        for path, items in EXPECTED_LOCAL.items()
-        for target, amount in items.items()
-    })
+    expected = Counter(
+        {
+            (path, target): amount
+            for path, items in EXPECTED_LOCAL.items()
+            for target, amount in items.items()
+        }
+    )
     if found != expected:
         delta = sorted((found - expected).items())
         missing = sorted((expected - found).items())
@@ -168,13 +201,14 @@ def self_test() -> None:
         except PipInstallPolicyError:
             continue
         raise AssertionError(f"unsafe pip install accepted: {value}")
-    assert classify(
-        "python -m pip install --require-hashes -r requirements/locks/core-py311.txt",
-        "security.yml",
-    ) == "hashed-closure"
-    assert classify(
-        "python -m pip install --no-deps --no-build-isolation .", "security.yml"
-    ) == "."
+    assert (
+        classify(
+            "python -m pip install --require-hashes -r requirements/locks/core-py311.txt",
+            "security.yml",
+        )
+        == "hashed-closure"
+    )
+    assert classify("python -m pip install --no-deps --no-build-isolation .", "security.yml") == "."
 
     with tempfile.TemporaryDirectory(prefix="pip-workflow-policy-") as tmp:
         base = Path(tmp)
@@ -190,7 +224,9 @@ def self_test() -> None:
             "python -m pip install --require-hashes -r https://example.org/evil",
             "python -m pip install --require-hashes -r requirements/locks/core-py311.txt",
         ):
-            (target / "security.yml").write_text(original.replace(good, replacement), encoding="utf-8")
+            (target / "security.yml").write_text(
+                original.replace(good, replacement), encoding="utf-8"
+            )
             try:
                 validate(base)
             except PipInstallPolicyError:
