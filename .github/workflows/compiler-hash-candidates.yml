@@ -38,11 +38,13 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          # Unhashed resolution is permitted ONLY in this ephemeral, unprivileged
-          # candidate producer. This workflow MUST be removed before PR merge.
-          python -m pip install --disable-pip-version-check --no-input pip==25.3 pip-tools==7.5.2
-          mkdir -p candidates
+          # Temporary proof that every reviewed interpreter closure actually installs.
+          # This workflow MUST be removed before PR merge.
           short="${PY_VERSION//./}"
+          python -m pip install --disable-pip-version-check --no-input --require-hashes \
+            -r "requirements/compiler/bootstrap-py${short}.txt"
+          python -c 'from importlib.metadata import version; assert version("pip") == "25.3"; assert version("pip-tools") == "7.5.2"'
+          mkdir -p candidates
           python -m piptools compile --generate-hashes --resolver=backtracking \
             --allow-unsafe --no-emit-index-url --no-emit-trusted-host \
             --output-file "candidates/compiler-py${short}.txt" \
