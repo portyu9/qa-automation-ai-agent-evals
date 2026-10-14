@@ -13,6 +13,7 @@ import json
 import os
 import urllib.error
 import urllib.request
+from pathlib import Path
 from typing import Any
 
 REPO = "portyu9/qa-automation-ai-agent-evals"
@@ -253,6 +254,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--self-test", action="store_true")
     parser.add_argument("--live", action="store_true")
+    parser.add_argument("--output", type=Path)
     args = parser.parse_args()
     if args.self_test == args.live:
         parser.error("specify exactly one of --self-test or --live")
@@ -266,9 +268,26 @@ def main() -> int:
                 raise DriftError("live audit must execute on main, never untrusted PR code")
             token = os.getenv("GITHUB_TOKEN", "")
             outcome = inspect(fetch_json("", token), fetch_json(f"/rulesets/{RULESET_ID}", token))
-            print(json.dumps(outcome, sort_keys=True))
+            report = json.dumps(outcome, sort_keys=True)
+            print(report)
+            if outcome["merge_controls"].startswith("BLOCKED"):
+                print(
+                    "::warning::Live repository admin settings are BLOCKED from "
+                    "this read-only token; do not interpret the audit job as "
+                    "a PASS for unverified administrator controls."
+                )
+            if args.output is not None:
+                args.output.parent.mkdir(parents=True, exist_ok=True)
+                args.output.write_text(report + "\n", encoding="utf-8")
     except DriftError as exc:
         print(f"live repository governance audit FAILED: {exc}")
+        if args.live and args.output is not None:
+            args.output.parent.mkdir(parents=True, exist_ok=True)
+            args.output.write_text(
+                json.dumps({"merge_controls": "FAIL", "error": str(exc)}, sort_keys=True)
+                + "\n",
+                encoding="utf-8",
+            )
         return 1
     return 0
 
