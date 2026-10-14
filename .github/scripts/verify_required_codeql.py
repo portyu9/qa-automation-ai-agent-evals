@@ -48,7 +48,7 @@ def allowed_events(trigger_event: str) -> set[str]:
     raise GateError(f"unsupported CI trigger event for protected gate: {trigger_event}")
 
 
-def select_codeql_run(
+def select_codeql_runs(
     rows: list[dict[str, Any]],
     *,
     subject_sha: str,
@@ -56,7 +56,7 @@ def select_codeql_run(
     trigger_event: str,
     required_workflow_name: str = WORKFLOW_NAME,
     required_workflow_path: str = WORKFLOW_PATH,
-) -> dict[str, Any] | None:
+) -> list[dict[str, Any]]:
     if (required_workflow_name, required_workflow_path) not in {
         (WORKFLOW_NAME, WORKFLOW_PATH),
         (SECURITY_WORKFLOW_NAME, SECURITY_WORKFLOW_PATH),
@@ -67,6 +67,7 @@ def select_codeql_run(
         raise GateError("subject branch must be a non-empty canonical ref name")
     events = allowed_events(trigger_event)
     candidates: list[dict[str, Any]] = []
+    run_ids: set[int] = set()
 
     for row in rows:
         if (
@@ -84,6 +85,9 @@ def select_codeql_run(
         conclusion = row.get("conclusion")
         if not isinstance(run_id, int) or isinstance(run_id, bool) or run_id < 1:
             raise GateError(f"exact-subject {required_workflow_name} run has invalid run id")
+        if run_id in run_ids:
+            raise GateError(f"duplicate exact-subject {required_workflow_name} run id: {run_id}")
+        run_ids.add(run_id)
         if not isinstance(attempt, int) or isinstance(attempt, bool) or attempt < 1:
             raise GateError(f"exact-subject {required_workflow_name} run has invalid run_attempt")
         if status not in ACTIVE_STATUSES | {"completed"}:
@@ -100,12 +104,8 @@ def select_codeql_run(
             )
         candidates.append(row)
 
-    if len(candidates) > 1:
-        run_ids = sorted(int(row["id"]) for row in candidates)
-        raise GateError(
-            f"ambiguous exact-subject {required_workflow_name} evidence for {subject_sha}: run ids {run_ids}"
-        )
-    return candidates[0] if candidates else None
+    # Never select a convenient green subset; every matched run is an obligation.
+    return sorted(candidates, key=lambda row: row["id"])
 
 
 def fetch_runs(repository: str, subject_sha: str, token: str) -> list[dict[str, Any]]:
@@ -144,8 +144,11 @@ def fetch_runs(repository: str, subject_sha: str, token: str) -> list[dict[str, 
     if not isinstance(payload, dict):
         raise GateError("GitHub Actions API payload must be an object")
     rows = payload.get("workflow_runs")
+    count = payload.get("total_count")
     if not isinstance(rows, list) or not all(isinstance(row, dict) for row in rows):
         raise GateError("GitHub Actions API workflow_runs must be an object list")
+    if not isinstance(count, int) or isinstance(count, bool) or count != len(rows):
+        raise GateError("GitHub Actions API workflow_runs response is truncated or invalid")
     return rows
 
 
@@ -160,7 +163,7 @@ def wait_for_success(
     delay_seconds: float,
     required_workflow_name: str = WORKFLOW_NAME,
     required_workflow_path: str = WORKFLOW_PATH,
-) -> dict[str, Any]:
+) -> list[dict[str, Any]]:
     if attempts < 1:
         raise GateError("attempts must be >= 1")
     if delay_seconds < 0:
@@ -178,7 +181,7 @@ def wait_for_success(
             time.sleep(delay_seconds)
             continue
 
-        run = select_codeql_run(
+        runs = select_codeql_runs(
             rows,
             subject_sha=subject_sha,
             branch=branch,
@@ -186,15 +189,15 @@ def wait_for_success(
             required_workflow_name=required_workflow_name,
             required_workflow_path=required_workflow_path,
         )
-        if run is not None and run["status"] == "completed":
-            return run
+        if runs and all(run["status"] == "completed" for run in runs):
+            return runs
         if attempt < attempts:
             time.sleep(delay_seconds)
 
     if last_transient is not None:
         raise last_transient
     raise GateError(
-        f"exact-subject {required_workflow_name} success did not register before "
+        f"all exact-subject {required_workflow_name} successes did not register before "
         "the bounded gate timeout"
     )
 
@@ -279,6 +282,15 @@ def require_security_job_success(jobs: list[dict[str, Any]], *, run_id: int, att
         )
 
 
+def require_all_security_jobs(repository: str, token: str, runs: list[dict[str, Any]]) -> None:
+    """Prove that both required jobs passed in every independently successful run."""
+    if not runs:
+        raise GateError("no successful exact-subject Security workflows")
+    for run in runs:
+        jobs = fetch_security_jobs(repository, token, run_id=run["id"], attempt=run["run_attempt"])
+        require_security_job_success(jobs, run_id=run["id"], attempt=run["run_attempt"])
+
+
 def self_test() -> None:
     sha = "1" * 40
     canonical = {
@@ -292,15 +304,12 @@ def self_test() -> None:
         "status": "completed",
         "conclusion": "success",
     }
-    if (
-        select_codeql_run(
-            [canonical],
-            subject_sha=sha,
-            branch="feature",
-            trigger_event="pull_request",
-        )
-        != canonical
-    ):
+    if select_codeql_runs(
+        [canonical],
+        subject_sha=sha,
+        branch="feature",
+        trigger_event="pull_request",
+    ) != [canonical]:
         raise GateError("self-test rejected canonical exact-subject CodeQL success")
 
     for wrong in (
@@ -310,18 +319,18 @@ def self_test() -> None:
         dict(canonical, event="push"),
     ):
         if (
-            select_codeql_run(
+            select_codeql_runs(
                 [wrong],
                 subject_sha=sha,
                 branch="feature",
                 trigger_event="pull_request",
             )
-            is not None
+            != []
         ):
             raise GateError("self-test accepted mismatched CodeQL evidence")
 
     try:
-        select_codeql_run(
+        select_codeql_runs(
             [dict(canonical, conclusion="failure")],
             subject_sha=sha,
             branch="feature",
@@ -332,17 +341,26 @@ def self_test() -> None:
     else:
         raise GateError("self-test accepted terminal CodeQL failure")
 
-    try:
-        select_codeql_run(
-            [canonical, dict(canonical, id=102)],
-            subject_sha=sha,
-            branch="feature",
-            trigger_event="pull_request",
-        )
-    except GateError:
-        pass
-    else:
-        raise GateError("self-test accepted ambiguous CodeQL evidence")
+    if select_codeql_runs(
+        [dict(canonical, id=102), canonical],
+        subject_sha=sha,
+        branch="feature",
+        trigger_event="pull_request",
+    ) != [canonical, dict(canonical, id=102)]:
+        raise GateError("self-test rejected valid duplicate-SHA CodeQL successes")
+    for bad in (
+        [canonical, dict(canonical)],
+        [canonical, dict(canonical, id=102, conclusion="failure")],
+        [canonical, dict(canonical, id=102, conclusion="cancelled")],
+        [canonical, dict(canonical, id=102, run_attempt=0)],
+        [canonical, dict(canonical, id=102, conclusion="skipped")],
+    ):
+        try:
+            select_codeql_runs(bad, subject_sha=sha, branch="feature", trigger_event="pull_request")
+        except GateError:
+            pass
+        else:
+            raise GateError("self-test accepted duplicate/failed CodeQL run")
 
     if allowed_events("workflow_dispatch") != {"push", "workflow_dispatch"}:
         raise GateError("self-test rejected governed post-merge CodeQL event set")
@@ -352,44 +370,40 @@ def self_test() -> None:
     scheduled = dict(canonical, head_branch="main", event="push")
     for event in ("push", "workflow_dispatch"):
         if (
-            select_codeql_run(
+            select_codeql_runs(
                 [dict(scheduled, event=event)],
                 subject_sha=sha,
                 branch="main",
                 trigger_event="schedule",
             )
-            is None
+            == []
         ):
             raise GateError(f"self-test rejected exact-subject {event} evidence for scheduled CI")
 
     for event in ("pull_request", "schedule"):
         if (
-            select_codeql_run(
+            select_codeql_runs(
                 [dict(scheduled, event=event)],
                 subject_sha=sha,
                 branch="main",
                 trigger_event="schedule",
             )
-            is not None
+            != []
         ):
             raise GateError(
                 f"self-test accepted non-post-merge {event} CodeQL evidence for scheduled CI"
             )
 
-    try:
-        select_codeql_run(
-            [
-                dict(scheduled, event="push"),
-                dict(scheduled, id=102, event="workflow_dispatch"),
-            ],
-            subject_sha=sha,
-            branch="main",
-            trigger_event="schedule",
-        )
-    except GateError:
-        pass
-    else:
-        raise GateError("self-test accepted ambiguous scheduled-CI post-merge CodeQL evidence")
+    if select_codeql_runs(
+        [
+            dict(scheduled, id=102, event="workflow_dispatch"),
+            dict(scheduled, event="push"),
+        ],
+        subject_sha=sha,
+        branch="main",
+        trigger_event="schedule",
+    ) != [dict(scheduled, event="push"), dict(scheduled, id=102, event="workflow_dispatch")]:
+        raise GateError("self-test rejected two valid post-merge CodeQL runs")
 
     try:
         allowed_events("unknown")
@@ -403,17 +417,14 @@ def self_test() -> None:
         name=SECURITY_WORKFLOW_NAME,
         path=SECURITY_WORKFLOW_PATH,
     )
-    if (
-        select_codeql_run(
-            [security],
-            subject_sha=sha,
-            branch="feature",
-            trigger_event="pull_request",
-            required_workflow_name=SECURITY_WORKFLOW_NAME,
-            required_workflow_path=SECURITY_WORKFLOW_PATH,
-        )
-        != security
-    ):
+    if select_codeql_runs(
+        [security],
+        subject_sha=sha,
+        branch="feature",
+        trigger_event="pull_request",
+        required_workflow_name=SECURITY_WORKFLOW_NAME,
+        required_workflow_path=SECURITY_WORKFLOW_PATH,
+    ) != [security]:
         raise GateError("self-test rejected exact-subject Security workflow")
     for unsafe in (
         dict(security, head_sha="2" * 40),
@@ -422,7 +433,7 @@ def self_test() -> None:
         dict(security, event="push"),
     ):
         if (
-            select_codeql_run(
+            select_codeql_runs(
                 [unsafe],
                 subject_sha=sha,
                 branch="feature",
@@ -430,7 +441,7 @@ def self_test() -> None:
                 required_workflow_name=SECURITY_WORKFLOW_NAME,
                 required_workflow_path=SECURITY_WORKFLOW_PATH,
             )
-            is not None
+            != []
         ):
             raise GateError("self-test accepted mismatched Security workflow")
     for invalid in (
@@ -439,7 +450,7 @@ def self_test() -> None:
         dict(security, status="in_progress", conclusion="success"),
     ):
         try:
-            select_codeql_run(
+            select_codeql_runs(
                 [invalid],
                 subject_sha=sha,
                 branch="feature",
@@ -451,19 +462,33 @@ def self_test() -> None:
             pass
         else:
             raise GateError("self-test accepted unqualified Security workflow")
-    try:
-        select_codeql_run(
-            [security, dict(security, id=103)],
-            subject_sha=sha,
-            branch="feature",
-            trigger_event="pull_request",
-            required_workflow_name=SECURITY_WORKFLOW_NAME,
-            required_workflow_path=SECURITY_WORKFLOW_PATH,
-        )
-    except GateError:
-        pass
-    else:
-        raise GateError("self-test accepted ambiguous Security runs")
+    if select_codeql_runs(
+        [dict(security, id=103, run_attempt=2), security],
+        subject_sha=sha,
+        branch="feature",
+        trigger_event="pull_request",
+        required_workflow_name=SECURITY_WORKFLOW_NAME,
+        required_workflow_path=SECURITY_WORKFLOW_PATH,
+    ) != [security, dict(security, id=103, run_attempt=2)]:
+        raise GateError("self-test rejected valid same-SHA Security runs")
+    for bad in (
+        [security, dict(security)],
+        [security, dict(security, id=103, conclusion="failure")],
+        [security, dict(security, id=103, status="queued", conclusion="success")],
+    ):
+        try:
+            select_codeql_runs(
+                bad,
+                subject_sha=sha,
+                branch="feature",
+                trigger_event="pull_request",
+                required_workflow_name=SECURITY_WORKFLOW_NAME,
+                required_workflow_path=SECURITY_WORKFLOW_PATH,
+            )
+        except GateError:
+            pass
+        else:
+            raise GateError("self-test accepted unqualified same-SHA Security run")
 
     security_jobs = [
         {
@@ -492,7 +517,75 @@ def self_test() -> None:
         else:
             raise GateError("self-test accepted unsafe Security job evidence")
 
-    print("required CodeQL and Security gates self-test: ok")
+    from unittest.mock import patch
+
+    queued = dict(canonical, id=103, status="queued", conclusion=None)
+    with (
+        patch(
+            __name__ + ".fetch_runs",
+            side_effect=[[canonical, queued], [canonical, dict(canonical, id=103)]],
+        ),
+        patch(__name__ + ".time.sleep"),
+    ):
+        seen = wait_for_success(
+            repository="owner/repo",
+            subject_sha=sha,
+            branch="feature",
+            trigger_event="pull_request",
+            token="fake",
+            attempts=2,
+            delay_seconds=0,
+        )
+    if seen != [canonical, dict(canonical, id=103)]:
+        raise GateError("self-test selected a green subset while another run was pending")
+    with (
+        patch(__name__ + ".fetch_runs", return_value=[canonical, queued]),
+        patch(__name__ + ".time.sleep"),
+    ):
+        try:
+            wait_for_success(
+                repository="owner/repo",
+                subject_sha=sha,
+                branch="feature",
+                trigger_event="pull_request",
+                token="fake",
+                attempts=2,
+                delay_seconds=0,
+            )
+        except GateError:
+            pass
+        else:
+            raise GateError("self-test accepted an unfinished same-SHA run")
+
+    runs = [security, dict(security, id=103, run_attempt=2)]
+
+    def good_jobs(
+        _repository: str, _token: str, *, run_id: int, attempt: int
+    ) -> list[dict[str, Any]]:
+        return [dict(row, run_id=run_id, run_attempt=attempt) for row in security_jobs]
+
+    with patch(__name__ + ".fetch_security_jobs", side_effect=good_jobs) as mocked:
+        require_all_security_jobs("owner/repo", "fake", runs)
+        if mocked.call_count != len(runs):
+            raise GateError("self-test did not verify jobs in every matching Security run")
+
+    def bad_jobs(
+        _repository: str, _token: str, *, run_id: int, attempt: int
+    ) -> list[dict[str, Any]]:
+        result = good_jobs(_repository, _token, run_id=run_id, attempt=attempt)
+        if run_id == 103:
+            result[0]["conclusion"] = "failure"
+        return result
+
+    with patch(__name__ + ".fetch_security_jobs", side_effect=bad_jobs):
+        try:
+            require_all_security_jobs("owner/repo", "fake", runs)
+        except GateError:
+            pass
+        else:
+            raise GateError("self-test ignored failure in second matching Security run")
+
+    print("required CodeQL and Security multi-run gates self-test: ok")
 
 
 def parse_args() -> argparse.Namespace:
@@ -518,7 +611,7 @@ def main() -> int:
     workflow_name = SECURITY_WORKFLOW_NAME if security else WORKFLOW_NAME
     workflow_path = SECURITY_WORKFLOW_PATH if security else WORKFLOW_PATH
     token = os.environ.get("GITHUB_TOKEN", "")
-    run = wait_for_success(
+    runs = wait_for_success(
         repository=args.repository,
         subject_sha=args.subject_sha,
         branch=args.branch,
@@ -530,16 +623,11 @@ def main() -> int:
         required_workflow_path=workflow_path,
     )
     if security:
-        jobs = fetch_security_jobs(
-            args.repository,
-            token,
-            run_id=run["id"],
-            attempt=run["run_attempt"],
-        )
-        require_security_job_success(jobs, run_id=run["id"], attempt=run["run_attempt"])
+        require_all_security_jobs(args.repository, token, runs)
+    receipts = [f"{run['id']}/{run['run_attempt']}" for run in runs]
     print(
-        f"protected {workflow_name} gate accepted exact-subject evidence: "
-        f"run={run['id']} attempt={run['run_attempt']} sha={run['head_sha']}"
+        f"protected {workflow_name} gate accepted every exact-subject run: "
+        f"receipts={receipts} sha={args.subject_sha}"
     )
     return 0
 
