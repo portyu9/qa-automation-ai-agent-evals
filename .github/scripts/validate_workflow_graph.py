@@ -221,6 +221,37 @@ def _validate_permissions(workflow: dict[str, Any], *, path: Path) -> None:
             )
 
 
+def _validate_scorecard_read_contract(workflow: dict[str, Any], *, path: Path) -> None:
+    """Protect the exact trusted-main Scorecard evidence visibility grant."""
+    if path.name != "security-scorecard.yml":
+        return
+    triggers = workflow.get("on")
+    if not isinstance(triggers, dict) or set(triggers) != {
+        "push", "schedule", "workflow_dispatch"
+    }:
+        raise WorkflowPolicyError(
+            f"{path}: Scorecard must stay on trusted-main push/schedule/dispatch"
+        )
+    jobs = workflow.get("jobs")
+    if not isinstance(jobs, dict) or set(jobs) != {"scorecard"}:
+        raise WorkflowPolicyError(f"{path}: one Scorecard observation job required")
+    job = jobs["scorecard"]
+    if not isinstance(job, dict) or "if" in job:
+        raise WorkflowPolicyError(f"{path}: Scorecard job cannot be conditionally skipped")
+    # Missing read permission silently downgrades an absent check to a missing
+    # observation. Unreviewed reads and all extra writes must also be rejected.
+    if job.get("permissions") != {
+        "contents": "read",
+        "checks": "read",
+        "issues": "read",
+        "pull-requests": "read",
+        "security-events": "write",
+    }:
+        raise WorkflowPolicyError(f"{path}: Scorecard read-evidence authority drift")
+    if "secrets." in path.read_text(encoding="utf-8"):
+        raise WorkflowPolicyError(f"{path}: Scorecard must not use privileged PAT secrets")
+
+
 def _validate_codeql_fork_contract(workflow: dict[str, Any], *, path: Path) -> None:
     """Prevent untrusted fork PR code gaining authority or evading the zero-alert scan."""
     if path.name != "codeql.yml":
@@ -301,6 +332,7 @@ def validate_workflow(path: Path) -> None:
         raise WorkflowPolicyError(f"{path}: workflow must declare at least one job")
 
     _validate_codeql_fork_contract(workflow, path=path)
+    _validate_scorecard_read_contract(workflow, path=path)
     _validate_permissions(workflow, path=path)
 
     graph: dict[str, tuple[str, ...]] = {}
@@ -440,6 +472,36 @@ jobs:
             except WorkflowPolicyError:
                 continue
             raise WorkflowPolicyError("fork CodeQL privilege or bypass mutation was accepted")
+
+        # A Scorecard run with no read access to checks can produce misleading
+        # 0/N SAST history; disallow that invisible regression (and new writes).
+        source_scorecard = (WORKFLOW_DIR / "security-scorecard.yml").read_text(
+            encoding="utf-8"
+        )
+        candidate_scorecard = root / "security-scorecard.yml"
+        candidate_scorecard.write_text(source_scorecard, encoding="utf-8")
+        validate_workflow(candidate_scorecard)
+        scorecard_mutations = (
+            ("      checks: read", "      checks: none"),
+            ("      checks: read", "      checks: write"),
+            ("      issues: read", "      issues: none"),
+            ("      pull-requests: read", "      pull-requests: none"),
+            ("      security-events: write", "      security-events: read"),
+            ("  push:\\n    branches: [main]", "  pull_request:\\n    branches: [main]"),
+        )
+        for original, malicious in scorecard_mutations:
+            if source_scorecard.count(original) != 1:
+                raise WorkflowPolicyError("Scorecard read-scope negative-test fixture drift")
+            candidate_scorecard.write_text(
+                source_scorecard.replace(original, malicious), encoding="utf-8"
+            )
+            try:
+                validate_workflow(candidate_scorecard)
+            except WorkflowPolicyError:
+                continue
+            raise WorkflowPolicyError(
+                "Scorecard read visibility or privilege boundary mutation accepted"
+            )
 
         fixtures = {
             "dangling.yml": """
