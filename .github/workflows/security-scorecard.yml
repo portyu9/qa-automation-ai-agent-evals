@@ -24,6 +24,9 @@ jobs:
     timeout-minutes: 15
     permissions:
       contents: read
+      checks: read
+      issues: read
+      pull-requests: read
       security-events: write
     steps:
       - name: Checkout exact monitored subject
