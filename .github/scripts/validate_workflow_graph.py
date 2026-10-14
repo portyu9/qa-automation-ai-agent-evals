@@ -221,7 +221,6 @@ def _validate_permissions(workflow: dict[str, Any], *, path: Path) -> None:
             )
 
 
-
 def _validate_codeql_fork_contract(workflow: dict[str, Any], *, path: Path) -> None:
     """Prevent untrusted fork PR code gaining authority or evading the zero-alert scan."""
     if path.name != "codeql.yml":
@@ -266,9 +265,7 @@ def _validate_codeql_fork_contract(workflow: dict[str, Any], *, path: Path) -> N
     }
     if set(named) != expected:
         raise WorkflowPolicyError(f"{path}: CodeQL analysis step inventory drift")
-    if named["Checkout exact analysis subject"].get("with") != {
-        "persist-credentials": False
-    }:
+    if named["Checkout exact analysis subject"].get("with") != {"persist-credentials": False}:
         raise WorkflowPolicyError(f"{path}: untrusted CodeQL checkout must not persist token")
     if named["Analyze"].get("with", {}).get("upload") != (
         "${{ github.event_name == 'pull_request' && 'never' || 'always' }}"
@@ -443,7 +440,6 @@ jobs:
             except WorkflowPolicyError:
                 continue
             raise WorkflowPolicyError("fork CodeQL privilege or bypass mutation was accepted")
-
 
         fixtures = {
             "dangling.yml": """
