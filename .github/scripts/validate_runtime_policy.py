@@ -398,8 +398,11 @@ if (
     fail("publish-release must use the default-branch-bound release-request repository_dispatch")
 if "workflow_dispatch:" in publish_release or "workflow_run:" in publish_release:
     fail("publish-release must not expose selectable-ref or upstream-workflow execution surfaces")
-if "permissions:\n  actions: read\n  contents: write" not in publish_release:
-    fail("publish-release must grant only actions-read/contents-write authority")
+if (
+    "permissions:\n  actions: read\n  contents: read" not in publish_release
+    or "\n    permissions:\n      actions: read\n      contents: write" not in publish_release
+):
+    fail("publish-release must default read-only and scope contents-write to its trusted job")
 if "id-token: write" in publish_release or "attestations: write" in publish_release:
     fail("publish-release must verify retained provenance without minting new attestations")
 if (
