@@ -40,14 +40,15 @@ _TRUSTED_JOB_WRITES: dict[str, dict[str, frozenset[str]]] = {
 
 # Exact guards protect the trust transitions that justify the elevated tokens.
 _TRUSTED_JOB_GUARDS: dict[tuple[str, str], str] = {
-    ("ci.yml", "release-provenance"):
-        "github.event_name == 'push' && github.ref == 'refs/heads/main'",
-    ("codeql.yml", "codeql"):
-        "github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository",
-    ("dependency-governance.yml", "govern"):
-        "github.event_name != 'pull_request'",
-    ("publish-release.yml", "publish"):
-        "github.ref == 'refs/heads/main'",
+    ("ci.yml", "release-provenance"): (
+        "github.event_name == 'push' && github.ref == 'refs/heads/main'"
+    ),
+    ("codeql.yml", "codeql"): (
+        "github.event_name != 'pull_request' || "
+        "github.event.pull_request.head.repo.full_name == github.repository"
+    ),
+    ("dependency-governance.yml", "govern"): "github.event_name != 'pull_request'",
+    ("publish-release.yml", "publish"): "github.ref == 'refs/heads/main'",
 }
 
 
@@ -178,7 +179,9 @@ def _validate_permissions(workflow: dict[str, Any], *, path: Path) -> None:
                 raise WorkflowPolicyError(
                     f"{path}: job {job_id!r} has an invalid permission declaration"
                 )
-        writes = frozenset(name for name, level in job_permissions.items() if level == "write")
+        writes = frozenset(
+            name for name, level in job_permissions.items() if level == "write"
+        )
         if not writes:
             continue
 
@@ -198,8 +201,12 @@ def _validate_permissions(workflow: dict[str, Any], *, path: Path) -> None:
             raise WorkflowPolicyError(
                 f"{path}: privileged job {job_id!r} lost its accepted trust guard"
             )
-        if path.name in {"security-scorecard.yml", "publish-pypi.yml",
-                         "publish-release.yml", "dependency-lock-publisher.yml"}:
+        if path.name in {
+            "security-scorecard.yml",
+            "publish-pypi.yml",
+            "publish-release.yml",
+            "dependency-lock-publisher.yml",
+        }:
             if "pull_request" in triggers:
                 raise WorkflowPolicyError(
                     f"{path}: trusted publication or SARIF job may not run on PR code"
@@ -210,14 +217,19 @@ def _validate_permissions(workflow: dict[str, Any], *, path: Path) -> None:
                     f"{path}: privileged lock publisher must use only workflow_run"
                 )
             condition = str(job.get("if", ""))
-            for required in ("workflow_run.conclusion == 'success'",
-                             "workflow_run.event == 'pull_request'",
-                             "workflow_run.head_branch, 'dependabot/pip/'"):
+            for required in (
+                "workflow_run.conclusion == 'success'",
+                "workflow_run.event == 'pull_request'",
+                "workflow_run.head_branch, 'dependabot/pip/'",
+            ):
                 if required not in condition:
                     raise WorkflowPolicyError(
                         f"{path}: privileged lock publisher lost source filtering"
                     )
-        if path.name == "publish-release.yml" and set(triggers) != {"repository_dispatch"}:
+        if (
+            path.name == "publish-release.yml"
+            and set(triggers) != {"repository_dispatch"}
+        ):
             raise WorkflowPolicyError(
                 f"{path}: privileged release publication must use only repository_dispatch"
             )
@@ -377,8 +389,9 @@ jobs:
     steps: []
 """,
         }
-        fixtures.update({
-            "workflow-wide-write.yml": """
+        fixtures.update(
+            {
+                "workflow-wide-write.yml": """
 name: Unsafe workflow token
 on: workflow_dispatch
 permissions:
@@ -388,7 +401,7 @@ jobs:
     runs-on: ubuntu-24.04
     steps: []
 """,
-            "unapproved-job-write.yml": """
+                "unapproved-job-write.yml": """
 name: Unsafe job token
 on: workflow_dispatch
 permissions:
@@ -400,7 +413,8 @@ jobs:
     runs-on: ubuntu-24.04
     steps: []
 """,
-        })
+            }
+        )
         trusted_release = root / "publish-release.yml"
         trusted_release.write_text(
             """name: Trusted release
@@ -437,7 +451,7 @@ jobs:
             path = root / name
             # Preserve the intended negative test rather than rejecting only a missing default.
             if "permissions:" not in source:
-                source = source.replace("jobs:", "permissions:\\n  contents: read\\njobs:", 1)
+                source = source.replace("jobs:", "permissions:\n  contents: read\njobs:", 1)
             path.write_text(source.lstrip(), encoding="utf-8")
             try:
                 validate_workflow(path)
