@@ -38,8 +38,9 @@ trusted-only publication, provenance, and security analysis paths. This is a
 regression guard, **not** an assertion that every previously reported alert
 is resolved or that Scorecard itself runs as a required PR check.
 
-The Scorecard monitor publishes real SARIF after the accepted workflow changes
-or on its weekly schedule/manual invocation, not on every untrusted PR.
+The follow-up monitoring decision changes Scorecard to publish real SARIF after
+every accepted `main` push, or on its weekly schedule/manual invocation; it
+still never executes untrusted PR code with SARIF write authority.
 Do not grant `security-events: write` to untrusted Scorecard PR code in an
 attempt to fabricate a merge gate. Continue retaining CodeQL zero-alert
 qualifications, Bandit/pip-audit, actionlint/zizmor, dependency-review and
