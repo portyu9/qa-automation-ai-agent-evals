@@ -53,6 +53,7 @@ jobs:
       # This observes raw scanner findings without suppressing SARIF. A new or
       # increased category fails the monitor but must not block SARIF retention.
       - name: Classify genuine SARIF against accepted security posture baseline
+        if: always()
         run: python3 .github/scripts/classify_scorecard_sarif.py reports/security/scorecard.sarif --report reports/security/scorecard-triage.json
       - name: Retain Scorecard evidence
         if: always()
