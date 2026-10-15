@@ -16,7 +16,8 @@
   ],
   "requiredChecks": [
     "ci-gate",
-    "CodeQL"
+    "CodeQL",
+    "Package integrity"
   ],
   "requiredWorkflows": [
     {

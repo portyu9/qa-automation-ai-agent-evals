@@ -24,6 +24,8 @@ API_VERSION = "2022-11-28"
 MAX_RESPONSE_BYTES = 8 * 1024 * 1024
 BOT_LOGIN = "dependabot[bot]"
 BOT_USER_ID = 49699333
+# Native protected branch-rule check-run integration identity, not user-controlled labels.
+GITHUB_ACTIONS_APP_ID = 15368
 BOT_EMAIL = "49699333+dependabot[bot]@users.noreply.github.com"
 TRUSTED_COMMITTER_LOGIN = "web-flow"
 TRUSTED_COMMITTER_NAME = "GitHub"
@@ -146,8 +148,8 @@ def validate_config(config: dict[str, Any]) -> list[str]:
         if item not in paths:
             errors.append(f"{item} must require manual review")
     checks = config.get("requiredChecks")
-    if checks != ["ci-gate", "CodeQL"]:
-        errors.append("requiredChecks must be exactly [ci-gate, CodeQL]")
+    if checks != ["ci-gate", "CodeQL", "Package integrity"]:
+        errors.append("requiredChecks must require ci-gate, CodeQL, and Package integrity")
 
     expected_workflows = [
         {
@@ -738,6 +740,18 @@ def require_green_checks(api: GitHubApi, head_sha: str, config: dict[str, Any]) 
         row = checks.get(name)
         if row is None:
             raise PolicyBlock(f"required check has not registered: {name}")
+        # A same-named SUCCESS from another integration is not a protected
+        # GitHub Actions check. Bind owner approval to the actual PR head.
+        app = row.get("app")
+        if (
+            not isinstance(app, dict)
+            or app.get("id") != GITHUB_ACTIONS_APP_ID
+            or app.get("slug") != "github-actions"
+            or row.get("head_sha") != head_sha
+        ):
+            raise PolicyBlock(
+                f"required check is not authenticated GitHub Actions evidence: {name}"
+            )
         if row.get("status") != "completed" or row.get("conclusion") != "success":
             raise PolicyBlock(
                 f"required check is not green: {name} status={row.get('status')} conclusion={row.get('conclusion')}"
@@ -1272,6 +1286,71 @@ def selftest(config: dict[str, Any]) -> None:
     errors = validate_config(config)
     if errors:
         raise GovernanceError("config self-test failed: " + "; ".join(errors))
+
+    # The controller must never generate an owner approval from just ci-gate:
+    # Package integrity is the final independent CodeQL+Security protected veto.
+    without_final_gate = copy.deepcopy(config)
+    without_final_gate["requiredChecks"].remove("Package integrity")
+    if not validate_config(without_final_gate):
+        raise GovernanceError("config accepted Dependabot owner approval before final gate")
+
+    signed_head = "1" * 40
+    app = {"id": GITHUB_ACTIONS_APP_ID, "slug": "github-actions"}
+    mandatory = [
+        {
+            "name": name,
+            "app": app,
+            "head_sha": signed_head,
+            "status": "completed",
+            "conclusion": "success",
+            "completed_at": "2026-10-14T15:00:00Z",
+        }
+        for name in config["requiredChecks"]
+    ]
+
+    class _ChecksApi:
+        def __init__(self, rows: list[dict[str, Any]]) -> None:
+            self.rows = rows
+
+        def list_all(self, path: str, *, max_pages: int) -> list[dict[str, Any]]:
+            if path != f"/commits/{signed_head}/check-runs?filter=latest" or max_pages != 4:
+                raise GovernanceError("check identity fixture used unexpected API endpoint")
+            return self.rows
+
+    require_green_checks(_ChecksApi(mandatory), signed_head, config)  # type: ignore[arg-type]
+
+    def reject_check_history(rows: list[dict[str, Any]], context: str) -> None:
+        try:
+            require_green_checks(_ChecksApi(rows), signed_head, config)  # type: ignore[arg-type]
+        except PolicyBlock:
+            return
+        raise GovernanceError(f"controller accepted invalid required check evidence: {context}")
+
+    reject_check_history(mandatory[:-1], "missing final Package integrity")
+    for mutation, replacement in (
+        ("pending", {"status": "in_progress", "conclusion": None}),
+        ("failed", {"status": "completed", "conclusion": "failure"}),
+        ("skipped", {"status": "completed", "conclusion": "skipped"}),
+        ("other GitHub App", {"app": {"id": 1, "slug": "other-app"}}),
+        ("missing app", {"app": None}),
+        ("wrong native app slug", {"app": {"id": GITHUB_ACTIONS_APP_ID, "slug": "other"}}),
+        ("wrong head", {"head_sha": "2" * 40}),
+    ):
+        mutated = [dict(check) for check in mandatory]
+        mutated[-1].update(replacement)
+        reject_check_history(mutated, mutation)
+    rogue = dict(
+        mandatory[-1],
+        app={"id": 12345, "slug": "other-app"},
+        completed_at="2026-10-14T15:05:00Z",
+    )
+    reject_check_history([*mandatory, rogue], "newer same-name foreign check-run")
+    # The exact mandatory checks must be native GitHub Actions even when the
+    # untrusted check is CodeQL or the aggregate CI gate, not only Package integrity.
+    for i, name in enumerate(config["requiredChecks"][:-1]):
+        mutated = [dict(check) for check in mandatory]
+        mutated[i]["app"] = {"id": 12345, "slug": "other-app"}
+        reject_check_history(mutated, f"foreign {name} check-run")
 
     # Pure, adversarial current-head review authority checks. The most recent
     # owner decision is binding irrespective of REST pagination/order; an
