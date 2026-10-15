@@ -205,3 +205,26 @@ tests and admin-only observability remain incomplete under #360.
 
 This section updates the **live** evidence while preserving the old 30- and
 24-finding baselines above as accurately dated historical snapshots.
+
+
+## Accepted-main verified 8-finding Scorecard checkpoint — 15 local pip warnings removed (15 October 2026 UTC)
+
+[PR #375](https://github.com/portyu9/qa-automation-ai-agent-evals/pull/375) (ADR 0034) merged through native main protection at `main@43cd171a2fec3ac6d3ae16d222a527ecef779887`, preserving the mandatory exact-head CI 38669393732, Security 38669393814, CodeQL 38669393761, Windows/macOS platform smoke 38669393813, free-threaded Python 38669393785, native Atheris/deep fuzz 38669393726, and deterministic performance 38669393811 as independently successful PR checks. The test lanes that import current **checked-out local source** now run `pip install --no-deps --no-build-isolation -e .` after full external SHA-256 locked dependency closure. Hatchling editable builds require only reviewed `dev-mode-dirs=["src"]` and no optional dynamically resolved package. Importantly, actual **noneditable** wheel and sdist build, install, import, CLI, reproducibility, manifest and retained release provenance tests were not replaced by editable installs.
+
+The independent accepted-main [OpenSSF Scorecard run 38669640178](https://github.com/portyu9/qa-automation-ai-agent-evals/actions/runs/38669640178), job `116209456072`, completed success with retained authentic artifact `openssf-scorecard-38669640178` (artifact ID `11942894954`). The unfiltered Scorecard SARIF was printed directly in the authentic job log and then classified with output **`Scorecard SARIF: FINDINGS_OPEN, real findings=8, baseline maxima=23; no alerts were suppressed`**. Exact remaining SARIF evidence is:
+
+| SARIF rule | Genuine findings | Interpretation |
+| --- | ---: | --- |
+| `PinnedDependenciesID` | **3** | `ci.yml:701` built local `dist/*.tar.gz`, `ci.yml:786` independently verified `retained-dist/*.tar.gz`, `publish-release.yml:207` verified retained sdist. Preserve actual noneditable installs. |
+| `BranchProtectionID` | 1 | Real zero independent required reviewers and missing stale/last-push protections in live ruleset. |
+| `CodeReviewID` | 1 | No recognized independently approved changeset history; owner-token automation is not a separate human reviewer. |
+| `SASTID` | 1 | Real CodeQL runs succeed, upstream historical scanner-app recognizer still 0/30. |
+| `MaintainedID` | 1 | Repo under 90 days; cannot falsify age. |
+| `CIIBestPracticesID` | 1 | Substantiated owner-enrolled external badge not yet proven. |
+| **Total** | **8** | Neither zero vulnerabilities nor eight exploitable CVEs. |
+
+The **15** earlier first-party local source `pipCommand` warnings were genuinely **absent** from the next SARIF, not suppressed, muted, converted into unrelated findings or dismissed. OpenSSF's current pip detector explicitly recognizes local source `--no-deps -e .` when its source is first-party; GitHub's actual Code Scanning open-alert list is a separate view this connected app cannot independently read.
+
+The next separate baseline-hardening change pins `classify_scorecard_sarif.py` to the **newly observed** three audited sdist source-command identities and five unchanged categories (**8 total**, rather than obsolete 23) and adds a negative fixture for the now-resolved 15 source warnings. The scanner **still publishes original complete SARIF**, and any reintroduction will fail the security posture gate. Only after independent CI and another authentic main scan should that baseline hardening be called accepted.
+
+Remaining hardening: preserve the full wheel+sdist tests when considering actual local sdist SHA-256 pinning, obtain human/admin governance and qualified external fork checks, await age eligibility, and enroll only in substantiated Best Practices criteria. Never conflate `BLOCKED` with `FAIL` or `PASS`, SHA-256 with authentication, and a signed Dependabot bot with independent human approval.
