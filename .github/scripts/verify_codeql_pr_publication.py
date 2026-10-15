@@ -353,8 +353,13 @@ def verify_sarif(directory: Path) -> None:
     require(files and len(files) <= 16, "SARIF archive file budget violated")
     actual = [p for p in files if p.is_file()]
     require(
-        1 <= len(actual) <= 8 and len(actual) == len(files),
-        "SARIF archive contains nonregular or unexpected entries",
+        len(actual) == len(files) == 2,
+        "SARIF archive must include exactly two regular CodeQL language reports",
+    )
+    require(
+        {p.relative_to(directory).as_posix() for p in actual}
+        == {"actions.sarif", "python.sarif"},
+        "CodeQL Actions or Python source analysis is missing/renamed",
     )
     for f in actual:
         require(not f.is_symlink() and f.suffix == ".sarif", "SARIF entry type invalid")
@@ -562,7 +567,8 @@ def self_test() -> None:
 
     with TemporaryDirectory() as tmp:
         root = Path(tmp)
-        sarif_file = root / "codeql.sarif"
+        sarif_file = root / "actions.sarif"
+        python_sarif = root / "python.sarif"
         doc = {
             "version": "2.1.0",
             "runs": [
@@ -580,7 +586,16 @@ def self_test() -> None:
             ],
         }
         sarif_file.write_text(json.dumps(doc), encoding="utf-8")
+        python_sarif.write_text(json.dumps(doc), encoding="utf-8")
         verify_sarif(root)
+        python_sarif.unlink()
+        try:
+            verify_sarif(root)
+        except Blocked:
+            pass
+        else:
+            raise AssertionError("partial CodeQL language evidence was accepted")
+        python_sarif.write_text(json.dumps(doc), encoding="utf-8")
         doc["runs"][0]["results"].append({"ruleId": "dangerous"})
         sarif_file.write_text(json.dumps(doc), encoding="utf-8")
         try:
@@ -601,6 +616,13 @@ def self_test() -> None:
         doc["runs"][0]["automationDetails"] = {"id": f"{CODEQL_CATEGORY}/"}
         sarif_file.write_text(json.dumps(doc), encoding="utf-8")
         verify_sarif(root)
+        python_sarif.rename(root / "unverified.sarif")
+        try:
+            verify_sarif(root)
+        except Blocked:
+            pass
+        else:
+            raise AssertionError("forged CodeQL language filename accepted")
     print("Trusted CodeQL PR publication provenance negative fixtures passed")
 
 
