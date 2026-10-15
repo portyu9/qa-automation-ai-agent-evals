@@ -264,7 +264,6 @@ def verify_manifest(
         )
 
 
-
 def write_locked_sdist_requirement(
     dist_dir: Path,
     output: Path,
@@ -305,13 +304,11 @@ def write_locked_sdist_requirement(
         raise ManifestError("refusing to replace an existing locked requirement")
     # Direct local-file requirement pins the sole reviewed archive; no index or
     # implicit transitive resolution is needed with --no-deps and hash mode.
-    line = (
-        f"qa-automation-ai-agent-evals @ {archive.as_uri()} "
-        f"--hash=sha256:{item['sha256']}\n"
-    )
+    line = f"qa-automation-ai-agent-evals @ {archive.as_uri()} --hash=sha256:{item['sha256']}\n"
     with output.open("x", encoding="utf-8", newline="\n") as stream:
         stream.write(line)
     return output
+
 
 def verify_reproduction(
     reproduced_dir: Path,
