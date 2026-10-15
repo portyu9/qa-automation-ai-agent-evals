@@ -61,6 +61,17 @@ immutable contracts in the semantic workflow graph validator with mutation
 fixtures. Never allow candidate-controlled `ref`, `run-id`, SARIF path,
 script path, shell expression, or permission setting.
 
+## Consequences
+
+This adds a separately authenticated Code Scanning publication path for same-repository
+PRs only. It introduces no additional privilege to the existing PR CodeQL job and
+does not transform SARIF artifact digests into authentication. It also introduces
+a deliberate fail-closed availability constraint for a PR that changes scanner
+or verifier inputs: such PRs cannot acquire the new trusted PR-head report
+until a separately independent native Code Scanning procedure qualifies them.
+The exact GitHub SAST-app check association and actual protected merge remain
+an external operational precondition, not a checked-in assertion.
+
 ## Scoped non-claims and migration boundaries
 
 - Fork PRs **continue to run unprivileged CodeQL and zero-alert veto**. Trusted
