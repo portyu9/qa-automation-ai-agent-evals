@@ -23,16 +23,16 @@ MAX_EXISTING: dict[str, int] = {
     "CodeReviewID": 1,
     "FuzzingID": 0,
     "MaintainedID": 1,
-    "PinnedDependenciesID": 18,
+    "PinnedDependenciesID": 3,
     "SASTID": 1,
 }
-BASELINE_COMMIT = "ac0680f130e5ce17fd85de587d95b8728347ba4e"
+BASELINE_COMMIT = "43cd171a2fec3ac6d3ae16d222a527ecef779887"
 
-# Exact (path, source command) identities emitted by genuine accepted-main
-# Scorecard SARIF job 116162840782. These are maximum *warning identities*, not
-# waivers or trusted install declarations; source install authority remains
-# independently enforced by validate_workflow_pip_installs.py.
-_LOCAL_SOURCE_PIP = (
+# Reviewed unresolved identities confirmed in genuine accepted-main Scorecard
+# job 116209456072 (8 SARIF findings, 3 sdist pip warnings). The 15 first-party
+# local-source installs cleared by PR #375 are deliberately NOT allowlisted here.
+# These are warning ceilings, never waivers or permissions for script execution.
+_PREVIOUS_LOCAL_SOURCE_PIP = (
     "python -m pip install --disable-pip-version-check --no-deps --no-build-isolation ."
 )
 _LOCAL_SDIST_PIP = (
@@ -43,18 +43,9 @@ _RETAINED_SDIST_PIP = (
     "--no-deps --no-build-isolation retained-dist/*.tar.gz"
 )
 REVIEWED_PINNED_FINDING_IDENTITIES: dict[tuple[str, str], int] = {
-    (".github/workflows/ci.yml", _LOCAL_SOURCE_PIP): 7,
     (".github/workflows/ci.yml", _LOCAL_SDIST_PIP): 1,
     (".github/workflows/ci.yml", _RETAINED_SDIST_PIP): 1,
-    (".github/workflows/deep-fuzz.yml", _LOCAL_SOURCE_PIP): 1,
-    (".github/workflows/deep-mutation.yml", _LOCAL_SOURCE_PIP): 1,
-    (".github/workflows/deep-property-stress.yml", _LOCAL_SOURCE_PIP): 1,
-    (".github/workflows/deterministic-performance.yml", _LOCAL_SOURCE_PIP): 1,
-    (".github/workflows/free-threaded-probe.yml", _LOCAL_SOURCE_PIP): 1,
-    (".github/workflows/live-provider-canary.yml", _LOCAL_SOURCE_PIP): 1,
-    (".github/workflows/platform-smoke.yml", _LOCAL_SOURCE_PIP): 1,
     (".github/workflows/publish-release.yml", _RETAINED_SDIST_PIP): 1,
-    (".github/workflows/security.yml", _LOCAL_SOURCE_PIP): 1,
 }
 
 
@@ -181,8 +172,8 @@ def self_test() -> None:
         for identity, count in REVIEWED_PINNED_FINDING_IDENTITIES.items()
         for _ in range(count)
     ]
-    if len(reviewed_sources) != 18:
-        raise ScorecardError("reviewed local pip identities are not the genuine 18")
+    if len(reviewed_sources) != 3:
+        raise ScorecardError("reviewed sdist pip warning identities must be exactly three")
 
     def make_result(name: str, index: int, rule_ids: list[str]) -> dict[str, Any]:
         result: dict[str, Any] = {
@@ -225,22 +216,22 @@ def self_test() -> None:
         }
 
     baseline = make(MAX_EXISTING)
-    if BASELINE_COMMIT != "ac0680f130e5ce17fd85de587d95b8728347ba4e":
-        raise ScorecardError("Fuzzing clearance baseline commit drifted")
+    if BASELINE_COMMIT != "43cd171a2fec3ac6d3ae16d222a527ecef779887":
+        raise ScorecardError("independently verified 8-finding main commit drifted")
     if MAX_EXISTING.get("FuzzingID") != 0:
         raise ScorecardError("previously cleared Fuzzing finding is no longer fail-closed")
-    if classify(baseline)["reported_findings"] != 23:
-        raise ScorecardError("accepted-main 23-finding reference classification failed")
+    if classify(baseline)["reported_findings"] != 8:
+        raise ScorecardError("accepted-main 8-finding reference classification failed")
     if classify(make({}))["classification"] != "NO_REPORTED_FINDINGS":
         raise ScorecardError("empty result classification failed")
-    if classify(make({"PinnedDependenciesID": 17}))["classification"] != "FINDINGS_OPEN":
+    if classify(make({"PinnedDependenciesID": 2}))["classification"] != "FINDINGS_OPEN":
         raise ScorecardError("reduced-count reference classification failed")
     import copy
 
     malicious: list[dict[str, Any]] = []
-    malicious.append(make({"PinnedDependenciesID": 19}))
-    # Replacing one existing local warning with a new third-party command must
-    # fail even when the total Scorecard finding count is unchanged at 23.
+    malicious.append(make({"PinnedDependenciesID": 4}))
+    # Replacing one of three audited sdist warnings with a new third-party
+    # command must fail even when the total SARIF count stays at eight.
     new_path = copy.deepcopy(baseline)
     first_pip = next(
         result
@@ -261,6 +252,21 @@ def self_test() -> None:
         "python -m pip install malicious==99.0"
     )
     malicious.append(changed_snippet)
+    # A previously resolved first-party source installer warning is now
+    # UNREVIEWED. Its reintroduction must be a regression, even with 8 total.
+    retired = copy.deepcopy(baseline)
+    first_pip = next(
+        result
+        for result in retired["runs"][0]["results"]
+        if result["ruleId"] == "PinnedDependenciesID"
+    )
+    first_pip["locations"][0]["physicalLocation"]["artifactLocation"]["uri"] = (
+        ".github/workflows/security.yml"
+    )
+    first_pip["locations"][0]["physicalLocation"]["region"]["snippet"]["text"] = (
+        _PREVIOUS_LOCAL_SOURCE_PIP
+    )
+    malicious.append(retired)
     absent_location = copy.deepcopy(baseline)
     first_pip = next(
         result

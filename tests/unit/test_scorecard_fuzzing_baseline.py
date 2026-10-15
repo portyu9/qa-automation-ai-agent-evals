@@ -14,7 +14,7 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 CLASSIFIER = ROOT / ".github/scripts/classify_scorecard_sarif.py"
-CURRENT_MAIN = "ac0680f130e5ce17fd85de587d95b8728347ba4e"
+CURRENT_MAIN = "43cd171a2fec3ac6d3ae16d222a527ecef779887"
 
 SOURCE_PIP = "python -m pip install --disable-pip-version-check --no-deps --no-build-isolation ."
 DIST_PIP = (
@@ -27,18 +27,9 @@ RETAINED_PIP = (
 # Independent observed Scanner SARIF inventory from accepted main; do not take
 # these values from the classifier under test and let it self-justify new risk.
 REVIEWED_PIP_IDENTITIES = {
-    (".github/workflows/ci.yml", SOURCE_PIP): 7,
     (".github/workflows/ci.yml", DIST_PIP): 1,
     (".github/workflows/ci.yml", RETAINED_PIP): 1,
-    (".github/workflows/deep-fuzz.yml", SOURCE_PIP): 1,
-    (".github/workflows/deep-mutation.yml", SOURCE_PIP): 1,
-    (".github/workflows/deep-property-stress.yml", SOURCE_PIP): 1,
-    (".github/workflows/deterministic-performance.yml", SOURCE_PIP): 1,
-    (".github/workflows/free-threaded-probe.yml", SOURCE_PIP): 1,
-    (".github/workflows/live-provider-canary.yml", SOURCE_PIP): 1,
-    (".github/workflows/platform-smoke.yml", SOURCE_PIP): 1,
     (".github/workflows/publish-release.yml", RETAINED_PIP): 1,
-    (".github/workflows/security.yml", SOURCE_PIP): 1,
 }
 
 
@@ -87,17 +78,17 @@ def _sarif(counts: dict[str, int], rule_ids: set[str]) -> dict[str, Any]:
     }
 
 
-def test_accepted_baseline_is_23_and_fuzzing_cannot_return() -> None:
+def test_accepted_baseline_is_8_and_fuzzing_cannot_return() -> None:
     scanner = runpy.run_path(str(CLASSIFIER))
     counts = scanner["MAX_EXISTING"]
     assert scanner["BASELINE_COMMIT"] == CURRENT_MAIN
-    assert sum(counts.values()) == 23
+    assert sum(counts.values()) == 8
     assert counts["FuzzingID"] == 0
     assert scanner["REVIEWED_PINNED_FINDING_IDENTITIES"] == REVIEWED_PIP_IDENTITIES
-    assert sum(REVIEWED_PIP_IDENTITIES.values()) == 18
+    assert sum(REVIEWED_PIP_IDENTITIES.values()) == 3
     result = scanner["classify"](_sarif(counts, set(counts)))
     assert result["classification"] == "FINDINGS_OPEN"
-    assert result["reported_findings"] == 23
+    assert result["reported_findings"] == 8
     assert result["baseline_maxima"]["FuzzingID"] == 0
     assert result["counts"].get("FuzzingID", 0) == 0
 
@@ -119,23 +110,23 @@ def test_any_reintroduced_fuzzing_fails_closed(separate_run: bool) -> None:
 def test_only_genuinely_lower_counts_are_allowed() -> None:
     scanner = runpy.run_path(str(CLASSIFIER))
     counts = dict(scanner["MAX_EXISTING"])
-    counts["PinnedDependenciesID"] = 17
+    counts["PinnedDependenciesID"] = 2
     result = scanner["classify"](_sarif(counts, set(counts)))
-    assert result["reported_findings"] == 22
+    assert result["reported_findings"] == 7
     assert result["classification"] == "FINDINGS_OPEN"
-    counts["PinnedDependenciesID"] = 19
+    counts["PinnedDependenciesID"] = 4
     with pytest.raises(scanner["ScorecardError"], match="PinnedDependenciesID"):
         scanner["classify"](_sarif(counts, set(counts)))
 
 
-@pytest.mark.parametrize("mutation", ["path", "snippet", "missing", "excess"])
+@pytest.mark.parametrize("mutation", ["path", "snippet", "missing", "excess", "retired-source"])
 def test_same_total_new_pip_command_cannot_replace_reviewed_warning(mutation: str) -> None:
     scanner = runpy.run_path(str(CLASSIFIER))
     counts = scanner["MAX_EXISTING"]
     document = _sarif(counts, set(counts))
     original = document["runs"][0]["results"]
     pip = [row for row in original if row["ruleId"] == "PinnedDependenciesID"]
-    assert len(pip) == 18
+    assert len(pip) == 3
     if mutation == "path":
         pip[0]["locations"][0]["physicalLocation"]["artifactLocation"]["uri"] = (
             ".github/workflows/unreviewed-third-party.yml"
@@ -144,14 +135,21 @@ def test_same_total_new_pip_command_cannot_replace_reviewed_warning(mutation: st
         pip[0]["locations"][0]["physicalLocation"]["region"]["snippet"]["text"] = (
             "python -m pip install suspicious==99.0"
         )
+    elif mutation == "retired-source":
+        # The cleared 15 local-source warnings can no longer hide in the
+        # eight-finding ceiling, even with the same scanner total.
+        pip[0]["locations"][0]["physicalLocation"]["artifactLocation"]["uri"] = (
+            ".github/workflows/security.yml"
+        )
+        pip[0]["locations"][0]["physicalLocation"]["region"]["snippet"]["text"] = SOURCE_PIP
     elif mutation == "missing":
         pip[0].pop("locations")
     else:
         # Move one existing warning to another already saturated reviewed
-        # identity, retaining 18 total warnings and a superficially green score.
+        # identity, retaining 3 total warnings and a superficially green score.
         pip[-1]["locations"] = pip[0]["locations"]
 
-    assert len(original) == 23
+    assert len(original) == 8
     with pytest.raises(scanner["ScorecardError"], match="PinnedDependencies"):
         scanner["classify"](document)
 
