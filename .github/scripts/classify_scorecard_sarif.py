@@ -23,30 +23,14 @@ MAX_EXISTING: dict[str, int] = {
     "CodeReviewID": 1,
     "FuzzingID": 0,
     "MaintainedID": 1,
-    "PinnedDependenciesID": 3,
+    "PinnedDependenciesID": 0,
     "SASTID": 1,
 }
-BASELINE_COMMIT = "43cd171a2fec3ac6d3ae16d222a527ecef779887"
+BASELINE_COMMIT = "c134d3bd2c15d3d5213aa72b7c3be7f2b192a990"
 
-# Reviewed unresolved identities confirmed in genuine accepted-main Scorecard
-# job 116209456072 (8 SARIF findings, 3 sdist pip warnings). The 15 first-party
-# local-source installs cleared by PR #375 are deliberately NOT allowlisted here.
-# These are warning ceilings, never waivers or permissions for script execution.
-_PREVIOUS_LOCAL_SOURCE_PIP = (
-    "python -m pip install --disable-pip-version-check --no-deps --no-build-isolation ."
-)
-_LOCAL_SDIST_PIP = (
-    "python -m pip install --disable-pip-version-check --no-deps --no-build-isolation dist/*.tar.gz"
-)
-_RETAINED_SDIST_PIP = (
-    "python -m pip install --disable-pip-version-check "
-    "--no-deps --no-build-isolation retained-dist/*.tar.gz"
-)
-REVIEWED_PINNED_FINDING_IDENTITIES: dict[tuple[str, str], int] = {
-    (".github/workflows/ci.yml", _LOCAL_SDIST_PIP): 1,
-    (".github/workflows/ci.yml", _RETAINED_SDIST_PIP): 1,
-    (".github/workflows/publish-release.yml", _RETAINED_SDIST_PIP): 1,
-}
+# Genuine accepted-main Scorecard run 38673527580 reports ZERO pip warnings.
+# Previously reviewed sdist command identities are now retired, not allowed.
+REVIEWED_PINNED_FINDING_IDENTITIES: dict[tuple[str, str], int] = {}
 
 
 class ScorecardError(ValueError):
@@ -166,35 +150,50 @@ def classify(raw: Any) -> dict[str, Any]:
 
 
 def self_test() -> None:
+    import copy
+
     expected = set(MAX_EXISTING)
-    reviewed_sources = [
-        identity
-        for identity, count in REVIEWED_PINNED_FINDING_IDENTITIES.items()
-        for _ in range(count)
-    ]
-    if len(reviewed_sources) != 3:
-        raise ScorecardError("reviewed sdist pip warning identities must be exactly three")
+    former_pips = (
+        (
+            ".github/workflows/ci.yml",
+            "python -m pip install --no-deps --no-build-isolation dist/*.tar.gz",
+        ),
+        (
+            ".github/workflows/ci.yml",
+            "python -m pip install --no-deps --no-build-isolation retained-dist/*.tar.gz",
+        ),
+        (
+            ".github/workflows/publish-release.yml",
+            "python -m pip install --no-deps --no-build-isolation retained-dist/*.tar.gz",
+        ),
+        (
+            ".github/workflows/security.yml",
+            "python -m pip install --no-deps --no-build-isolation .",
+        ),
+        (".github/workflows/unreviewed.yml", "python -m pip install malware==99.0"),
+    )
 
-    def make_result(name: str, index: int, rule_ids: list[str]) -> dict[str, Any]:
-        result: dict[str, Any] = {
-            "ruleId": name,
-            "ruleIndex": rule_ids.index(name),
-            "message": {"text": "genuine finding fixture"},
-        }
-        if name == "PinnedDependenciesID":
-            path, snippet = reviewed_sources[index % len(reviewed_sources)]
-            result["locations"] = [
-                {
-                    "physicalLocation": {
-                        "artifactLocation": {"uri": path},
-                        "region": {"snippet": {"text": snippet}},
+    def make(counts: dict[str, int], *, source: tuple[str, str] = former_pips[0]) -> dict[str, Any]:
+        rules = sorted(expected | set(counts))
+
+        def result(rid: str) -> dict[str, Any]:
+            row: dict[str, Any] = {
+                "ruleId": rid,
+                "ruleIndex": rules.index(rid),
+                "message": {"text": "synthetic negative-test finding"},
+            }
+            if rid == "PinnedDependenciesID":
+                path, snippet = source
+                row["locations"] = [
+                    {
+                        "physicalLocation": {
+                            "artifactLocation": {"uri": path},
+                            "region": {"snippet": {"text": snippet}},
+                        }
                     }
-                }
-            ]
-        return result
+                ]
+            return row
 
-    def make(counts: dict[str, int]) -> dict[str, Any]:
-        rule_ids = sorted(expected | set(counts))
         return {
             "version": "2.1.0",
             "runs": [
@@ -203,135 +202,88 @@ def self_test() -> None:
                         "driver": {
                             "name": "Scorecard",
                             "semanticVersion": "v5.5.0",
-                            "rules": [{"id": name} for name in rule_ids],
+                            "rules": [{"id": rid} for rid in rules],
                         }
                     },
                     "results": [
-                        make_result(name, index, rule_ids)
-                        for name, qty in counts.items()
-                        for index in range(qty)
+                        result(rid) for rid, amount in counts.items() for _ in range(amount)
                     ],
                 }
             ],
         }
 
+    if BASELINE_COMMIT != "c134d3bd2c15d3d5213aa72b7c3be7f2b192a990":
+        raise ScorecardError("independently verified five-finding commit drifted")
+    if MAX_EXISTING.get("PinnedDependenciesID") != 0 or MAX_EXISTING.get("FuzzingID") != 0:
+        raise ScorecardError("previously cleared pip/fuzz findings lost their zero maxima")
+    if REVIEWED_PINNED_FINDING_IDENTITIES or sum(MAX_EXISTING.values()) != 5:
+        raise ScorecardError("five-finding zero-pip maximum drifted")
     baseline = make(MAX_EXISTING)
-    if BASELINE_COMMIT != "43cd171a2fec3ac6d3ae16d222a527ecef779887":
-        raise ScorecardError("independently verified 8-finding main commit drifted")
-    if MAX_EXISTING.get("FuzzingID") != 0:
-        raise ScorecardError("previously cleared Fuzzing finding is no longer fail-closed")
-    if classify(baseline)["reported_findings"] != 8:
-        raise ScorecardError("accepted-main 8-finding reference classification failed")
+    if classify(baseline)["reported_findings"] != 5:
+        raise ScorecardError("accepted-main five-finding reference classification failed")
     if classify(make({}))["classification"] != "NO_REPORTED_FINDINGS":
-        raise ScorecardError("empty result classification failed")
-    if classify(make({"PinnedDependenciesID": 2}))["classification"] != "FINDINGS_OPEN":
-        raise ScorecardError("reduced-count reference classification failed")
-    import copy
+        raise ScorecardError("empty SARIF result classification failed")
+    smaller = dict(MAX_EXISTING)
+    smaller["SASTID"] = 0
+    if classify(make(smaller))["reported_findings"] != 4:
+        raise ScorecardError("genuine improvement was not represented as a lower count")
 
-    malicious: list[dict[str, Any]] = []
-    malicious.append(make({"PinnedDependenciesID": 4}))
-    # Replacing one of three audited sdist warnings with a new third-party
-    # command must fail even when the total SARIF count stays at eight.
-    new_path = copy.deepcopy(baseline)
-    first_pip = next(
-        result
-        for result in new_path["runs"][0]["results"]
-        if result["ruleId"] == "PinnedDependenciesID"
-    )
-    first_pip["locations"][0]["physicalLocation"]["artifactLocation"]["uri"] = (
-        ".github/workflows/unreviewed.yml"
-    )
-    malicious.append(new_path)
-    changed_snippet = copy.deepcopy(baseline)
-    first_pip = next(
-        result
-        for result in changed_snippet["runs"][0]["results"]
-        if result["ruleId"] == "PinnedDependenciesID"
-    )
-    first_pip["locations"][0]["physicalLocation"]["region"]["snippet"]["text"] = (
-        "python -m pip install malicious==99.0"
-    )
-    malicious.append(changed_snippet)
-    # A previously resolved first-party source installer warning is now
-    # UNREVIEWED. Its reintroduction must be a regression, even with 8 total.
-    retired = copy.deepcopy(baseline)
-    first_pip = next(
-        result
-        for result in retired["runs"][0]["results"]
-        if result["ruleId"] == "PinnedDependenciesID"
-    )
-    first_pip["locations"][0]["physicalLocation"]["artifactLocation"]["uri"] = (
-        ".github/workflows/security.yml"
-    )
-    first_pip["locations"][0]["physicalLocation"]["region"]["snippet"]["text"] = (
-        _PREVIOUS_LOCAL_SOURCE_PIP
-    )
-    malicious.append(retired)
-    absent_location = copy.deepcopy(baseline)
-    first_pip = next(
-        result
-        for result in absent_location["runs"][0]["results"]
-        if result["ruleId"] == "PinnedDependenciesID"
-    )
-    first_pip.pop("locations")
-    malicious.append(absent_location)
-    excess_identity = copy.deepcopy(baseline)
-    pip_results = [
-        result
-        for result in excess_identity["runs"][0]["results"]
-        if result["ruleId"] == "PinnedDependenciesID"
+    malicious: list[dict[str, Any]] = [
+        make({"PinnedDependenciesID": 1}, source=s) for s in former_pips
     ]
-    pip_results[-1]["locations"] = copy.deepcopy(pip_results[0]["locations"])
-    malicious.append(excess_identity)
-    malicious.append(make({"FuzzingID": 1}))
-    # A previously fixed warning must also fail when it reappears in a
-    # separate SARIF run, even if the initial run matches accepted main.
-    split_run = copy.deepcopy(baseline)
-    split_run["runs"].extend(make({"FuzzingID": 1})["runs"])
-    malicious.append(split_run)
-    malicious.append(make({"UnknownNewCheckID": 1}))
-    bad = copy.deepcopy(baseline)
-    bad["runs"] = []
-    malicious.append(bad)
-    bad = copy.deepcopy(baseline)
-    del bad["runs"][0]["results"]
-    malicious.append(bad)
-    bad = copy.deepcopy(baseline)
-    bad["runs"][0]["tool"]["driver"]["name"] = "NotScorecard"
-    malicious.append(bad)
-    bad = copy.deepcopy(baseline)
-    bad["runs"][0]["tool"]["driver"]["rules"] = [{"id": "SASTID"}]
-    malicious.append(bad)
-    bad = copy.deepcopy(baseline)
-    bad["runs"][0]["results"][0]["ruleIndex"] = 999
-    malicious.append(bad)
-    bad = copy.deepcopy(baseline)
-    del bad["runs"][0]["results"][0]["message"]
-    malicious.append(bad)
-    bad = copy.deepcopy(baseline)
-    bad["version"] = "2.0.0"
-    malicious.append(bad)
-    for i, fixture in enumerate(malicious):
+    malicious.extend((make({"FuzzingID": 1}), make({"SASTID": 2}), make({"UnknownRuleID": 1})))
+    for rid in ("PinnedDependenciesID", "FuzzingID"):
+        split = copy.deepcopy(baseline)
+        split["runs"].extend(make({rid: 1})["runs"])
+        malicious.append(split)
+    missing_location = make({"PinnedDependenciesID": 1})
+    missing_location["runs"][0]["results"][0].pop("locations")
+    malicious.append(missing_location)
+    for kind in (
+        "no-runs",
+        "no-results",
+        "wrong-scanner",
+        "wrong-rules",
+        "bad-index",
+        "missing-message",
+        "old-sarif",
+    ):
+        bad = copy.deepcopy(baseline)
+        if kind == "no-runs":
+            bad["runs"] = []
+        elif kind == "no-results":
+            bad["runs"][0].pop("results")
+        elif kind == "wrong-scanner":
+            bad["runs"][0]["tool"]["driver"]["name"] = "NotScorecard"
+        elif kind == "wrong-rules":
+            bad["runs"][0]["tool"]["driver"]["rules"] = [{"id": "SASTID"}]
+        elif kind == "bad-index":
+            bad["runs"][0]["results"][0]["ruleIndex"] = 999
+        elif kind == "missing-message":
+            bad["runs"][0]["results"][0].pop("message")
+        else:
+            bad["version"] = "2.0.0"
+        malicious.append(bad)
+    for number, fixture in enumerate(malicious):
         try:
             classify(fixture)
         except ScorecardError:
             continue
-        raise ScorecardError(f"unsafe scanner evidence fixture accepted: {i}")
-    # Exercise the real report-serialization path with both PASS and FAIL.
+        raise ScorecardError(f"malformed or unsafe scanner fixture accepted: {number}")
     with tempfile.TemporaryDirectory() as directory:
-        path = Path(directory) / "triage.json"
-        emit_report(path, baseline)
-        if json.loads(path.read_text(encoding="utf-8"))["classification"] != "FINDINGS_OPEN":
-            raise ScorecardError("reported-finding evidence was lost")
+        output = Path(directory) / "triage.json"
+        emit_report(output, baseline)
+        if json.loads(output.read_text(encoding="utf-8"))["classification"] != "FINDINGS_OPEN":
+            raise ScorecardError("genuine findings were not reported")
         try:
-            emit_report(path, malicious[0])
+            emit_report(output, malicious[0])
         except ScorecardError:
             pass
         else:
-            raise ScorecardError("increased findings were not a failing signal")
-        if json.loads(path.read_text(encoding="utf-8"))["classification"] != "FAIL":
-            raise ScorecardError("failed classification did not retain fail-closed evidence")
-    print("Scorecard SARIF posture negative fixtures passed")
+            raise ScorecardError("reintroduced pip warning did not fail closed")
+        if json.loads(output.read_text(encoding="utf-8"))["classification"] != "FAIL":
+            raise ScorecardError("failure report did not retain FAIL")
+    print("Scorecard five-finding zero-pip regression fixtures passed")
 
 
 def emit_report(path: Path, raw: Any, *, input_sha256: str | None = None) -> dict[str, Any]:

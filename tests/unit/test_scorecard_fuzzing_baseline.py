@@ -1,7 +1,7 @@
-"""Independent unit guards for the accepted Scorecard fuzzing-clearance baseline.
+"""Independent synthetic SARIF guards for the genuine five-finding Scorecard baseline.
 
-These synthetic fixtures test the classifier logic, not the authenticity of a
-GitHub Code Scanning export or the completeness of any fuzzing campaign.
+These fixtures do not constitute independent scanner execution or Code Scanning
+UI evidence. Refer to accepted main Scorecard run 38673527580.
 """
 
 from __future__ import annotations
@@ -14,39 +14,42 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 CLASSIFIER = ROOT / ".github/scripts/classify_scorecard_sarif.py"
-CURRENT_MAIN = "43cd171a2fec3ac6d3ae16d222a527ecef779887"
+ACCEPTED_MAIN = "c134d3bd2c15d3d5213aa72b7c3be7f2b192a990"
 
-SOURCE_PIP = "python -m pip install --disable-pip-version-check --no-deps --no-build-isolation ."
-DIST_PIP = (
-    "python -m pip install --disable-pip-version-check --no-deps --no-build-isolation dist/*.tar.gz"
+RETIRED_PIPS = (
+    (
+        ".github/workflows/ci.yml",
+        "python -m pip install --no-deps --no-build-isolation dist/*.tar.gz",
+    ),
+    (
+        ".github/workflows/ci.yml",
+        "python -m pip install --no-deps --no-build-isolation retained-dist/*.tar.gz",
+    ),
+    (
+        ".github/workflows/publish-release.yml",
+        "python -m pip install --no-deps --no-build-isolation retained-dist/*.tar.gz",
+    ),
+    (".github/workflows/security.yml", "python -m pip install --no-deps --no-build-isolation ."),
+    (".github/workflows/unknown.yml", "python -m pip install malicious==99.0"),
 )
-RETAINED_PIP = (
-    "python -m pip install --disable-pip-version-check "
-    "--no-deps --no-build-isolation retained-dist/*.tar.gz"
-)
-# Independent observed Scanner SARIF inventory from accepted main; do not take
-# these values from the classifier under test and let it self-justify new risk.
-REVIEWED_PIP_IDENTITIES = {
-    (".github/workflows/ci.yml", DIST_PIP): 1,
-    (".github/workflows/ci.yml", RETAINED_PIP): 1,
-    (".github/workflows/publish-release.yml", RETAINED_PIP): 1,
-}
 
 
-def _sarif(counts: dict[str, int], rule_ids: set[str]) -> dict[str, Any]:
-    rules = sorted(rule_ids)
-    pip_locations = [
-        identity for identity, quantity in REVIEWED_PIP_IDENTITIES.items() for _ in range(quantity)
-    ]
+def _sarif(
+    counts: dict[str, int],
+    rules: set[str],
+    *,
+    source: tuple[str, str] = RETIRED_PIPS[0],
+) -> dict[str, Any]:
+    declared = sorted(rules | set(counts))
 
-    def finding(rid: str, index: int) -> dict[str, Any]:
+    def finding(rid: str) -> dict[str, Any]:
         result: dict[str, Any] = {
             "ruleId": rid,
-            "ruleIndex": rules.index(rid),
+            "ruleIndex": declared.index(rid),
             "message": {"text": "synthetic negative-test finding"},
         }
         if rid == "PinnedDependenciesID":
-            path, snippet = pip_locations[index % len(pip_locations)]
+            path, snippet = source
             result["locations"] = [
                 {
                     "physicalLocation": {
@@ -65,100 +68,90 @@ def _sarif(counts: dict[str, int], rule_ids: set[str]) -> dict[str, Any]:
                     "driver": {
                         "name": "Scorecard",
                         "semanticVersion": "v5.5.0",
-                        "rules": [{"id": rid} for rid in rules],
+                        "rules": [{"id": rule} for rule in declared],
                     }
                 },
                 "results": [
-                    finding(rid, index)
-                    for rid, quantity in counts.items()
-                    for index in range(quantity)
+                    finding(rule) for rule, amount in counts.items() for _ in range(amount)
                 ],
             }
         ],
     }
 
 
-def test_accepted_baseline_is_8_and_fuzzing_cannot_return() -> None:
-    scanner = runpy.run_path(str(CLASSIFIER))
-    counts = scanner["MAX_EXISTING"]
-    assert scanner["BASELINE_COMMIT"] == CURRENT_MAIN
-    assert sum(counts.values()) == 8
-    assert counts["FuzzingID"] == 0
-    assert scanner["REVIEWED_PINNED_FINDING_IDENTITIES"] == REVIEWED_PIP_IDENTITIES
-    assert sum(REVIEWED_PIP_IDENTITIES.values()) == 3
-    result = scanner["classify"](_sarif(counts, set(counts)))
-    assert result["classification"] == "FINDINGS_OPEN"
-    assert result["reported_findings"] == 8
-    assert result["baseline_maxima"]["FuzzingID"] == 0
-    assert result["counts"].get("FuzzingID", 0) == 0
+def test_accepted_five_finding_baseline_has_no_pip_or_fuzz_allowance() -> None:
+    classifier = runpy.run_path(str(CLASSIFIER))
+    limits = classifier["MAX_EXISTING"]
+    assert classifier["BASELINE_COMMIT"] == ACCEPTED_MAIN
+    assert sum(limits.values()) == 5
+    assert limits["FuzzingID"] == 0
+    assert limits["PinnedDependenciesID"] == 0
+    assert classifier["REVIEWED_PINNED_FINDING_IDENTITIES"] == {}
+    report = classifier["classify"](_sarif(limits, set(limits)))
+    assert report["classification"] == "FINDINGS_OPEN"
+    assert report["reported_findings"] == 5
+    assert report["reviewed_pip_identity_maxima"] == 0
+    assert report["observed_pip_identities"] == 0
 
 
-@pytest.mark.parametrize("separate_run", [False, True])
-def test_any_reintroduced_fuzzing_fails_closed(separate_run: bool) -> None:
-    scanner = runpy.run_path(str(CLASSIFIER))
-    counts = scanner["MAX_EXISTING"]
-    document = _sarif(counts, set(counts))
-    recurrence = _sarif({"FuzzingID": 1}, set(counts))
-    if separate_run:
-        document["runs"].extend(recurrence["runs"])
+@pytest.mark.parametrize("source", RETIRED_PIPS)
+@pytest.mark.parametrize("split_run", [False, True])
+def test_cleared_pip_commands_cannot_reappear(source: tuple[str, str], split_run: bool) -> None:
+    classifier = runpy.run_path(str(CLASSIFIER))
+    limits = classifier["MAX_EXISTING"]
+    document = _sarif(limits, set(limits))
+    relapse = _sarif({"PinnedDependenciesID": 1}, set(limits), source=source)
+    if split_run:
+        document["runs"].extend(relapse["runs"])
     else:
-        document["runs"][0]["results"].extend(recurrence["runs"][0]["results"])
-    with pytest.raises(scanner["ScorecardError"], match="FuzzingID"):
-        scanner["classify"](document)
+        document["runs"][0]["results"].extend(relapse["runs"][0]["results"])
+    with pytest.raises(classifier["ScorecardError"], match="PinnedDependencies"):
+        classifier["classify"](document)
 
 
-def test_only_genuinely_lower_counts_are_allowed() -> None:
-    scanner = runpy.run_path(str(CLASSIFIER))
-    counts = dict(scanner["MAX_EXISTING"])
-    counts["PinnedDependenciesID"] = 2
-    result = scanner["classify"](_sarif(counts, set(counts)))
-    assert result["reported_findings"] == 7
-    assert result["classification"] == "FINDINGS_OPEN"
-    counts["PinnedDependenciesID"] = 4
-    with pytest.raises(scanner["ScorecardError"], match="PinnedDependenciesID"):
-        scanner["classify"](_sarif(counts, set(counts)))
+@pytest.mark.parametrize("rule", ["FuzzingID", "PinnedDependenciesID"])
+def test_every_cleared_rule_reintroduces_a_failure(rule: str) -> None:
+    classifier = runpy.run_path(str(CLASSIFIER))
+    limits = classifier["MAX_EXISTING"]
+    document = _sarif(limits, set(limits))
+    document["runs"].extend(_sarif({rule: 1}, set(limits))["runs"])
+    with pytest.raises(classifier["ScorecardError"], match=rule.replace("ID", "")):
+        classifier["classify"](document)
 
 
-@pytest.mark.parametrize("mutation", ["path", "snippet", "missing", "excess", "retired-source"])
-def test_same_total_new_pip_command_cannot_replace_reviewed_warning(mutation: str) -> None:
-    scanner = runpy.run_path(str(CLASSIFIER))
-    counts = scanner["MAX_EXISTING"]
-    document = _sarif(counts, set(counts))
-    original = document["runs"][0]["results"]
-    pip = [row for row in original if row["ruleId"] == "PinnedDependenciesID"]
-    assert len(pip) == 3
-    if mutation == "path":
-        pip[0]["locations"][0]["physicalLocation"]["artifactLocation"]["uri"] = (
-            ".github/workflows/unreviewed-third-party.yml"
-        )
-    elif mutation == "snippet":
-        pip[0]["locations"][0]["physicalLocation"]["region"]["snippet"]["text"] = (
-            "python -m pip install suspicious==99.0"
-        )
-    elif mutation == "retired-source":
-        # The cleared 15 local-source warnings can no longer hide in the
-        # eight-finding ceiling, even with the same scanner total.
-        pip[0]["locations"][0]["physicalLocation"]["artifactLocation"]["uri"] = (
-            ".github/workflows/security.yml"
-        )
-        pip[0]["locations"][0]["physicalLocation"]["region"]["snippet"]["text"] = SOURCE_PIP
-    elif mutation == "missing":
-        pip[0].pop("locations")
+def test_five_finding_monitor_allows_real_decreases_and_vetoes_growth() -> None:
+    classifier = runpy.run_path(str(CLASSIFIER))
+    limits = dict(classifier["MAX_EXISTING"])
+    limits["SASTID"] = 0
+    actual = classifier["classify"](_sarif(limits, set(limits)))
+    assert actual["reported_findings"] == 4
+    assert actual["classification"] == "FINDINGS_OPEN"
+    limits["SASTID"] = 2
+    with pytest.raises(classifier["ScorecardError"], match="SASTID"):
+        classifier["classify"](_sarif(limits, set(limits)))
+
+
+@pytest.mark.parametrize("mutation", ["missing", "empty", "invalid-path"])
+def test_pip_findings_cannot_hide_behind_malformed_identity(mutation: str) -> None:
+    classifier = runpy.run_path(str(CLASSIFIER))
+    limits = classifier["MAX_EXISTING"]
+    doc = _sarif({"PinnedDependenciesID": 1}, set(limits))
+    row = doc["runs"][0]["results"][0]
+    if mutation == "missing":
+        del row["locations"]
+    elif mutation == "empty":
+        row["locations"] = []
     else:
-        # Move one existing warning to another already saturated reviewed
-        # identity, retaining 3 total warnings and a superficially green score.
-        pip[-1]["locations"] = pip[0]["locations"]
-
-    assert len(original) == 8
-    with pytest.raises(scanner["ScorecardError"], match="PinnedDependencies"):
-        scanner["classify"](document)
+        row["locations"][0]["physicalLocation"]["artifactLocation"]["uri"] = ""
+    with pytest.raises(classifier["ScorecardError"], match="PinnedDependencies"):
+        classifier["classify"](doc)
 
 
-def test_cross_run_growth_of_local_warning_identity_is_rejected() -> None:
-    scanner = runpy.run_path(str(CLASSIFIER))
-    counts = scanner["MAX_EXISTING"]
-    document = _sarif(counts, set(counts))
-    another = _sarif({"PinnedDependenciesID": 1}, set(counts))
-    document["runs"].extend(another["runs"])
-    with pytest.raises(scanner["ScorecardError"], match="PinnedDependencies"):
-        scanner["classify"](document)
+def test_empty_real_results_are_not_the_same_as_missing_scanner_evidence() -> None:
+    classifier = runpy.run_path(str(CLASSIFIER))
+    limits = classifier["MAX_EXISTING"]
+    empty = _sarif({}, set(limits))
+    assert classifier["classify"](empty)["classification"] == "NO_REPORTED_FINDINGS"
+    del empty["runs"][0]["results"]
+    with pytest.raises(classifier["ScorecardError"], match="missing Scorecard SARIF results"):
+        classifier["classify"](empty)
