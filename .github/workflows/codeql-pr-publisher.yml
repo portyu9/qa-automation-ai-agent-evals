@@ -51,6 +51,7 @@ jobs:
           name: codeql-sarif-${{ steps.provenance.outputs.run_id }}
           github-token: ${{ github.token }}
           path: reports/security/pr-codeql
+          digest-mismatch: error
       - name: Revalidate exact original CodeQL SARIF under trusted main
         if: steps.provenance.outputs.has_target == 'true'
         run: |
