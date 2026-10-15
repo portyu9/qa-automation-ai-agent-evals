@@ -267,7 +267,9 @@ def _validate_codeql_fork_contract(workflow: dict[str, Any], *, path: Path) -> N
         raise WorkflowPolicyError(f"{path}: fork CodeQL must use unprivileged pull_request")
     jobs = workflow.get("jobs")
     if not isinstance(jobs, dict) or set(jobs) != {"codeql", "codeql-upload"}:
-        raise WorkflowPolicyError(f"{path}: expected separate read-only CodeQL and main publisher jobs")
+        raise WorkflowPolicyError(
+            f"{path}: expected separate read-only CodeQL and main publisher jobs"
+        )
     job = jobs["codeql"]
     if not isinstance(job, dict) or "if" in job:
         raise WorkflowPolicyError(f"{path}: CodeQL job must never skip external fork PRs")
