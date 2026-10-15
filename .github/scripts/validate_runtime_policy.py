@@ -518,7 +518,10 @@ for required in (
     "--require-hashes",
     "requirements/locks/core-py311.txt",
     "--no-deps retained-dist/*.whl",
-    "--no-deps --no-build-isolation retained-dist/*.tar.gz",
+    '--no-deps --no-build-isolation --require-hashes -r "$RUNNER_TEMP/local-sdist-requirements.txt"',
+    "package_artifact_manifest.py locked-sdist",
+    '--dist-dir retained-dist',
+    '--output "$RUNNER_TEMP/local-sdist-requirements.txt"',
     "release-supply-chain-${{ steps.candidate.outputs.ci_run_id }}",
     "release_supply_chain.py verify",
     "ci-qualification-${{ steps.candidate.outputs.ci_run_id }}",
@@ -558,7 +561,7 @@ for required in (
         fail(f"publish-release workflow is missing required contract text: {required}")
 for retained_path, minimum_count in (
     ("retained-dist/*.whl", 3),
-    ("retained-dist/*.tar.gz", 3),
+    ("retained-dist/*.tar.gz", 2),
     ("retained-dist/artifact-manifest.json", 2),
     ("retained-supply-chain/release-sbom.spdx.json", 2),
     ("retained-supply-chain/release-supply-chain-evidence.json", 2),
@@ -854,7 +857,10 @@ for required in (
     "requirements/locks/core-py311.txt",
     "python -m build --no-isolation",
     "--no-deps dist/*.whl",
-    "--no-deps --no-build-isolation dist/*.tar.gz",
+    '--no-deps --no-build-isolation --require-hashes -r "$RUNNER_TEMP/local-sdist-requirements.txt"',
+    "package_artifact_manifest.py locked-sdist",
+    '--dist-dir dist',
+    '--output "$RUNNER_TEMP/local-sdist-requirements.txt"',
 ):
     if required not in package:
         fail(f"package build must use the locked non-isolated build contract: {required}")
@@ -875,14 +881,17 @@ if "python -m build" in package_reverify:
     fail("package-reverify must not rebuild package distributions")
 if (
     "retained-dist/*.whl" not in package_reverify
-    or "retained-dist/*.tar.gz" not in package_reverify
+    or "package_artifact_manifest.py locked-sdist" not in package_reverify
 ):
     fail("package-reverify must exercise the downloaded wheel and sdist")
 for required in (
     "--require-hashes",
     "requirements/locks/core-py311.txt",
     "--no-deps retained-dist/*.whl",
-    "--no-deps --no-build-isolation retained-dist/*.tar.gz",
+    '--no-deps --no-build-isolation --require-hashes -r "$RUNNER_TEMP/local-sdist-requirements.txt"',
+    "package_artifact_manifest.py locked-sdist",
+    '--dist-dir retained-dist',
+    '--output "$RUNNER_TEMP/local-sdist-requirements.txt"',
 ):
     if required not in package_reverify:
         fail(f"package-reverify must consume the locked dependency environment: {required}")
