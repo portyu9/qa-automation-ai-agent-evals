@@ -619,13 +619,15 @@ def self_test() -> None:
     check_path = f"/repos/{REPOSITORY}/commits/{head}/check-runs?per_page=100"
     already[check_path] = {
         "total_count": 1,
-        "check_runs": [{
-            "name": "CodeQL",
-            "head_sha": head,
-            "app": {"slug": "github-advanced-security"},
-            "status": "completed",
-            "conclusion": "success",
-        }],
+        "check_runs": [
+            {
+                "name": "CodeQL",
+                "head_sha": head,
+                "app": {"slug": "github-advanced-security"},
+                "status": "completed",
+                "conclusion": "success",
+            }
+        ],
     }
     require(discover(Fake(already)) is None, "already published successful CodeQL head not skipped")
     neutral = deepcopy(already)
