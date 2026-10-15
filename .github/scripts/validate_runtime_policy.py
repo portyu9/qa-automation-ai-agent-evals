@@ -1168,6 +1168,23 @@ if "python .github/scripts/verify_required_codeql.py" not in protected_gate:
     fail("protected-gate must enforce exact-subject CodeQL success")
 if "python .github/scripts/verify_required_codeql.py --workflow security" not in protected_gate:
     fail("protected-gate must enforce exact-subject independent Security success")
+if not re.search(r"^    timeout-minutes: 22\s*$", protected_gate, flags=re.MULTILINE):
+    fail("protected-gate must budget for authenticated two-job CodeQL publication")
+codeql_step_start = protected_gate.find("      - name: Require exact-subject CodeQL success")
+security_step_start = protected_gate.find("      - name: Self-test exact-subject Security bridge")
+if codeql_step_start < 0 or security_step_start <= codeql_step_start:
+    fail("protected-gate CodeQL and Security verification order changed")
+else:
+    codeql_bridge = protected_gate[codeql_step_start:security_step_start]
+    if (
+        "--attempts 90" not in codeql_bridge
+        or "--delay-seconds 10" not in codeql_bridge
+        or '--subject-sha "$SUBJECT_SHA"' not in codeql_bridge
+        or '--branch "$SUBJECT_BRANCH"' not in codeql_bridge
+        or '--trigger-event "$TRIGGER_EVENT"' not in codeql_bridge
+        or "--workflow security" in codeql_bridge
+    ):
+        fail("protected-gate CodeQL bridge lost the exact-subject bounded 15-minute wait")
 for expression in (
     "github.event.pull_request.head.sha || github.sha",
     "github.event.pull_request.head.ref || github.ref_name",
