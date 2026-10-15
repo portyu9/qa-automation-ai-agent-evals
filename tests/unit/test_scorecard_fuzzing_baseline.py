@@ -17,9 +17,18 @@ CLASSIFIER = ROOT / ".github/scripts/classify_scorecard_sarif.py"
 ACCEPTED_MAIN = "c134d3bd2c15d3d5213aa72b7c3be7f2b192a990"
 
 RETIRED_PIPS = (
-    (".github/workflows/ci.yml", "python -m pip install --no-deps --no-build-isolation dist/*.tar.gz"),
-    (".github/workflows/ci.yml", "python -m pip install --no-deps --no-build-isolation retained-dist/*.tar.gz"),
-    (".github/workflows/publish-release.yml", "python -m pip install --no-deps --no-build-isolation retained-dist/*.tar.gz"),
+    (
+        ".github/workflows/ci.yml",
+        "python -m pip install --no-deps --no-build-isolation dist/*.tar.gz",
+    ),
+    (
+        ".github/workflows/ci.yml",
+        "python -m pip install --no-deps --no-build-isolation retained-dist/*.tar.gz",
+    ),
+    (
+        ".github/workflows/publish-release.yml",
+        "python -m pip install --no-deps --no-build-isolation retained-dist/*.tar.gz",
+    ),
     (".github/workflows/security.yml", "python -m pip install --no-deps --no-build-isolation ."),
     (".github/workflows/unknown.yml", "python -m pip install malicious==99.0"),
 )
@@ -41,24 +50,32 @@ def _sarif(
         }
         if rid == "PinnedDependenciesID":
             path, snippet = source
-            result["locations"] = [{
-                "physicalLocation": {
-                    "artifactLocation": {"uri": path},
-                    "region": {"snippet": {"text": snippet}},
+            result["locations"] = [
+                {
+                    "physicalLocation": {
+                        "artifactLocation": {"uri": path},
+                        "region": {"snippet": {"text": snippet}},
+                    }
                 }
-            }]
+            ]
         return result
 
     return {
         "version": "2.1.0",
-        "runs": [{
-            "tool": {"driver": {
-                "name": "Scorecard",
-                "semanticVersion": "v5.5.0",
-                "rules": [{"id": rule} for rule in declared],
-            }},
-            "results": [finding(rule) for rule, amount in counts.items() for _ in range(amount)],
-        }],
+        "runs": [
+            {
+                "tool": {
+                    "driver": {
+                        "name": "Scorecard",
+                        "semanticVersion": "v5.5.0",
+                        "rules": [{"id": rule} for rule in declared],
+                    }
+                },
+                "results": [
+                    finding(rule) for rule, amount in counts.items() for _ in range(amount)
+                ],
+            }
+        ],
     }
 
 
@@ -79,9 +96,7 @@ def test_accepted_five_finding_baseline_has_no_pip_or_fuzz_allowance() -> None:
 
 @pytest.mark.parametrize("source", RETIRED_PIPS)
 @pytest.mark.parametrize("split_run", [False, True])
-def test_cleared_pip_commands_cannot_reappear(
-    source: tuple[str, str], split_run: bool
-) -> None:
+def test_cleared_pip_commands_cannot_reappear(source: tuple[str, str], split_run: bool) -> None:
     classifier = runpy.run_path(str(CLASSIFIER))
     limits = classifier["MAX_EXISTING"]
     document = _sarif(limits, set(limits))
