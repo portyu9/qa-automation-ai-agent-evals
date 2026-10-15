@@ -1270,6 +1270,90 @@ def selftest(config: dict[str, Any]) -> None:
     errors = validate_config(config)
     if errors:
         raise GovernanceError("config self-test failed: " + "; ".join(errors))
+
+    # Pure, adversarial current-head review authority checks. The most recent
+    # owner decision is binding irrespective of REST pagination/order; an
+    # autonomous owner-token approval must NEVER erase an explicit owner veto.
+    head = "1" * 40
+    old = "2" * 40
+    owner = {
+        "login": config["ownerApprovalLogin"],
+        "id": config["ownerApprovalUserId"],
+    }
+    first = {
+        "id": 101,
+        "user": owner,
+        "state": "APPROVED",
+        "commit_id": head,
+        "submitted_at": "2026-10-14T15:00:00Z",
+    }
+    veto = dict(
+        first, id=102, state="CHANGES_REQUESTED", submitted_at="2026-10-14T15:01:00Z"
+    )
+    dismissed = dict(first, id=103, state="DISMISSED", submitted_at="2026-10-14T15:02:00Z")
+    reapproved = dict(first, id=104, submitted_at="2026-10-14T15:03:00Z")
+    checks = (
+        ([], "none"),
+        ([first], "approved"),
+        ([first, veto], "veto"),
+        ([veto, first], "veto"),
+        ([first, dismissed], "veto"),
+        ([first, veto, reapproved], "approved"),
+        ([dict(first, commit_id=old)], "none"),
+        ([first, dict(reapproved, commit_id=old)], "none"),
+        ([veto, dict(reapproved, commit_id=old)], "veto"),
+        ([first, dict(veto, id=105, submitted_at=first["submitted_at"])], "veto"),
+        ([first, dict(veto, state="COMMENTED")], "approved"),
+        ([first, dict(veto, state="PENDING", submitted_at=None)], "approved"),
+        ([dict(first, user={"login": "unrelated", "id": 424242})], "none"),
+    )
+    for history, expected in checks:
+        outcome = _owner_review_decision(history, head, config)
+        if outcome != expected:
+            raise GovernanceError(
+                f"owner review authority self-test mismatch: {expected} != {outcome}"
+            )
+    for forged in (
+        dict(first, user={"login": owner["login"], "id": 424242}),
+        dict(first, user={"login": "forged", "id": owner["id"]}),
+        dict(first, id=0),
+        dict(first, id=True),
+        dict(first, commit_id="malformed"),
+        dict(first, submitted_at="invalid"),
+        dict(first, state="mystery"),
+    ):
+        try:
+            _owner_review_decision([forged], head, config)
+        except GovernanceError:
+            pass
+        else:
+            raise GovernanceError("owner review authority accepted forged decision")
+    try:
+        _owner_review_decision([first, dict(first)], head, config)
+    except GovernanceError:
+        pass
+    else:
+        raise GovernanceError("owner review authority accepted duplicate decision identity")
+
+    class _VetoApi:
+        def list_all(self, path: str, *, max_pages: int) -> list[dict[str, Any]]:
+            if path != "/pulls/7/reviews" or max_pages != config["maxPaginationPages"]:
+                raise GovernanceError("veto fixture consulted unexpected API endpoint")
+            return [first, veto]
+
+        def post(self, *args: Any, **kwargs: Any) -> None:
+            raise GovernanceError("explicit veto fixture was auto-overridden")
+
+    try:
+        _ensure_owner_review_and_approval(
+            _VetoApi(), {"number": 7, "headSha": head}, config  # type: ignore[arg-type]
+        )
+    except PolicyBlock as exc:
+        if "veto" not in str(exc):
+            raise GovernanceError("owner veto returned wrong policy outcome") from exc
+    else:
+        raise GovernanceError("owner changes-requested veto was not enforced")
+
     for key, bad in (
         ("ownerApprovalRequired", False),
         ("ownerApprovalLogin", ""),
