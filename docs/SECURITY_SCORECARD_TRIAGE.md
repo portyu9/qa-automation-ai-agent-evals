@@ -233,3 +233,49 @@ Remaining hardening: preserve the full wheel+sdist tests when considering actual
 ## Prepared source-distribution SHA-256 installation hardening (PR pending verification)
 
 The three remaining local/retained sdist pip heuristics are being addressed by generating a one-line, **local-file only** pip `--require-hashes` requirement **from the previously reviewed, exact source-bound artifact manifest**, after independently verifying the complete two-file artifact set. CI now creates the manifest after inspecting wheel/sdist metadata but before the first noneditable sdist installation; both CI sdist tests and the trusted release sdist smoke retain `--no-deps --no-build-isolation`, while pip itself must verify the manifest SHA-256 at installation. The release job separately verifies Sigstore bundle/subjects and CI source identity before this smoke; these new hashes do not themselves authenticate the publisher. Premerge installer inventory and negative tests must reject either bare sdist glob from being restored or a synthetic `--require-hashes` without the manifest generator. **This is a pending PR candidate, not an accepted-main result or a claim that any Code Scanning alerts have closed.** Authenticate exact-head CI and real postmerge Scorecard before changing the eight-finding ceiling.
+
+
+## Verified five-finding checkpoint and zero-installer regression threshold (15 October 2026 UTC)
+
+The formerly pending sdist installation hardening above was completed and independently
+qualified as protected merged PR #377, accepted main
+c134d3bd2c15d3d5213aa72b7c3be7f2b192a990. On its exact PR head,
+30 checks succeeded, five intentionally skipped, and zero failed; real
+noneditable wheel/sdist installations, independent reproducibility and
+Sigstore/trusted release provenance, Quality Python 3.11/3.14, CodeQL,
+Security, Package integrity, Windows/macOS and deep fuzz all passed.
+The single live repository branch is main; there were no open PRs at this
+checkpoint.
+
+The new main commit triggered independent authentic OpenSSF Scorecard
+workflow 38673527580, job 116221835112, which successfully uploaded the
+original *unfiltered* SARIF to GitHub Code Scanning and retained the evidence
+as artifact 11945232317, ZIP SHA-256
+7e5945d0d170d576c8fbbad9a2216f3d5fd89608fc109a34c96bf7394cf5520b.
+It logged the exact classification:
+
+Scorecard SARIF: FINDINGS_OPEN, real findings=5, baseline maxima=8; no alerts were suppressed
+
+The three formerly reported PinnedDependenciesID warnings on reviewed
+noneditable sdist installations are genuinely *absent* from this SARIF.
+Each noneditable installation now uses pip --require-hashes with an exclusive
+source-manifest-bound local requirement file, while keeping --no-deps and
+--no-build-isolation; no real smoke or release attestation was deleted.
+Hashes bind bytes and cannot authenticate package publishers or runner trust.
+
+Exactly five genuine SARIF warnings remain: BranchProtectionID, CodeReviewID,
+SASTID, MaintainedID, CIIBestPracticesID. These respectively require a real
+governance reviewer/admin decision, independently qualified approval history,
+upstream historical SAST app recognition, natural repository age and
+substantiated external Best Practices enrollment. The connected GitHub app
+cannot read the admin-authenticated /code-scanning/alerts listing, so this
+SARIF evidence does not assert that the UI count immediately equals five.
+
+The separate follow-up policy PR ratchets the previously allowed
+PinnedDependenciesID maximum from 3 to 0, preserves FuzzingID=0, and changes
+the postmerge scanner ceiling from 8 to 5. Synthetic regression fixtures
+reject reintroduction of old local or retained pip installs, unknown
+third-party commands, cross-run relapses, missing locations and malformed
+scanner results. Real scanner SARIF is never rewritten or suppressed, and
+the existing CodeQL/Security/Package-integrity merge protection is untouched.
+The remaining #349 and #360 owner/governance issues are not closed or waived.
