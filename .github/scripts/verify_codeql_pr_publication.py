@@ -384,10 +384,7 @@ def verify_sarif(directory: Path) -> None:
             # than silently creating another untracked analysis identity.
             require(
                 metadata is None
-                or (
-                    isinstance(metadata, dict)
-                    and metadata.get("id") == f"{CODEQL_CATEGORY}/"
-                ),
+                or (isinstance(metadata, dict) and metadata.get("id") == f"{CODEQL_CATEGORY}/"),
                 "CodeQL original SARIF carries a conflicting analysis category",
             )
             results = analysis.get("results", [])
