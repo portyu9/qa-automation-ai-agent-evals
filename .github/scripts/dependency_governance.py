@@ -1148,9 +1148,7 @@ def _owner_review_decision(
     return "none"  # No valid approval for the current exact head.
 
 
-def _owner_review_status(
-    api: GitHubApi, number: int, head_sha: str, config: dict[str, Any]
-) -> str:
+def _owner_review_status(api: GitHubApi, number: int, head_sha: str, config: dict[str, Any]) -> str:
     reviews = api.list_all(f"/pulls/{number}/reviews", max_pages=config["maxPaginationPages"])
     return _owner_review_decision(reviews, head_sha, config)
 
@@ -1291,9 +1289,7 @@ def selftest(config: dict[str, Any]) -> None:
         "commit_id": head,
         "submitted_at": "2026-10-14T15:00:00Z",
     }
-    veto = dict(
-        first, id=102, state="CHANGES_REQUESTED", submitted_at="2026-10-14T15:01:00Z"
-    )
+    veto = dict(first, id=102, state="CHANGES_REQUESTED", submitted_at="2026-10-14T15:01:00Z")
     dismissed = dict(first, id=103, state="DISMISSED", submitted_at="2026-10-14T15:02:00Z")
     reapproved = dict(first, id=104, submitted_at="2026-10-14T15:03:00Z")
     checks = (
@@ -1350,7 +1346,9 @@ def selftest(config: dict[str, Any]) -> None:
 
     try:
         _ensure_owner_review_and_approval(
-            _VetoApi(), {"number": 7, "headSha": head}, config  # type: ignore[arg-type]
+            _VetoApi(),
+            {"number": 7, "headSha": head},
+            config,  # type: ignore[arg-type]
         )
     except PolicyBlock as exc:
         if "veto" not in str(exc):
