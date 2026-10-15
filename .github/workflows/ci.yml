@@ -695,10 +695,27 @@ jobs:
           if doctor['version'] != expected:
               raise SystemExit(f'doctor version mismatch: {doctor["version"]!r} != {expected!r}')
           PY
+      - name: Create retained package artifact manifest
+        run: |
+          python .github/scripts/package_artifact_manifest.py create \
+            --dist-dir dist \
+            --repository "$GITHUB_REPOSITORY" \
+            --commit-sha "$GITHUB_SHA" \
+            --workflow "$GITHUB_WORKFLOW" \
+            --run-id "$GITHUB_RUN_ID" \
+            --run-attempt "$GITHUB_RUN_ATTEMPT"
       - name: Install from built source distribution
         run: |
           python -m pip uninstall -y qa-automation-ai-agent-evals
-          python -m pip install --disable-pip-version-check --no-deps --no-build-isolation dist/*.tar.gz
+          python .github/scripts/package_artifact_manifest.py locked-sdist \
+            --dist-dir dist \
+            --repository "$GITHUB_REPOSITORY" \
+            --commit-sha "$GITHUB_SHA" \
+            --workflow "$GITHUB_WORKFLOW" \
+            --run-id "$GITHUB_RUN_ID" \
+            --run-attempt "$GITHUB_RUN_ATTEMPT" \
+            --output "$RUNNER_TEMP/local-sdist-requirements.txt"
+          python -m pip install --disable-pip-version-check --no-deps --no-build-isolation --require-hashes -r "$RUNNER_TEMP/local-sdist-requirements.txt"
           python -c "import agent_evals; print(agent_evals.__name__)"
           agent-evals --help >/dev/null
           python - <<'PY'
@@ -711,15 +728,6 @@ jobs:
           if doctor['version'] != expected:
               raise SystemExit(f'doctor version mismatch: {doctor["version"]!r} != {expected!r}')
           PY
-      - name: Create retained package artifact manifest
-        run: |
-          python .github/scripts/package_artifact_manifest.py create \
-            --dist-dir dist \
-            --repository "$GITHUB_REPOSITORY" \
-            --commit-sha "$GITHUB_SHA" \
-            --workflow "$GITHUB_WORKFLOW" \
-            --run-id "$GITHUB_RUN_ID" \
-            --run-attempt "$GITHUB_RUN_ATTEMPT"
       - name: Upload exact tested package artifacts
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -783,7 +791,15 @@ jobs:
       - name: Install retained source distribution
         run: |
           python -m pip uninstall -y qa-automation-ai-agent-evals
-          python -m pip install --disable-pip-version-check --no-deps --no-build-isolation retained-dist/*.tar.gz
+          python .github/scripts/package_artifact_manifest.py locked-sdist \
+            --dist-dir retained-dist \
+            --repository "$GITHUB_REPOSITORY" \
+            --commit-sha "$GITHUB_SHA" \
+            --workflow "$GITHUB_WORKFLOW" \
+            --run-id "$GITHUB_RUN_ID" \
+            --run-attempt "$GITHUB_RUN_ATTEMPT" \
+            --output "$RUNNER_TEMP/local-sdist-requirements.txt"
+          python -m pip install --disable-pip-version-check --no-deps --no-build-isolation --require-hashes -r "$RUNNER_TEMP/local-sdist-requirements.txt"
           python -c "import agent_evals; print(agent_evals.__name__)"
           agent-evals --help >/dev/null
           python - <<'PY'

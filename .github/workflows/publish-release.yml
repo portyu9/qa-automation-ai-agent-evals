@@ -204,7 +204,15 @@ jobs:
       - name: Exercise retained source distribution
         run: |
           python -m pip uninstall -y qa-automation-ai-agent-evals
-          python -m pip install --disable-pip-version-check --no-deps --no-build-isolation retained-dist/*.tar.gz
+          python .github/scripts/package_artifact_manifest.py locked-sdist \
+            --dist-dir retained-dist \
+            --repository "$GITHUB_REPOSITORY" \
+            --commit-sha "${{ steps.candidate.outputs.commit_sha }}" \
+            --workflow "CI" \
+            --run-id "${{ steps.candidate.outputs.ci_run_id }}" \
+            --run-attempt "${{ steps.candidate.outputs.ci_run_attempt }}" \
+            --output "$RUNNER_TEMP/local-sdist-requirements.txt"
+          python -m pip install --disable-pip-version-check --no-deps --no-build-isolation --require-hashes -r "$RUNNER_TEMP/local-sdist-requirements.txt"
           python -c "import agent_evals; print(agent_evals.__name__)"
           agent-evals --help >/dev/null
       - name: Revalidate tag and release state immediately before publication

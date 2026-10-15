@@ -26,9 +26,7 @@ APPROVED_FLAGS = {"--disable-pip-version-check", "--no-input"}
 LOCAL_TARGETS = {
     ".",
     "dist/*.whl",
-    "dist/*.tar.gz",
     "retained-dist/*.whl",
-    "retained-dist/*.tar.gz",
 }
 
 # Validator-owned exact inventory: new local package installation paths require policy
@@ -37,9 +35,7 @@ EXPECTED_LOCAL = {
     "ci.yml": {
         ".": 7,
         "dist/*.whl": 1,
-        "dist/*.tar.gz": 1,
         "retained-dist/*.whl": 4,
-        "retained-dist/*.tar.gz": 1,
     },
     "deep-fuzz.yml": {".": 1},
     "deep-mutation.yml": {".": 1},
@@ -49,9 +45,13 @@ EXPECTED_LOCAL = {
     "live-provider-canary.yml": {".": 1},
     "platform-smoke.yml": {".": 1},
     "publish-pypi.yml": {"retained-dist/*.whl": 1},
-    "publish-release.yml": {"retained-dist/*.whl": 1, "retained-dist/*.tar.gz": 1},
+    "publish-release.yml": {"retained-dist/*.whl": 1},
     "security.yml": {".": 1},
 }
+
+
+EXPECTED_HASHED_SDIST = {"ci.yml": 2, "publish-release.yml": 1}
+LOCKED_SDIST_REQUIREMENT = "$RUNNER_TEMP/local-sdist-requirements.txt"
 
 
 class PipInstallPolicyError(ValueError):
@@ -85,6 +85,26 @@ def classify(command: str, workflow: str) -> str:
                 f"{workflow}: unsupported package acquisition flag {unsafe}"
             )
     if "--require-hashes" in args:
+        # Exactly three source-distribution smoke installs have independent
+        # manifest-bound SHA-256 requirements, NOT a remote lockfile source.
+        if (
+            "-r" in args
+            and args.index("-r") + 1 < len(args)
+            and args[args.index("-r") + 1] == LOCKED_SDIST_REQUIREMENT
+        ):
+            expected = {
+                "--disable-pip-version-check",
+                "--no-deps",
+                "--no-build-isolation",
+                "--require-hashes",
+                "-r",
+                LOCKED_SDIST_REQUIREMENT,
+            }
+            if workflow not in EXPECTED_HASHED_SDIST or len(args) != 6 or set(args) != expected:
+                raise PipInstallPolicyError(
+                    f"{workflow}: unsafe local sdist hash-install arguments"
+                )
+            return "hashed-local-sdist"
         if "--no-deps" in args or "--no-build-isolation" in args:
             raise PipInstallPolicyError(f"{workflow}: mixed hashed dependency and local install")
         if args.count("-r") != 1:
@@ -161,6 +181,7 @@ def validate(root: Path = ROOT) -> tuple[int, int]:
     found = Counter()
     count = 0
     hashed = 0
+    locked_sdists = Counter()
     for path in paths:
         wf = _load_workflow(path)
         jobs = wf.get("jobs")
@@ -183,6 +204,24 @@ def validate(root: Path = ROOT) -> tuple[int, int]:
                         count += 1
                         if kind == "hashed-closure":
                             hashed += 1
+                        elif kind == "hashed-local-sdist":
+                            # Enforce the manifest-to-pip handoff in the same
+                            # executable step; declaring a hash flag alone is
+                            # insufficient to establish the runtime input.
+                            required = (
+                                "python .github/scripts/package_artifact_manifest.py locked-sdist",
+                                '--output "$RUNNER_TEMP/local-sdist-requirements.txt"',
+                                '--repository "$GITHUB_REPOSITORY"',
+                                "--dist-dir " + ("retained-dist" if "retained" in run else "dist"),
+                            )
+                            if (
+                                any(token not in run for token in required)
+                                or run.count(required[0]) != 1
+                            ):
+                                raise PipInstallPolicyError(
+                                    f"{path.name}: local sdist install not bound to manifest producer"
+                                )
+                            locked_sdists[path.name] += 1
                         else:
                             found[(path.name, kind)] += 1
     expected = Counter(
@@ -197,6 +236,10 @@ def validate(root: Path = ROOT) -> tuple[int, int]:
         missing = sorted((expected - found).items())
         raise PipInstallPolicyError(
             f"local artifact install identity/count drift: extra={delta}, missing={missing}"
+        )
+    if dict(locked_sdists) != EXPECTED_HASHED_SDIST:
+        raise PipInstallPolicyError(
+            f"local SHA-256 sdist install identity drift: {dict(locked_sdists)}"
         )
     if hashed == 0:
         raise PipInstallPolicyError("no SHA-256-verified third-party dependency closure found")
@@ -221,6 +264,10 @@ def self_test() -> None:
         "python -m pip install --no-deps --no-build-isolation -e git+https://evil.example/pkg",
         "python -m pip install --no-deps --no-build-isolation -e dist/*.whl",
         "python -m pip install --no-deps --no-build-isolation dist/*.whl -e",
+        "python -m pip install --require-hashes -r $RUNNER_TEMP/local-sdist-requirements.txt",
+        "python -m pip install --no-deps --require-hashes -r $RUNNER_TEMP/local-sdist-requirements.txt",
+        "python -m pip install --no-deps --no-build-isolation --require-hashes -r $RUNNER_TEMP/local-sdist-requirements.txt",
+        "python -m pip install --no-deps --no-build-isolation --require-hashes -r $RUNNER_TEMP/local-sdist-requirements.txt --index-url https://evil.example",
     )
     for value in bad:
         try:
@@ -238,11 +285,27 @@ def self_test() -> None:
     assert (
         classify("python -m pip install --no-deps --no-build-isolation -e .", "security.yml") == "."
     )
-    assert classify("python -m pip install --no-deps dist/*.whl", "ci.yml") == "dist/*.whl"
     assert (
-        classify("python -m pip install --no-deps --no-build-isolation dist/*.tar.gz", "ci.yml")
-        == "dist/*.tar.gz"
+        classify(
+            "python -m pip install --disable-pip-version-check --no-deps --no-build-isolation "
+            '--require-hashes -r "$RUNNER_TEMP/local-sdist-requirements.txt"',
+            "ci.yml",
+        )
+        == "hashed-local-sdist"
     )
+    assert classify("python -m pip install --no-deps dist/*.whl", "ci.yml") == "dist/*.whl"
+    # The three former noneditable sdist installs MUST remain hash-bound; never
+    # admit un-hashed sdist commands as a local-smoke exception.
+    for unverified in ("dist/*.tar.gz", "retained-dist/*.tar.gz"):
+        try:
+            classify(
+                f"python -m pip install --no-deps --no-build-isolation {unverified}",
+                "ci.yml",
+            )
+        except PipInstallPolicyError:
+            pass
+        else:
+            raise AssertionError(f"un-hashed source-distribution smoke accepted: {unverified}")
 
     with tempfile.TemporaryDirectory(prefix="pip-workflow-policy-") as tmp:
         base = Path(tmp)
