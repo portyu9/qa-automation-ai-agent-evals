@@ -1,0 +1,64 @@
+name: Trusted CodeQL PR-head publication
+
+# Producer scans untrusted PRs with a read-only token. A distinct workflow_run
+# consumer reads ONLY trusted main scripts, validates canonical PR/run/source
+# identity and zero-alert SARIF, then publishes the original CodeQL evidence.
+# GitHub security-events:write never reaches a job running candidate scripts.
+on:
+  workflow_run:
+    workflows: [CodeQL]
+    types: [completed]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: trusted-pr-codeql-publish-${{ github.event.workflow_run.id }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Authenticated PR-head Code Scanning
+    if: github.event_name == 'workflow_run' && github.event.workflow_run.event == 'pull_request' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_repository.full_name == github.repository
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      actions: read
+      checks: read
+      pull-requests: read
+      security-events: write
+    steps:
+      - name: Checkout accepted-main verification logic only
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          path: trusted
+          persist-credentials: false
+      - name: Self-test trusted provenance refusal cases
+        run: python3 trusted/.github/scripts/verify_codeql_pr_publication.py --self-test
+      - name: Authenticate live producer, candidate tree and CodeQL inputs
+        id: provenance
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 trusted/.github/scripts/verify_codeql_pr_publication.py --verify
+      - name: Download only canonical completed-run CodeQL evidence
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          repository: ${{ github.repository }}
+          run-id: ${{ steps.provenance.outputs.run_id }}
+          name: codeql-sarif-${{ steps.provenance.outputs.run_id }}
+          github-token: ${{ github.token }}
+          path: reports/security/pr-codeql
+      - name: Revalidate exact original CodeQL SARIF under trusted main
+        run: |
+          python3 trusted/.github/scripts/verify_codeql_pr_publication.py --verify-sarif reports/security/pr-codeql
+          python3 trusted/.github/scripts/validate_codeql_sarif.py reports/security/pr-codeql
+      - name: Publish authentic PR-head CodeQL result
+        uses: github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
+        with:
+          sarif_file: reports/security/pr-codeql
+          ref: refs/pull/${{ steps.provenance.outputs.pr_number }}/head
+          sha: ${{ steps.provenance.outputs.head_sha }}
+          category: authenticated-codeql-pr-head
+          wait-for-processing: "true"
