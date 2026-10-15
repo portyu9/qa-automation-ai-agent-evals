@@ -141,9 +141,7 @@ def test_same_total_new_pip_command_cannot_replace_reviewed_warning(mutation: st
         pip[0]["locations"][0]["physicalLocation"]["artifactLocation"]["uri"] = (
             ".github/workflows/security.yml"
         )
-        pip[0]["locations"][0]["physicalLocation"]["region"]["snippet"]["text"] = (
-            SOURCE_PIP
-        )
+        pip[0]["locations"][0]["physicalLocation"]["region"]["snippet"]["text"] = SOURCE_PIP
     elif mutation == "missing":
         pip[0].pop("locations")
     else:
