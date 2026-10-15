@@ -357,8 +357,7 @@ def verify_sarif(directory: Path) -> None:
         "SARIF archive must include exactly two regular CodeQL language reports",
     )
     require(
-        {p.relative_to(directory).as_posix() for p in actual}
-        == {"actions.sarif", "python.sarif"},
+        {p.relative_to(directory).as_posix() for p in actual} == {"actions.sarif", "python.sarif"},
         "CodeQL Actions or Python source analysis is missing/renamed",
     )
     for f in actual:
