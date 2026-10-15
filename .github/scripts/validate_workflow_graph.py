@@ -464,7 +464,7 @@ def _validate_codeql_pr_publication_contract(workflow: dict[str, Any], *, path: 
         "sarif_file": "reports/security/pr-codeql",
         "ref": "refs/pull/${{ steps.provenance.outputs.pr_number }}/head",
         "sha": "${{ steps.provenance.outputs.head_sha }}",
-        "category": "authenticated-codeql-pr-head",
+        "category": ".github/workflows/codeql.yml:codeql-upload",
         "wait-for-processing": "true",
     }:
         raise WorkflowPolicyError(f"{path}: PR-head code scanning destination drift")
