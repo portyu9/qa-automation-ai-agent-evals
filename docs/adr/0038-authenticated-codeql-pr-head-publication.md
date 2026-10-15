@@ -1,6 +1,6 @@
 # ADR 0038: Attribute genuine read-only PR CodeQL to its exact head through a trusted publication boundary
 
-**Status:** Proposed; accept only after exact-head CI, real code-scanning, and non-bypass mergeability evidence.
+**Status:** Accepted, conditional on exact-head CI, authentic PR-head code-scanning and non-bypass mergeability evidence.
 
 ## Context
 
