@@ -287,7 +287,12 @@ if "security-events: write" in native_fuzz or "id-token: write" in native_fuzz:
     fail("native Atheris coverage-fuzz job must remain read-only")
 if re.search(r"^    if:", native_fuzz, flags=re.MULTILINE):
     fail("native Atheris job must not be silently skipped by a conditional guard")
-for forbidden in ("continue-on-error:", "|| true", "--no-deps --no-build-isolation .", "--no-deps --no-build-isolation -e ."):
+for forbidden in (
+    "continue-on-error:",
+    "|| true",
+    "--no-deps --no-build-isolation .",
+    "--no-deps --no-build-isolation -e .",
+):
     if forbidden in native_fuzz:
         fail(f"native Atheris job must not bypass execution or re-install source: {forbidden}")
 
