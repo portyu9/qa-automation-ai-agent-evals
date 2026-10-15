@@ -25,14 +25,20 @@ Keep `.github/workflows/codeql.yml` unchanged: unprivileged PR scanning,
 unmodified original CodeQL SARIF, zero-alert veto, exact-run forensic artifact,
 and existing authenticated accepted-main Code Scanning publication.
 
-Add a distinct trusted **`workflow_run` consumer** executed from GitHub
-default-branch workflow source after the canonical CodeQL PR run reports success.
+Add a distinct trusted **main-owned scheduled / manually dispatched consumer**
+running at a ten-minute scheduled cadence or explicitly on `main` dispatch.
+It independently enumerates actual completed CodeQL pull-request runs through
+the trusted GitHub API (not a candidate event payload); no privileged PR or
+`workflow_run` event ever fires this workflow.
 Its only write authority is `security-events: write`, held in a single publisher
 job. It checks out *accepted main source only* into `trusted/`, with checkout
 credentials not persisted. It never checks out, evaluates, sources, or executes
 the candidate PR's files in its privileged runner.
 
-The trusted verifier re-reads GitHub APIs with the live read-scoped job token:
+The trusted verifier re-reads GitHub APIs with the live job token's
+read-scoped APIs. It selects only real current PR heads and completed canonical
+CodeQL runs, and skips a PR head that already has a genuine successful GitHub
+Code Scanning SAST check. Its verification requires:
 
 - exactly the canonical immutable CodeQL workflow ID/path/event/name/success and
   first attempt, head branch, same-repository identity, and one live open PR
@@ -64,7 +70,9 @@ script path, shell expression, or permission setting.
 ## Consequences
 
 This adds a separately authenticated Code Scanning publication path for same-repository
-PRs only. It introduces no additional privilege to the existing PR CodeQL job and
+PRs only. Its scheduled cadence may delay merge readiness and requires GitHub
+Actions scheduling capacity; a workflow dispatch on accepted main can accelerate
+a pending authenticated PR if the scheduler has not completed. It introduces no additional privilege to the existing PR CodeQL job and
 does not transform SARIF artifact digests into authentication. It also introduces
 a deliberate fail-closed availability constraint for a PR that changes scanner
 or verifier inputs: such PRs cannot acquire the new trusted PR-head report
