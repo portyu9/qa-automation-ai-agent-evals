@@ -11,6 +11,7 @@ import re
 import shlex
 import shutil
 import tempfile
+import tomllib
 from collections import Counter
 from pathlib import Path
 
@@ -142,6 +143,19 @@ def classify(command: str, workflow: str) -> str:
 
 
 def validate(root: Path = ROOT) -> tuple[int, int]:
+    # Editable PEP 660 is safe/available only with explicit first-party src
+    # directories and without downloading an extra un-hashed build backend.
+    try:
+        project = tomllib.loads((root / "pyproject.toml").read_text(encoding="utf-8"))
+        backend = project["tool"]["hatch"]["build"]["targets"]["wheel"]
+    except (OSError, UnicodeError, tomllib.TOMLDecodeError, KeyError, TypeError) as exc:
+        raise PipInstallPolicyError("first-party editable build contract is unreadable") from exc
+    if backend.get("dev-mode-dirs") != ["src"] or backend.get("packages") != [
+        "src/agent_evals"
+    ]:
+        raise PipInstallPolicyError(
+            "Hatchling editable source must use exact src/agent_evals without optional downloads"
+        )
     folder = root / ".github" / "workflows"
     paths = sorted(folder.glob("*.y*ml"))
     if not paths:
@@ -234,6 +248,20 @@ def self_test() -> None:
         base = Path(tmp)
         target = base / ".github" / "workflows"
         shutil.copytree(ROOT / ".github" / "workflows", target)
+        shutil.copyfile(ROOT / "pyproject.toml", base / "pyproject.toml")
+        original_project = (base / "pyproject.toml").read_text(encoding="utf-8")
+        for bad_mode in ('dev-mode-dirs = ["."]', 'dev-mode-dirs = ["src", "tests"]'):
+            (base / "pyproject.toml").write_text(
+                original_project.replace('dev-mode-dirs = ["src"]', bad_mode),
+                encoding="utf-8",
+            )
+            try:
+                validate(base)
+            except PipInstallPolicyError:
+                pass
+            else:
+                raise AssertionError("unreviewed editable source directory was accepted")
+        (base / "pyproject.toml").write_text(original_project, encoding="utf-8")
         original = (target / "security.yml").read_text(encoding="utf-8")
         good = "python -m pip install --disable-pip-version-check --no-deps --no-build-isolation -e ."
         if original.count(good) != 1:
