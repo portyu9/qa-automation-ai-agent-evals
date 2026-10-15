@@ -673,7 +673,10 @@ jobs:
         )
         publisher_mutations = (
             ("          ref: ${{ github.sha }}\n", "          ref: main\n"),
-            ("          TRUSTED_MAIN_SHA: ${{ github.sha }}", "          TRUSTED_MAIN_SHA: ${{ github.head_ref }}"),
+            (
+                "          TRUSTED_MAIN_SHA: ${{ github.sha }}",
+                "          TRUSTED_MAIN_SHA: ${{ github.head_ref }}",
+            ),
             ("          persist-credentials: false", "          persist-credentials: true"),
             ("      security-events: write", "      contents: write"),
             ("          digest-mismatch: error", "          digest-mismatch: warn"),
