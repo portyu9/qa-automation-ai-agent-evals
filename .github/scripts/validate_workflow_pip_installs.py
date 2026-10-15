@@ -150,9 +150,7 @@ def validate(root: Path = ROOT) -> tuple[int, int]:
         backend = project["tool"]["hatch"]["build"]["targets"]["wheel"]
     except (OSError, UnicodeError, tomllib.TOMLDecodeError, KeyError, TypeError) as exc:
         raise PipInstallPolicyError("first-party editable build contract is unreadable") from exc
-    if backend.get("dev-mode-dirs") != ["src"] or backend.get("packages") != [
-        "src/agent_evals"
-    ]:
+    if backend.get("dev-mode-dirs") != ["src"] or backend.get("packages") != ["src/agent_evals"]:
         raise PipInstallPolicyError(
             "Hatchling editable source must use exact src/agent_evals without optional downloads"
         )
@@ -237,7 +235,9 @@ def self_test() -> None:
         )
         == "hashed-closure"
     )
-    assert classify("python -m pip install --no-deps --no-build-isolation -e .", "security.yml") == "."
+    assert (
+        classify("python -m pip install --no-deps --no-build-isolation -e .", "security.yml") == "."
+    )
     assert classify("python -m pip install --no-deps dist/*.whl", "ci.yml") == "dist/*.whl"
     assert (
         classify("python -m pip install --no-deps --no-build-isolation dist/*.tar.gz", "ci.yml")
@@ -263,7 +263,9 @@ def self_test() -> None:
                 raise AssertionError("unreviewed editable source directory was accepted")
         (base / "pyproject.toml").write_text(original_project, encoding="utf-8")
         original = (target / "security.yml").read_text(encoding="utf-8")
-        good = "python -m pip install --disable-pip-version-check --no-deps --no-build-isolation -e ."
+        good = (
+            "python -m pip install --disable-pip-version-check --no-deps --no-build-isolation -e ."
+        )
         if original.count(good) != 1:
             raise AssertionError("security workflow test fixture changed")
         for replacement in (
