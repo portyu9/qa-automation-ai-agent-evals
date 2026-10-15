@@ -520,7 +520,7 @@ for required in (
     "--no-deps retained-dist/*.whl",
     '--no-deps --no-build-isolation --require-hashes -r "$RUNNER_TEMP/local-sdist-requirements.txt"',
     "package_artifact_manifest.py locked-sdist",
-    '--dist-dir retained-dist',
+    "--dist-dir retained-dist",
     '--output "$RUNNER_TEMP/local-sdist-requirements.txt"',
     "release-supply-chain-${{ steps.candidate.outputs.ci_run_id }}",
     "release_supply_chain.py verify",
@@ -859,7 +859,7 @@ for required in (
     "--no-deps dist/*.whl",
     '--no-deps --no-build-isolation --require-hashes -r "$RUNNER_TEMP/local-sdist-requirements.txt"',
     "package_artifact_manifest.py locked-sdist",
-    '--dist-dir dist',
+    "--dist-dir dist",
     '--output "$RUNNER_TEMP/local-sdist-requirements.txt"',
 ):
     if required not in package:
@@ -890,7 +890,7 @@ for required in (
     "--no-deps retained-dist/*.whl",
     '--no-deps --no-build-isolation --require-hashes -r "$RUNNER_TEMP/local-sdist-requirements.txt"',
     "package_artifact_manifest.py locked-sdist",
-    '--dist-dir retained-dist',
+    "--dist-dir retained-dist",
     '--output "$RUNNER_TEMP/local-sdist-requirements.txt"',
 ):
     if required not in package_reverify:
