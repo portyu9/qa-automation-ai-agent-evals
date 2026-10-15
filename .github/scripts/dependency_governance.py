@@ -1344,7 +1344,7 @@ def selftest(config: dict[str, Any]) -> None:
         app={"id": 12345, "slug": "other-app"},
         completed_at="2026-10-14T15:05:00Z",
     )
-    reject_check_history(mandatory + [rogue], "newer same-name foreign check-run")
+    reject_check_history([*mandatory, rogue], "newer same-name foreign check-run")
     # The exact mandatory checks must be native GitHub Actions even when the
     # untrusted check is CodeQL or the aggregate CI gate, not only Package integrity.
     for i, name in enumerate(config["requiredChecks"][:-1]):
