@@ -379,7 +379,6 @@ def _validate_codeql_fork_contract(workflow: dict[str, Any], *, path: Path) -> N
         raise WorkflowPolicyError(f"{path}: CodeQL publisher lost verified SARIF destination")
 
 
-
 def _validate_codeql_pr_publication_contract(workflow: dict[str, Any], *, path: Path) -> None:
     """Bound trusted main-owned scheduled code-scanning authority, not PR run events."""
     if path.name != "codeql-pr-publisher.yml":
@@ -398,8 +397,11 @@ def _validate_codeql_pr_publication_contract(workflow: dict[str, Any], *, path: 
     if publish.get("if") != _TRUSTED_JOB_GUARDS[("codeql-pr-publisher.yml", "publish")]:
         raise WorkflowPolicyError(f"{path}: non-main privileged publisher is forbidden")
     if publish.get("permissions") != {
-        "contents": "read", "actions": "read", "checks": "read",
-        "pull-requests": "read", "security-events": "write",
+        "contents": "read",
+        "actions": "read",
+        "checks": "read",
+        "pull-requests": "read",
+        "security-events": "write",
     }:
         raise WorkflowPolicyError(f"{path}: publisher authority broadened")
     steps = publish.get("steps")
@@ -422,18 +424,24 @@ def _validate_codeql_pr_publication_contract(workflow: dict[str, Any], *, path: 
     if checkout.get("uses") != (
         "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1"
     ) or checkout.get("with") != {
-        "ref": "main", "path": "trusted", "persist-credentials": False,
+        "ref": "main",
+        "path": "trusted",
+        "persist-credentials": False,
     }:
         raise WorkflowPolicyError(f"{path}: publisher can only checkout main verifier")
     if selftest.get("run") != (
         "python3 trusted/.github/scripts/verify_codeql_pr_publication.py --self-test"
     ):
         raise WorkflowPolicyError(f"{path}: publisher self-test removed")
-    if verify.get("run") != (
-        "python3 trusted/.github/scripts/verify_codeql_pr_publication.py --discover"
-    ) or verify.get("id") != "provenance" or verify.get("env") != {
-        "GH_TOKEN": "${{ github.token }}",
-    }:
+    if (
+        verify.get("run")
+        != ("python3 trusted/.github/scripts/verify_codeql_pr_publication.py --discover")
+        or verify.get("id") != "provenance"
+        or verify.get("env")
+        != {
+            "GH_TOKEN": "${{ github.token }}",
+        }
+    ):
         raise WorkflowPolicyError(f"{path}: publisher source discovery bypass")
     if download.get("uses") != (
         "actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c"
@@ -460,7 +468,9 @@ def _validate_codeql_pr_publication_contract(workflow: dict[str, Any], *, path: 
         "wait-for-processing": "true",
     }:
         raise WorkflowPolicyError(f"{path}: PR-head code scanning destination drift")
-    if "secrets." in path.read_text(encoding="utf-8") or "pull_request_target" in path.read_text(encoding="utf-8"):
+    if "secrets." in path.read_text(encoding="utf-8") or "pull_request_target" in path.read_text(
+        encoding="utf-8"
+    ):
         raise WorkflowPolicyError(f"{path}: PR-head publication cannot use secret/target authority")
 
 
@@ -646,15 +656,16 @@ jobs:
                 continue
             raise WorkflowPolicyError("fork CodeQL privilege or bypass mutation was accepted")
 
-        source_pr_publisher = (WORKFLOW_DIR / "codeql-pr-publisher.yml").read_text(
-            encoding="utf-8"
-        )
+        source_pr_publisher = (WORKFLOW_DIR / "codeql-pr-publisher.yml").read_text(encoding="utf-8")
         candidate_pr_publisher = root / "codeql-pr-publisher.yml"
         candidate_pr_publisher.write_text(source_pr_publisher, encoding="utf-8")
         validate_workflow(candidate_pr_publisher)
         subprocess.run(
-            [sys.executable, str(ROOT / ".github/scripts/verify_codeql_pr_publication.py"),
-             "--self-test"],
+            [
+                sys.executable,
+                str(ROOT / ".github/scripts/verify_codeql_pr_publication.py"),
+                "--self-test",
+            ],
             check=True,
             timeout=15,
         )
@@ -664,16 +675,26 @@ jobs:
             ("      security-events: write", "      contents: write"),
             ('    - cron: "*/10 * * * *"', '    - cron: "* * * * *"'),
             ("  workflow_dispatch:", "  pull_request_target:"),
-            ("        run: python3 trusted/.github/scripts/verify_codeql_pr_publication.py --discover",
-             "        run: echo bypass"),
-            ("      - name: Publish authentic PR-head CodeQL result\n        if: steps.provenance.outputs.has_target == 'true'",
-             "      - name: Publish authentic PR-head CodeQL result\n        if: always()"),
-            ("          run-id: ${{ steps.provenance.outputs.run_id }}",
-             "          run-id: ${{ github.run_id }}"),
-            ("          ref: refs/pull/${{ steps.provenance.outputs.pr_number }}/head",
-             "          ref: refs/heads/main"),
-            ("          sha: ${{ steps.provenance.outputs.head_sha }}",
-             "          sha: ${{ github.sha }}"),
+            (
+                "        run: python3 trusted/.github/scripts/verify_codeql_pr_publication.py --discover",
+                "        run: echo bypass",
+            ),
+            (
+                "      - name: Publish authentic PR-head CodeQL result\n        if: steps.provenance.outputs.has_target == 'true'",
+                "      - name: Publish authentic PR-head CodeQL result\n        if: always()",
+            ),
+            (
+                "          run-id: ${{ steps.provenance.outputs.run_id }}",
+                "          run-id: ${{ github.run_id }}",
+            ),
+            (
+                "          ref: refs/pull/${{ steps.provenance.outputs.pr_number }}/head",
+                "          ref: refs/heads/main",
+            ),
+            (
+                "          sha: ${{ steps.provenance.outputs.head_sha }}",
+                "          sha: ${{ github.sha }}",
+            ),
         )
         for original, forged in publisher_mutations:
             if source_pr_publisher.count(original) != 1:
