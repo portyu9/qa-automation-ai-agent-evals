@@ -57,6 +57,10 @@ Issues = "https://github.com/portyu9/qa-automation-ai-agent-evals/issues"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/agent_evals"]
+# Constrain PEP 660 editable installs to this checked-out src tree.
+# This avoids the optional editables backend in the hash-locked CI closure;
+# normal wheel/sdist build paths stay independently exercised.
+dev-mode-dirs = ["src"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

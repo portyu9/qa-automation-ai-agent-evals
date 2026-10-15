@@ -61,7 +61,7 @@ jobs:
         run: |
           set -euo pipefail
           python -m pip install --disable-pip-version-check --require-hashes -r requirements/locks/core-py314.txt
-          python -m pip install --disable-pip-version-check --no-deps --no-build-isolation .
+          python -m pip install --disable-pip-version-check --no-deps --no-build-isolation -e .
           python -m pip check
       - name: Run platform-neutral deterministic kernel smoke
         run: >-

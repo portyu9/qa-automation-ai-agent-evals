@@ -236,7 +236,7 @@ for required in (
     "persist-credentials: false",
     "--require-hashes",
     "requirements/locks/mcp-py311.txt",
-    "--no-deps --no-build-isolation .",
+    "--no-deps --no-build-isolation -e .",
     "-m fuzz",
     "tests/fuzz",
     "src/agent_evals/mcp/remote_auth.py",
@@ -287,7 +287,12 @@ if "security-events: write" in native_fuzz or "id-token: write" in native_fuzz:
     fail("native Atheris coverage-fuzz job must remain read-only")
 if re.search(r"^    if:", native_fuzz, flags=re.MULTILINE):
     fail("native Atheris job must not be silently skipped by a conditional guard")
-for forbidden in ("continue-on-error:", "|| true", "--no-deps --no-build-isolation ."):
+for forbidden in (
+    "continue-on-error:",
+    "|| true",
+    "--no-deps --no-build-isolation .",
+    "--no-deps --no-build-isolation -e .",
+):
     if forbidden in native_fuzz:
         fail(f"native Atheris job must not bypass execution or re-install source: {forbidden}")
 
@@ -304,7 +309,7 @@ for required in (
     "persist-credentials: false",
     "--require-hashes",
     "requirements/locks/core-py311.txt",
-    "--no-deps --no-build-isolation .",
+    "--no-deps --no-build-isolation -e .",
 ):
     if required not in deep_mutation:
         fail(f"deep-mutation workflow is missing required contract text: {required}")
@@ -738,7 +743,7 @@ locked_job_next = {
 }
 for job, lock_path in locked_job_contracts.items():
     block = job_block(workflow, job, locked_job_next[job])
-    for required in ("--require-hashes", lock_path, "--no-deps --no-build-isolation ."):
+    for required in ("--require-hashes", lock_path, "--no-deps --no-build-isolation -e ."):
         if required not in block:
             fail(
                 f"{job} must install the exact repository lock before the local project: {required}"
@@ -788,7 +793,7 @@ for required in (
     "openai-mcp-latest-py314.txt",
     "--require-hashes",
     '"${{ matrix.lock }}"',
-    "--no-deps --no-build-isolation .",
+    "--no-deps --no-build-isolation -e .",
     "python -m pip check",
     '[[ "$RUNNER_OS" == "Linux" ]]',
     '[[ "$RUNNER_ARCH" == "X64" ]]',
