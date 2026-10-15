@@ -1,6 +1,6 @@
 # ADR 0030: Separate unprivileged CodeQL PR analysis from trusted main Code Scanning publication
 
-**Status:** Proposed, subject to independently successful exact-head PR and post-merge push qualification.
+**Status:** Accepted, conditional on exact-head PR and accepted-main post-merge qualification.
 
 ## Context
 
