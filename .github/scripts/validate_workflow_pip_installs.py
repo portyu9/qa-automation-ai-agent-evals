@@ -26,9 +26,7 @@ APPROVED_FLAGS = {"--disable-pip-version-check", "--no-input"}
 LOCAL_TARGETS = {
     ".",
     "dist/*.whl",
-    "dist/*.tar.gz",
     "retained-dist/*.whl",
-    "retained-dist/*.tar.gz",
 }
 
 # Validator-owned exact inventory: new local package installation paths require policy
