@@ -63,5 +63,5 @@ jobs:
           sarif_file: reports/security/pr-codeql
           ref: refs/pull/${{ steps.provenance.outputs.pr_number }}/head
           sha: ${{ steps.provenance.outputs.head_sha }}
-          category: authenticated-codeql-pr-head
+          category: .github/workflows/codeql.yml:codeql-upload
           wait-for-processing: "true"
