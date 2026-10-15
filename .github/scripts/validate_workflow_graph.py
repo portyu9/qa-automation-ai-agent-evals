@@ -649,9 +649,9 @@ jobs:
         candidate_pr_publisher.write_text(source_pr_publisher, encoding="utf-8")
         validate_workflow(candidate_pr_publisher)
         publisher_mutations = (
-            ("        ref: main\n", "        ref: ${{ github.event.workflow_run.head_sha }}\n"),
+            ("          ref: main\n", "          ref: ${{ github.event.workflow_run.head_sha }}\n"),
             ("          persist-credentials: false", "          persist-credentials: true"),
-            ("          security-events: write", "          security-events: read"),
+            ("      security-events: write", "      security-events: read"),
             ("    workflows: [CodeQL]", "    workflows: [CI]"),
             ("        run: python3 trusted/.github/scripts/verify_codeql_pr_publication.py --verify",
              "        run: echo bypass"),
