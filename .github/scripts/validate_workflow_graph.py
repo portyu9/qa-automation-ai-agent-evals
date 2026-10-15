@@ -28,7 +28,7 @@ _TRUSTED_JOB_WRITES: dict[str, dict[str, frozenset[str]]] = {
     "ci.yml": {
         "release-provenance": frozenset({"id-token", "attestations", "artifact-metadata"}),
     },
-    "codeql.yml": {"codeql": frozenset({"security-events"})},
+    "codeql.yml": {"codeql-upload": frozenset({"security-events"})},
     "security-scorecard.yml": {"scorecard": frozenset({"security-events"})},
     "dependency-governance.yml": {
         "govern": frozenset({"actions", "contents", "issues", "pull-requests"}),
@@ -42,6 +42,9 @@ _TRUSTED_JOB_WRITES: dict[str, dict[str, frozenset[str]]] = {
 _TRUSTED_JOB_GUARDS: dict[tuple[str, str], str] = {
     ("ci.yml", "release-provenance"): (
         "github.event_name == 'push' && github.ref == 'refs/heads/main'"
+    ),
+    ("codeql.yml", "codeql-upload"): (
+        "github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && needs.codeql.result == 'success'"
     ),
     ("dependency-governance.yml", "govern"): "github.event_name != 'pull_request'",
     ("publish-release.yml", "publish"): "github.ref == 'refs/heads/main'",
@@ -263,15 +266,15 @@ def _validate_codeql_fork_contract(workflow: dict[str, Any], *, path: Path) -> N
     ):
         raise WorkflowPolicyError(f"{path}: fork CodeQL must use unprivileged pull_request")
     jobs = workflow.get("jobs")
-    if not isinstance(jobs, dict) or set(jobs) != {"codeql"}:
-        raise WorkflowPolicyError(f"{path}: expected one CodeQL analysis job")
+    if not isinstance(jobs, dict) or set(jobs) != {"codeql", "codeql-upload"}:
+        raise WorkflowPolicyError(f"{path}: expected separate read-only CodeQL and main publisher jobs")
     job = jobs["codeql"]
     if not isinstance(job, dict) or "if" in job:
         raise WorkflowPolicyError(f"{path}: CodeQL job must never skip external fork PRs")
     if job.get("permissions") != {
         "actions": "read",
         "contents": "read",
-        "security-events": "write",
+        "security-events": "read",
     }:
         raise WorkflowPolicyError(f"{path}: CodeQL job token authority drift")
     steps = job.get("steps")
@@ -296,10 +299,8 @@ def _validate_codeql_fork_contract(workflow: dict[str, Any], *, path: Path) -> N
         raise WorkflowPolicyError(f"{path}: CodeQL analysis step inventory drift")
     if named["Checkout exact analysis subject"].get("with") != {"persist-credentials": False}:
         raise WorkflowPolicyError(f"{path}: untrusted CodeQL checkout must not persist token")
-    if named["Analyze"].get("with", {}).get("upload") != (
-        "${{ github.event_name == 'pull_request' && 'never' || 'always' }}"
-    ):
-        raise WorkflowPolicyError(f"{path}: fork and internal PR CodeQL uploads must be disabled")
+    if named["Analyze"].get("with", {}).get("upload") != "never":
+        raise WorkflowPolicyError(f"{path}: untrusted CodeQL analysis must never upload SARIF")
     if named["Analyze"].get("id") != "analyze-source":
         raise WorkflowPolicyError(f"{path}: CodeQL SARIF output binding drift")
     if "if" in named["Analyze"] or "if" in named["Enforce zero CodeQL alerts"]:
@@ -316,6 +317,60 @@ def _validate_codeql_fork_contract(workflow: dict[str, Any], *, path: Path) -> N
         raise WorkflowPolicyError(f"{path}: forensic CodeQL SARIF must be retained on failure")
     if "secrets." in path.read_text(encoding="utf-8"):
         raise WorkflowPolicyError(f"{path}: untrusted fork CodeQL must never access secrets")
+
+    # The write-capable job may receive only validated SARIF from this exact
+    # trusted workflow run. It must NEVER inspect a PR head or execute PR code.
+    publisher = jobs["codeql-upload"]
+    if not isinstance(publisher, dict):
+        raise WorkflowPolicyError(f"{path}: CodeQL publisher job is malformed")
+    if publisher.get("needs") != "codeql":
+        raise WorkflowPolicyError(f"{path}: CodeQL publication must depend on scan veto")
+    if publisher.get("if") != _TRUSTED_JOB_GUARDS[("codeql.yml", "codeql-upload")]:
+        raise WorkflowPolicyError(f"{path}: CodeQL publisher must be main-only after success")
+    if publisher.get("permissions") != {
+        "contents": "read",
+        "security-events": "write",
+    }:
+        raise WorkflowPolicyError(f"{path}: CodeQL publisher token authority drift")
+    published_steps = publisher.get("steps")
+    if not isinstance(published_steps, list):
+        raise WorkflowPolicyError(f"{path}: CodeQL publisher steps missing")
+    steps_by_name = {
+        step.get("name"): step
+        for step in published_steps
+        if isinstance(step, dict) and isinstance(step.get("name"), str)
+    }
+    if len(steps_by_name) != len(published_steps) or set(steps_by_name) != {
+        "Checkout exact trusted publication subject",
+        "Download exact-run verified CodeQL SARIF",
+        "Reverify retained CodeQL zero-alert evidence",
+        "Upload verified CodeQL SARIF to Code Scanning",
+    }:
+        raise WorkflowPolicyError(f"{path}: CodeQL publication step inventory drift")
+    if any("if" in step for step in published_steps):
+        raise WorkflowPolicyError(f"{path}: CodeQL SARIF publish gates may not be skipped")
+    checkout = steps_by_name["Checkout exact trusted publication subject"]
+    if checkout.get("uses") != (
+        "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1"
+    ) or checkout.get("with") != {"persist-credentials": False}:
+        raise WorkflowPolicyError(f"{path}: trusted CodeQL publisher checkout drift")
+    download = steps_by_name["Download exact-run verified CodeQL SARIF"]
+    if download.get("uses") != (
+        "actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c"
+    ) or download.get("with") != {
+        "name": "codeql-sarif-${{ github.run_id }}",
+        "path": "reports/security/codeql-source",
+    }:
+        raise WorkflowPolicyError(f"{path}: CodeQL publisher must use exact-run artifacts")
+    if steps_by_name["Reverify retained CodeQL zero-alert evidence"].get("run") != (
+        "python3 .github/scripts/validate_codeql_sarif.py reports/security/codeql-source"
+    ):
+        raise WorkflowPolicyError(f"{path}: CodeQL publisher lost independent SARIF veto")
+    upload = steps_by_name["Upload verified CodeQL SARIF to Code Scanning"]
+    if upload.get("uses") != (
+        "github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2"
+    ) or upload.get("with") != {"sarif_file": "reports/security/codeql-source"}:
+        raise WorkflowPolicyError(f"{path}: CodeQL publisher lost verified SARIF destination")
 
 
 def validate_workflow(path: Path) -> None:
@@ -439,7 +494,7 @@ jobs:
                 "  pull_request_target:\n",
             ),
             (
-                "          upload: ${{ github.event_name == 'pull_request' && 'never' || 'always' }}",
+                "          upload: never",
                 "          upload: always",
             ),
             (
@@ -457,6 +512,34 @@ jobs:
             (
                 "      - name: Analyze\n",
                 "      - name: Analyze\n        if: github.event_name != 'pull_request'\n",
+            ),
+            (
+                "      security-events: read",
+                "      security-events: write",
+            ),
+            (
+                "    needs: codeql\n",
+                "    needs: missing\n",
+            ),
+            (
+                "    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && needs.codeql.result == 'success'",
+                "    if: github.event_name != 'pull_request'",
+            ),
+            (
+                "          name: codeql-sarif-${{ github.run_id }}",
+                "          name: codeql-sarif-${{ github.event.pull_request.head.sha }}",
+            ),
+            (
+                "      - name: Reverify retained CodeQL zero-alert evidence\n",
+                "      - name: Reverify retained CodeQL zero-alert evidence\n        if: false\n",
+            ),
+            (
+                "run: python3 .github/scripts/validate_codeql_sarif.py reports/security/codeql-source",
+                "run: echo pretend-publisher-gate",
+            ),
+            (
+                "      - name: Upload verified CodeQL SARIF to Code Scanning\n",
+                "      - name: Upload verified CodeQL SARIF to Code Scanning\n        if: false\n",
             ),
         )
         for original, malicious in changes:
