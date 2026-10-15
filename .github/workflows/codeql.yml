@@ -19,14 +19,15 @@ concurrency:
 jobs:
   codeql:
     name: CodeQL
-    # Every pull_request, including external forks, must produce independent
-    # CodeQL findings and enforce the local zero-alert gate. Fork PR tokens are
-    # read-only by GitHub policy; the analyze step below never uploads on PRs.
-    # Never run fork code in pull_request_target or workflow_run authority.
+    # Every pull_request, including same-repository branches and external
+    # forks, must scan and pass the local zero-alert veto using a token that
+    # cannot write security events. GitHub's fork permission downgrade alone
+    # is NOT the authorization boundary.
+    # Never run PR code in pull_request_target or workflow_run authority.
     permissions:
       actions: read
       contents: read
-      security-events: write
+      security-events: read
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
@@ -49,7 +50,9 @@ jobs:
         uses: github/codeql-action/analyze@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
         with:
           output: reports/security/codeql-source
-          upload: ${{ github.event_name == 'pull_request' && 'never' || 'always' }}
+          # Never upload from a job that executes checked-out PR scripts.
+          # Accepted-main upload occurs in a separate trusted-only job.
+          upload: never
       - name: Enforce zero CodeQL alerts
         env:
           SARIF_DIR: ${{ steps.analyze-source.outputs.sarif-output }}
@@ -62,3 +65,31 @@ jobs:
           path: reports/security/codeql-source/
           if-no-files-found: error
           retention-days: 14
+
+  codeql-upload:
+    name: Publish verified CodeQL SARIF
+    # This job never runs on pull_request, even for same-repository branches.
+    # Scan and veto happen in the distinct read-only CodeQL job above.
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && needs.codeql.result == 'success'
+    needs: codeql
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - name: Checkout exact trusted publication subject
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Download exact-run verified CodeQL SARIF
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: codeql-sarif-${{ github.run_id }}
+          path: reports/security/codeql-source
+      - name: Reverify retained CodeQL zero-alert evidence
+        run: python3 .github/scripts/validate_codeql_sarif.py reports/security/codeql-source
+      - name: Upload verified CodeQL SARIF to Code Scanning
+        uses: github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
+        with:
+          sarif_file: reports/security/codeql-source
