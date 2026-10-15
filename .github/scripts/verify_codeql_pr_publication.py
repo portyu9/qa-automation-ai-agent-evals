@@ -20,6 +20,7 @@ from typing import Any
 REPOSITORY = "portyu9/qa-automation-ai-agent-evals"
 WORKFLOW_ID = 359681797
 WORKFLOW_PATH = ".github/workflows/codeql.yml"
+CODEQL_CATEGORY = ".github/workflows/codeql.yml:codeql-upload"
 SHA = re.compile(r"^[0-9a-f]{40}$")
 BRANCH = re.compile(r"^[A-Za-z0-9._/-]{1,200}$")
 DIGEST = re.compile(r"^sha256:[0-9a-f]{64}$")
@@ -376,7 +377,20 @@ def verify_sarif(directory: Path) -> None:
                 isinstance(driver, dict) and driver.get("name") == "CodeQL",
                 "non-CodeQL SARIF cannot be published",
             )
-            results = obj(run, "SARIF run").get("results", [])
+            analysis = obj(run, "SARIF run")
+            metadata = analysis.get("automationDetails")
+            # GitHub's upload-sarif 'category' input cannot override SARIF's
+            # own automationDetails.id. Reject an unexpected category rather
+            # than silently creating another untracked analysis identity.
+            require(
+                metadata is None
+                or (
+                    isinstance(metadata, dict)
+                    and metadata.get("id") == f"{CODEQL_CATEGORY}/"
+                ),
+                "CodeQL original SARIF carries a conflicting analysis category",
+            )
+            results = analysis.get("results", [])
             require(
                 isinstance(results, list) and len(results) == 0,
                 "nonzero/malformed CodeQL findings are never published as green",
@@ -578,6 +592,18 @@ def self_test() -> None:
             pass
         else:
             raise AssertionError("alert-containing CodeQL SARIF accepted")
+        doc["runs"][0]["results"] = []
+        doc["runs"][0]["automationDetails"] = {"id": "attacker/other-scan/"}
+        sarif_file.write_text(json.dumps(doc), encoding="utf-8")
+        try:
+            verify_sarif(root)
+        except Blocked:
+            pass
+        else:
+            raise AssertionError("SARIF with conflicting category accepted")
+        doc["runs"][0]["automationDetails"] = {"id": f"{CODEQL_CATEGORY}/"}
+        sarif_file.write_text(json.dumps(doc), encoding="utf-8")
+        verify_sarif(root)
     print("Trusted CodeQL PR publication provenance negative fixtures passed")
 
 
