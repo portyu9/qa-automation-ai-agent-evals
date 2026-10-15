@@ -749,7 +749,9 @@ def require_green_checks(api: GitHubApi, head_sha: str, config: dict[str, Any]) 
             or app.get("slug") != "github-actions"
             or row.get("head_sha") != head_sha
         ):
-            raise PolicyBlock(f"required check is not authenticated GitHub Actions evidence: {name}")
+            raise PolicyBlock(
+                f"required check is not authenticated GitHub Actions evidence: {name}"
+            )
         if row.get("status") != "completed" or row.get("conclusion") != "success":
             raise PolicyBlock(
                 f"required check is not green: {name} status={row.get('status')} conclusion={row.get('conclusion')}"
