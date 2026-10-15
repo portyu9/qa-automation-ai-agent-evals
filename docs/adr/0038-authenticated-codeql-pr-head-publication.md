@@ -27,12 +27,6 @@ and existing authenticated accepted-main Code Scanning publication.
 
 Add a distinct trusted **main-owned scheduled / manually dispatched consumer**
 running at a ten-minute scheduled cadence or explicitly on `main` dispatch.
-The trusted verifier checkout is pinned to the immutable `${{ github.sha }}`
-that selected the workflow run, rather than the mutable `main` branch ref.
-At discovery, the accepted live `refs/heads/main` SHA must equal that pinned
-workflow subject. A newer accepted main invalidates an older scheduled job
-and fails closed; GitHub's content provenance must never silently drift
-between runner allocation and verification.
 It independently enumerates actual completed CodeQL pull-request runs through
 the trusted GitHub API (not a candidate event payload); no privileged PR or
 `workflow_run` event ever fires this workflow.
