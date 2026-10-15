@@ -1089,25 +1089,86 @@ def _request_stale_dependabot_refresh(
     return True
 
 
+def _owner_review_decision(
+    reviews: list[dict[str, Any]], head_sha: str, config: dict[str, Any]
+) -> str:
+    """Return latest submitted owner decision, never merely ANY historical approval.
+
+    GitHub permits multiple review submissions for a single exact PR head. A later
+    CHANGES_REQUESTED or DISMISSED review must not be silently overwritten by
+    owner-token automation. This is an owner-account authority check, NOT proof of
+    independent human review: owner-token and owner-person share an identity.
+    """
+    require_sha(head_sha, "owner review head SHA")
+    owner_id = config["ownerApprovalUserId"]
+    owner_login = config["ownerApprovalLogin"]
+    decisions: list[tuple[datetime, int, str, str]] = []
+    seen_ids: set[int] = set()
+    for review in reviews:
+        if not isinstance(review, dict):
+            raise GovernanceError("owner review collection contains a malformed entry")
+        user = review.get("user")
+        if not isinstance(user, dict):
+            continue  # Deleted or unknown accounts cannot authenticate as owner.
+        login, reviewer_id = user.get("login"), user.get("id")
+        if login != owner_login and reviewer_id != owner_id:
+            continue
+        if login != owner_login or reviewer_id != owner_id:
+            raise GovernanceError("owner review has mismatched login and numeric identity")
+        state = review.get("state")
+        if state in {"PENDING", "COMMENTED"}:
+            continue  # Neither is a submitted approval or changes-request veto.
+        if state not in {"APPROVED", "CHANGES_REQUESTED", "DISMISSED"}:
+            raise GovernanceError(f"unsupported owner review decision state: {state!r}")
+        review_id = review.get("id")
+        if not isinstance(review_id, int) or isinstance(review_id, bool) or review_id <= 0:
+            raise GovernanceError("owner review decision has invalid review id")
+        if review_id in seen_ids:
+            raise GovernanceError("owner review history contains duplicate review id")
+        seen_ids.add(review_id)
+        reviewed_sha = review.get("commit_id")
+        if not isinstance(reviewed_sha, str) or SHA.fullmatch(reviewed_sha) is None:
+            raise GovernanceError("owner review decision has invalid commit identity")
+        try:
+            submitted = _parse_time(review.get("submitted_at"))
+        except PolicyBlock as exc:
+            raise GovernanceError("owner review decision lacks a valid submission time") from exc
+        decisions.append((submitted, review_id, state, reviewed_sha))
+    if not decisions:
+        return "none"
+    _, _, state, reviewed_sha = max(decisions)
+    if state in {"CHANGES_REQUESTED", "DISMISSED"}:
+        return "veto"
+    if state == "APPROVED" and reviewed_sha == head_sha:
+        return "approved"
+    # A stale-head approval must not silently clear a prior owner's explicit
+    # request for changes. A NEW exact-head approval is needed to clear it.
+    if any(entry[2] in {"CHANGES_REQUESTED", "DISMISSED"} for entry in decisions):
+        return "veto"
+    return "none"  # No valid approval for the current exact head.
+
+
+def _owner_review_status(api: GitHubApi, number: int, head_sha: str, config: dict[str, Any]) -> str:
+    reviews = api.list_all(f"/pulls/{number}/reviews", max_pages=config["maxPaginationPages"])
+    return _owner_review_decision(reviews, head_sha, config)
+
+
 def _has_exact_owner_approval(
     api: GitHubApi, number: int, head_sha: str, config: dict[str, Any]
 ) -> bool:
-    reviews = api.list_all(f"/pulls/{number}/reviews", max_pages=config["maxPaginationPages"])
-    return any(
-        review.get("state") == "APPROVED"
-        and review.get("commit_id") == head_sha
-        and (review.get("user") or {}).get("login") == config["ownerApprovalLogin"]
-        and (review.get("user") or {}).get("id") == config["ownerApprovalUserId"]
-        for review in reviews
-    )
+    return _owner_review_status(api, number, head_sha, config) == "approved"
 
 
 def _ensure_owner_review_and_approval(
     api: GitHubApi, subject: dict[str, Any], config: dict[str, Any]
 ) -> None:
-    owner_token = _verified_owner_token(api, config)
     number = int(subject["number"])
     head_sha = str(subject["headSha"])
+    # Honor a submitted owner's explicit veto BEFORE acquiring the owner token
+    # or posting even an informational bot-authored owner comment.
+    if _owner_review_status(api, number, head_sha, config) == "veto":
+        raise PolicyBlock("latest owner review vetoes automated approval and merge")
+    owner_token = _verified_owner_token(api, config)
 
     comment_marker = f"{OWNER_REVIEW_MARKER}{head_sha} -->"
     comments = api.list_all(f"/issues/{number}/comments", max_pages=config["maxPaginationPages"])
@@ -1137,7 +1198,12 @@ def _ensure_owner_review_and_approval(
             token=owner_token,
         )
 
-    if not _has_exact_owner_approval(api, number, head_sha, config):
+    # Re-read after posting the owner review comment: a fresh human owner
+    # CHANGES_REQUESTED or dismissal must not be auto-overwritten as APPROVED.
+    decision = _owner_review_status(api, number, head_sha, config)
+    if decision == "veto":
+        raise PolicyBlock("latest owner review vetoes automated approval and merge")
+    if decision != "approved":
         api.post(
             f"/pulls/{number}/reviews",
             {
@@ -1206,6 +1272,90 @@ def selftest(config: dict[str, Any]) -> None:
     errors = validate_config(config)
     if errors:
         raise GovernanceError("config self-test failed: " + "; ".join(errors))
+
+    # Pure, adversarial current-head review authority checks. The most recent
+    # owner decision is binding irrespective of REST pagination/order; an
+    # autonomous owner-token approval must NEVER erase an explicit owner veto.
+    head = "1" * 40
+    old = "2" * 40
+    owner = {
+        "login": config["ownerApprovalLogin"],
+        "id": config["ownerApprovalUserId"],
+    }
+    first = {
+        "id": 101,
+        "user": owner,
+        "state": "APPROVED",
+        "commit_id": head,
+        "submitted_at": "2026-10-14T15:00:00Z",
+    }
+    veto = dict(first, id=102, state="CHANGES_REQUESTED", submitted_at="2026-10-14T15:01:00Z")
+    dismissed = dict(first, id=103, state="DISMISSED", submitted_at="2026-10-14T15:02:00Z")
+    reapproved = dict(first, id=104, submitted_at="2026-10-14T15:03:00Z")
+    checks = (
+        ([], "none"),
+        ([first], "approved"),
+        ([first, veto], "veto"),
+        ([veto, first], "veto"),
+        ([first, dismissed], "veto"),
+        ([first, veto, reapproved], "approved"),
+        ([dict(first, commit_id=old)], "none"),
+        ([first, dict(reapproved, commit_id=old)], "none"),
+        ([veto, dict(reapproved, commit_id=old)], "veto"),
+        ([first, dict(veto, id=105, submitted_at=first["submitted_at"])], "veto"),
+        ([first, dict(veto, state="COMMENTED")], "approved"),
+        ([first, dict(veto, state="PENDING", submitted_at=None)], "approved"),
+        ([dict(first, user={"login": "unrelated", "id": 424242})], "none"),
+    )
+    for history, expected in checks:
+        outcome = _owner_review_decision(history, head, config)
+        if outcome != expected:
+            raise GovernanceError(
+                f"owner review authority self-test mismatch: {expected} != {outcome}"
+            )
+    for forged in (
+        dict(first, user={"login": owner["login"], "id": 424242}),
+        dict(first, user={"login": "forged", "id": owner["id"]}),
+        dict(first, id=0),
+        dict(first, id=True),
+        dict(first, commit_id="malformed"),
+        dict(first, submitted_at="invalid"),
+        dict(first, state="mystery"),
+    ):
+        try:
+            _owner_review_decision([forged], head, config)
+        except GovernanceError:
+            pass
+        else:
+            raise GovernanceError("owner review authority accepted forged decision")
+    try:
+        _owner_review_decision([first, dict(first)], head, config)
+    except GovernanceError:
+        pass
+    else:
+        raise GovernanceError("owner review authority accepted duplicate decision identity")
+
+    class _VetoApi:
+        def list_all(self, path: str, *, max_pages: int) -> list[dict[str, Any]]:
+            if path != "/pulls/7/reviews" or max_pages != config["maxPaginationPages"]:
+                raise GovernanceError("veto fixture consulted unexpected API endpoint")
+            return [first, veto]
+
+        def post(self, *args: Any, **kwargs: Any) -> None:
+            raise GovernanceError("explicit veto fixture was auto-overridden")
+
+    try:
+        _ensure_owner_review_and_approval(
+            _VetoApi(),
+            {"number": 7, "headSha": head},
+            config,  # type: ignore[arg-type]
+        )
+    except PolicyBlock as exc:
+        if "veto" not in str(exc):
+            raise GovernanceError("owner veto returned wrong policy outcome") from exc
+    else:
+        raise GovernanceError("owner changes-requested veto was not enforced")
+
     for key, bad in (
         ("ownerApprovalRequired", False),
         ("ownerApprovalLogin", ""),
