@@ -10,6 +10,8 @@ from __future__ import annotations
 
 import argparse
 import re
+import subprocess
+import sys
 import tempfile
 from collections.abc import Iterable
 from pathlib import Path
@@ -650,6 +652,12 @@ jobs:
         candidate_pr_publisher = root / "codeql-pr-publisher.yml"
         candidate_pr_publisher.write_text(source_pr_publisher, encoding="utf-8")
         validate_workflow(candidate_pr_publisher)
+        subprocess.run(
+            [sys.executable, str(ROOT / ".github/scripts/verify_codeql_pr_publication.py"),
+             "--self-test"],
+            check=True,
+            timeout=15,
+        )
         publisher_mutations = (
             ("          ref: main\n", "          ref: ${{ github.event.pull_request.head.sha }}\n"),
             ("          persist-credentials: false", "          persist-credentials: true"),
@@ -658,8 +666,8 @@ jobs:
             ("  workflow_dispatch:", "  pull_request_target:"),
             ("        run: python3 trusted/.github/scripts/verify_codeql_pr_publication.py --discover",
              "        run: echo bypass"),
-            ("        if: steps.provenance.outputs.has_target == 'true'\n",
-             "        if: always()\n"),
+            ("      - name: Publish authentic PR-head CodeQL result\n        if: steps.provenance.outputs.has_target == 'true'",
+             "      - name: Publish authentic PR-head CodeQL result\n        if: always()"),
             ("          run-id: ${{ steps.provenance.outputs.run_id }}",
              "          run-id: ${{ github.run_id }}"),
             ("          ref: refs/pull/${{ steps.provenance.outputs.pr_number }}/head",
