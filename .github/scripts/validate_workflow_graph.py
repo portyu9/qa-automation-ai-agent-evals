@@ -526,8 +526,8 @@ jobs:
                 "    if: github.event_name != 'pull_request'",
             ),
             (
-                "          name: codeql-sarif-${{ github.run_id }}",
-                "          name: codeql-sarif-${{ github.event.pull_request.head.sha }}",
+                "          path: reports/security/codeql-source\n",
+                "          path: reports/security/untrusted-artifact\n",
             ),
             (
                 "      - name: Reverify retained CodeQL zero-alert evidence\n",
