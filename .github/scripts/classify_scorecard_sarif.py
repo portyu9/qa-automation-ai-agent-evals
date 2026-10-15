@@ -154,35 +154,63 @@ def self_test() -> None:
 
     expected = set(MAX_EXISTING)
     former_pips = (
-        (".github/workflows/ci.yml", "python -m pip install --no-deps --no-build-isolation dist/*.tar.gz"),
-        (".github/workflows/ci.yml", "python -m pip install --no-deps --no-build-isolation retained-dist/*.tar.gz"),
-        (".github/workflows/publish-release.yml", "python -m pip install --no-deps --no-build-isolation retained-dist/*.tar.gz"),
-        (".github/workflows/security.yml", "python -m pip install --no-deps --no-build-isolation ."),
+        (
+            ".github/workflows/ci.yml",
+            "python -m pip install --no-deps --no-build-isolation dist/*.tar.gz",
+        ),
+        (
+            ".github/workflows/ci.yml",
+            "python -m pip install --no-deps --no-build-isolation retained-dist/*.tar.gz",
+        ),
+        (
+            ".github/workflows/publish-release.yml",
+            "python -m pip install --no-deps --no-build-isolation retained-dist/*.tar.gz",
+        ),
+        (
+            ".github/workflows/security.yml",
+            "python -m pip install --no-deps --no-build-isolation .",
+        ),
         (".github/workflows/unreviewed.yml", "python -m pip install malware==99.0"),
     )
 
     def make(counts: dict[str, int], *, source: tuple[str, str] = former_pips[0]) -> dict[str, Any]:
         rules = sorted(expected | set(counts))
+
         def result(rid: str) -> dict[str, Any]:
             row: dict[str, Any] = {
-                "ruleId": rid, "ruleIndex": rules.index(rid),
+                "ruleId": rid,
+                "ruleIndex": rules.index(rid),
                 "message": {"text": "synthetic negative-test finding"},
             }
             if rid == "PinnedDependenciesID":
                 path, snippet = source
-                row["locations"] = [{"physicalLocation": {
-                    "artifactLocation": {"uri": path},
-                    "region": {"snippet": {"text": snippet}},
-                }}]
+                row["locations"] = [
+                    {
+                        "physicalLocation": {
+                            "artifactLocation": {"uri": path},
+                            "region": {"snippet": {"text": snippet}},
+                        }
+                    }
+                ]
             return row
 
-        return {"version": "2.1.0", "runs": [{
-            "tool": {"driver": {
-                "name": "Scorecard", "semanticVersion": "v5.5.0",
-                "rules": [{"id": rid} for rid in rules],
-            }},
-            "results": [result(rid) for rid, amount in counts.items() for _ in range(amount)],
-        }]}
+        return {
+            "version": "2.1.0",
+            "runs": [
+                {
+                    "tool": {
+                        "driver": {
+                            "name": "Scorecard",
+                            "semanticVersion": "v5.5.0",
+                            "rules": [{"id": rid} for rid in rules],
+                        }
+                    },
+                    "results": [
+                        result(rid) for rid, amount in counts.items() for _ in range(amount)
+                    ],
+                }
+            ],
+        }
 
     if BASELINE_COMMIT != "c134d3bd2c15d3d5213aa72b7c3be7f2b192a990":
         raise ScorecardError("independently verified five-finding commit drifted")
@@ -200,7 +228,9 @@ def self_test() -> None:
     if classify(make(smaller))["reported_findings"] != 4:
         raise ScorecardError("genuine improvement was not represented as a lower count")
 
-    malicious: list[dict[str, Any]] = [make({"PinnedDependenciesID": 1}, source=s) for s in former_pips]
+    malicious: list[dict[str, Any]] = [
+        make({"PinnedDependenciesID": 1}, source=s) for s in former_pips
+    ]
     malicious.extend((make({"FuzzingID": 1}), make({"SASTID": 2}), make({"UnknownRuleID": 1})))
     for rid in ("PinnedDependenciesID", "FuzzingID"):
         split = copy.deepcopy(baseline)
@@ -209,8 +239,15 @@ def self_test() -> None:
     missing_location = make({"PinnedDependenciesID": 1})
     missing_location["runs"][0]["results"][0].pop("locations")
     malicious.append(missing_location)
-    for kind in ("no-runs", "no-results", "wrong-scanner", "wrong-rules",
-                 "bad-index", "missing-message", "old-sarif"):
+    for kind in (
+        "no-runs",
+        "no-results",
+        "wrong-scanner",
+        "wrong-rules",
+        "bad-index",
+        "missing-message",
+        "old-sarif",
+    ):
         bad = copy.deepcopy(baseline)
         if kind == "no-runs":
             bad["runs"] = []
