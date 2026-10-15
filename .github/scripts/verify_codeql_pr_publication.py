@@ -306,19 +306,19 @@ def discover(api: Any) -> dict[str, str] | None:
         require(isinstance(runs, list) and len(runs) <= 100, "CodeQL run page malformed")
         for run in runs:
             run = obj(run, "CodeQL workflow run")
-            if (
-                (run.get("head_sha"), run.get("head_branch")) not in active
-                or run.get("workflow_id") != WORKFLOW_ID
-                or run.get("event") != "pull_request"
-                or run.get("status") != "completed"
-                or run.get("conclusion") != "success"
-            ):
+            if (run.get("head_sha"), run.get("head_branch")) not in active:
                 continue
-            try:
-                result = verify(api, {"action": "completed", "workflow_run": run})
-            except Blocked as exc:
-                print(f"BLOCKED authentic scanner provenance: {exc}")
-                continue
+            # The API lists newest runs first. Never fall back to a previous
+            # green run for a head whose most recent scan failed, was cancelled,
+            # was re-run, or is still in progress.
+            require(
+                run.get("workflow_id") == WORKFLOW_ID
+                and run.get("event") == "pull_request"
+                and run.get("status") == "completed"
+                and run.get("conclusion") == "success",
+                "newest exact-head CodeQL producer is not a completed success",
+            )
+            result = verify(api, {"action": "completed", "workflow_run": run})
             head = result["head_sha"]
             # A successful native check can represent an unrelated tool or
             # a different CodeQL configuration. Only the *actual*, exact-head
@@ -559,6 +559,19 @@ def self_test() -> None:
         discover(Fake(discover_lookup))["head_sha"] == head,
         "trusted scheduler discovery rejected valid PR run",
     )
+    newest_failed = deepcopy(discover_lookup)
+    newer = deepcopy(run)
+    newer["id"] = 102
+    newer["conclusion"] = "failure"
+    newest_failed[
+        f"/repos/{REPOSITORY}/actions/workflows/{WORKFLOW_ID}/runs?event=pull_request&per_page=100&page=1"
+    ]["workflow_runs"] = [newer, run]
+    try:
+        discover(Fake(newest_failed))
+    except Blocked:
+        pass
+    else:
+        raise AssertionError("older successful CodeQL run concealed latest failed run")
     already = deepcopy(discover_lookup)
     existing = {
         "tool": {"name": "CodeQL"},
