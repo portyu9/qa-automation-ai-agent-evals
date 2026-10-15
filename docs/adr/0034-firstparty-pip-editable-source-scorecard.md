@@ -1,0 +1,35 @@
+# ADR 0034: Match first-party source-test installation semantics to hash-locked supply-chain boundaries
+
+**Status:** Accepted (subject to real exact-PR and accepted-main Scorecard qualification).
+
+## Context
+
+On accepted `main@9546fbb9f568127956171ea32404e6e9f70cf056` the real [Scorecard run 38666281474](https://github.com/portyu9/qa-automation-ai-agent-evals/actions/runs/38666281474) reports exactly **23 SARIF findings**. Of the 18 `PinnedDependenciesID` warnings, 15 correspond to `python -m pip install --disable-pip-version-check --no-deps --no-build-isolation .` on the **checked-out local repository source**, after third-party dependencies were installed from committed complete `--require-hashes` closures. The other three are real non-editable smoke installs of locally generated/reverified **source distributions** (`dist/*.tar.gz` and `retained-dist/*.tar.gz`). The 15 local source commands fetch no external package dependencies, but are flagged by Scorecard's literal pip command parser as unpinned sources. They do *not* constitute 15 proven vulnerable remote dependencies.
+
+OpenSSF Scorecard's actual [`checks/raw/shell_download_validate.go`](https://github.com/ossf/scorecard/blob/main/checks/raw/shell_download_validate.go), functions `isUnpinnedPipInstall` and `isPinnedEditableSource`, recognizes `pip install --no-deps -e .` on local source as a pinned source dependency, precisely because dependency resolution is disabled and the source is local. It recognizes `--require-hashes` on third-party installs. Its documented maintainer explanation of local editable source is [discussion #4669](https://github.com/ossf/scorecard/discussions/4669). That is materially different from concealing the pip call from the scanner or adding ineffective comments.
+
+Preflight [issue #349 comment 6182644858](https://github.com/portyu9/qa-automation-ai-agent-evals/issues/349#issuecomment-6182644858) verified latest accepted main, no open PRs, *only main* branch, historical overlapping security/scorecard lane branches already merged, and exact source blob identities before new code. No unique capability remains stranded in an unmerged branch.
+
+## Decision
+
+For **only the 15 existing first-party source test** installs, use `python -m pip install --disable-pip-version-check --no-deps --no-build-isolation -e .` while preserving exact existing third-party `--require-hashes` installation, checked-out commit, `pip check`, full Python matrix, security scanner, platform smoke, fuzz/mutation, and boundary checks. An editable local install is appropriate for tests running directly against **the exact checked-out source head**; no external package acquisition is authorized by `-e .`. It still installs distribution metadata and console script entry points using the reviewed backend.
+
+**Do not convert any noneditable package-artifact smoke**: CI `Package build and inspection` still builds real wheel and source distribution bytes and installs both into environments that exercise `agent-evals --help`; `Reverify retained package artifacts`, SPDX+license checks, independent byte-for-byte rebuild, Sigstore evidence and `publish-release` still independently install the verified retained wheel and sdist. Those are independent downstream distribution assurances, not silently replaced by editable installs. Windows and Python 3.14 platform test runners remain real, with their source-code/test coverage and interpreter boundaries preserved.
+
+Strengthen `.github/scripts/validate_workflow_pip_installs.py` (premerge Repository policy) to **require** `-e .` plus `--no-deps --no-build-isolation` and permit **only** this local editable target; reject remote editable/VCS URLs, external project names, missing flags, `--editable` and `-e` on built distributions, and any unreviewed install-source expansion. Keep the exact 15 source + full artifact inventory, and add adversarial fixtures ensuring noneditable local source cannot silently reenter and real wheel/sdist installs remain valid and uneditable. Tighten `.github/scripts/validate_runtime_policy.py` for required quality/compatibility/deep-fuzz/deep-mutation jobs to preserve the precise new source invocation, and reject any install of source into the separate native Atheris job.
+
+## Consequences
+
+Scorecard's next genuine accepted-main run **may** classify 15 first-party local source installs as pinned rather than emitting 15 `PinnedDependenciesID` warnings. This is a real upstream parser behavior, not a manual alert dismissal or an invented synthetic result. The three genuinely noneditable sdist package-install heuristics may remain until the upstream scanner understands verified local archives. Once a *real* postmerge SARIF confirms any reduction, shrink the independent baseline maxima and reviewed-warning identity inventory in a separate verified follow-up so previously fixed warnings cannot silently recur.
+
+An editable install is **not the same validation as installing a built wheel or sdist**, which is why the existing independent real package-build, release-artifact install, import, CLI, provenance and digest verification tests are explicitly unchanged. A green test does not prove the project is packaged or deployed safely in all environments. Keeping both kinds of tests is mandatory.
+
+## Assurance impact
+
+Distinguishes first-party exact-checkout source testing from external dependency acquisition without weakening transitive SHA-256-locked installs; narrows the premerge pip policy to this exact first-party source while preserving true downstream wheel/sdist installation and retained artifact evidence. Enables Scorecard to recognize already-in-place local source trust preconditions, if verified by its genuine scanner.
+
+## Non-claims
+
+- A Scorecard SARIF count reduction is **not** proof of zero vulnerabilities or authenticated publisher identity; SHA-256 binds artifact bytes, not authorship.
+- The 23 currently visible code-scanning alerts may **not** resolve until GitHub Code Scanning processes a successful newer main SARIF. The connected GitHub app cannot read the private code-scanning alert endpoint; claim only the *actual* SARIF count as observed, not unqueried UI state.
+- This is not a fix for live branch human-review enforcement, SAST historical recognized-app checks, external OpenSSF Best Practices enrollment, repository age, first real signed Dependabot end-to-end, or external fork PR qualification. Never recategorize `BLOCKED` as `PASS`, silence the SARIF, or dismiss authentic findings merely to obtain a green badge.
