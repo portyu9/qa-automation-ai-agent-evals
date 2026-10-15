@@ -1,6 +1,6 @@
 """Authenticate a read-only PR CodeQL run before trusted SARIF publication.
 
-Executed ONLY from accepted-main source in the trusted workflow_run consumer.
+Executed ONLY from accepted-main source in the trusted main-owned scheduled consumer.
 This module neither executes nor imports any checked-out PR files.
 """
 from __future__ import annotations
@@ -14,7 +14,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 REPOSITORY = "portyu9/qa-automation-ai-agent-evals"
 WORKFLOW_ID = 359681797
@@ -241,6 +241,62 @@ def verify(api: Any, event: Any) -> dict[str, str]:
     }
 
 
+
+def discover(api: Any) -> dict[str, str] | None:
+    """Re-read canonical completed PR runs; do not trust caller-supplied run IDs."""
+    prs = api.get(f"/repos/{REPOSITORY}/pulls?state=open&base=main&per_page=100&page=1")
+    require(isinstance(prs, list) and len(prs) < 100, "open PR listing incomplete")
+    active = set()
+    for pr in prs:
+        pr = obj(pr, "candidate open PR")
+        if nested(pr, "head", "repo", "full_name") == REPOSITORY:
+            active.add((nested(pr, "head", "sha"), nested(pr, "head", "ref")))
+    if not active:
+        return None
+    for page in range(1, 4):
+        payload = obj(api.get(
+            f"/repos/{REPOSITORY}/actions/workflows/{WORKFLOW_ID}/runs"
+            f"?event=pull_request&per_page=100&page={page}"
+        ), "canonical CodeQL run listing")
+        runs = payload.get("workflow_runs")
+        require(isinstance(runs, list) and len(runs) <= 100, "CodeQL run page malformed")
+        for run in runs:
+            run = obj(run, "CodeQL workflow run")
+            if ((run.get("head_sha"), run.get("head_branch")) not in active or
+                    run.get("workflow_id") != WORKFLOW_ID or
+                    run.get("event") != "pull_request" or
+                    run.get("status") != "completed" or
+                    run.get("conclusion") != "success"):
+                continue
+            try:
+                result = verify(api, {"action": "completed", "workflow_run": run})
+            except Blocked as exc:
+                print(f"BLOCKED authentic scanner provenance: {exc}")
+                continue
+            head = result["head_sha"]
+            evidence = obj(api.get(
+                f"/repos/{REPOSITORY}/commits/{head}/check-runs?per_page=100"
+            ), "original native SAST head checks")
+            checks = evidence.get("check_runs")
+            count = evidence.get("total_count")
+            require(type(count) is int and 0 <= count <= 100 and
+                    isinstance(checks, list) and len(checks) == count,
+                    "SAST check-run inventory missing or incomplete")
+            if any(
+                nested(check, "app", "slug") in {
+                    "github-code-scanning", "github-advanced-security"
+                } and check.get("status") == "completed" and
+                check.get("conclusion") == "success" and
+                check.get("head_sha") == head
+                for check in checks
+            ):
+                continue
+            return result
+        if len(runs) < 100:
+            return None
+    raise Blocked("CodeQL workflow run inventory exceeds bounded 300-run lookback")
+
+
 def verify_sarif(directory: Path) -> None:
     require(directory.is_dir() and not directory.is_symlink(), "SARIF directory missing")
     files = list(directory.rglob("*"))
@@ -356,7 +412,7 @@ def self_test() -> None:
 def main() -> int:
     ap = argparse.ArgumentParser()
     mode = ap.add_mutually_exclusive_group(required=True)
-    mode.add_argument("--verify", action="store_true")
+    mode.add_argument("--discover", action="store_true")
     mode.add_argument("--verify-sarif", metavar="DIR", type=Path)
     mode.add_argument("--self-test", action="store_true")
     args = ap.parse_args()
@@ -367,12 +423,16 @@ def main() -> int:
             verify_sarif(args.verify_sarif)
             print("CodeQL source run and zero-alert SARIF schema verified")
         else:
-            event = json.loads(Path(os.environ["GITHUB_EVENT_PATH"]).read_text(encoding="utf-8"))
-            value = verify(GitHubRead(os.environ["GH_TOKEN"]), event)
+            value = discover(GitHubRead(os.environ["GH_TOKEN"]))
             with Path(os.environ["GITHUB_OUTPUT"]).open("a", encoding="utf-8") as f:
-                for key, val in value.items():
-                    f.write(f"{key}={val}\n")
-            print("Authenticated same-repo CodeQL producer and exact PR head", value["pr_number"])
+                f.write(f"has_target={'true' if value else 'false'}\\n")
+                if value:
+                    for key, val in value.items():
+                        f.write(f"{key}={val}\\n")
+            if value:
+                print("Authenticated same-repo CodeQL scan and exact PR head", value["pr_number"])
+            else:
+                print("No eligible PR-head SAST scan; no report fabricated")
     except (Blocked, ValueError, KeyError, OSError) as exc:
         print(f"BLOCKED: trusted CodeQL PR publication: {exc}", file=sys.stderr)
         return 1
