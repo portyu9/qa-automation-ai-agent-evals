@@ -506,8 +506,8 @@ jobs:
                 "run: echo pretend-sarif-gate",
             ),
             (
-                "          persist-credentials: false",
-                "          persist-credentials: true",
+                "      - name: Checkout exact analysis subject\n        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1\n        with:\n          persist-credentials: false",
+                "      - name: Checkout exact analysis subject\n        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1\n        with:\n          persist-credentials: true",
             ),
             (
                 "      - name: Analyze\n",
