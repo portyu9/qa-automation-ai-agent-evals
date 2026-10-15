@@ -424,7 +424,7 @@ def _validate_codeql_pr_publication_contract(workflow: dict[str, Any], *, path: 
     if checkout.get("uses") != (
         "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1"
     ) or checkout.get("with") != {
-        "ref": "main",
+        "ref": "${{ github.sha }}",
         "path": "trusted",
         "persist-credentials": False,
     }:
@@ -440,6 +440,7 @@ def _validate_codeql_pr_publication_contract(workflow: dict[str, Any], *, path: 
         or verify.get("env")
         != {
             "GH_TOKEN": "${{ github.token }}",
+            "TRUSTED_MAIN_SHA": "${{ github.sha }}",
         }
     ):
         raise WorkflowPolicyError(f"{path}: publisher source discovery bypass")
@@ -671,7 +672,11 @@ jobs:
             timeout=15,
         )
         publisher_mutations = (
-            ("          ref: main\n", "          ref: ${{ github.event.pull_request.head.sha }}\n"),
+            ("          ref: ${{ github.sha }}\n", "          ref: main\n"),
+            (
+                "          TRUSTED_MAIN_SHA: ${{ github.sha }}",
+                "          TRUSTED_MAIN_SHA: ${{ github.head_ref }}",
+            ),
             ("          persist-credentials: false", "          persist-credentials: true"),
             ("      security-events: write", "      contents: write"),
             ("          digest-mismatch: error", "          digest-mismatch: warn"),

@@ -92,7 +92,7 @@ class GitHubRead:
             raise Blocked("GitHub read was not valid JSON") from exc
 
 
-def verify(api: Any, event: Any) -> dict[str, str]:
+def verify(api: Any, event: Any, *, trusted_main_sha: str | None = None) -> dict[str, str]:
     payload = obj(event, "workflow_run event")
     run_event = obj(payload.get("workflow_run"), "workflow_run payload")
     run_id = run_event.get("id")
@@ -138,6 +138,13 @@ def verify(api: Any, event: Any) -> dict[str, str]:
         "malformed accepted-main SHA",
     )
     require(main_ref.get("ref") == "refs/heads/main", "main ref identity drift")
+    if trusted_main_sha is not None:
+        require(
+            isinstance(trusted_main_sha, str)
+            and SHA.fullmatch(trusted_main_sha) is not None
+            and main_sha == trusted_main_sha,
+            "accepted main moved away from the workflow's pinned trusted source SHA",
+        )
     matched = []
     for page in range(1, 4):
         candidates = api.get(
@@ -283,8 +290,17 @@ def verify(api: Any, event: Any) -> dict[str, str]:
     }
 
 
-def discover(api: Any) -> dict[str, str] | None:
+def discover(api: Any, *, trusted_main_sha: str | None = None) -> dict[str, str] | None:
     """Re-read canonical completed PR runs; do not trust caller-supplied run IDs."""
+    if trusted_main_sha is not None:
+        main_ref = obj(api.get(f"/repos/{REPOSITORY}/git/ref/heads/main"), "scheduled main ref")
+        require(
+            main_ref.get("ref") == "refs/heads/main"
+            and isinstance(trusted_main_sha, str)
+            and SHA.fullmatch(trusted_main_sha) is not None
+            and nested(main_ref, "object", "sha") == trusted_main_sha,
+            "current main no longer matches immutable scheduled-workflow source",
+        )
     prs = api.get(f"/repos/{REPOSITORY}/pulls?state=open&base=main&per_page=100&page=1")
     require(isinstance(prs, list) and len(prs) < 100, "open PR listing incomplete")
     active = set()
@@ -318,7 +334,11 @@ def discover(api: Any) -> dict[str, str] | None:
                 and run.get("conclusion") == "success",
                 "newest exact-head CodeQL producer is not a completed success",
             )
-            result = verify(api, {"action": "completed", "workflow_run": run})
+            result = verify(
+                api,
+                {"action": "completed", "workflow_run": run},
+                trusted_main_sha=trusted_main_sha,
+            )
             head = result["head_sha"]
             # A successful native check can represent an unrelated tool or
             # a different CodeQL configuration. Only the *actual*, exact-head
@@ -589,9 +609,23 @@ def self_test() -> None:
     )
     discover_lookup[analysis_path] = []
     require(
-        discover(Fake(discover_lookup))["head_sha"] == head,
+        discover(Fake(discover_lookup), trusted_main_sha=main)["head_sha"] == head,
         "trusted scheduler discovery rejected valid PR run",
     )
+    try:
+        discover(Fake(discover_lookup), trusted_main_sha="0" * 40)
+    except Blocked:
+        pass
+    else:
+        raise AssertionError("stale workflow main SHA was trusted during publication")
+    newer_main = deepcopy(discover_lookup)
+    newer_main[f"/repos/{REPOSITORY}/git/ref/heads/main"]["object"]["sha"] = "9" * 40
+    try:
+        discover(Fake(newer_main), trusted_main_sha=main)
+    except Blocked:
+        pass
+    else:
+        raise AssertionError("newer accepted main did not block old trusted consumer")
     newest_failed = deepcopy(discover_lookup)
     newer = deepcopy(run)
     newer["id"] = 102
@@ -739,7 +773,14 @@ def main() -> int:
             verify_sarif(args.verify_sarif)
             print("CodeQL source run and zero-alert SARIF schema verified")
         else:
-            value = discover(GitHubRead(os.environ["GH_TOKEN"]))
+            require(
+                os.environ.get("GITHUB_REF") == "refs/heads/main",
+                "privileged publisher invoked outside accepted main",
+            )
+            value = discover(
+                GitHubRead(os.environ["GH_TOKEN"]),
+                trusted_main_sha=os.environ["TRUSTED_MAIN_SHA"],
+            )
             with Path(os.environ["GITHUB_OUTPUT"]).open("a", encoding="utf-8") as f:
                 f.write(f"has_target={'true' if value else 'false'}\n")
                 if value:
