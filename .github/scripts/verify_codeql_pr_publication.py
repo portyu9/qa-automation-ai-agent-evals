@@ -320,26 +320,36 @@ def discover(api: Any) -> dict[str, str] | None:
                 print(f"BLOCKED authentic scanner provenance: {exc}")
                 continue
             head = result["head_sha"]
-            evidence = obj(
-                api.get(f"/repos/{REPOSITORY}/commits/{head}/check-runs?per_page=100"),
-                "original native SAST head checks",
+            # A successful native check can represent an unrelated tool or
+            # a different CodeQL configuration. Only the *actual*, exact-head
+            # analysis for the trusted active CodeQL category permits a skip.
+            number = result["pr_number"]
+            ref = f"refs/pull/{number}/head"
+            encoded_ref = urllib.parse.quote(ref, safe="")
+            analyses = api.get(
+                f"/repos/{REPOSITORY}/code-scanning/analyses"
+                f"?ref={encoded_ref}&per_page=100"
             )
-            checks = evidence.get("check_runs")
-            count = evidence.get("total_count")
             require(
-                type(count) is int
-                and 0 <= count <= 100
-                and isinstance(checks, list)
-                and len(checks) == count,
-                "SAST check-run inventory missing or incomplete",
+                isinstance(analyses, list) and len(analyses) < 100,
+                "bounded exact-ref Code Scanning analysis inventory missing",
             )
-            if any(
-                nested(check, "app", "slug") in {"github-code-scanning", "github-advanced-security"}
-                and check.get("status") == "completed"
-                and check.get("conclusion") == "success"
-                and check.get("head_sha") == head
-                for check in checks
-            ):
+            matching = [
+                a
+                for a in analyses
+                if isinstance(a, dict)
+                and a.get("ref") == ref
+                and a.get("commit_sha") == head
+                and nested(a, "tool", "name") == "CodeQL"
+                and a.get("analysis_key") == CODEQL_CATEGORY
+                and a.get("category") == CODEQL_CATEGORY
+            ]
+            require(len(matching) <= 1, "ambiguous active CodeQL analyses on exact PR head")
+            if matching:
+                require(
+                    matching[0].get("error") == "" and matching[0].get("warning") == "",
+                    "published active CodeQL analysis contains failure/warning",
+                )
                 continue
             return result
         if len(runs) < 100:
@@ -541,27 +551,42 @@ def self_test() -> None:
     ] = {
         "workflow_runs": [run],
     }
-    discover_lookup[f"/repos/{REPOSITORY}/commits/{head}/check-runs?per_page=100"] = {
-        "total_count": 0,
-        "check_runs": [],
-    }
+    analysis_path = (
+        f"/repos/{REPOSITORY}/code-scanning/analyses"
+        f"?ref={urllib.parse.quote(f'refs/pull/{prnum}/head', safe='')}&per_page=100"
+    )
+    discover_lookup[analysis_path] = []
     require(
         discover(Fake(discover_lookup))["head_sha"] == head,
         "trusted scheduler discovery rejected valid PR run",
     )
     already = deepcopy(discover_lookup)
-    already[f"/repos/{REPOSITORY}/commits/{head}/check-runs?per_page=100"] = {
-        "total_count": 1,
-        "check_runs": [
-            {
-                "app": {"slug": "github-code-scanning"},
-                "status": "completed",
-                "conclusion": "success",
-                "head_sha": head,
-            }
-        ],
+    existing = {
+        "tool": {"name": "CodeQL"},
+        "ref": f"refs/pull/{prnum}/head",
+        "commit_sha": head,
+        "analysis_key": CODEQL_CATEGORY,
+        "category": CODEQL_CATEGORY,
+        "error": "",
+        "warning": "",
     }
-    require(discover(Fake(already)) is None, "already published PR head was not skipped")
+    already[analysis_path] = [existing]
+    require(discover(Fake(already)) is None, "already published exact-category PR head not skipped")
+    unrelated = deepcopy(already)
+    unrelated[analysis_path][0]["analysis_key"] = "(default)"
+    unrelated[analysis_path][0]["category"] = ""
+    require(
+        discover(Fake(unrelated))["head_sha"] == head,
+        "unrelated native CodeQL category masked required trusted publication",
+    )
+    invalid = deepcopy(already)
+    invalid[analysis_path][0]["error"] = "integrity failure"
+    try:
+        discover(Fake(invalid))
+    except Blocked:
+        pass
+    else:
+        raise AssertionError("failed published CodeQL analysis concealed as a success")
     from tempfile import TemporaryDirectory
 
     with TemporaryDirectory() as tmp:
