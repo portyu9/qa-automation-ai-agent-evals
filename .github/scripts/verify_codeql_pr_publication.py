@@ -406,6 +406,43 @@ def self_test() -> None:
         mutated = deepcopy(lookup)
         mutate(mutated)
         blocked(mutated, event, label)
+    discover_lookup = deepcopy(lookup)
+    discover_lookup[f"/repos/{REPOSITORY}/actions/workflows/{WORKFLOW_ID}/runs?event=pull_request&per_page=100&page=1"] = {
+        "workflow_runs": [run],
+    }
+    discover_lookup[f"/repos/{REPOSITORY}/commits/{head}/check-runs?per_page=100"] = {
+        "total_count": 0, "check_runs": [],
+    }
+    require(discover(Fake(discover_lookup))["head_sha"] == head,
+            "trusted scheduler discovery rejected valid PR run")
+    already = deepcopy(discover_lookup)
+    already[f"/repos/{REPOSITORY}/commits/{head}/check-runs?per_page=100"] = {
+        "total_count": 1,
+        "check_runs": [{
+            "app": {"slug": "github-code-scanning"},
+            "status": "completed", "conclusion": "success", "head_sha": head,
+        }],
+    }
+    require(discover(Fake(already)) is None,
+            "already published PR head was not skipped")
+    from tempfile import TemporaryDirectory
+    with TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        sarif_file = root / "codeql.sarif"
+        doc = {
+            "version": "2.1.0",
+            "runs": [{"tool": {"driver": {"name": "CodeQL"}}, "results": []}],
+        }
+        sarif_file.write_text(json.dumps(doc), encoding="utf-8")
+        verify_sarif(root)
+        doc["runs"][0]["results"].append({"ruleId": "dangerous"})
+        sarif_file.write_text(json.dumps(doc), encoding="utf-8")
+        try:
+            verify_sarif(root)
+        except Blocked:
+            pass
+        else:
+            raise AssertionError("alert-containing CodeQL SARIF accepted")
     print("Trusted CodeQL PR publication provenance negative fixtures passed")
 
 
@@ -425,10 +462,10 @@ def main() -> int:
         else:
             value = discover(GitHubRead(os.environ["GH_TOKEN"]))
             with Path(os.environ["GITHUB_OUTPUT"]).open("a", encoding="utf-8") as f:
-                f.write(f"has_target={'true' if value else 'false'}\\n")
+                f.write(f"has_target={'true' if value else 'false'}\n")
                 if value:
                     for key, val in value.items():
-                        f.write(f"{key}={val}\\n")
+                        f.write(f"{key}={val}\n")
             if value:
                 print("Authenticated same-repo CodeQL scan and exact PR head", value["pr_number"])
             else:
