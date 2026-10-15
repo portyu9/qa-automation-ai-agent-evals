@@ -327,8 +327,7 @@ def discover(api: Any) -> dict[str, str] | None:
             ref = f"refs/pull/{number}/head"
             encoded_ref = urllib.parse.quote(ref, safe="")
             analyses = api.get(
-                f"/repos/{REPOSITORY}/code-scanning/analyses"
-                f"?ref={encoded_ref}&per_page=100"
+                f"/repos/{REPOSITORY}/code-scanning/analyses?ref={encoded_ref}&per_page=100"
             )
             require(
                 isinstance(analyses, list) and len(analyses) < 100,
