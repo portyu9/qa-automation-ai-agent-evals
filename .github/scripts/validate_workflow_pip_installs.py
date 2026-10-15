@@ -101,7 +101,9 @@ def classify(command: str, workflow: str) -> str:
                 LOCKED_SDIST_REQUIREMENT,
             }
             if workflow not in EXPECTED_HASHED_SDIST or len(args) != 6 or set(args) != expected:
-                raise PipInstallPolicyError(f"{workflow}: unsafe local sdist hash-install arguments")
+                raise PipInstallPolicyError(
+                    f"{workflow}: unsafe local sdist hash-install arguments"
+                )
             return "hashed-local-sdist"
         if "--no-deps" in args or "--no-build-isolation" in args:
             raise PipInstallPolicyError(f"{workflow}: mixed hashed dependency and local install")
@@ -212,7 +214,10 @@ def validate(root: Path = ROOT) -> tuple[int, int]:
                                 '--repository "$GITHUB_REPOSITORY"',
                                 "--dist-dir " + ("retained-dist" if "retained" in run else "dist"),
                             )
-                            if any(token not in run for token in required) or run.count(required[0]) != 1:
+                            if (
+                                any(token not in run for token in required)
+                                or run.count(required[0]) != 1
+                            ):
                                 raise PipInstallPolicyError(
                                     f"{path.name}: local sdist install not bound to manifest producer"
                                 )
@@ -282,10 +287,11 @@ def self_test() -> None:
     )
     assert (
         classify(
-            'python -m pip install --disable-pip-version-check --no-deps --no-build-isolation '
+            "python -m pip install --disable-pip-version-check --no-deps --no-build-isolation "
             '--require-hashes -r "$RUNNER_TEMP/local-sdist-requirements.txt"',
             "ci.yml",
-        ) == "hashed-local-sdist"
+        )
+        == "hashed-local-sdist"
     )
     assert classify("python -m pip install --no-deps dist/*.whl", "ci.yml") == "dist/*.whl"
     # The three former noneditable sdist installs MUST remain hash-bound; never
