@@ -1141,7 +1141,11 @@ def _owner_review_decision(
         return "veto"
     if state == "APPROVED" and reviewed_sha == head_sha:
         return "approved"
-    return "none"  # The latest approval is for an old, superseded head.
+    # A stale-head approval must not silently clear a prior owner's explicit
+    # request for changes. A NEW exact-head approval is needed to clear it.
+    if any(entry[2] in {"CHANGES_REQUESTED", "DISMISSED"} for entry in decisions):
+        return "veto"
+    return "none"  # No valid approval for the current exact head.
 
 
 def _owner_review_status(
