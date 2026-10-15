@@ -29,6 +29,7 @@ _TRUSTED_JOB_WRITES: dict[str, dict[str, frozenset[str]]] = {
         "release-provenance": frozenset({"id-token", "attestations", "artifact-metadata"}),
     },
     "codeql.yml": {"codeql-upload": frozenset({"security-events"})},
+    "codeql-pr-publisher.yml": {"publish": frozenset({"security-events"})},
     "security-scorecard.yml": {"scorecard": frozenset({"security-events"})},
     "dependency-governance.yml": {
         "govern": frozenset({"actions", "contents", "issues", "pull-requests"}),
@@ -45,6 +46,11 @@ _TRUSTED_JOB_GUARDS: dict[tuple[str, str], str] = {
     ),
     ("codeql.yml", "codeql-upload"): (
         "github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && needs.codeql.result == 'success'"
+    ),
+    ("codeql-pr-publisher.yml", "publish"): (
+        "github.event_name == 'workflow_run' && github.event.workflow_run.event == 'pull_request' && "
+        "github.event.workflow_run.conclusion == 'success' && "
+        "github.event.workflow_run.head_repository.full_name == github.repository"
     ),
     ("dependency-governance.yml", "govern"): "github.event_name != 'pull_request'",
     ("publish-release.yml", "publish"): "github.ref == 'refs/heads/main'",
@@ -375,6 +381,85 @@ def _validate_codeql_fork_contract(workflow: dict[str, Any], *, path: Path) -> N
         raise WorkflowPolicyError(f"{path}: CodeQL publisher lost verified SARIF destination")
 
 
+
+def _validate_codeql_pr_publication_contract(workflow: dict[str, Any], *, path: Path) -> None:
+    """Never turn PR-controlled workflow runs, artifacts or commands into write authority."""
+    if path.name != "codeql-pr-publisher.yml":
+        return
+    trigger = workflow.get("on")
+    if trigger != {"workflow_run": {"workflows": ["CodeQL"], "types": ["completed"]}}:
+        raise WorkflowPolicyError(f"{path}: publisher must use one trusted CodeQL completion event")
+    if workflow.get("permissions") != {"contents": "read"}:
+        raise WorkflowPolicyError(f"{path}: publisher workflow authority drift")
+    jobs = workflow.get("jobs")
+    if not isinstance(jobs, dict) or set(jobs) != {"publish"}:
+        raise WorkflowPolicyError(f"{path}: publisher must have one gated job")
+    publish = jobs["publish"]
+    if publish.get("if") != _TRUSTED_JOB_GUARDS[("codeql-pr-publisher.yml", "publish")]:
+        raise WorkflowPolicyError(f"{path}: publisher lost exact trusted-origin guard")
+    if publish.get("permissions") != {
+        "contents": "read", "actions": "read", "checks": "read",
+        "pull-requests": "read", "security-events": "write",
+    }:
+        raise WorkflowPolicyError(f"{path}: publisher acquired unexpected capabilities")
+    steps = publish.get("steps")
+    names = (
+        "Checkout accepted-main verification logic only",
+        "Self-test trusted provenance refusal cases",
+        "Authenticate live producer, candidate tree and CodeQL inputs",
+        "Download only canonical completed-run CodeQL evidence",
+        "Revalidate exact original CodeQL SARIF under trusted main",
+        "Publish authentic PR-head CodeQL result",
+    )
+    if not isinstance(steps, list) or tuple(s.get("name") for s in steps) != names:
+        raise WorkflowPolicyError(f"{path}: CodeQL publisher trust sequence drift")
+    if any("if" in s or "continue-on-error" in s for s in steps):
+        raise WorkflowPolicyError(f"{path}: PR-head publication stages must be mandatory")
+    checkout, selftest, verify, download, sarif, upload = steps
+    if checkout.get("uses") != (
+        "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1"
+    ) or checkout.get("with") != {
+        "ref": "main", "path": "trusted", "persist-credentials": False,
+    }:
+        raise WorkflowPolicyError(f"{path}: trusted-main verifier checkout drift")
+    if selftest.get("run") != (
+        "python3 trusted/.github/scripts/verify_codeql_pr_publication.py --self-test"
+    ):
+        raise WorkflowPolicyError(f"{path}: CodeQL provenance self-test bypass")
+    if verify.get("run") != (
+        "python3 trusted/.github/scripts/verify_codeql_pr_publication.py --verify"
+    ) or verify.get("id") != "provenance" or verify.get("env") != {
+        "GH_TOKEN": "${{ github.token }}",
+    }:
+        raise WorkflowPolicyError(f"{path}: canonical provenance verification bypass")
+    if download.get("uses") != (
+        "actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c"
+    ) or download.get("with") != {
+        "repository": "${{ github.repository }}",
+        "run-id": "${{ steps.provenance.outputs.run_id }}",
+        "name": "codeql-sarif-${{ steps.provenance.outputs.run_id }}",
+        "github-token": "${{ github.token }}",
+        "path": "reports/security/pr-codeql",
+    }:
+        raise WorkflowPolicyError(f"{path}: untrusted/mismatched SARIF artifact source")
+    if sarif.get("run") != (
+        "python3 trusted/.github/scripts/verify_codeql_pr_publication.py --verify-sarif reports/security/pr-codeql\n"
+        "python3 trusted/.github/scripts/validate_codeql_sarif.py reports/security/pr-codeql\n"
+    ):
+        raise WorkflowPolicyError(f"{path}: trusted-main original SARIF veto bypass")
+    if upload.get("uses") != (
+        "github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2"
+    ) or upload.get("with") != {
+        "sarif_file": "reports/security/pr-codeql",
+        "ref": "refs/pull/${{ steps.provenance.outputs.pr_number }}/head",
+        "sha": "${{ steps.provenance.outputs.head_sha }}",
+        "category": "authenticated-codeql-pr-head",
+        "wait-for-processing": "true",
+    }:
+        raise WorkflowPolicyError(f"{path}: unauthorized SARIF destination or subject")
+    if "secrets." in path.read_text(encoding="utf-8") or "pull_request_target" in path.read_text(encoding="utf-8"):
+        raise WorkflowPolicyError(f"{path}: PR-head publication cannot use secrets/PR-target event")
+
 def validate_workflow(path: Path) -> None:
     workflow = _load_workflow(path)
     if not isinstance(workflow.get("name"), str) or not workflow["name"].strip():
@@ -387,6 +472,7 @@ def validate_workflow(path: Path) -> None:
         raise WorkflowPolicyError(f"{path}: workflow must declare at least one job")
 
     _validate_codeql_fork_contract(workflow, path=path)
+    _validate_codeql_pr_publication_contract(workflow, path=path)
     _validate_scorecard_read_contract(workflow, path=path)
     _validate_permissions(workflow, path=path)
 
@@ -555,6 +641,38 @@ jobs:
             except WorkflowPolicyError:
                 continue
             raise WorkflowPolicyError("fork CodeQL privilege or bypass mutation was accepted")
+
+        source_pr_publisher = (WORKFLOW_DIR / "codeql-pr-publisher.yml").read_text(
+            encoding="utf-8"
+        )
+        candidate_pr_publisher = root / "codeql-pr-publisher.yml"
+        candidate_pr_publisher.write_text(source_pr_publisher, encoding="utf-8")
+        validate_workflow(candidate_pr_publisher)
+        publisher_mutations = (
+            ("        ref: main\n", "        ref: ${{ github.event.workflow_run.head_sha }}\n"),
+            ("          persist-credentials: false", "          persist-credentials: true"),
+            ("          security-events: write", "          security-events: read"),
+            ("    workflows: [CodeQL]", "    workflows: [CI]"),
+            ("        run: python3 trusted/.github/scripts/verify_codeql_pr_publication.py --verify",
+             "        run: echo bypass"),
+            ("          run-id: ${{ steps.provenance.outputs.run_id }}",
+             "          run-id: ${{ github.event.workflow_run.id }}"),
+            ("          ref: refs/pull/${{ steps.provenance.outputs.pr_number }}/head",
+             "          ref: refs/heads/main"),
+            ("          sha: ${{ steps.provenance.outputs.head_sha }}",
+             "          sha: ${{ github.sha }}"),
+        )
+        for original, forged in publisher_mutations:
+            if source_pr_publisher.count(original) != 1:
+                raise WorkflowPolicyError("PR CodeQL publisher fixture drift")
+            candidate_pr_publisher.write_text(
+                source_pr_publisher.replace(original, forged), encoding="utf-8"
+            )
+            try:
+                validate_workflow(candidate_pr_publisher)
+            except WorkflowPolicyError:
+                continue
+            raise WorkflowPolicyError("trusted PR-head CodeQL publisher tamper accepted")
 
         # A Scorecard run with no read access to checks can produce misleading
         # 0/N SAST history; disallow that invisible regression (and new writes).
