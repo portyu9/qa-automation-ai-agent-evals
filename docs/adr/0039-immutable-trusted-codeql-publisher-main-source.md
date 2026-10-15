@@ -1,6 +1,6 @@
 # ADR 0039: Bind privileged CodeQL PR-head publication to its immutable accepted-main workflow subject
 
-**Status:** Proposed; effective only after accepted protected merge and genuine runtime qualification.
+**Status:** Accepted
 
 ## Context
 
