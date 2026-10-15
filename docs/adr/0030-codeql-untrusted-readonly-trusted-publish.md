@@ -25,7 +25,11 @@ Change the repository-owned semantic workflow policy to **remove** `security-eve
 - Accepted-main CodeQL job graph changes from one job to two; a green `CodeQL` workflow includes both jobs on trusted main, while PR analysis still vetoes findings and uploader is necessarily skipped. The difference must be verified by the live GitHub run, not inferred from YAML.
 - This change does **not** introduce a publish-on-fork privilege path or bypass the current seven main ruleset checks.
 
-## Assurance and non-claims
+## Assurance impact
+
+The read-only analysis job removes a write permission previously available to same-repository PR scanner execution. The privileged upload job accepts only a successful exact-run artifact after a trusted-main zero-alert recheck. The separation reduces authority while preserving the mandatory independent CodeQL and Security trust contract.
+
+## Non-claims
 
 - This is **permission least-privilege hardening**, not a declaration that Scorecard's historical `SASTID` `0/30` check-run recognizer will improve. Upstream Scorecard detects scanner *app slugs* on the historic PR heads, not mere presence of a CodeQL job. Actual CodeQL scan execution must be evaluated separately.
 - A successful scanner check does not establish all vulnerabilities absent. SHA-256 artifact identity is not publisher authentication, and the job token cannot authenticate a source user's claims.
