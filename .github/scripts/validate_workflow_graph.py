@@ -10,6 +10,8 @@ from __future__ import annotations
 
 import argparse
 import re
+import subprocess
+import sys
 import tempfile
 from collections.abc import Iterable
 from pathlib import Path
@@ -29,6 +31,7 @@ _TRUSTED_JOB_WRITES: dict[str, dict[str, frozenset[str]]] = {
         "release-provenance": frozenset({"id-token", "attestations", "artifact-metadata"}),
     },
     "codeql.yml": {"codeql-upload": frozenset({"security-events"})},
+    "codeql-pr-publisher.yml": {"publish": frozenset({"security-events"})},
     "security-scorecard.yml": {"scorecard": frozenset({"security-events"})},
     "dependency-governance.yml": {
         "govern": frozenset({"actions", "contents", "issues", "pull-requests"}),
@@ -46,6 +49,7 @@ _TRUSTED_JOB_GUARDS: dict[tuple[str, str], str] = {
     ("codeql.yml", "codeql-upload"): (
         "github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && needs.codeql.result == 'success'"
     ),
+    ("codeql-pr-publisher.yml", "publish"): "github.ref == 'refs/heads/main'",
     ("dependency-governance.yml", "govern"): "github.event_name != 'pull_request'",
     ("publish-release.yml", "publish"): "github.ref == 'refs/heads/main'",
 }
@@ -375,6 +379,102 @@ def _validate_codeql_fork_contract(workflow: dict[str, Any], *, path: Path) -> N
         raise WorkflowPolicyError(f"{path}: CodeQL publisher lost verified SARIF destination")
 
 
+def _validate_codeql_pr_publication_contract(workflow: dict[str, Any], *, path: Path) -> None:
+    """Bound trusted main-owned scheduled code-scanning authority, not PR run events."""
+    if path.name != "codeql-pr-publisher.yml":
+        return
+    if workflow.get("on") != {
+        "schedule": [{"cron": "*/10 * * * *"}],
+        "workflow_dispatch": None,
+    }:
+        raise WorkflowPolicyError(f"{path}: only main-owned scheduler/dispatch can publish PR SAST")
+    if workflow.get("permissions") != {"contents": "read"}:
+        raise WorkflowPolicyError(f"{path}: default authority must be read only")
+    jobs = workflow.get("jobs")
+    if not isinstance(jobs, dict) or set(jobs) != {"publish"}:
+        raise WorkflowPolicyError(f"{path}: one authenticated publisher job required")
+    publish = jobs["publish"]
+    if publish.get("if") != _TRUSTED_JOB_GUARDS[("codeql-pr-publisher.yml", "publish")]:
+        raise WorkflowPolicyError(f"{path}: non-main privileged publisher is forbidden")
+    if publish.get("permissions") != {
+        "contents": "read",
+        "actions": "read",
+        "checks": "read",
+        "pull-requests": "read",
+        "security-events": "write",
+    }:
+        raise WorkflowPolicyError(f"{path}: publisher authority broadened")
+    steps = publish.get("steps")
+    names = (
+        "Checkout accepted-main verification logic only",
+        "Self-test trusted provenance refusal cases",
+        "Discover and authenticate completed PR CodeQL evidence",
+        "Download only canonical completed-run CodeQL evidence",
+        "Revalidate exact original CodeQL SARIF under trusted main",
+        "Publish authentic PR-head CodeQL result",
+    )
+    if not isinstance(steps, list) or tuple(step.get("name") for step in steps) != names:
+        raise WorkflowPolicyError(f"{path}: trusted publisher step sequence changed")
+    gating = "steps.provenance.outputs.has_target == 'true'"
+    if any("if" in step or "continue-on-error" in step for step in steps[:3]) or any(
+        step.get("if") != gating or "continue-on-error" in step for step in steps[3:]
+    ):
+        raise WorkflowPolicyError(f"{path}: conditional SAST veto or publication bypass")
+    checkout, selftest, verify, download, sarif, upload = steps
+    if checkout.get("uses") != (
+        "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1"
+    ) or checkout.get("with") != {
+        "ref": "main",
+        "path": "trusted",
+        "persist-credentials": False,
+    }:
+        raise WorkflowPolicyError(f"{path}: publisher can only checkout main verifier")
+    if selftest.get("run") != (
+        "python3 trusted/.github/scripts/verify_codeql_pr_publication.py --self-test"
+    ):
+        raise WorkflowPolicyError(f"{path}: publisher self-test removed")
+    if (
+        verify.get("run")
+        != ("python3 trusted/.github/scripts/verify_codeql_pr_publication.py --discover")
+        or verify.get("id") != "provenance"
+        or verify.get("env")
+        != {
+            "GH_TOKEN": "${{ github.token }}",
+        }
+    ):
+        raise WorkflowPolicyError(f"{path}: publisher source discovery bypass")
+    if download.get("uses") != (
+        "actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c"
+    ) or download.get("with") != {
+        "repository": "${{ github.repository }}",
+        "run-id": "${{ steps.provenance.outputs.run_id }}",
+        "name": "codeql-sarif-${{ steps.provenance.outputs.run_id }}",
+        "github-token": "${{ github.token }}",
+        "path": "reports/security/pr-codeql",
+        "digest-mismatch": "error",
+    }:
+        raise WorkflowPolicyError(f"{path}: unauthenticated retained SARIF selection")
+    if sarif.get("run") != (
+        "python3 trusted/.github/scripts/verify_codeql_pr_publication.py --verify-sarif reports/security/pr-codeql\n"
+        "python3 trusted/.github/scripts/validate_codeql_sarif.py reports/security/pr-codeql\n"
+    ):
+        raise WorkflowPolicyError(f"{path}: original CodeQL SARIF veto is mandatory")
+    if upload.get("uses") != (
+        "github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2"
+    ) or upload.get("with") != {
+        "sarif_file": "reports/security/pr-codeql",
+        "ref": "refs/pull/${{ steps.provenance.outputs.pr_number }}/head",
+        "sha": "${{ steps.provenance.outputs.head_sha }}",
+        "category": ".github/workflows/codeql.yml:codeql-upload",
+        "wait-for-processing": "true",
+    }:
+        raise WorkflowPolicyError(f"{path}: PR-head code scanning destination drift")
+    if "secrets." in path.read_text(encoding="utf-8") or "pull_request_target" in path.read_text(
+        encoding="utf-8"
+    ):
+        raise WorkflowPolicyError(f"{path}: PR-head publication cannot use secret/target authority")
+
+
 def validate_workflow(path: Path) -> None:
     workflow = _load_workflow(path)
     if not isinstance(workflow.get("name"), str) or not workflow["name"].strip():
@@ -387,6 +487,7 @@ def validate_workflow(path: Path) -> None:
         raise WorkflowPolicyError(f"{path}: workflow must declare at least one job")
 
     _validate_codeql_fork_contract(workflow, path=path)
+    _validate_codeql_pr_publication_contract(workflow, path=path)
     _validate_scorecard_read_contract(workflow, path=path)
     _validate_permissions(workflow, path=path)
 
@@ -555,6 +656,59 @@ jobs:
             except WorkflowPolicyError:
                 continue
             raise WorkflowPolicyError("fork CodeQL privilege or bypass mutation was accepted")
+
+        source_pr_publisher = (WORKFLOW_DIR / "codeql-pr-publisher.yml").read_text(encoding="utf-8")
+        candidate_pr_publisher = root / "codeql-pr-publisher.yml"
+        candidate_pr_publisher.write_text(source_pr_publisher, encoding="utf-8")
+        validate_workflow(candidate_pr_publisher)
+        subprocess.run(
+            [
+                sys.executable,
+                str(ROOT / ".github/scripts/verify_codeql_pr_publication.py"),
+                "--self-test",
+            ],
+            check=True,
+            timeout=15,
+        )
+        publisher_mutations = (
+            ("          ref: main\n", "          ref: ${{ github.event.pull_request.head.sha }}\n"),
+            ("          persist-credentials: false", "          persist-credentials: true"),
+            ("      security-events: write", "      contents: write"),
+            ("          digest-mismatch: error", "          digest-mismatch: warn"),
+            ('    - cron: "*/10 * * * *"', '    - cron: "* * * * *"'),
+            ("  workflow_dispatch:", "  pull_request_target:"),
+            (
+                "        run: python3 trusted/.github/scripts/verify_codeql_pr_publication.py --discover",
+                "        run: echo bypass",
+            ),
+            (
+                "      - name: Publish authentic PR-head CodeQL result\n        if: steps.provenance.outputs.has_target == 'true'",
+                "      - name: Publish authentic PR-head CodeQL result\n        if: always()",
+            ),
+            (
+                "          run-id: ${{ steps.provenance.outputs.run_id }}",
+                "          run-id: ${{ github.run_id }}",
+            ),
+            (
+                "          ref: refs/pull/${{ steps.provenance.outputs.pr_number }}/head",
+                "          ref: refs/heads/main",
+            ),
+            (
+                "          sha: ${{ steps.provenance.outputs.head_sha }}",
+                "          sha: ${{ github.sha }}",
+            ),
+        )
+        for original, forged in publisher_mutations:
+            if source_pr_publisher.count(original) != 1:
+                raise WorkflowPolicyError("PR CodeQL publisher fixture drift")
+            candidate_pr_publisher.write_text(
+                source_pr_publisher.replace(original, forged), encoding="utf-8"
+            )
+            try:
+                validate_workflow(candidate_pr_publisher)
+            except WorkflowPolicyError:
+                continue
+            raise WorkflowPolicyError("trusted PR-head CodeQL publisher tamper accepted")
 
         # A Scorecard run with no read access to checks can produce misleading
         # 0/N SAST history; disallow that invisible regression (and new writes).

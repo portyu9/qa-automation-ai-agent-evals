@@ -1,0 +1,68 @@
+name: Trusted CodeQL PR-head publication
+
+# No privileged PR event. A main-owned schedule or owner dispatch re-reads
+# canonical completed read-only CodeQL PR scans, checks exact producer bytes,
+# checks live current-base/head/tree and revalidates original SARIF before upload.
+# The privileged job NEVER checks out candidate files or runs candidate scripts.
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: trusted-codeql-pr-publisher-main
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Authenticated PR-head Code Scanning
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      actions: read
+      checks: read
+      pull-requests: read
+      security-events: write
+    steps:
+      - name: Checkout accepted-main verification logic only
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          path: trusted
+          persist-credentials: false
+      - name: Self-test trusted provenance refusal cases
+        run: python3 trusted/.github/scripts/verify_codeql_pr_publication.py --self-test
+      - name: Discover and authenticate completed PR CodeQL evidence
+        id: provenance
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 trusted/.github/scripts/verify_codeql_pr_publication.py --discover
+      - name: Download only canonical completed-run CodeQL evidence
+        if: steps.provenance.outputs.has_target == 'true'
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          repository: ${{ github.repository }}
+          run-id: ${{ steps.provenance.outputs.run_id }}
+          name: codeql-sarif-${{ steps.provenance.outputs.run_id }}
+          github-token: ${{ github.token }}
+          path: reports/security/pr-codeql
+          digest-mismatch: error
+      - name: Revalidate exact original CodeQL SARIF under trusted main
+        if: steps.provenance.outputs.has_target == 'true'
+        run: |
+          python3 trusted/.github/scripts/verify_codeql_pr_publication.py --verify-sarif reports/security/pr-codeql
+          python3 trusted/.github/scripts/validate_codeql_sarif.py reports/security/pr-codeql
+      - name: Publish authentic PR-head CodeQL result
+        if: steps.provenance.outputs.has_target == 'true'
+        uses: github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
+        with:
+          sarif_file: reports/security/pr-codeql
+          ref: refs/pull/${{ steps.provenance.outputs.pr_number }}/head
+          sha: ${{ steps.provenance.outputs.head_sha }}
+          category: .github/workflows/codeql.yml:codeql-upload
+          wait-for-processing: "true"
