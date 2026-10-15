@@ -451,6 +451,7 @@ def _validate_codeql_pr_publication_contract(workflow: dict[str, Any], *, path: 
         "name": "codeql-sarif-${{ steps.provenance.outputs.run_id }}",
         "github-token": "${{ github.token }}",
         "path": "reports/security/pr-codeql",
+        "digest-mismatch": "error",
     }:
         raise WorkflowPolicyError(f"{path}: unauthenticated retained SARIF selection")
     if sarif.get("run") != (
@@ -673,6 +674,7 @@ jobs:
             ("          ref: main\n", "          ref: ${{ github.event.pull_request.head.sha }}\n"),
             ("          persist-credentials: false", "          persist-credentials: true"),
             ("      security-events: write", "      contents: write"),
+            ("          digest-mismatch: error", "          digest-mismatch: warn"),
             ('    - cron: "*/10 * * * *"', '    - cron: "* * * * *"'),
             ("  workflow_dispatch:", "  pull_request_target:"),
             (
