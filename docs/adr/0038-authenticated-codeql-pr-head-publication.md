@@ -72,7 +72,16 @@ until a separately independent native Code Scanning procedure qualifies them.
 The exact GitHub SAST-app check association and actual protected merge remain
 an external operational precondition, not a checked-in assertion.
 
-## Scoped non-claims and migration boundaries
+## Assurance impact
+
+The authority split remains non-compensatory: the privileged publisher cannot
+improve an untrusted PR's CodeQL result, suppress a finding, or bypass a missing
+scan. The publication precondition binds the real GitHub workflow/run/PR/head,
+unchanged trusted producer bytes and original CodeQL SARIF without granting
+untrusted workflow code security-reporting authority. A missing precondition is
+BLOCKED, not PASS or an inferred agent defect.
+
+## Non-claims
 
 - Fork PRs **continue to run unprivileged CodeQL and zero-alert veto**. Trusted
   PR-head publication is initially BLOCKED for fork heads until an independently
