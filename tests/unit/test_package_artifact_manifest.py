@@ -33,6 +33,7 @@ def _run(
     commit: str = _COMMIT,
     run_attempt: str = _RUN_ATTEMPT,
     reference_dir: Path | None = None,
+    output_file: Path | None = None,
 ) -> subprocess.CompletedProcess[str]:
     args = [
         sys.executable,
@@ -53,6 +54,8 @@ def _run(
     ]
     if reference_dir is not None:
         args.extend(("--reference-dir", str(reference_dir)))
+    if output_file is not None:
+        args.extend(("--output", str(output_file)))
     return subprocess.run(
         args,
         check=False,
@@ -276,3 +279,42 @@ def test_reproduction_comparison_rejects_symlink_material(tmp_path: Path) -> Non
 
     assert result.returncode != 0
     assert "reproduced artifact directory must contain regular files only" in result.stderr
+
+
+def test_locked_sdist_requirement_exact_manifest_digest_and_local_file(tmp_path: Path) -> None:
+    dist = _artifact_dir(tmp_path)
+    manifest = _create(dist)
+    locked = tmp_path / "sdist-lock.txt"
+    result = _run(dist, "locked-sdist", output_file=locked)
+    assert result.returncode == 0, result.stderr
+    parsed = json.loads(manifest.read_text(encoding="utf-8"))
+    entry = next(item for item in parsed["artifacts"] if item["kind"] == "sdist")
+    sdist = dist / entry["filename"]
+    assert locked.read_text(encoding="utf-8") == (
+        f"qa-automation-ai-agent-evals @ {sdist.resolve().as_uri()} "
+        f"--hash=sha256:{entry['sha256']}\n"
+    )
+    assert "https://" not in locked.read_text(encoding="utf-8")
+    # Exclusive creation prevents a stale or malicious preexisting lock.
+    again = _run(dist, "locked-sdist", output_file=locked)
+    assert again.returncode != 0
+
+
+def test_locked_sdist_requirement_rejects_digest_context_and_path_mutation(tmp_path: Path) -> None:
+    dist = _artifact_dir(tmp_path)
+    _create(dist)
+    sdist = next(dist.glob("*.tar.gz"))
+    original = sdist.read_bytes()
+    sdist.write_bytes(b"X" + original[1:])
+    tampered = _run(dist, "locked-sdist", output_file=tmp_path / "tamper.txt")
+    assert tampered.returncode != 0
+    assert "digest mismatch" in tampered.stderr
+    assert not (tmp_path / "tamper.txt").exists()
+    sdist.write_bytes(original)
+    wrong_commit = _run(dist, "locked-sdist", commit="b" * 40, output_file=tmp_path / "wrong.txt")
+    assert wrong_commit.returncode != 0
+    assert "source context" in wrong_commit.stderr
+    assert not (tmp_path / "wrong.txt").exists()
+    in_dist = _run(dist, "locked-sdist", output_file=dist / "untrusted.txt")
+    assert in_dist.returncode != 0
+    assert "must not contaminate" in in_dist.stderr

@@ -264,6 +264,55 @@ def verify_manifest(
         )
 
 
+
+def write_locked_sdist_requirement(
+    dist_dir: Path,
+    output: Path,
+    *,
+    repository: str,
+    commit_sha: str,
+    workflow: str,
+    run_id: int,
+    run_attempt: int,
+) -> Path:
+    """Bind pip's actual install to the source-verified manifest SHA-256.
+
+    This creates a local *runtime* requirement, not an independent publisher
+    signature. Never derive the accepted digest from unverified downloaded bytes.
+    """
+    verify_manifest(
+        dist_dir,
+        repository=repository,
+        commit_sha=commit_sha,
+        workflow=workflow,
+        run_id=run_id,
+        run_attempt=run_attempt,
+    )
+    manifest = _load_manifest(dist_dir / _MANIFEST_NAME)
+    sdist_entries = [item for item in manifest["artifacts"] if item["kind"] == "sdist"]
+    if len(sdist_entries) != 1:
+        raise ManifestError("expected exactly one verified source distribution")
+    item = sdist_entries[0]
+    filename = item["filename"]
+    if re.fullmatch(r"[A-Za-z0-9_.-]+\.tar\.gz", filename) is None:
+        raise ManifestError("source distribution filename is unsafe for a pip requirement")
+    archive = (dist_dir / filename).resolve(strict=True)
+    if not output.is_absolute():
+        raise ManifestError("locked sdist requirements output must use an absolute path")
+    if output.resolve(strict=False).is_relative_to(dist_dir.resolve()):
+        raise ManifestError("locked requirement must not contaminate retained artifact directory")
+    if output.exists() or output.is_symlink():
+        raise ManifestError("refusing to replace an existing locked requirement")
+    # Direct local-file requirement pins the sole reviewed archive; no index or
+    # implicit transitive resolution is needed with --no-deps and hash mode.
+    line = (
+        f"qa-automation-ai-agent-evals @ {archive.as_uri()} "
+        f"--hash=sha256:{item['sha256']}\n"
+    )
+    with output.open("x", encoding="utf-8", newline="\n") as stream:
+        stream.write(line)
+    return output
+
 def verify_reproduction(
     reproduced_dir: Path,
     *,
@@ -317,9 +366,10 @@ def verify_reproduction(
 
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("mode", choices=("create", "verify", "compare"))
+    parser.add_argument("mode", choices=("create", "verify", "compare", "locked-sdist"))
     parser.add_argument("--dist-dir", type=Path, default=Path("dist"))
     parser.add_argument("--reference-dir", type=Path)
+    parser.add_argument("--output", type=Path)
     parser.add_argument("--repository", required=True)
     parser.add_argument("--commit-sha", required=True)
     parser.add_argument("--workflow", required=True)
@@ -341,6 +391,19 @@ def main() -> int:
                 run_attempt=args.run_attempt,
             )
             print(path)
+        elif args.mode == "locked-sdist":
+            if args.output is None:
+                raise ManifestError("locked-sdist mode requires --output")
+            path = write_locked_sdist_requirement(
+                args.dist_dir,
+                args.output,
+                repository=args.repository,
+                commit_sha=args.commit_sha,
+                workflow=args.workflow,
+                run_id=args.run_id,
+                run_attempt=args.run_attempt,
+            )
+            print(f"verified SHA-256 locked local sdist requirement: {path}")
         elif args.mode == "verify":
             verify_manifest(
                 args.dist_dir,
