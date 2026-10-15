@@ -431,7 +431,9 @@ def self_test() -> None:
         sarif_file = root / "codeql.sarif"
         doc = {
             "version": "2.1.0",
-            "runs": [{"tool": {"driver": {"name": "CodeQL"}}, "results": []}],
+            "runs": [{"tool": {"driver": {"name": "CodeQL", "semanticVersion": "2.20.0",
+                        "informationUri": "https://github.com/github/codeql",
+                        "rules": []}}, "results": []}],
         }
         sarif_file.write_text(json.dumps(doc), encoding="utf-8")
         verify_sarif(root)
