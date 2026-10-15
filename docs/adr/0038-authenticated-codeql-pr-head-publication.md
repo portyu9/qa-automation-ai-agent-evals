@@ -59,7 +59,11 @@ Code Scanning SAST check. Its verification requires:
 
 Only after those preconditions pass, use the immutable pinned GitHub
 `upload-sarif` action with explicit `refs/pull/<number>/head` and actual
-`head_sha`, and a separate Code Scanning category. The official action
+`head_sha`, and the **established accepted-main CodeQL analysis category**
+`.github/workflows/codeql.yml:codeql-upload`. The original SARIF is not
+rewritten. If its own `automationDetails.id` conflicts with this stable
+category, the publisher refuses it, because the action's category input
+cannot override metadata already present in the source. The official action
 supports explicit ref and SHA inputs, but end-to-end proof must verify the
 *actual* GitHub Code Scanning check-run app attribution. The workflow's privileged
 steps, origin event, exact publisher output bindings, and self-test are
@@ -88,6 +92,27 @@ scan. The publication precondition binds the real GitHub workflow/run/PR/head,
 unchanged trusted producer bytes and original CodeQL SARIF without granting
 untrusted workflow code security-reporting authority. A missing precondition is
 BLOCKED, not PASS or an inferred agent defect.
+
+
+**Observed native bootstrap limitation (2026-10-15).** Two original and
+zero-alert CodeQL SARIF files were uploaded manually against PR #382 and
+GitHub processed them without errors. Its analyses classified both under
+`analysis_key=(default)`, `category=""`, while `main`'s current active
+trusted uploader uses `.github/workflows/codeql.yml:codeql-upload`. A
+second historical `.github/workflows/codeql.yml:codeql` analysis stream
+was also still expected by the merge-protection ruleset, although the
+repository's current PR CodeQL `codeql` job intentionally never uploads.
+The resulting native `github-advanced-security` PR check was **neutral**
+with `2 configurations not found`, and GitHub returned HTTP 405 on
+protected merge despite genuinely green CodeQL, Security and CI.
+
+Aligning the new publisher to the existing *active* `codeql-upload` stream
+avoids creating a third unrelated Code Scanning category, but **does not
+repair the older `codeql` stream or prove the PR can merge**. That stream
+must be verified genuinely obsolete before GitHub's official stale-analysis
+removal procedure is considered, or an independently reviewed ruleset
+policy migration must be made. Neither a fake check nor a duplicate green
+result for a scanner job that did not execute is acceptable.
 
 ## Non-claims
 
