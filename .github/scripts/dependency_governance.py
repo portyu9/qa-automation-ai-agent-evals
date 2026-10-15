@@ -24,6 +24,8 @@ API_VERSION = "2022-11-28"
 MAX_RESPONSE_BYTES = 8 * 1024 * 1024
 BOT_LOGIN = "dependabot[bot]"
 BOT_USER_ID = 49699333
+# Native protected branch-rule check-run integration identity, not user-controlled labels.
+GITHUB_ACTIONS_APP_ID = 15368
 BOT_EMAIL = "49699333+dependabot[bot]@users.noreply.github.com"
 TRUSTED_COMMITTER_LOGIN = "web-flow"
 TRUSTED_COMMITTER_NAME = "GitHub"
@@ -146,8 +148,8 @@ def validate_config(config: dict[str, Any]) -> list[str]:
         if item not in paths:
             errors.append(f"{item} must require manual review")
     checks = config.get("requiredChecks")
-    if checks != ["ci-gate", "CodeQL"]:
-        errors.append("requiredChecks must be exactly [ci-gate, CodeQL]")
+    if checks != ["ci-gate", "CodeQL", "Package integrity"]:
+        errors.append("requiredChecks must require ci-gate, CodeQL, and Package integrity")
 
     expected_workflows = [
         {
@@ -738,6 +740,16 @@ def require_green_checks(api: GitHubApi, head_sha: str, config: dict[str, Any]) 
         row = checks.get(name)
         if row is None:
             raise PolicyBlock(f"required check has not registered: {name}")
+        # A same-named SUCCESS from another integration is not a protected
+        # GitHub Actions check. Bind owner approval to the actual PR head.
+        app = row.get("app")
+        if (
+            not isinstance(app, dict)
+            or app.get("id") != GITHUB_ACTIONS_APP_ID
+            or app.get("slug") != "github-actions"
+            or row.get("head_sha") != head_sha
+        ):
+            raise PolicyBlock(f"required check is not authenticated GitHub Actions evidence: {name}")
         if row.get("status") != "completed" or row.get("conclusion") != "success":
             raise PolicyBlock(
                 f"required check is not green: {name} status={row.get('status')} conclusion={row.get('conclusion')}"
