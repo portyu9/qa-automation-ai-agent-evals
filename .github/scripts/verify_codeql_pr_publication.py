@@ -349,6 +349,39 @@ def discover(api: Any) -> dict[str, str] | None:
                     matching[0].get("error") == "" and matching[0].get("warning") == "",
                     "published active CodeQL analysis contains failure/warning",
                 )
+                # A completed upload alone does not prove GitHub's *native*
+                # Code Scanning check is successful. A stale second CodeQL
+                # configuration can turn that check neutral/blocked despite
+                # this one category being present. Never treat neutral as PASS
+                # or spam an already uploaded result into the same category.
+                head_checks = obj(
+                    api.get(f"/repos/{REPOSITORY}/commits/{head}/check-runs?per_page=100"),
+                    "native head Code Scanning check-runs",
+                )
+                checks = head_checks.get("check_runs")
+                count = head_checks.get("total_count")
+                require(
+                    type(count) is int
+                    and 0 <= count <= 100
+                    and isinstance(checks, list)
+                    and len(checks) == count,
+                    "incomplete native Code Scanning check-run inventory",
+                )
+                native = [
+                    check
+                    for check in checks
+                    if isinstance(check, dict)
+                    and check.get("name") == "CodeQL"
+                    and check.get("head_sha") == head
+                    and nested(check, "app", "slug")
+                    in {"github-advanced-security", "github-code-scanning"}
+                ]
+                require(
+                    len(native) == 1
+                    and native[0].get("status") == "completed"
+                    and native[0].get("conclusion") == "success",
+                    "CodeQL analysis exists but native PR check is absent, neutral or failed",
+                )
                 continue
             return result
         if len(runs) < 100:
@@ -583,7 +616,35 @@ def self_test() -> None:
         "warning": "",
     }
     already[analysis_path] = [existing]
-    require(discover(Fake(already)) is None, "already published exact-category PR head not skipped")
+    check_path = f"/repos/{REPOSITORY}/commits/{head}/check-runs?per_page=100"
+    already[check_path] = {
+        "total_count": 1,
+        "check_runs": [{
+            "name": "CodeQL",
+            "head_sha": head,
+            "app": {"slug": "github-advanced-security"},
+            "status": "completed",
+            "conclusion": "success",
+        }],
+    }
+    require(discover(Fake(already)) is None, "already published successful CodeQL head not skipped")
+    neutral = deepcopy(already)
+    neutral[check_path]["check_runs"][0]["conclusion"] = "neutral"
+    try:
+        discover(Fake(neutral))
+    except Blocked:
+        pass
+    else:
+        raise AssertionError("neutral native CodeQL check falsely counted as success")
+    omitted = deepcopy(already)
+    omitted[check_path]["total_count"] = 0
+    omitted[check_path]["check_runs"] = []
+    try:
+        discover(Fake(omitted))
+    except Blocked:
+        pass
+    else:
+        raise AssertionError("missing native CodeQL check falsely counted as success")
     unrelated = deepcopy(already)
     unrelated[analysis_path][0]["analysis_key"] = "(default)"
     unrelated[analysis_path][0]["category"] = ""
