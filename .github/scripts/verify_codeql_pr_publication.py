@@ -310,6 +310,10 @@ def discover(api: Any, *, trusted_main_sha: str | None = None) -> dict[str, str]
             active.add((nested(pr, "head", "sha"), nested(pr, "head", "ref")))
     if not active:
         return None
+    # A blocked newest run must shadow older successes for THAT head, but
+    # cannot veto a distinct, independently authenticated green PR.
+    seen_heads: set[tuple[str, str]] = set()
+    blocked_heads: set[tuple[str, str]] = set()
     for page in range(1, 4):
         payload = obj(
             api.get(
@@ -322,18 +326,25 @@ def discover(api: Any, *, trusted_main_sha: str | None = None) -> dict[str, str]
         require(isinstance(runs, list) and len(runs) <= 100, "CodeQL run page malformed")
         for run in runs:
             run = obj(run, "CodeQL workflow run")
-            if (run.get("head_sha"), run.get("head_branch")) not in active:
+            subject = (run.get("head_sha"), run.get("head_branch"))
+            if subject not in active or subject in seen_heads:
                 continue
-            # The API lists newest runs first. Never fall back to a previous
-            # green run for a head whose most recent scan failed, was cancelled,
-            # was re-run, or is still in progress.
+            # Runs are newest-first across all pages. Mark the head before
+            # admission so an earlier green attempt never masks its bad latest.
+            seen_heads.add(subject)
             require(
                 run.get("workflow_id") == WORKFLOW_ID
-                and run.get("event") == "pull_request"
-                and run.get("status") == "completed"
-                and run.get("conclusion") == "success",
-                "newest exact-head CodeQL producer is not a completed success",
+                and run.get("event") == "pull_request",
+                "canonical CodeQL producer workflow identity drift",
             )
+            if run.get("status") != "completed" or run.get("conclusion") != "success":
+                blocked_heads.add(subject)
+                print(
+                    "BLOCKED: live PR's newest CodeQL run is not completed-success; "
+                    "older runs for that head are ineligible",
+                    file=sys.stderr,
+                )
+                continue
             result = verify(
                 api,
                 {"action": "completed", "workflow_run": run},
@@ -405,6 +416,11 @@ def discover(api: Any, *, trusted_main_sha: str | None = None) -> dict[str, str]
                 continue
             return result
         if len(runs) < 100:
+            if blocked_heads:
+                raise Blocked(
+                    f"{len(blocked_heads)} live PR head(s) have no completed-success newest "
+                    "CodeQL run; no ineligible evidence was published"
+                )
             return None
     raise Blocked("CodeQL workflow run inventory exceeds bounded 300-run lookback")
 
@@ -626,6 +642,39 @@ def self_test() -> None:
         pass
     else:
         raise AssertionError("newer accepted main did not block old trusted consumer")
+    # A bad or still-running PR cannot starve a distinct verified PR.
+    # No auth data or source files from the blocked peer are ever read.
+    peer_blocked = deepcopy(discover_lookup)
+    peer_pr = deepcopy(pr)
+    peer_pr["number"] = prnum + 1
+    peer_pr["head"]["sha"] = "1" * 40
+    peer_pr["head"]["ref"] = "security/blocked-peer"
+    prs_path = f"/repos/{REPOSITORY}/pulls?state=open&base=main&per_page=100&page=1"
+    runs_path = (
+        f"/repos/{REPOSITORY}/actions/workflows/{WORKFLOW_ID}/runs"
+        "?event=pull_request&per_page=100&page=1"
+    )
+    peer_blocked[prs_path].append(peer_pr)
+    peer_run = deepcopy(run)
+    peer_run.update(
+        id=102,
+        head_sha="1" * 40,
+        head_branch="security/blocked-peer",
+        conclusion="failure",
+    )
+    peer_blocked[runs_path]["workflow_runs"] = [peer_run, run]
+    require(
+        discover(Fake(peer_blocked))["head_sha"] == head,
+        "failed unrelated CodeQL scan starved valid exact-head publication",
+    )
+    peer_pending = deepcopy(peer_blocked)
+    peer_pending[runs_path]["workflow_runs"][0].update(
+        status="in_progress", conclusion=None
+    )
+    require(
+        discover(Fake(peer_pending))["head_sha"] == head,
+        "in-progress unrelated CodeQL scan starved valid exact-head publication",
+    )
     newest_failed = deepcopy(discover_lookup)
     newer = deepcopy(run)
     newer["id"] = 102
@@ -664,6 +713,15 @@ def self_test() -> None:
         ],
     }
     require(discover(Fake(already)) is None, "already published successful CodeQL head not skipped")
+    all_blocked = deepcopy(peer_blocked)
+    all_blocked[analysis_path] = [existing]
+    all_blocked[check_path] = deepcopy(already[check_path])
+    try:
+        discover(Fake(all_blocked))
+    except Blocked:
+        pass
+    else:
+        raise AssertionError("blocked peer was silently reported as no outstanding work")
     neutral = deepcopy(already)
     neutral[check_path]["check_runs"][0]["conclusion"] = "neutral"
     try:
