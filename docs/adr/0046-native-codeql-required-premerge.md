@@ -15,6 +15,28 @@ recognizes a specific native app, not arbitrary `github-actions` check names.
 A native `neutral` counts for Scorecard's historical metric but is **not**
 proof that a security gate succeeded. Issue #380 retains exact evidence.
 
+A real self-hosted qualification experiment on this PR's exact head
+`be6b4ee44b51071d3503c5ebdfa7be2324af7d43` subsequently established
+that read-only CodeQL [run 38936834431](https://github.com/portyu9/qa-automation-ai-agent-evals/actions/runs/38936834431)
+completed with original zero-alert evidence and trusted-main publisher
+[run 38926004305, attempt 2](https://github.com/portyu9/qa-automation-ai-agent-evals/actions/runs/38926004305)
+successfully uploaded the authenticated artifact. GitHub then created an
+independently verifiable genuine `github-advanced-security CodeQL:success`
+check on the identical PR head. Yet the new gate and accepted-main publisher
+refused to count the Code Scanning analysis. This was a true fail-closed
+identity-query mismatch, not a permission or scanner failure: GitHub's
+[Code Scanning REST reference](https://docs.github.com/en/rest/code-scanning/code-scanning)
+documents the **`pr`** analysis-list filter for PRs, whereas its `ref`
+filter documents `refs/pull/N/merge` (the uploader accepts
+`refs/pull/N/head`). Further, the returned SARIF-derived `category`
+includes the authenticated `automationDetails.id` trailing slash, while
+`analysis_key` names the workflow job without it. Earlier verifier
+fixtures incorrectly assumed both fields were identical. Replace the
+unqualified head-ref filter with bounded `pr=N` discovery and require
+exact original source SHA, head ref, job analysis key, SARIF category
+with slash, genuine native app check and error/warning veto. Preserve
+negative tests for spoofed unrelated analysis categories and stale heads.
+
 The existing `Package integrity` gate is one of thirteen nonbypassable
 GitHub Actions contexts required by Protect Main ruleset #22191532. It
 already binds genuine read-only CodeQL and independent Security workflows
@@ -31,15 +53,16 @@ Extend the *existing required* `Package integrity` PR job with a new
 fail-closed read-only native CodeQL verifier and local adversarial fixtures,
 without changing the required status list or adding an unprotected advisory
 context. Bind the live open PR number, exact current head SHA and current
-protected `main` base SHA. Query canonical GitHub check-runs and active
+protected `main` base SHA. Query canonical GitHub check-runs and the bounded, documented `pr=N`
 Code Scanning analysis inventory under read-only scopes:
 
 - Require exactly one native CodeQL check issued by the real
   `github-advanced-security` or `github-code-scanning` app, concluding
   **completed success** on the exact final PR source head.
 - Require exactly one corresponding authenticated CodeQL analysis with
-  exact live `refs/pull/<number>/head`, matching commit SHA, and the trusted
-  `.github/workflows/codeql.yml:codeql-upload` analysis key and category;
+  exact live `refs/pull/<number>/head`, matching commit SHA, the trusted
+  `.github/workflows/codeql.yml:codeql-upload` analysis key and exact
+  original SARIF category with the final `/` delimiter;
   reject warnings/errors, stale and contradictory evidence.
 - Treat `neutral`, `skipped`, ordinary `github-actions CodeQL` green,
   missing/check-run-truncated evidence, base/head drift and unqualified
@@ -56,8 +79,12 @@ Code Scanning analysis inventory under read-only scopes:
   Semantic graph validation pins the exact protected-gate step sequence,
   trigger and read-only GitHub evidence authority.
 
-A new real same-repository PR must receive authentic current native
-publication while still open. This change's own PR must satisfy the
+The accepted-main-owned publisher's **duplicate-avoidance check** also uses
+this documented PR analysis query and correct SARIF category after merge,
+so a prior genuine native check and its source analysis remain jointly
+qualified; no duplicate publisher upload is authorized by a missing
+head-ref query result alone. A new real same-repository PR must receive
+authentic current native publication while still open. This change's own PR must satisfy the
 same binding and all original protections before protected merge.
 
 ## Consequences
