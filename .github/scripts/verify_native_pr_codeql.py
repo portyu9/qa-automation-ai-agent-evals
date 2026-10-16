@@ -148,14 +148,49 @@ def validate_snapshot(
         raise Pending("no genuine native PR-head CodeQL evidence yet")
     require(
         len(native) == 1 and len(matching) == 1,
-        "native check/analysis mismatch (exact PR ref, source SHA, analysis key, "
-        "SARIF automationDetails category and app-owned check must all agree)",
+        "native check/analysis mismatch: "
+        + json.dumps(
+            {
+                "native_count": len(native),
+                "matching_count": len(matching),
+                "pr_analysis_count": len(analyses),
+                "pr_analysis_identity": _safe_analysis_metadata(analyses, head_sha=head_sha),
+            },
+            sort_keys=True,
+        ),
     )
     analysis = matching[0]
     require(
         analysis.get("error") == "" and analysis.get("warning") == "",
         "Code Scanning analysis contains error or warning",
     )
+
+
+def _safe_analysis_metadata(rows: Any, *, head_sha: str) -> list[dict[str, str]]:
+    """Only public, bounded non-secret provider identifiers for fail-closed diagnostics."""
+    if not isinstance(rows, list):
+        return []
+    result: list[dict[str, str]] = []
+    for entry in rows[:100]:
+        if not isinstance(entry, dict):
+            continue
+        tool = entry.get("tool")
+        category = entry.get("category")
+        if (
+            entry.get("commit_sha") != head_sha
+            and not (isinstance(category, str) and ACTIVE_CATEGORY in category)
+        ):
+            continue
+        result.append(
+            {
+                key: str(entry.get(key, ""))[:180]
+                for key in ("ref", "commit_sha", "analysis_key", "category", "error", "warning")
+            }
+        )
+        result[-1]["tool"] = str(tool.get("name", ""))[:100] if isinstance(tool, dict) else ""
+        if len(result) == 8:
+            break
+    return result
 
 
 def verify_live(api: Any, *, repository: str, pr_number: int, head_sha: str) -> None:
@@ -169,6 +204,23 @@ def verify_live(api: Any, *, repository: str, pr_number: int, head_sha: str) -> 
     native = api.get(f"{root}/commits/{head_sha}/check-runs?per_page=100")
     # GitHub lists PR analyses using the documented pr filter, not the upload head ref.
     analyses = api.get(f"{root}/code-scanning/analyses?pr={number}&per_page=100")
+    if analyses == []:
+        # Diagnostics are never evidence or authorization. The API may omit
+        # head-ref uploads when filtered by PR; inspect most recent exact SHA.
+        try:
+            recent = api.get(f"{root}/code-scanning/analyses?per_page=100")
+        except Blocked:
+            recent = []
+        print(
+            "NATIVE_CODEQL_PR_ANALYSIS_DIAGNOSTIC "
+            + json.dumps(
+                {"pr_rows": 0, "recent_exact_subject": _safe_analysis_metadata(
+                    recent, head_sha=head_sha
+                )},
+                sort_keys=True,
+            ),
+            file=sys.stderr,
+        )
     main_ref = api.get(f"{root}/git/ref/heads/main")
     pr = api.get(f"{root}/pulls/{number}")
     validate_snapshot(
