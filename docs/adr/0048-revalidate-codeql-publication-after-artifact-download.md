@@ -1,11 +1,11 @@
 # ADR 0048: Revalidate PR-head CodeQL authorization at the privileged upload boundary
 
-- **Status:** Accepted by protected PR #393, contingent on successful exact-head checks and merge
+**Status:** Accepted
 - **Date:** 2026-10-16
 - **Applies to:** accepted-main-owned `.github/workflows/codeql-pr-publisher.yml`
 - **Parent evidence:** #380 and #349; ADRs 0046, 0047
 
-## Problem
+## Context
 
 Before this change, the privileged trusted-main publisher authenticated a successful
 read-only pull-request CodeQL workflow, a unique live PR head/base/source tree and the
@@ -43,7 +43,23 @@ a code-scanning result for a different category or application.
 6. If the provider's evidence cannot be independently read, classify **BLOCKED** and
    do not upload. Do not transform BLOCKED into a misleading CodeQL FAIL or PASS.
 
-## Nonclaims and operational consequences
+## Consequences
+
+A stale discovery result can no longer authorize the trusted publisher: the
+candidate is rechecked after download against the original snapshot. A concurrent
+native scanner publication fails the current job rather than replacing genuine
+evidence. This adds bounded GitHub API reads; if they fail, no privileged
+SARIF write occurs. The existing pinned 13-context merge policy remains unchanged.
+
+## Assurance impact
+
+The positive claim narrows to a continuously re-evaluated, canonical PR-head,
+main SHA, zero-alert original artifact and native Code Scanning identity at the
+last publisher-controlled verification step. Semantic mutation tests make this
+preupload authorization step non-optional; exact refusal fixtures cover
+post-discovery main/head/PR/digest drift and competing reports.
+
+## Non-claims
 
 - Final revalidation narrows, but does **not** mathematically eliminate the race between
   the last GitHub API response and the native `upload-sarif` action; a future atomic
