@@ -1378,6 +1378,9 @@ jobs:
     permissions:
       actions: read
       contents: read
+      checks: read
+      pull-requests: read
+      security-events: read
     runs-on: ubuntu-24.04
     timeout-minutes: 22
     steps:
@@ -1412,6 +1415,24 @@ jobs:
             --trigger-event "$TRIGGER_EVENT" \
             --attempts 90 \
             --delay-seconds 10
+      # Native Code Scanning is a different trust source than a green Actions
+      # CodeQL workflow. Require the trusted-main publisher's real exact-head
+      # app check and active-category analysis while this PR is STILL OPEN.
+      # Forks with no independently qualified publication remain BLOCKED.
+      - name: Self-test native PR-head CodeQL qualification
+        run: python .github/scripts/verify_native_pr_codeql.py --self-test
+      - name: Require authentic native CodeQL success on live PR head
+        if: github.event_name == 'pull_request'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SUBJECT_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          python .github/scripts/verify_native_pr_codeql.py \\
+            --subject-sha "$SUBJECT_SHA" \\
+            --pr-number "$PR_NUMBER" \\
+            --attempts 48 \\
+            --delay-seconds 5
       - name: Self-test exact-subject Security bridge
         run: python .github/scripts/verify_required_codeql.py --self-test
       - name: Require independent exact-subject Security workflow and job success
