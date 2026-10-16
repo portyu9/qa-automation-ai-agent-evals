@@ -37,6 +37,12 @@ on:
       - '.github/scripts/compact_compatibility_lock.py'
       - '.github/scripts/validate_ci_locks.py'
       - '.github/scripts/validate_dependency_compatibility.py'
+      - '.github/semantic-adr-policy.json'
+      - '.github/scripts/audit_live_repo_controls.py'
+      - '.github/scripts/validate_semantic_adr.py'
+      - '.github/scripts/verify_codeql_pr_publication.py'
+      - '.github/scripts/verify_native_pr_codeql.py'
+      - '.github/workflows/codeql-pr-publisher.yml'
       - 'CI_DEPENDENCY_LOCKS.md'
       - 'requirements-dev-ci-build.txt'
       - 'requirements/locks/**'
@@ -89,6 +95,10 @@ jobs:
           .github/scripts/validate_security_stack.py
           .github/scripts/validate_workflow_graph.py
           .github/scripts/verify_required_codeql.py
+          .github/scripts/audit_live_repo_controls.py
+          .github/scripts/validate_semantic_adr.py
+          .github/scripts/verify_codeql_pr_publication.py
+          .github/scripts/verify_native_pr_codeql.py
       - name: Validate governance and recovery configuration
         run: |
           python .github/scripts/dependency_governance.py --validate-config
@@ -101,6 +111,8 @@ jobs:
           python .github/scripts/validate_codeql_sarif_selfcheck.py
           python .github/scripts/validate_security_stack.py
           python .github/scripts/verify_required_codeql.py --self-test
+          python .github/scripts/verify_codeql_pr_publication.py --self-test
+          python .github/scripts/verify_native_pr_codeql.py --self-test
 
   govern:
     name: govern-dependabot
