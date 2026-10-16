@@ -114,8 +114,7 @@ def validate_snapshot(
     rows = checks.get("check_runs")
     count = checks.get("total_count")
     require(
-        type(count) is int and 0 <= count <= 100
-        and isinstance(rows, list) and len(rows) == count,
+        type(count) is int and 0 <= count <= 100 and isinstance(rows, list) and len(rows) == count,
         "incomplete native check-run inventory",
     )
     native = []
@@ -170,28 +169,51 @@ def verify_live(api: Any, *, repository: str, pr_number: int, head_sha: str) -> 
     main_ref = api.get(f"{root}/git/ref/heads/main")
     pr = api.get(f"{root}/pulls/{number}")
     validate_snapshot(
-        repository=repository, pr_number=number, head_sha=head_sha,
-        pr=pr, main_ref=main_ref, native_checks=native, analyses=analyses,
+        repository=repository,
+        pr_number=number,
+        head_sha=head_sha,
+        pr=pr,
+        main_ref=main_ref,
+        native_checks=native,
+        analyses=analyses,
     )
 
 
 def self_test() -> None:
     repo, sha, base = "owner/repo", "a" * 40, "b" * 40
     pr = {
-        "number": 17, "state": "open", "draft": False,
+        "number": 17,
+        "state": "open",
+        "draft": False,
         "head": {"sha": sha, "repo": {"full_name": repo}},
         "base": {"ref": "main", "sha": base, "repo": {"full_name": repo}},
     }
     main = {"ref": "refs/heads/main", "object": {"sha": base}}
-    valid = {"name": "CodeQL", "head_sha": sha, "status": "completed",
-             "conclusion": "success", "app": {"slug": "github-advanced-security"}}
+    valid = {
+        "name": "CodeQL",
+        "head_sha": sha,
+        "status": "completed",
+        "conclusion": "success",
+        "app": {"slug": "github-advanced-security"},
+    }
     checks = {"total_count": 1, "check_runs": [valid]}
-    analysis = {"ref": "refs/pull/17/head", "commit_sha": sha, "tool": {"name": "CodeQL"},
-                "analysis_key": ACTIVE_CATEGORY, "category": ACTIVE_CATEGORY,
-                "error": "", "warning": ""}
+    analysis = {
+        "ref": "refs/pull/17/head",
+        "commit_sha": sha,
+        "tool": {"name": "CodeQL"},
+        "analysis_key": ACTIVE_CATEGORY,
+        "category": ACTIVE_CATEGORY,
+        "error": "",
+        "warning": "",
+    }
     params: dict[str, Any] = dict(
-        repository=repo, pr_number=17, head_sha=sha,
-        pr=pr, main_ref=main, native_checks=checks, analyses=[analysis],
+        repository=repo,
+        pr_number=17,
+        head_sha=sha,
+        pr=pr,
+        main_ref=main,
+        native_checks=checks,
+        analyses=[analysis],
     )
     validate_snapshot(**params)
 
@@ -216,7 +238,12 @@ def self_test() -> None:
     rejected(native_checks={"total_count": 1, "check_runs": [dict(valid, status="queued")]})
     rejected(native_checks={"total_count": 1, "check_runs": [dict(valid, head_sha="c" * 40)]})
     rejected(native_checks={"total_count": 1, "check_runs": [dict(valid, conclusion="failure")]})
-    rejected(native_checks={"total_count": 1, "check_runs": [dict(valid, app={"slug": "github-actions"})]})
+    rejected(
+        native_checks={
+            "total_count": 1,
+            "check_runs": [dict(valid, app={"slug": "github-actions"})],
+        }
+    )
     rejected(native_checks={"total_count": 2, "check_runs": [valid, valid]})
     rejected(native_checks={"total_count": 2, "check_runs": [valid]})
     rejected(native_checks={"total_count": 101, "check_runs": [valid] * 101})
@@ -230,9 +257,13 @@ def self_test() -> None:
     rejected(analyses=[analysis] * 100)
     # Correct independent evidence from the other recognized GitHub app is valid.
     validate_snapshot(
-        **{**params, "native_checks": {"total_count": 1, "check_runs": [
-            {**valid, "app": {"slug": "github-code-scanning"}}
-        ]}}
+        **{
+            **params,
+            "native_checks": {
+                "total_count": 1,
+                "check_runs": [{**valid, "app": {"slug": "github-code-scanning"}}],
+            },
+        }
     )
 
     class Fake:
@@ -273,7 +304,9 @@ def main() -> int:
     api = GitHubRead(repository, os.environ.get("GITHUB_TOKEN", ""))
     for attempt in range(args.attempts):
         try:
-            verify_live(api, repository=repository, pr_number=args.pr_number, head_sha=args.subject_sha)
+            verify_live(
+                api, repository=repository, pr_number=args.pr_number, head_sha=args.subject_sha
+            )
         except Pending as exc:
             if attempt == args.attempts - 1:
                 raise Blocked(f"native CodeQL BLOCKED after bounded wait: {exc}") from exc
