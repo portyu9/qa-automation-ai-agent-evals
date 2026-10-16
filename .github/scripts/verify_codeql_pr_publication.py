@@ -21,6 +21,7 @@ REPOSITORY = "portyu9/qa-automation-ai-agent-evals"
 WORKFLOW_ID = 359681797
 WORKFLOW_PATH = ".github/workflows/codeql.yml"
 CODEQL_CATEGORY = ".github/workflows/codeql.yml:codeql-upload"
+CODEQL_ANALYSIS_KEY = ".github/workflows/codeql-pr-publisher.yml:publish"
 SHA = re.compile(r"^[0-9a-f]{40}$")
 BRANCH = re.compile(r"^[A-Za-z0-9._/-]{1,200}$")
 DIGEST = re.compile(r"^sha256:[0-9a-f]{64}$")
@@ -355,13 +356,15 @@ def discover(api: Any, *, trusted_main_sha: str | None = None) -> dict[str, str]
             # analysis for the trusted active CodeQL category permits a skip.
             number = result["pr_number"]
             ref = f"refs/pull/{number}/head"
-            encoded_ref = urllib.parse.quote(ref, safe="")
+            # GitHub documents 'pr' for listing a PR's analyses. Uploads
+            # may target refs/pull/N/head, but the list API's 'ref' filter
+            # expects refs/pull/N/merge and can otherwise return no rows.
             analyses = api.get(
-                f"/repos/{REPOSITORY}/code-scanning/analyses?ref={encoded_ref}&per_page=100"
+                f"/repos/{REPOSITORY}/code-scanning/analyses?pr={number}&per_page=100"
             )
             require(
                 isinstance(analyses, list) and len(analyses) < 100,
-                "bounded exact-ref Code Scanning analysis inventory missing",
+                "bounded exact-PR Code Scanning analysis inventory missing",
             )
             matching = [
                 a
@@ -370,7 +373,7 @@ def discover(api: Any, *, trusted_main_sha: str | None = None) -> dict[str, str]
                 and a.get("ref") == ref
                 and a.get("commit_sha") == head
                 and nested(a, "tool", "name") == "CodeQL"
-                and a.get("analysis_key") == CODEQL_CATEGORY
+                and a.get("analysis_key") == CODEQL_ANALYSIS_KEY
                 and a.get("category") == CODEQL_CATEGORY
             ]
             require(len(matching) <= 1, "ambiguous active CodeQL analyses on exact PR head")
@@ -623,10 +626,7 @@ def self_test() -> None:
     ] = {
         "workflow_runs": [run],
     }
-    analysis_path = (
-        f"/repos/{REPOSITORY}/code-scanning/analyses"
-        f"?ref={urllib.parse.quote(f'refs/pull/{prnum}/head', safe='')}&per_page=100"
-    )
+    analysis_path = f"/repos/{REPOSITORY}/code-scanning/analyses?pr={prnum}&per_page=100"
     discover_lookup[analysis_path] = []
     check_path = f"/repos/{REPOSITORY}/commits/{head}/check-runs?per_page=100"
     discover_lookup[check_path] = {"total_count": 0, "check_runs": []}
@@ -697,7 +697,7 @@ def self_test() -> None:
         "tool": {"name": "CodeQL"},
         "ref": f"refs/pull/{prnum}/head",
         "commit_sha": head,
-        "analysis_key": CODEQL_CATEGORY,
+        "analysis_key": CODEQL_ANALYSIS_KEY,
         "category": CODEQL_CATEGORY,
         "error": "",
         "warning": "",
@@ -744,6 +744,24 @@ def self_test() -> None:
         raise AssertionError("missing native CodeQL check falsely counted as success")
     # Category disagreement despite an existing native app check is a
     # contradictory signal. Never call the uploader again to bury it.
+    # The API's analysis_key identifies the trusted main-only uploader,
+    # not the unprivileged source CodeQL producer. Keep both identities pinned.
+    wrong_publisher = deepcopy(already)
+    wrong_publisher[analysis_path][0]["analysis_key"] = CODEQL_CATEGORY
+    try:
+        discover(Fake(wrong_publisher))
+    except Blocked:
+        pass
+    else:
+        raise AssertionError("source CodeQL job spoofed trusted publisher analysis_key")
+    wrong_category = deepcopy(already)
+    wrong_category[analysis_path][0]["category"] = f"{CODEQL_CATEGORY}/"
+    try:
+        discover(Fake(wrong_category))
+    except Blocked:
+        pass
+    else:
+        raise AssertionError("SARIF trailing slash spoofed exact published category")
     unrelated = deepcopy(already)
     unrelated[analysis_path][0]["analysis_key"] = "(default)"
     unrelated[analysis_path][0]["category"] = ""
