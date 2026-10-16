@@ -1428,10 +1428,10 @@ jobs:
           SUBJECT_SHA: ${{ github.event.pull_request.head.sha }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
-          python .github/scripts/verify_native_pr_codeql.py \\
-            --subject-sha "$SUBJECT_SHA" \\
-            --pr-number "$PR_NUMBER" \\
-            --attempts 48 \\
+          python .github/scripts/verify_native_pr_codeql.py \
+            --subject-sha "$SUBJECT_SHA" \
+            --pr-number "$PR_NUMBER" \
+            --attempts 48 \
             --delay-seconds 5
       - name: Self-test exact-subject Security bridge
         run: python .github/scripts/verify_required_codeql.py --self-test
