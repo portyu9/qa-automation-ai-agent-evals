@@ -824,10 +824,6 @@ jobs:
                 "          PR_NUMBER: 1",
             ),
             (
-                '    --subject-sha "$SUBJECT_SHA" \\\\',
-                '    --subject-sha "$GITHUB_SHA" \\\\',
-            ),
-            (
                 "      - name: Require authentic native CodeQL success on live PR head\n",
                 "      - name: Require authentic native CodeQL success on live PR head\n"
                 "        continue-on-error: true\n",
