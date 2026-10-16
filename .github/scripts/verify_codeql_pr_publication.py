@@ -333,8 +333,7 @@ def discover(api: Any, *, trusted_main_sha: str | None = None) -> dict[str, str]
             # admission so an earlier green attempt never masks its bad latest.
             seen_heads.add(subject)
             require(
-                run.get("workflow_id") == WORKFLOW_ID
-                and run.get("event") == "pull_request",
+                run.get("workflow_id") == WORKFLOW_ID and run.get("event") == "pull_request",
                 "canonical CodeQL producer workflow identity drift",
             )
             if run.get("status") != "completed" or run.get("conclusion") != "success":
@@ -668,9 +667,7 @@ def self_test() -> None:
         "failed unrelated CodeQL scan starved valid exact-head publication",
     )
     peer_pending = deepcopy(peer_blocked)
-    peer_pending[runs_path]["workflow_runs"][0].update(
-        status="in_progress", conclusion=None
-    )
+    peer_pending[runs_path]["workflow_runs"][0].update(status="in_progress", conclusion=None)
     require(
         discover(Fake(peer_pending))["head_sha"] == head,
         "in-progress unrelated CodeQL scan starved valid exact-head publication",
