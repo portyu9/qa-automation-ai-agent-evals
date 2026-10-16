@@ -20,6 +20,7 @@ from typing import Any
 SHA = re.compile(r"^[0-9a-f]{40}$")
 REPO = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
 ACTIVE_CATEGORY = ".github/workflows/codeql.yml:codeql-upload"
+ACTIVE_ANALYSIS_KEY = ".github/workflows/codeql-pr-publisher.yml:publish"
 NATIVE_APPS = frozenset({"github-advanced-security", "github-code-scanning"})
 
 
@@ -139,8 +140,8 @@ def validate_snapshot(
             analysis.get("ref") == ref
             and analysis.get("commit_sha") == head_sha
             and mapping(analysis.get("tool"), "analysis tool absent").get("name") == "CodeQL"
-            and analysis.get("analysis_key") == ACTIVE_CATEGORY
-            and analysis.get("category") == f"{ACTIVE_CATEGORY}/"
+            and analysis.get("analysis_key") == ACTIVE_ANALYSIS_KEY
+            and analysis.get("category") == ACTIVE_CATEGORY
         ):
             matching.append(analysis)
     require(len(matching) <= 1, "multiple active CodeQL analyses on same PR head")
@@ -256,8 +257,8 @@ def self_test() -> None:
         "ref": "refs/pull/17/head",
         "commit_sha": sha,
         "tool": {"name": "CodeQL"},
-        "analysis_key": ACTIVE_CATEGORY,
-        "category": f"{ACTIVE_CATEGORY}/",
+        "analysis_key": ACTIVE_ANALYSIS_KEY,
+        "category": ACTIVE_CATEGORY,
         "error": "",
         "warning": "",
     }
@@ -305,7 +306,8 @@ def self_test() -> None:
     rejected(analyses=[])
     rejected(analyses=[dict(analysis, commit_sha="c" * 40)])
     rejected(analyses=[dict(analysis, category="unrelated")])
-    rejected(analyses=[dict(analysis, category=ACTIVE_CATEGORY)])
+    rejected(analyses=[dict(analysis, category=f"{ACTIVE_CATEGORY}/")])
+    rejected(analyses=[dict(analysis, analysis_key=ACTIVE_CATEGORY)])
     rejected(analyses=[dict(analysis, analysis_key="unrelated")])
     rejected(analyses=[dict(analysis, error="scan error")])
     rejected(analyses=[dict(analysis, warning="ignored result")])
