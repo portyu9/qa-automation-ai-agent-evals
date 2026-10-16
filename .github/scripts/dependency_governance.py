@@ -48,6 +48,21 @@ MAX_MANIFEST_BYTES = 256 * 1024
 OWNER_REVIEW_MARKER = "<!-- dependency-governance:owner-review:"
 OWNER_APPROVAL_MARKER = "<!-- dependency-governance:owner-approval:"
 OWNER_REFRESH_MARKER = "<!-- dependency-governance:owner-refresh:"
+# Security-control files acquired since the original Dependabot governance
+# contract. These are not themselves bot-editable authority declarations.
+# The existing reviewed action-pin-only workflow exception remains separate.
+SAST_CONTROL_PATHS = (
+    ".github/semantic-adr-policy.json",
+    ".github/scripts/audit_live_repo_controls.py",
+    ".github/scripts/validate_semantic_adr.py",
+    ".github/scripts/validate_workflow_graph.py",
+    ".github/scripts/verify_codeql_pr_publication.py",
+    ".github/scripts/verify_native_pr_codeql.py",
+    ".github/scripts/verify_required_codeql.py",
+    ".github/workflows/codeql-pr-publisher.yml",
+    ".github/workflows/security-scorecard.yml",
+    ".github/workflows/security.yml",
+)
 
 
 class GovernanceError(RuntimeError):
@@ -144,6 +159,7 @@ def validate_config(config: dict[str, Any]) -> list[str]:
         ".github/workflows/dependency-governance.yml",
         ".github/workflows/codeql.yml",
     }
+    critical.update(SAST_CONTROL_PATHS)
     for item in sorted(critical):
         if item not in paths:
             errors.append(f"{item} must require manual review")
@@ -1287,6 +1303,28 @@ def selftest(config: dict[str, Any]) -> None:
     if errors:
         raise GovernanceError("config self-test failed: " + "; ".join(errors))
 
+    # Regression proof: each newly accepted SAST/governance authority path
+    # is pinned by the validator and manual-review scope, even if edited
+    # alongside an otherwise legitimate signed Dependabot update.
+    for protected_path in SAST_CONTROL_PATHS:
+        if protected_path not in config["manualReviewPaths"]:
+            raise GovernanceError(f"trusted control path not protected: {protected_path}")
+        mutation = copy.deepcopy(config)
+        mutation["manualReviewPaths"].remove(protected_path)
+        if not validate_config(mutation):
+            raise GovernanceError(f"config accepted removed trust path: {protected_path}")
+        if not protected_path.startswith(".github/workflows/"):
+            try:
+                require_unprotected_non_action_scope(
+                    [{"filename": protected_path}], config
+                )
+            except PolicyBlock:
+                pass
+            else:
+                raise GovernanceError(
+                    f"non-workflow security control accepted for bot merge: {protected_path}"
+                )
+
     # The controller must never generate an owner approval from just ci-gate:
     # Package integrity is the final independent CodeQL+Security protected veto.
     without_final_gate = copy.deepcopy(config)
@@ -1447,6 +1485,14 @@ def selftest(config: dict[str, Any]) -> None:
     workflow_text = (ROOT / ".github" / "workflows" / "dependency-governance.yml").read_text(
         encoding="utf-8"
     )
+    # Every newly designated trusted control path must trigger the read-only
+    # governance PR self-check (independent of the always-required CI checks).
+    for protected_path in SAST_CONTROL_PATHS:
+        trigger = f"- '{protected_path}'"
+        if workflow_text.count(trigger) != 1:
+            raise GovernanceError(
+                f"dependency governance PR self-test trigger missing/ambiguous: {protected_path}"
+            )
     owner_secret = "DEPENDABOT_OWNER_TOKEN: ${{ secrets.DEPENDABOT_OWNER_TOKEN }}"
     if workflow_text.count(owner_secret) != 1:
         raise GovernanceError("owner token must be wired exactly once in dependency governance")
