@@ -374,38 +374,38 @@ def discover(api: Any, *, trusted_main_sha: str | None = None) -> dict[str, str]
                 and a.get("category") == CODEQL_CATEGORY
             ]
             require(len(matching) <= 1, "ambiguous active CodeQL analyses on exact PR head")
+            # Query the authenticated app-owned check on every candidate,
+            # including when the analysis inventory appears empty. A missing
+            # active category with an existing native result is a contradictory
+            # control-plane signal, NOT authorization to upload repeatedly.
+            head_checks = obj(
+                api.get(f"/repos/{REPOSITORY}/commits/{head}/check-runs?per_page=100"),
+                "native head Code Scanning check-runs",
+            )
+            checks = head_checks.get("check_runs")
+            count = head_checks.get("total_count")
+            require(
+                type(count) is int
+                and 0 <= count <= 100
+                and isinstance(checks, list)
+                and len(checks) == count,
+                "incomplete native Code Scanning check-run inventory",
+            )
+            native = [
+                check
+                for check in checks
+                if isinstance(check, dict)
+                and check.get("name") == "CodeQL"
+                and check.get("head_sha") == head
+                and nested(check, "app", "slug")
+                in {"github-advanced-security", "github-code-scanning"}
+            ]
+            require(len(native) <= 1, "ambiguous native CodeQL checks on exact PR head")
             if matching:
                 require(
                     matching[0].get("error") == "" and matching[0].get("warning") == "",
                     "published active CodeQL analysis contains failure/warning",
                 )
-                # A completed upload alone does not prove GitHub's *native*
-                # Code Scanning check is successful. A stale second CodeQL
-                # configuration can turn that check neutral/blocked despite
-                # this one category being present. Never treat neutral as PASS
-                # or spam an already uploaded result into the same category.
-                head_checks = obj(
-                    api.get(f"/repos/{REPOSITORY}/commits/{head}/check-runs?per_page=100"),
-                    "native head Code Scanning check-runs",
-                )
-                checks = head_checks.get("check_runs")
-                count = head_checks.get("total_count")
-                require(
-                    type(count) is int
-                    and 0 <= count <= 100
-                    and isinstance(checks, list)
-                    and len(checks) == count,
-                    "incomplete native Code Scanning check-run inventory",
-                )
-                native = [
-                    check
-                    for check in checks
-                    if isinstance(check, dict)
-                    and check.get("name") == "CodeQL"
-                    and check.get("head_sha") == head
-                    and nested(check, "app", "slug")
-                    in {"github-advanced-security", "github-code-scanning"}
-                ]
                 require(
                     len(native) == 1
                     and native[0].get("status") == "completed"
@@ -413,6 +413,11 @@ def discover(api: Any, *, trusted_main_sha: str | None = None) -> dict[str, str]
                     "CodeQL analysis exists but native PR check is absent, neutral or failed",
                 )
                 continue
+            require(
+                not native,
+                "native CodeQL check exists without an exact active-category analysis; "
+                "BLOCKED pending Code Scanning inventory reconciliation, not reupload",
+            )
             return result
         if len(runs) < 100:
             if blocked_heads:
@@ -623,6 +628,8 @@ def self_test() -> None:
         f"?ref={urllib.parse.quote(f'refs/pull/{prnum}/head', safe='')}&per_page=100"
     )
     discover_lookup[analysis_path] = []
+    check_path = f"/repos/{REPOSITORY}/commits/{head}/check-runs?per_page=100"
+    discover_lookup[check_path] = {"total_count": 0, "check_runs": []}
     require(
         discover(Fake(discover_lookup), trusted_main_sha=main)["head_sha"] == head,
         "trusted scheduler discovery rejected valid PR run",
@@ -696,7 +703,6 @@ def self_test() -> None:
         "warning": "",
     }
     already[analysis_path] = [existing]
-    check_path = f"/repos/{REPOSITORY}/commits/{head}/check-runs?per_page=100"
     already[check_path] = {
         "total_count": 1,
         "check_runs": [
@@ -736,13 +742,40 @@ def self_test() -> None:
         pass
     else:
         raise AssertionError("missing native CodeQL check falsely counted as success")
+    # Category disagreement despite an existing native app check is a
+    # contradictory signal. Never call the uploader again to bury it.
     unrelated = deepcopy(already)
     unrelated[analysis_path][0]["analysis_key"] = "(default)"
     unrelated[analysis_path][0]["category"] = ""
+    try:
+        discover(Fake(unrelated))
+    except Blocked:
+        pass
+    else:
+        raise AssertionError("native CodeQL category conflict triggered a duplicate upload")
+    missing_category = deepcopy(already)
+    missing_category[analysis_path] = []
+    try:
+        discover(Fake(missing_category))
+    except Blocked:
+        pass
+    else:
+        raise AssertionError("missing active inventory with a native check triggered reupload")
+    # A different tool's same-named check cannot impersonate native CodeQL.
+    different_app = deepcopy(missing_category)
+    different_app[check_path]["check_runs"][0]["app"]["slug"] = "github-actions"
     require(
-        discover(Fake(unrelated))["head_sha"] == head,
-        "unrelated native CodeQL category masked required trusted publication",
+        discover(Fake(different_app))["head_sha"] == head,
+        "non-native CodeQL check falsely blocked authenticated initial publication",
     )
+    neutral_without_category = deepcopy(missing_category)
+    neutral_without_category[check_path]["check_runs"][0]["conclusion"] = "neutral"
+    try:
+        discover(Fake(neutral_without_category))
+    except Blocked:
+        pass
+    else:
+        raise AssertionError("native neutral with missing category triggered duplicate upload")
     invalid = deepcopy(already)
     invalid[analysis_path][0]["error"] = "integrity failure"
     try:
