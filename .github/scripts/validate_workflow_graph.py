@@ -269,6 +269,17 @@ def _validate_codeql_fork_contract(workflow: dict[str, Any], *, path: Path) -> N
         or "workflow_run" in triggers
     ):
         raise WorkflowPolicyError(f"{path}: fork CodeQL must use unprivileged pull_request")
+    # Keep each PR synchronization SHA in its own immutable scan group.
+    # With cancel-in-progress disabled, later commits cannot cancel or
+    # displace a different SHA's read-only CodeQL run. Do not weaken this
+    # to an ordinary per-PR single-pending concurrency group.
+    if workflow.get("concurrency") != {
+        "group": "codeql-${{ github.repository }}-${{ github.event.pull_request.number || github.ref }}-${{ github.event.pull_request.head.sha || github.sha }}",
+        "cancel-in-progress": False,
+    }:
+        raise WorkflowPolicyError(
+            f"{path}: CodeQL exact-source-SHA isolation or cancellation policy drift"
+        )
     jobs = workflow.get("jobs")
     if not isinstance(jobs, dict) or set(jobs) != {"codeql", "codeql-upload"}:
         raise WorkflowPolicyError(
@@ -590,6 +601,15 @@ jobs:
         candidate_codeql.write_text(source_codeql, encoding="utf-8")
         validate_workflow(candidate_codeql)
         changes = (
+            ("  cancel-in-progress: false", "  cancel-in-progress: true"),
+            (
+                "  group: codeql-${{ github.repository }}-${{ github.event.pull_request.number || github.ref }}-${{ github.event.pull_request.head.sha || github.sha }}",
+                "  group: codeql-${{ github.repository }}-${{ github.event.pull_request.number || github.ref }}",
+            ),
+            (
+                "  group: codeql-${{ github.repository }}-${{ github.event.pull_request.number || github.ref }}-${{ github.event.pull_request.head.sha || github.sha }}",
+                "  group: codeql-${{ github.repository }}",
+            ),
             (
                 "    permissions:\n      actions: read",
                 "    if: github.event_name != 'pull_request'\n    permissions:\n      actions: read",

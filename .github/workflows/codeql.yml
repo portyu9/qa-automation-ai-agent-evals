@@ -12,9 +12,13 @@ on:
 permissions:
   contents: read
 
+# Preserve genuine SAST evidence on each PR synchronization SHA: cancelling
+# older PR-head scans prevents Scorecard from recognizing their actual commits.
+# Exact-head isolation avoids superseding another SHA's pending scan; tokens
+# remain read-only and the trusted publisher remains separately main-owned.
 concurrency:
-  group: codeql-${{ github.repository }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  group: codeql-${{ github.repository }}-${{ github.event.pull_request.number || github.ref }}-${{ github.event.pull_request.head.sha || github.sha }}
+  cancel-in-progress: false
 
 jobs:
   codeql:
