@@ -141,13 +141,17 @@ def validate_snapshot(
             and analysis.get("commit_sha") == head_sha
             and mapping(analysis.get("tool"), "analysis tool absent").get("name") == "CodeQL"
             and analysis.get("analysis_key") == ACTIVE_CATEGORY
-            and analysis.get("category") == ACTIVE_CATEGORY
+            and analysis.get("category") == f"{ACTIVE_CATEGORY}/"
         ):
             matching.append(analysis)
     require(len(matching) <= 1, "multiple active CodeQL analyses on same PR head")
     if not native and not matching:
         raise Pending("no genuine native PR-head CodeQL evidence yet")
-    require(len(native) == 1 and len(matching) == 1, "native check/analysis mismatch")
+    require(
+        len(native) == 1 and len(matching) == 1,
+        "native check/analysis mismatch (exact PR ref, source SHA, analysis key, "
+        "SARIF automationDetails category and app-owned check must all agree)",
+    )
     analysis = matching[0]
     require(
         analysis.get("error") == "" and analysis.get("warning") == "",
@@ -161,11 +165,11 @@ def verify_live(api: Any, *, repository: str, pr_number: int, head_sha: str) -> 
     require(bool(SHA.fullmatch(head_sha)), "invalid source SHA")
     root = f"/repos/{repository}"
     number = pr_number
-    ref = urllib.parse.quote(f"refs/pull/{number}/head", safe="")
     # Re-read PR/current main *after* the two native evidence queries as well,
     # so a concurrent head/base update cannot silently qualify an obsolete scan.
     native = api.get(f"{root}/commits/{head_sha}/check-runs?per_page=100")
-    analyses = api.get(f"{root}/code-scanning/analyses?ref={ref}&per_page=100")
+    # GitHub lists PR analyses using the documented pr filter, not the upload head ref.
+    analyses = api.get(f"{root}/code-scanning/analyses?pr={number}&per_page=100")
     main_ref = api.get(f"{root}/git/ref/heads/main")
     pr = api.get(f"{root}/pulls/{number}")
     validate_snapshot(
@@ -202,7 +206,7 @@ def self_test() -> None:
         "commit_sha": sha,
         "tool": {"name": "CodeQL"},
         "analysis_key": ACTIVE_CATEGORY,
-        "category": ACTIVE_CATEGORY,
+        "category": f"{ACTIVE_CATEGORY}/",
         "error": "",
         "warning": "",
     }
@@ -250,6 +254,7 @@ def self_test() -> None:
     rejected(analyses=[])
     rejected(analyses=[dict(analysis, commit_sha="c" * 40)])
     rejected(analyses=[dict(analysis, category="unrelated")])
+    rejected(analyses=[dict(analysis, category=ACTIVE_CATEGORY)])
     rejected(analyses=[dict(analysis, analysis_key="unrelated")])
     rejected(analyses=[dict(analysis, error="scan error")])
     rejected(analyses=[dict(analysis, warning="ignored result")])
@@ -276,7 +281,7 @@ def self_test() -> None:
     prefix = f"/repos/{repo}"
     lookup = {
         f"{prefix}/commits/{sha}/check-runs?per_page=100": checks,
-        f"{prefix}/code-scanning/analyses?ref=refs%2Fpull%2F17%2Fhead&per_page=100": [analysis],
+        f"{prefix}/code-scanning/analyses?pr=17&per_page=100": [analysis],
         f"{prefix}/git/ref/heads/main": main,
         f"{prefix}/pulls/17": pr,
     }
