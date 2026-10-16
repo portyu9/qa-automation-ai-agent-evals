@@ -1,119 +1,114 @@
-# ADR 0044: Retain authentic per-commit CodeQL checks with bounded PR scan queue
+# ADR 0044: Isolate read-only CodeQL runs by the exact source commit
 
 **Status:** Accepted
 
 ## Context
 
-OpenSSF Scorecard's `SASTID` currently recognizes **18/30** recent
-commits on genuine accepted-main unfiltered [run
-38906594311](https://github.com/portyu9/qa-automation-ai-agent-evals/actions/runs/38906594311).
-The original `SASTID` remains an actual finding, not a filter target.
+Authentic unfiltered OpenSSF Scorecard [run 38906594311](https://github.com/portyu9/qa-automation-ai-agent-evals/actions/runs/38906594311) on accepted main
+reports `SASTID` **8/10, 18/30** recent commits recognized. The finding
+is real and must remain unsuppressed while its historical coverage gap
+persists. Inspection of exact GitHub PR commit check-runs found intermediate
+commits such as `ad2b06e5b2` and `6a9566d05a` with cancelled CodeQL
+workflows, and intermediate commits including `a68904de74` and
+`2598464200` with no CodeQL check attached, despite successful final
+PR-head scans. This is genuine missing evidence; not every absent result
+has an independently established identical cause.
 
-Independent canonical GitHub commit/check-run inspection of the 30 most
-recent accepted-main SHAs shows several intermediate PR commits lacking
-a successful source CodeQL scan even though later head SHAs successfully
-ran read-only CodeQL: e.g. `ad2b06e5b2` and `6a9566d05a` have
-`CodeQL` runs with conclusion `cancelled`; intermediate
-`a68904de74` and `2598464200` have no attached CodeQL check.
-Meanwhile terminal PR heads have genuine `github-actions CodeQL`
-`success`, and some previously observed heads received independent
-main-owned `github-advanced-security CodeQL` successful native scans.
-These examples establish a missing historical evidence problem, not a
-claim that every such gap has exactly the same root cause.
+The read-only PR producer in `.github/workflows/codeql.yml` previously
+used a per-PR concurrency group and `cancel-in-progress: true`.
+Consequently, a quick commit update cancelled the older PR's ongoing
+CodeQL scan. A per-PR group with only `cancel-in-progress: false` still
+has GitHub's default one-pending-run replacement behavior: some
+intermediate commits can be dropped before their checks execute.
 
-The accepted read-only scanner workflow `.github/workflows/codeql.yml`
-uses a per-PR workflow-level concurrency group with
-`cancel-in-progress: true`. This intentionally cancels older
-in-progress runs when the PR branch receives a newer source commit,
-leaving the older SHA without a completed scan. Merely switching
-`cancel-in-progress` to false without a queue still retains GitHub's
-single-pending-run replacement behavior and can discard a series of
-rapid source updates.
-
-GitHub documented [bounded concurrency queues on May 7,
-2026](https://github.blog/changelog/2026-05-07-github-actions-concurrency-groups-now-allow-larger-queues/):
-`queue: max` with no in-progress cancellation permits up to 100
-pending workflow runs per concurrency group, processed separately. A
-per-PR queue is preferable to unlimited parallel CodeQL scans because
-it avoids unnecessary resource spikes while retaining intermediate
-authentic analysis results.
+GitHub documents `concurrency.queue: max` as an up-to-100 pending-run
+alternative as of May 2026. That syntax is not yet understood by this
+repository's pinned actionlint validation (see upstream
+[rhysd/actionlint#657](https://github.com/rhysd/actionlint/issues/657)),
+and adding it without an independently qualified toolchain would break
+mandatory Actions security checks. Do not bypass the linter, suppress
+its error, or misrepresent the unaccepted `queue` configuration as
+operational. A different, compatible design can avoid cross-commit
+cancellation without changing token authority.
 
 ## Decision
 
-Keep the **exact existing** workflow-level per-PR/main-ref concurrency
-group `codeql-${{ github.repository }}-${{ github.event.pull_request.number || github.ref }}`,
-but change only its scheduling behavior to:
+Give each read-only CodeQL workflow run a concurrency group that includes
+the **exact source commit SHA**, in addition to the existing repository and
+PR identity:
 
-- `cancel-in-progress: false` so newer PR synchronize events never
-  automatically terminate an already-running source CodeQL scan;
-- `queue: max` so multiple pending commit scans for that same PR
-  can be retained rather than replacing all but the newest pending run.
+`codeql-${{ github.repository }}-${{ github.event.pull_request.number || github.ref }}-${{ github.event.pull_request.head.sha || github.sha }}`
 
-Strengthen the fail-closed `.github/scripts/validate_workflow_graph.py`
-policy to require this exact group/false/max combination. Deterministic
-adversarial fixtures must reject restored `cancel-in-progress: true`,
-replacement of `queue: max` with the single-pending queue, or
-broadening the group to drop the per-PR partition. Existing workflow
-self-tests continue to reject unsafe `pull_request_target`,
-write-authority in an untrusted job, skipping original SARIF validation,
-client-side SARIF substitution, and bypass of the trusted-main publisher.
+Set `cancel-in-progress: false`. Do not use an unqualified `queue` key.
+The PR event head SHA is source-owned metadata and affects **only
+cancellation/resource grouping**, never privileged publication authority.
+For non-PR events the expression uses the accepted event's `github.sha`.
+A newer PR source commit therefore occupies a different concurrency
+group and cannot cancel or displace the prior SHA's running or pending
+scan merely by advancing the branch.
 
-The scan continues to run read-only for all same-repo and external-fork
-`pull_request` heads, retaining the exact original zero-alert SARIF
-veto and source-run artifact. A separate accepted-main-only publisher
-is still solely responsible for authenticated Code Scanning publication,
-with its own original evidence binding, scoped token and active category.
-No privileged PR event or new token permission is introduced.
+Extend the existing fail-closed workflow graph validator to pin the
+**exact** repository/PR/SHA group and false cancellation state. Add
+adversarial fixtures that reject setting cancellation to true, removing
+the SHA dimension (reintroducing single-pending-run replacement across
+commits), or collapsing the group to a whole-repository identity.
+Keep all existing negative tests for fork privilege elevation,
+`pull_request_target`, accidental SARIF uploads from PR code,
+original-SARIF zero-alert veto, and accepted-main-owned publication.
+
+The untrusted `pull_request` scanner remains read-only on every
+same-repository or external fork event. The separate main-only trusted
+publisher still independently authenticates live **current** PR source
+identity, exact original run, immutable producer bytes, retained artifact
+and original zero-alert SARIF, and requires native Code Scanning app
+qualification where relevant. Historical intermediate scans do **not**
+grant authority to publish SARIF as though they were current PR heads.
 
 ## Consequences
 
-More legitimate PR source commits may finish with genuinely successful
-CodeQL checks rather than cancelled/missing checks. This may improve
-Scorecard's rolling recognized history as real future source commits
-replace older unrecognized commits, but is not an immediate correction
-to existing GitHub check histories. Intermediate CodeQL scans may take
-extra Actions minutes and repository artifact storage. The bounded
-`queue: max` is capped at 100 pending per concurrency group; GitHub
-may still fail/limit runs for unrelated platform reasons. Every finished
-scan must stand on its own zero-alert and evidence gates.
+Distinct source SHA events can now be scanned concurrently rather than
+cancelling each other through the original per-PR group. Resource usage
+may increase when contributors push rapidly. Identical-SHA reruns still
+share a group, and GitHub can reject, delay or drop workflow events for
+other limits; this change does not create an unbounded delivery guarantee
+or retroactively repair earlier cancellations. The repository's global
+resource, Actions and artifact-retention limits still apply.
 
-A completed `github-actions CodeQL` scan is not equivalent to a
-successful native `github-advanced-security CodeQL` check. The trusted
-publisher still requires canonical live exact PR head, original
-authentic SARIF, category and successful native check, and external
-fork delegated publication remains BLOCKED pending real qualification.
-Preserving intermediate scans does not grant their historical commits
-authority to publish SARIF against the latest PR SHA.
+Future independently successful CodeQL source checks on real PR commits
+may raise the rolling Scorecard SAST fraction as old, unqualified
+commits leave its genuine last-30 sample. An ordinary
+`github-actions CodeQL` result is distinct from a native
+`github-advanced-security` Code Scanning result. Separate native
+publication remains deliberately evidence-bound and may be BLOCKED on
+GitHub inventory/category mismatch or an external fork.
 
 ## Assurance impact
 
-The new queue changes only **liveness of read-only evidence production**,
-not scanner authorization or strict non-compensatory safety. It preserves
-the distinction between a cancelled/missing scan and an authentic
-`success`: future runs can complete and be verified on their own
-original SHAs without pretending a later successful run covers an
-earlier SHA. If the queue fills or GitHub does not execute the scan,
-the result remains missing or BLOCKED, not PASS.
+This changes the **availability** of legitimate read-only scan results,
+not their trust level. Each commit must produce its own genuine
+successful zero-alert scan; neither a newer green PR-head scan nor
+a digest is authentication of a missing prior result. No privileged
+token is added to code executing PR-supplied sources. `BLOCKED` remains
+distinct from `FAIL`, and no compensatory aggregation replaces the
+per-commit scanner decision.
 
-Normal protected merge still requires all 13 required Actions contexts
-on the **current** PR head and zero bypass actors. Any native app
-qualification must be verified separately rather than copied from
-another head.
+Protected merges still require all existing 13 mandatory exact-head
+Actions contexts and zero bypass actors. Independently running an
+intermediate source scan cannot turn an unverified final head green.
 
 ## Non-claims
 
-- This does **not** retroactively make Scorecard `SASTID` 30/30,
-  dismiss security Code Scanning alert #27 or repair historical
-  cancelled PR heads without real new scans.
-- This does **not** guarantee every GitHub Actions event executes or
-  that a queued scan passes; Actions capacity, external-fork events and
-  queue limits remain independent constraints.
-- This does **not** reduce any existing privilege boundary, use hashes
-  as authentication, make a failed CodeQL source scan compensatable,
-  or treat `BLOCKED` as `FAIL`.
-- This does **not** demonstrate fork delegated native Code Scanning or
-  independently human-reviewed governance. Those remain separately
-  tracked.
+- This does **not** immediately increase the true `SASTID` count from
+  18/30 to 30/30, dismiss alert #27, or create historical green checks.
+- This does **not** claim `queue: max` works with the pinned actionlint
+  toolchain or guarantee every GitHub event is executed.
+- This does **not** qualify privileged native publication on forks,
+  force GitHub's best-effort trusted-main scheduler to run, or count
+  an Actions CodeQL result as a native GitHub Advanced Security result.
+- This does **not** relax CODEOWNER, branch protection, mandatory
+  reviewers, scanner zero-alert criteria or the original verifier.
+- The existence of a final green scan cannot prove every intermediate
+  source commit passed; those remain independently checked or unknown.
 
-**Tracked by:** [#380](https://github.com/portyu9/qa-automation-ai-agent-evals/issues/380),
-[#349](https://github.com/portyu9/qa-automation-ai-agent-evals/issues/349).
+**Tracking:** [#380](https://github.com/portyu9/qa-automation-ai-agent-evals/issues/380)
+and [#349](https://github.com/portyu9/qa-automation-ai-agent-evals/issues/349).
