@@ -1,6 +1,6 @@
 # ADR 0041: Isolate blocked CodeQL PR-head discovery without trusting stale green scans
 
-**Status:** Proposed, pending protected CI and independent accepted-main publication qualification
+**Status:** Accepted
 
 ## Context
 
