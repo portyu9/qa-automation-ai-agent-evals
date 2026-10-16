@@ -720,6 +720,87 @@ def self_test() -> None:
         discover(Fake(discover_lookup), trusted_main_sha=main)["head_sha"] == head,
         "trusted scheduler discovery rejected valid PR run",
     )
+
+    # Preupload authority must be revalidated AFTER a download: stale results
+    # and conflicting native publications cannot consume write authority.
+    snapshot = verify(Fake(lookup), event, trusted_main_sha=main)
+    revalidate_before_upload(Fake(discover_lookup), snapshot, trusted_main_sha=main)
+    for label, mutate in (
+        (
+            "head moved during download",
+            lambda d: d[f"/repos/{REPOSITORY}/pulls/{prnum}"]["head"].update(sha="9" * 40),
+        ),
+        (
+            "PR closed during download",
+            lambda d: d[f"/repos/{REPOSITORY}/pulls/{prnum}"].update(state="closed"),
+        ),
+        (
+            "accepted main moved during download",
+            lambda d: d[f"/repos/{REPOSITORY}/git/ref/heads/main"]["object"].update(
+                sha="9" * 40
+            ),
+        ),
+        (
+            "artifact digest changed during download",
+            lambda d: d[f"/repos/{REPOSITORY}/actions/runs/{run_id}/artifacts?per_page=100"][
+                "artifacts"
+            ][0].update(digest="sha256:" + "0" * 64),
+        ),
+        (
+            "native CodeQL check appeared concurrently",
+            lambda d: d[check_path].update(
+                total_count=1,
+                check_runs=[
+                    {
+                        "name": "CodeQL",
+                        "head_sha": head,
+                        "app": {"slug": "github-advanced-security"},
+                        "status": "completed",
+                        "conclusion": "success",
+                    }
+                ],
+            ),
+        ),
+        (
+            "native analysis appeared concurrently",
+            lambda d: d[analysis_path].append(
+                {
+                    "ref": f"refs/pull/{prnum}/head",
+                    "commit_sha": head,
+                    "tool": {"name": "CodeQL"},
+                    "analysis_key": CODEQL_ANALYSIS_KEY,
+                    "category": CODEQL_CATEGORY,
+                }
+            ),
+        ),
+        (
+            "native check inventory truncated",
+            lambda d: d[check_path].update(total_count=1),
+        ),
+    ):
+        mutated = deepcopy(discover_lookup)
+        mutate(mutated)
+        try:
+            revalidate_before_upload(Fake(mutated), snapshot, trusted_main_sha=main)
+        except Blocked:
+            pass
+        else:
+            raise AssertionError(f"preupload revalidation accepted: {label}")
+    for bad in (
+        dict(snapshot, artifact_digest="sha256:" + "0" * 64),
+        dict(snapshot, artifact_id="777"),
+        dict(snapshot, pr_number="0"),
+        dict(snapshot, run_id="unknown"),
+        dict(snapshot, head_sha="9" * 40),
+        {key: val for key, val in snapshot.items() if key != "base_sha"},
+        dict(snapshot, unrecognized="untrusted"),
+    ):
+        try:
+            revalidate_before_upload(Fake(discover_lookup), bad, trusted_main_sha=main)
+        except (Blocked, ValueError):
+            pass
+        else:
+            raise AssertionError("preupload revalidation accepted a forged/incomplete snapshot")
     try:
         discover(Fake(discover_lookup), trusted_main_sha="0" * 40)
     except Blocked:
@@ -955,6 +1036,7 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     mode = ap.add_mutually_exclusive_group(required=True)
     mode.add_argument("--discover", action="store_true")
+    mode.add_argument("--revalidate-target", action="store_true")
     mode.add_argument("--verify-sarif", metavar="DIR", type=Path)
     mode.add_argument("--self-test", action="store_true")
     args = ap.parse_args()
@@ -964,6 +1046,25 @@ def main() -> int:
         elif args.verify_sarif is not None:
             verify_sarif(args.verify_sarif)
             print("CodeQL source run and zero-alert SARIF schema verified")
+        elif args.revalidate_target:
+            require(
+                os.environ.get("GITHUB_REF") == "refs/heads/main",
+                "privileged preupload check invoked outside accepted main",
+            )
+            expected = {
+                "pr_number": os.environ["EXPECTED_PR_NUMBER"],
+                "head_sha": os.environ["EXPECTED_HEAD_SHA"],
+                "base_sha": os.environ["EXPECTED_BASE_SHA"],
+                "run_id": os.environ["EXPECTED_RUN_ID"],
+                "artifact_id": os.environ["EXPECTED_ARTIFACT_ID"],
+                "artifact_digest": os.environ["EXPECTED_ARTIFACT_DIGEST"],
+            }
+            revalidate_before_upload(
+                GitHubRead(os.environ["GH_TOKEN"]),
+                expected,
+                trusted_main_sha=os.environ["TRUSTED_MAIN_SHA"],
+            )
+            print("Exact PR head, accepted main, verified artifact and native state revalidated")
         else:
             require(
                 os.environ.get("GITHUB_REF") == "refs/heads/main",
