@@ -1,12 +1,16 @@
 name: Trusted CodeQL PR-head publication
 
-# No privileged PR event. A main-owned schedule or owner dispatch re-reads
-# canonical completed read-only CodeQL PR scans, checks exact producer bytes,
+# No privileged PR event. Protected main pushes, a main-owned schedule, or
+# owner dispatch re-read canonical completed read-only CodeQL PR scans,
 # checks live current-base/head/tree and revalidates original SARIF before upload.
 # The privileged job NEVER checks out candidate files or runs candidate scripts.
 on:
+  push:
+    branches: [main]
   schedule:
-    - cron: "*/10 * * * *"
+    # Keep the same 10-minute period away from highly contended minute :00.
+    # GitHub's schedule remains best-effort; no privileged PR event is enabled.
+    - cron: "7,17,27,37,47,57 * * * *"
   workflow_dispatch:
 
 permissions:
