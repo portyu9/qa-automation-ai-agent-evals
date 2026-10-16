@@ -412,6 +412,7 @@ def _validate_codeql_pr_publication_contract(workflow: dict[str, Any], *, path: 
         "Discover and authenticate completed PR CodeQL evidence",
         "Download only canonical completed-run CodeQL evidence",
         "Revalidate exact original CodeQL SARIF under trusted main",
+        "Reauthenticate exact live target after download before privileged upload",
         "Publish authentic PR-head CodeQL result",
     )
     if not isinstance(steps, list) or tuple(step.get("name") for step in steps) != names:
@@ -421,7 +422,7 @@ def _validate_codeql_pr_publication_contract(workflow: dict[str, Any], *, path: 
         step.get("if") != gating or "continue-on-error" in step for step in steps[3:]
     ):
         raise WorkflowPolicyError(f"{path}: conditional SAST veto or publication bypass")
-    checkout, selftest, verify, download, sarif, upload = steps
+    checkout, selftest, verify, download, sarif, preupload, upload = steps
     if checkout.get("uses") != (
         "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1"
     ) or checkout.get("with") != {
@@ -461,6 +462,20 @@ def _validate_codeql_pr_publication_contract(workflow: dict[str, Any], *, path: 
         "python3 trusted/.github/scripts/validate_codeql_sarif.py reports/security/pr-codeql\n"
     ):
         raise WorkflowPolicyError(f"{path}: original CodeQL SARIF veto is mandatory")
+    if preupload.get("run") != (
+        "python3 trusted/.github/scripts/verify_codeql_pr_publication.py --revalidate-target"
+    ) or preupload.get("env") != {
+        "GH_TOKEN": "${{ github.token }}",
+        "TRUSTED_MAIN_SHA": "${{ github.sha }}",
+        "EXPECTED_PR_NUMBER": "${{ steps.provenance.outputs.pr_number }}",
+        "EXPECTED_HEAD_SHA": "${{ steps.provenance.outputs.head_sha }}",
+        "EXPECTED_BASE_SHA": "${{ steps.provenance.outputs.base_sha }}",
+        "EXPECTED_RUN_ID": "${{ steps.provenance.outputs.run_id }}",
+        "EXPECTED_ARTIFACT_ID": "${{ steps.provenance.outputs.artifact_id }}",
+        "EXPECTED_ARTIFACT_DIGEST": "${{ steps.provenance.outputs.artifact_digest }}",
+    }:
+        raise WorkflowPolicyError(f"{path}: post-download exact-target revalidation bypass")
+
     if upload.get("uses") != (
         "github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2"
     ) or upload.get("with") != {
@@ -746,8 +761,10 @@ jobs:
         publisher_mutations = (
             ("          ref: ${{ github.sha }}\n", "          ref: main\n"),
             (
-                "          TRUSTED_MAIN_SHA: ${{ github.sha }}",
-                "          TRUSTED_MAIN_SHA: ${{ github.head_ref }}",
+                "          TRUSTED_MAIN_SHA: ${{ github.sha }}\n"
+                "        run: python3 trusted/.github/scripts/verify_codeql_pr_publication.py --discover",
+                "          TRUSTED_MAIN_SHA: ${{ github.head_ref }}\n"
+                "        run: python3 trusted/.github/scripts/verify_codeql_pr_publication.py --discover",
             ),
             ("          persist-credentials: false", "          persist-credentials: true"),
             ("      security-events: write", "      contents: write"),
@@ -760,6 +777,24 @@ jobs:
             (
                 "        run: python3 trusted/.github/scripts/verify_codeql_pr_publication.py --discover",
                 "        run: echo bypass",
+            ),
+            (
+                "        run: python3 trusted/.github/scripts/verify_codeql_pr_publication.py --revalidate-target",
+                "        run: echo skip-final-revalidation",
+            ),
+            (
+                "          EXPECTED_HEAD_SHA: ${{ steps.provenance.outputs.head_sha }}",
+                "          EXPECTED_HEAD_SHA: ${{ github.sha }}",
+            ),
+            (
+                "          EXPECTED_ARTIFACT_DIGEST: ${{ steps.provenance.outputs.artifact_digest }}",
+                "          EXPECTED_ARTIFACT_DIGEST: ${{ github.sha }}",
+            ),
+            (
+                "      - name: Reauthenticate exact live target after download before privileged upload\n"
+                "        if: steps.provenance.outputs.has_target == 'true'",
+                "      - name: Reauthenticate exact live target after download before privileged upload\n"
+                "        if: false",
             ),
             (
                 "      - name: Publish authentic PR-head CodeQL result\n        if: steps.provenance.outputs.has_target == 'true'",
