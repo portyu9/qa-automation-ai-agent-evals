@@ -1315,9 +1315,7 @@ def selftest(config: dict[str, Any]) -> None:
             raise GovernanceError(f"config accepted removed trust path: {protected_path}")
         if not protected_path.startswith(".github/workflows/"):
             try:
-                require_unprotected_non_action_scope(
-                    [{"filename": protected_path}], config
-                )
+                require_unprotected_non_action_scope([{"filename": protected_path}], config)
             except PolicyBlock:
                 pass
             else:
