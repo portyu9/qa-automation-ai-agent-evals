@@ -291,6 +291,92 @@ def verify(api: Any, event: Any, *, trusted_main_sha: str | None = None) -> dict
     }
 
 
+
+def revalidate_before_upload(
+    api: Any, expected: dict[str, str], *, trusted_main_sha: str
+) -> None:
+    """Recheck the *same* immutable PR/run/artifact after download, before upload.
+
+    A protected main-owned publisher may have waited for the artifact while
+    main, PR state, head or Code Scanning inventory changed. No previously
+    trusted discovery result remains an authorization to publish indefinitely.
+    """
+    keys = {"pr_number", "head_sha", "base_sha", "run_id", "artifact_id", "artifact_digest"}
+    require(isinstance(expected, dict) and set(expected) == keys, "incomplete publication target")
+    require(
+        isinstance(trusted_main_sha, str)
+        and SHA.fullmatch(trusted_main_sha) is not None
+        and expected["base_sha"] == trusted_main_sha,
+        "publication target is not bound to this accepted main",
+    )
+    require(
+        isinstance(expected["head_sha"], str)
+        and SHA.fullmatch(expected["head_sha"]) is not None
+        and isinstance(expected["artifact_digest"], str)
+        and DIGEST.fullmatch(expected["artifact_digest"]) is not None,
+        "publication target SHA or artifact digest malformed",
+    )
+    for key in ("pr_number", "run_id", "artifact_id"):
+        value = expected[key]
+        require(
+            isinstance(value, str) and value.isascii() and value.isdecimal()
+            and not value.startswith("0") and int(value) > 0,
+            f"publication target {key} malformed",
+        )
+    run_id = expected["run_id"]
+    canonical_run = obj(api.get(f"/repos/{REPOSITORY}/actions/runs/{run_id}"), "rechecked run")
+    original = verify(
+        api,
+        {"action": "completed", "workflow_run": canonical_run},
+        trusted_main_sha=trusted_main_sha,
+    )
+    require(original == expected, "publication target changed since authenticated discovery")
+
+    # Another authorized upload may have completed during the artifact download.
+    # Never overwrite it or spawn conflicting native Code Scanning identities.
+    number = expected["pr_number"]
+    head = expected["head_sha"]
+    analyses = api.get(f"/repos/{REPOSITORY}/code-scanning/analyses?pr={number}&per_page=100")
+    require(
+        isinstance(analyses, list) and len(analyses) < 100,
+        "preupload native analysis inventory is missing or truncated",
+    )
+    require(
+        not any(
+            isinstance(row, dict)
+            and row.get("ref") == f"refs/pull/{number}/head"
+            and row.get("commit_sha") == head
+            and nested(row, "tool", "name") == "CodeQL"
+            and row.get("analysis_key") == CODEQL_ANALYSIS_KEY
+            and row.get("category") == CODEQL_CATEGORY
+            for row in analyses
+        ),
+        "exact PR-head CodeQL analysis was published by a concurrent actor",
+    )
+    inventory = obj(
+        api.get(f"/repos/{REPOSITORY}/commits/{head}/check-runs?per_page=100"),
+        "preupload native check inventory",
+    )
+    count = inventory.get("total_count")
+    checks = inventory.get("check_runs")
+    require(
+        type(count) is int and 0 <= count <= 100
+        and isinstance(checks, list) and len(checks) == count,
+        "preupload native check inventory incomplete",
+    )
+    require(
+        not any(
+            isinstance(check, dict)
+            and check.get("name") == "CodeQL"
+            and check.get("head_sha") == head
+            and nested(check, "app", "slug")
+            in {"github-advanced-security", "github-code-scanning"}
+            for check in checks
+        ),
+        "native CodeQL check appeared after discovery; no duplicate upload permitted",
+    )
+
+
 def discover(api: Any, *, trusted_main_sha: str | None = None) -> dict[str, str] | None:
     """Re-read canonical completed PR runs; do not trust caller-supplied run IDs."""
     if trusted_main_sha is not None:
