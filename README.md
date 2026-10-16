@@ -9,6 +9,7 @@
 [![GitHub Release](https://img.shields.io/github/v/release/portyu9/qa-automation-ai-agent-evals?style=flat-square&label=Release)](https://github.com/portyu9/qa-automation-ai-agent-evals/releases/latest)
 [![OpenAI Agents SDK](https://img.shields.io/badge/OpenAI%20Agents%20SDK-Integrated-000000?style=flat-square)](docs/OPENAI_ADAPTER.md)
 [![MIT License](https://img.shields.io/badge/License-MIT-2ea44f?style=flat-square)](LICENSE)
+[![OpenSSF Best Practices](https://www.bestpractices.dev/projects/15517/badge)](https://www.bestpractices.dev/projects/15517)
 [![Architecture](https://img.shields.io/badge/Architecture-Evidence--Bound-111827?style=flat-square)](docs/ARCHITECTURE.md)
 
 **A provider-neutral quality-engineering framework for evaluating autonomous agents by observable outcomes, side effects, authority boundaries, approval intent, adversarial conditions, protocol state, authorization behavior, reliability, and reproducible evidence—not persuasive final prose.**
