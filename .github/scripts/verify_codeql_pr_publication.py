@@ -355,13 +355,15 @@ def discover(api: Any, *, trusted_main_sha: str | None = None) -> dict[str, str]
             # analysis for the trusted active CodeQL category permits a skip.
             number = result["pr_number"]
             ref = f"refs/pull/{number}/head"
-            encoded_ref = urllib.parse.quote(ref, safe="")
+            # GitHub documents 'pr' for listing a PR's analyses. Uploads
+            # may target refs/pull/N/head, but the list API's 'ref' filter
+            # expects refs/pull/N/merge and can otherwise return no rows.
             analyses = api.get(
-                f"/repos/{REPOSITORY}/code-scanning/analyses?ref={encoded_ref}&per_page=100"
+                f"/repos/{REPOSITORY}/code-scanning/analyses?pr={number}&per_page=100"
             )
             require(
                 isinstance(analyses, list) and len(analyses) < 100,
-                "bounded exact-ref Code Scanning analysis inventory missing",
+                "bounded exact-PR Code Scanning analysis inventory missing",
             )
             matching = [
                 a
@@ -371,7 +373,7 @@ def discover(api: Any, *, trusted_main_sha: str | None = None) -> dict[str, str]
                 and a.get("commit_sha") == head
                 and nested(a, "tool", "name") == "CodeQL"
                 and a.get("analysis_key") == CODEQL_CATEGORY
-                and a.get("category") == CODEQL_CATEGORY
+                and a.get("category") == f"{CODEQL_CATEGORY}/"
             ]
             require(len(matching) <= 1, "ambiguous active CodeQL analyses on exact PR head")
             # Query the authenticated app-owned check on every candidate,
@@ -623,10 +625,7 @@ def self_test() -> None:
     ] = {
         "workflow_runs": [run],
     }
-    analysis_path = (
-        f"/repos/{REPOSITORY}/code-scanning/analyses"
-        f"?ref={urllib.parse.quote(f'refs/pull/{prnum}/head', safe='')}&per_page=100"
-    )
+    analysis_path = f"/repos/{REPOSITORY}/code-scanning/analyses?pr={prnum}&per_page=100"
     discover_lookup[analysis_path] = []
     check_path = f"/repos/{REPOSITORY}/commits/{head}/check-runs?per_page=100"
     discover_lookup[check_path] = {"total_count": 0, "check_runs": []}
@@ -698,7 +697,7 @@ def self_test() -> None:
         "ref": f"refs/pull/{prnum}/head",
         "commit_sha": head,
         "analysis_key": CODEQL_CATEGORY,
-        "category": CODEQL_CATEGORY,
+        "category": f"{CODEQL_CATEGORY}/",
         "error": "",
         "warning": "",
     }
@@ -744,6 +743,16 @@ def self_test() -> None:
         raise AssertionError("missing native CodeQL check falsely counted as success")
     # Category disagreement despite an existing native app check is a
     # contradictory signal. Never call the uploader again to bury it.
+    # The SARIF automationDetails id carries a trailing slash. A tool
+    # pretending the unsuffixed workflow job identity is NOT the same source.
+    unsuffixed = deepcopy(already)
+    unsuffixed[analysis_path][0]["category"] = CODEQL_CATEGORY
+    try:
+        discover(Fake(unsuffixed))
+    except Blocked:
+        pass
+    else:
+        raise AssertionError("unsuffixed/mismatched native category reused as verified")
     unrelated = deepcopy(already)
     unrelated[analysis_path][0]["analysis_key"] = "(default)"
     unrelated[analysis_path][0]["category"] = ""
