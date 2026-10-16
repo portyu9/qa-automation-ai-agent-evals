@@ -62,6 +62,18 @@ jobs:
         run: |
           python3 trusted/.github/scripts/verify_codeql_pr_publication.py --verify-sarif reports/security/pr-codeql
           python3 trusted/.github/scripts/validate_codeql_sarif.py reports/security/pr-codeql
+      - name: Reauthenticate exact live target after download before privileged upload
+        if: steps.provenance.outputs.has_target == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TRUSTED_MAIN_SHA: ${{ github.sha }}
+          EXPECTED_PR_NUMBER: ${{ steps.provenance.outputs.pr_number }}
+          EXPECTED_HEAD_SHA: ${{ steps.provenance.outputs.head_sha }}
+          EXPECTED_BASE_SHA: ${{ steps.provenance.outputs.base_sha }}
+          EXPECTED_RUN_ID: ${{ steps.provenance.outputs.run_id }}
+          EXPECTED_ARTIFACT_ID: ${{ steps.provenance.outputs.artifact_id }}
+          EXPECTED_ARTIFACT_DIGEST: ${{ steps.provenance.outputs.artifact_digest }}
+        run: python3 trusted/.github/scripts/verify_codeql_pr_publication.py --revalidate-target
       - name: Publish authentic PR-head CodeQL result
         if: steps.provenance.outputs.has_target == 'true'
         uses: github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
