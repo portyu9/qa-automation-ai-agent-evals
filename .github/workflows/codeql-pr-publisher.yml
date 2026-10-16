@@ -6,7 +6,9 @@ name: Trusted CodeQL PR-head publication
 # The privileged job NEVER checks out candidate files or runs candidate scripts.
 on:
   schedule:
-    - cron: "*/10 * * * *"
+    # Keep the same 10-minute period away from highly contended minute :00.
+    # GitHub's schedule remains best-effort; no privileged PR event is enabled.
+    - cron: "7,17,27,37,47,57 * * * *"
   workflow_dispatch:
 
 permissions:
