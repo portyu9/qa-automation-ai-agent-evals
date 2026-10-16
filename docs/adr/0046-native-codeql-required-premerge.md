@@ -28,14 +28,26 @@ identity-query mismatch, not a permission or scanner failure: GitHub's
 [Code Scanning REST reference](https://docs.github.com/en/rest/code-scanning/code-scanning)
 documents the **`pr`** analysis-list filter for PRs, whereas its `ref`
 filter documents `refs/pull/N/merge` (the uploader accepts
-`refs/pull/N/head`). Further, the returned SARIF-derived `category`
-includes the authenticated `automationDetails.id` trailing slash, while
-`analysis_key` names the workflow job without it. Earlier verifier
-fixtures incorrectly assumed both fields were identical. Replace the
-unqualified head-ref filter with bounded `pr=N` discovery and require
-exact original source SHA, head ref, job analysis key, SARIF category
-with slash, genuine native app check and error/warning veto. Preserve
-negative tests for spoofed unrelated analysis categories and stale heads.
+`refs/pull/N/head`). The first corrected implementation still BLOCKED
+on real, authentic postpublication inventory. The decisive **actual GitHub
+API response**, retained in the failed [PR #391 CI job 117103801678](https://github.com/portyu9/qa-automation-ai-agent-evals/actions/runs/38939340725),
+contains **three** valid CodeQL analyses for PR #391 source heads, all with:
+
+- `analysis_key=.github/workflows/codeql-pr-publisher.yml:publish`:
+  the **accepted-main-owned trusted publisher job**, not source CodeQL;
+- `category=.github/workflows/codeql.yml:codeql-upload`:
+  the authenticated uploader's exact **normalized API category**, without
+  the slash present in original SARIF `automationDetails.id`;
+- `ref=refs/pull/391/head`, matching the original uploaded source SHA,
+  `tool.name=CodeQL`, empty `error` and `warning`.
+
+The prior checks incorrectly conflated the source CodeQL job with the
+trusted-main uploader's `analysis_key` and assumed GitHub retained the
+SARIF automationDetails delimiter verbatim in the API `category`. Require
+the **observed exact tuple** of PR head ref, commit SHA, distinct trusted
+publisher job analysis key, source-scanning category, genuine native app
+SUCCESS and zero analysis error/warnings; adversarial fixtures reject both
+old identities, category confusion, unrelated checks and stale heads.
 
 The existing `Package integrity` gate is one of thirteen nonbypassable
 GitHub Actions contexts required by Protect Main ruleset #22191532. It
@@ -61,8 +73,9 @@ Code Scanning analysis inventory under read-only scopes:
   **completed success** on the exact final PR source head.
 - Require exactly one corresponding authenticated CodeQL analysis with
   exact live `refs/pull/<number>/head`, matching commit SHA, the trusted
-  `.github/workflows/codeql.yml:codeql-upload` analysis key and exact
-  original SARIF category with the final `/` delimiter;
+  `.github/workflows/codeql-pr-publisher.yml:publish` *analysis key*
+  and the distinct `.github/workflows/codeql.yml:codeql-upload` published
+  *category* (no trailing delimiter, per authentic GitHub API evidence);
   reject warnings/errors, stale and contradictory evidence.
 - Treat `neutral`, `skipped`, ordinary `github-actions CodeQL` green,
   missing/check-run-truncated evidence, base/head drift and unqualified
@@ -80,7 +93,8 @@ Code Scanning analysis inventory under read-only scopes:
   trigger and read-only GitHub evidence authority.
 
 The accepted-main-owned publisher's **duplicate-avoidance check** also uses
-this documented PR analysis query and correct SARIF category after merge,
+this documented PR analysis query and distinct verified publisher job key
+plus source CodeQL category after merge,
 so a prior genuine native check and its source analysis remain jointly
 qualified; no duplicate publisher upload is authorized by a missing
 head-ref query result alone. A new real same-repository PR must receive
