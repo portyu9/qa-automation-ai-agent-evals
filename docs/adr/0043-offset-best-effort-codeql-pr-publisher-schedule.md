@@ -37,17 +37,25 @@ delivery guarantees.
 
 Use `7,17,27,37,47,57 * * * *` for the accepted-main publisher.
 This maintains a **10-minute nominal period** while shifting every slot
-away from minute zero. Retain the explicit main-only
+away from minute zero. Add a second, independently authenticated wake-up:
+`push` restricted by GitHub to `branches: [main]`, after protected
+acceptance of a main commit. Retain the explicit main-only
 `workflow_dispatch` owner option, but **do not** introduce untrusted PR
 triggers, `pull_request_target`, `workflow_run` token promotion,
 new write permissions, self-reported SAST successes, or a scheduler
 fallback that could bypass the exact accepted-main provenance checks.
+The existing job guard and immutable trusted `github.sha` checkout
+apply to **every** allowed trigger. A main push can qualify independently
+waiting PR heads only, not the PR just merged and no longer open.
 
 Update the repository's fail-closed workflow-graph validator to require
-the *exact* shifted expression, alongside its existing exact job steps,
+the *exact* shifted expression and main-only push ref restriction,
+alongside its existing exact job steps,
 write-scope pinning, immutable main checkout, SARIF veto, and publication
-category checks. The negative fixtures explicitly reject both reverting
-to `*/10 * * * *` and broadening to `* * * * *`; existing fixtures
+category checks. The negative fixtures explicitly reject reverting
+to `*/10 * * * *`, broadening to `* * * * *`, substituting
+a `pull_request` event for the accepted-main `push` event, and
+broadening the push branch selector to all branches. Existing fixtures
 also reject `pull_request_target`, attacker-substituted run IDs and
 commit SHAs, token scope expansion, and tampered digest enforcement.
 
@@ -61,7 +69,10 @@ and Protect Main's 13 required checks **unchanged**.
 Nominal schedule opportunities remain six per hour, simply offset.
 Moving away from minute zero may reduce platform scheduling contention,
 but there is **no guaranteed upper bound** for delay, delivery, or actual
-native GitHub Code Scanning result publication. Failure to observe a
+native GitHub Code Scanning result publication. A genuine protected main
+push gives the trusted publisher another independent launch opportunity
+when other open PRs await publication; it cannot serve a lone open PR
+with no intervening accepted main activity. Failure to observe a
 new accepted-main run still requires an explicit BLOCKED / evidence-
 pending conclusion, not retrospective PASS.
 
@@ -75,8 +86,9 @@ independently tested mechanism exists.
 
 ## Assurance impact
 
-The change is restricted to best-effort scheduler liveness and the
-supply-chain guard that pins the only authorized trigger list. It
+The change is restricted to best-effort scheduling, accepted-main
+push liveness, and the supply-chain guard that pins the only authorized
+trigger list and trusted ref. It
 does not change security authority boundaries, broaden native publication
 eligibility, or compensate for missing evidence. A missed publisher
 execution remains genuinely missing; `BLOCKED` must never become
@@ -91,7 +103,8 @@ limitation must be documented rather than fabricated.
 ## Non-claims
 
 - This change cannot force GitHub to run scheduled workflows, and does
-  not provide a time-bound service-level guarantee.
+  not provide a time-bound service-level guarantee. A protected-main push
+  is a distinct eligible event, not an automatic retry of a missed slot.
 - This does not guarantee native CodeQL success on the scheduler-change
   PR before merge, retroactively repair PR #387's missing app check,
   or make Scorecard `SASTID` 30/30.
