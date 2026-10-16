@@ -384,6 +384,7 @@ def _validate_codeql_pr_publication_contract(workflow: dict[str, Any], *, path: 
     if path.name != "codeql-pr-publisher.yml":
         return
     if workflow.get("on") != {
+        "push": {"branches": ["main"]},
         "schedule": [{"cron": "7,17,27,37,47,57 * * * *"}],
         "workflow_dispatch": None,
     }:
@@ -680,6 +681,8 @@ jobs:
             ("          persist-credentials: false", "          persist-credentials: true"),
             ("      security-events: write", "      contents: write"),
             ("          digest-mismatch: error", "          digest-mismatch: warn"),
+            ("  push:\n    branches: [main]", "  pull_request:\n    branches: [main]"),
+            ("  push:\n    branches: [main]", "  push:\n    branches: ['*']"),
             ('    - cron: "7,17,27,37,47,57 * * * *"', '    - cron: "*/10 * * * *"'),
             ('    - cron: "7,17,27,37,47,57 * * * *"', '    - cron: "* * * * *"'),
             ("  workflow_dispatch:", "  pull_request_target:"),
