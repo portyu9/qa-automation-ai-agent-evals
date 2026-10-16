@@ -82,6 +82,17 @@ analysis metadata or original immutable SARIF. We do not broaden delegated
 publication to forks, turn BLOCKED into PASS, or restore any unqualified native
 premerge rule.
 
+## Assurance impact
+
+This change narrows privileged write-side behavior when two authenticated
+control-plane observations disagree. Existing successful native app checks
+cannot compensate for absent exact-category analysis metadata; the state is
+explicitly BLOCKED rather than PASS or a repeated publication. A first
+publication remains possible only after the original source evidence passes
+the complete fail-closed zero-alert and provenance gates. Any diagnostic
+BLOCKED event should trigger owner investigation of the independent GitHub
+Code Scanning API, not a bypass or a forged green check.
+
 ## Non-claims
 
 - No claim that the upstream Code Scanning analysis-list discrepancy has
