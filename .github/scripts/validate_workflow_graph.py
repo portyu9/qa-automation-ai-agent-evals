@@ -477,10 +477,7 @@ def _validate_codeql_pr_publication_contract(workflow: dict[str, Any], *, path: 
         raise WorkflowPolicyError(f"{path}: PR-head publication cannot use secret/target authority")
 
 
-
-def _validate_native_pr_codeql_premerge_contract(
-    workflow: dict[str, Any], *, path: Path
-) -> None:
+def _validate_native_pr_codeql_premerge_contract(workflow: dict[str, Any], *, path: Path) -> None:
     """Pin native PR-head CodeQL into the *existing ruleset-required* Package integrity."""
     if path.name != "ci.yml":
         return
@@ -515,9 +512,10 @@ def _validate_native_pr_codeql_premerge_contract(
         "Self-test exact-subject Security bridge",
         "Require independent exact-subject Security workflow and job success",
     )
-    if not isinstance(steps, list) or tuple(
-        step.get("name") for step in steps if isinstance(step, dict)
-    ) != names:
+    if (
+        not isinstance(steps, list)
+        or tuple(step.get("name") for step in steps if isinstance(step, dict)) != names
+    ):
         raise WorkflowPolicyError(f"{path}: missing/altered required native security steps")
     if len(steps) != len(names):
         raise WorkflowPolicyError(f"{path}: required gate step inventory ambiguous")
