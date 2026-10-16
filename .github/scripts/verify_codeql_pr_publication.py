@@ -21,6 +21,7 @@ REPOSITORY = "portyu9/qa-automation-ai-agent-evals"
 WORKFLOW_ID = 359681797
 WORKFLOW_PATH = ".github/workflows/codeql.yml"
 CODEQL_CATEGORY = ".github/workflows/codeql.yml:codeql-upload"
+CODEQL_ANALYSIS_KEY = ".github/workflows/codeql-pr-publisher.yml:publish"
 SHA = re.compile(r"^[0-9a-f]{40}$")
 BRANCH = re.compile(r"^[A-Za-z0-9._/-]{1,200}$")
 DIGEST = re.compile(r"^sha256:[0-9a-f]{64}$")
@@ -372,8 +373,8 @@ def discover(api: Any, *, trusted_main_sha: str | None = None) -> dict[str, str]
                 and a.get("ref") == ref
                 and a.get("commit_sha") == head
                 and nested(a, "tool", "name") == "CodeQL"
-                and a.get("analysis_key") == CODEQL_CATEGORY
-                and a.get("category") == f"{CODEQL_CATEGORY}/"
+                and a.get("analysis_key") == CODEQL_ANALYSIS_KEY
+                and a.get("category") == CODEQL_CATEGORY
             ]
             require(len(matching) <= 1, "ambiguous active CodeQL analyses on exact PR head")
             # Query the authenticated app-owned check on every candidate,
@@ -696,8 +697,8 @@ def self_test() -> None:
         "tool": {"name": "CodeQL"},
         "ref": f"refs/pull/{prnum}/head",
         "commit_sha": head,
-        "analysis_key": CODEQL_CATEGORY,
-        "category": f"{CODEQL_CATEGORY}/",
+        "analysis_key": CODEQL_ANALYSIS_KEY,
+        "category": CODEQL_CATEGORY,
         "error": "",
         "warning": "",
     }
@@ -743,16 +744,24 @@ def self_test() -> None:
         raise AssertionError("missing native CodeQL check falsely counted as success")
     # Category disagreement despite an existing native app check is a
     # contradictory signal. Never call the uploader again to bury it.
-    # The SARIF automationDetails id carries a trailing slash. A tool
-    # pretending the unsuffixed workflow job identity is NOT the same source.
-    unsuffixed = deepcopy(already)
-    unsuffixed[analysis_path][0]["category"] = CODEQL_CATEGORY
+    # The API's analysis_key identifies the trusted main-only uploader,
+    # not the unprivileged source CodeQL producer. Keep both identities pinned.
+    wrong_publisher = deepcopy(already)
+    wrong_publisher[analysis_path][0]["analysis_key"] = CODEQL_CATEGORY
     try:
-        discover(Fake(unsuffixed))
+        discover(Fake(wrong_publisher))
     except Blocked:
         pass
     else:
-        raise AssertionError("unsuffixed/mismatched native category reused as verified")
+        raise AssertionError("source CodeQL job spoofed trusted publisher analysis_key")
+    wrong_category = deepcopy(already)
+    wrong_category[analysis_path][0]["category"] = f"{CODEQL_CATEGORY}/"
+    try:
+        discover(Fake(wrong_category))
+    except Blocked:
+        pass
+    else:
+        raise AssertionError("SARIF trailing slash spoofed exact published category")
     unrelated = deepcopy(already)
     unrelated[analysis_path][0]["analysis_key"] = "(default)"
     unrelated[analysis_path][0]["category"] = ""
