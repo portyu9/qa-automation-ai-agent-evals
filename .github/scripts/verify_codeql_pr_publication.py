@@ -291,10 +291,7 @@ def verify(api: Any, event: Any, *, trusted_main_sha: str | None = None) -> dict
     }
 
 
-
-def revalidate_before_upload(
-    api: Any, expected: dict[str, str], *, trusted_main_sha: str
-) -> None:
+def revalidate_before_upload(api: Any, expected: dict[str, str], *, trusted_main_sha: str) -> None:
     """Recheck the *same* immutable PR/run/artifact after download, before upload.
 
     A protected main-owned publisher may have waited for the artifact while
@@ -319,8 +316,11 @@ def revalidate_before_upload(
     for key in ("pr_number", "run_id", "artifact_id"):
         value = expected[key]
         require(
-            isinstance(value, str) and value.isascii() and value.isdecimal()
-            and not value.startswith("0") and int(value) > 0,
+            isinstance(value, str)
+            and value.isascii()
+            and value.isdecimal()
+            and not value.startswith("0")
+            and int(value) > 0,
             f"publication target {key} malformed",
         )
     run_id = expected["run_id"]
@@ -360,8 +360,10 @@ def revalidate_before_upload(
     count = inventory.get("total_count")
     checks = inventory.get("check_runs")
     require(
-        type(count) is int and 0 <= count <= 100
-        and isinstance(checks, list) and len(checks) == count,
+        type(count) is int
+        and 0 <= count <= 100
+        and isinstance(checks, list)
+        and len(checks) == count,
         "preupload native check inventory incomplete",
     )
     require(
@@ -369,8 +371,7 @@ def revalidate_before_upload(
             isinstance(check, dict)
             and check.get("name") == "CodeQL"
             and check.get("head_sha") == head
-            and nested(check, "app", "slug")
-            in {"github-advanced-security", "github-code-scanning"}
+            and nested(check, "app", "slug") in {"github-advanced-security", "github-code-scanning"}
             for check in checks
         ),
         "native CodeQL check appeared after discovery; no duplicate upload permitted",
@@ -736,9 +737,7 @@ def self_test() -> None:
         ),
         (
             "accepted main moved during download",
-            lambda d: d[f"/repos/{REPOSITORY}/git/ref/heads/main"]["object"].update(
-                sha="9" * 40
-            ),
+            lambda d: d[f"/repos/{REPOSITORY}/git/ref/heads/main"]["object"].update(sha="9" * 40),
         ),
         (
             "artifact digest changed during download",
