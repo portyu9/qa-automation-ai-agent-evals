@@ -28,6 +28,12 @@ REQUIRED_CHECKS = frozenset(
         "MCP fault lab / deterministic protocol",
         "MCP remote auth / loopback HTTP",
         "Package integrity",
+        "CodeQL",
+        "Security scanners",
+        "security-gate",
+        "Repository policy",
+        "Actions security / actionlint + zizmor",
+        "ci-gate",
     }
 )
 
@@ -138,7 +144,8 @@ def inspect(repo: Any, ruleset: Any) -> dict[str, Any]:
             else "UNVERIFIED: number of approvers does not prove independent humans"
         ),
         "codeql_and_security": (
-            "indirectly required by Package integrity; direct status enforcement not claimed"
+            "direct GitHub Actions-app required contexts: CodeQL, Security scanners, "
+            "security-gate; native CodeQL-app evidence is verified separately"
         ),
         "private_vulnerability_reporting": "UNVERIFIED: separate admin-only feature",
     }
@@ -288,6 +295,23 @@ def self_test() -> None:
         except DriftError:
             continue
         raise DriftError("mutated protected check or merge rule accepted")
+    # Regression proof for every independently required context: a missing or
+    # wrong-app binding must not be concealed by the other twelve healthy checks.
+    for required in sorted(REQUIRED_CHECKS):
+        for mutation in ("drop", "wrong-app"):
+            bad = json.loads(json.dumps(ruleset))
+            checks = bad["rules"][3]["parameters"]["required_status_checks"]
+            index = next(i for i, item in enumerate(checks) if item["context"] == required)
+            if mutation == "drop":
+                checks.pop(index)
+            else:
+                checks[index]["integration_id"] = GITHUB_ACTIONS_ID + 1
+            try:
+                inspect(repo, bad)
+            except DriftError:
+                pass
+            else:
+                raise DriftError(f"{mutation} of required {required!r} passed governance audit")
     print("Read-only live governance contract self-tests passed")
 
 
