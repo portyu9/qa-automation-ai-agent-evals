@@ -477,6 +477,78 @@ def _validate_codeql_pr_publication_contract(workflow: dict[str, Any], *, path: 
         raise WorkflowPolicyError(f"{path}: PR-head publication cannot use secret/target authority")
 
 
+
+def _validate_native_pr_codeql_premerge_contract(
+    workflow: dict[str, Any], *, path: Path
+) -> None:
+    """Pin native PR-head CodeQL into the *existing ruleset-required* Package integrity."""
+    if path.name != "ci.yml":
+        return
+    jobs = workflow.get("jobs")
+    if not isinstance(jobs, dict):
+        raise WorkflowPolicyError(f"{path}: CI jobs are absent")
+    gate = jobs.get("protected-gate")
+    if not isinstance(gate, dict):
+        raise WorkflowPolicyError(f"{path}: required Package integrity job missing")
+    if (
+        gate.get("name") != "Package integrity"
+        or gate.get("if") != "always()"
+        or gate.get("needs") != ["ci-gate"]
+        or gate.get("permissions")
+        != {
+            "actions": "read",
+            "contents": "read",
+            "checks": "read",
+            "pull-requests": "read",
+            "security-events": "read",
+        }
+    ):
+        raise WorkflowPolicyError(f"{path}: native SAST required gate or read-only scopes drift")
+    steps = gate.get("steps")
+    names = (
+        "Checkout protected-gate subject",
+        "Require aggregate CI success",
+        "Self-test exact-subject CodeQL bridge",
+        "Require exact-subject CodeQL success",
+        "Self-test native PR-head CodeQL qualification",
+        "Require authentic native CodeQL success on live PR head",
+        "Self-test exact-subject Security bridge",
+        "Require independent exact-subject Security workflow and job success",
+    )
+    if not isinstance(steps, list) or tuple(
+        step.get("name") for step in steps if isinstance(step, dict)
+    ) != names:
+        raise WorkflowPolicyError(f"{path}: missing/altered required native security steps")
+    if len(steps) != len(names):
+        raise WorkflowPolicyError(f"{path}: required gate step inventory ambiguous")
+    for step in steps:
+        if "continue-on-error" in step:
+            raise WorkflowPolicyError(f"{path}: required gate may not hide failure")
+    selftest, native = steps[4:6]
+    if selftest != {
+        "name": "Self-test native PR-head CodeQL qualification",
+        "run": "python .github/scripts/verify_native_pr_codeql.py --self-test",
+    }:
+        raise WorkflowPolicyError(f"{path}: required native CodeQL adversarial selftest changed")
+    if native != {
+        "name": "Require authentic native CodeQL success on live PR head",
+        "if": "github.event_name == 'pull_request'",
+        "env": {
+            "GITHUB_TOKEN": "${{ secrets.GITHUB_TOKEN }}",
+            "SUBJECT_SHA": "${{ github.event.pull_request.head.sha }}",
+            "PR_NUMBER": "${{ github.event.pull_request.number }}",
+        },
+        "run": (
+            "python .github/scripts/verify_native_pr_codeql.py \\\n"
+            '  --subject-sha "$SUBJECT_SHA" \\\n'
+            '  --pr-number "$PR_NUMBER" \\\n'
+            "  --attempts 48 \\\n"
+            "  --delay-seconds 5\n"
+        ),
+    }:
+        raise WorkflowPolicyError(f"{path}: exact-head native CodeQL veto changed or bypassed")
+
+
 def validate_workflow(path: Path) -> None:
     workflow = _load_workflow(path)
     if not isinstance(workflow.get("name"), str) or not workflow["name"].strip():
@@ -490,6 +562,7 @@ def validate_workflow(path: Path) -> None:
 
     _validate_codeql_fork_contract(workflow, path=path)
     _validate_codeql_pr_publication_contract(workflow, path=path)
+    _validate_native_pr_codeql_premerge_contract(workflow, path=path)
     _validate_scorecard_read_contract(workflow, path=path)
     _validate_permissions(workflow, path=path)
 
@@ -718,6 +791,57 @@ jobs:
             except WorkflowPolicyError:
                 continue
             raise WorkflowPolicyError("trusted PR-head CodeQL publisher tamper accepted")
+
+        # Native exact-head evidence must be mandatory in an already protected
+        # context, not a new optional job or a self-declared Actions status.
+        source_ci = (WORKFLOW_DIR / "ci.yml").read_text(encoding="utf-8")
+        candidate_ci = root / "ci.yml"
+        candidate_ci.write_text(source_ci, encoding="utf-8")
+        validate_workflow(candidate_ci)
+        native_mutations = (
+            (
+                "      security-events: read\\n",
+                "      security-events: write\\n",
+            ),
+            (
+                "      - name: Require authentic native CodeQL success on live PR head\\n"
+                "        if: github.event_name == 'pull_request'",
+                "      - name: Require authentic native CodeQL success on live PR head\\n"
+                "        if: false",
+            ),
+            (
+                "      - name: Self-test native PR-head CodeQL qualification\\n"
+                "        run: python .github/scripts/verify_native_pr_codeql.py --self-test",
+                "      - name: Self-test native PR-head CodeQL qualification\\n"
+                "        run: echo 'pretend native scanner'",
+            ),
+            (
+                "          SUBJECT_SHA: ${{ github.event.pull_request.head.sha }}",
+                "          SUBJECT_SHA: ${{ github.sha }}",
+            ),
+            (
+                "          PR_NUMBER: ${{ github.event.pull_request.number }}",
+                "          PR_NUMBER: 1",
+            ),
+            (
+                '    --subject-sha "$SUBJECT_SHA" \\\\',
+                '    --subject-sha "$GITHUB_SHA" \\\\',
+            ),
+            (
+                "      - name: Require authentic native CodeQL success on live PR head\\n",
+                "      - name: Require authentic native CodeQL success on live PR head\\n"
+                "        continue-on-error: true\\n",
+            ),
+        )
+        for original, malicious in native_mutations:
+            if source_ci.count(original) != 1:
+                raise WorkflowPolicyError("native CodeQL premerge negative fixture drift")
+            candidate_ci.write_text(source_ci.replace(original, malicious), encoding="utf-8")
+            try:
+                validate_workflow(candidate_ci)
+            except WorkflowPolicyError:
+                continue
+            raise WorkflowPolicyError("native CodeQL premerge bypass was accepted")
 
         # A Scorecard run with no read access to checks can produce misleading
         # 0/N SAST history; disallow that invisible regression (and new writes).
