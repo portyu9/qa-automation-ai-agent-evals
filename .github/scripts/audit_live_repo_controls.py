@@ -90,7 +90,13 @@ def inspect(repo: Any, ruleset: Any) -> dict[str, Any]:
         if not isinstance(name, str) or name in indexed:
             raise DriftError("duplicate or malformed repository rule type")
         indexed[name] = rule
-    mandatory = {"deletion", "non_fast_forward", "pull_request", "required_status_checks", "code_quality"}
+    mandatory = {
+        "deletion",
+        "non_fast_forward",
+        "pull_request",
+        "required_status_checks",
+        "code_quality",
+    }
     if not mandatory.issubset(indexed):
         raise DriftError(f"missing protections {sorted(mandatory - indexed.keys())}")
     pr = require_object(indexed["pull_request"].get("parameters"), "PR protections")
