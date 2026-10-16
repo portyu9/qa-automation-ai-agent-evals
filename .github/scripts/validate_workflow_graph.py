@@ -800,19 +800,19 @@ jobs:
         validate_workflow(candidate_ci)
         native_mutations = (
             (
-                "      security-events: read\\n",
-                "      security-events: write\\n",
+                "      security-events: read\n",
+                "      security-events: write\n",
             ),
             (
-                "      - name: Require authentic native CodeQL success on live PR head\\n"
+                "      - name: Require authentic native CodeQL success on live PR head\n"
                 "        if: github.event_name == 'pull_request'",
-                "      - name: Require authentic native CodeQL success on live PR head\\n"
+                "      - name: Require authentic native CodeQL success on live PR head\n"
                 "        if: false",
             ),
             (
-                "      - name: Self-test native PR-head CodeQL qualification\\n"
+                "      - name: Self-test native PR-head CodeQL qualification\n"
                 "        run: python .github/scripts/verify_native_pr_codeql.py --self-test",
-                "      - name: Self-test native PR-head CodeQL qualification\\n"
+                "      - name: Self-test native PR-head CodeQL qualification\n"
                 "        run: echo 'pretend native scanner'",
             ),
             (
@@ -828,9 +828,9 @@ jobs:
                 '    --subject-sha "$GITHUB_SHA" \\\\',
             ),
             (
-                "      - name: Require authentic native CodeQL success on live PR head\\n",
-                "      - name: Require authentic native CodeQL success on live PR head\\n"
-                "        continue-on-error: true\\n",
+                "      - name: Require authentic native CodeQL success on live PR head\n",
+                "      - name: Require authentic native CodeQL success on live PR head\n"
+                "        continue-on-error: true\n",
             ),
         )
         for original, malicious in native_mutations:
