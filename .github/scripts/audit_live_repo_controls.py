@@ -90,7 +90,13 @@ def inspect(repo: Any, ruleset: Any) -> dict[str, Any]:
         if not isinstance(name, str) or name in indexed:
             raise DriftError("duplicate or malformed repository rule type")
         indexed[name] = rule
-    mandatory = {"deletion", "non_fast_forward", "pull_request", "required_status_checks"}
+    mandatory = {
+        "deletion",
+        "non_fast_forward",
+        "pull_request",
+        "required_status_checks",
+        "code_quality",
+    }
     if not mandatory.issubset(indexed):
         raise DriftError(f"missing protections {sorted(mandatory - indexed.keys())}")
     pr = require_object(indexed["pull_request"].get("parameters"), "PR protections")
@@ -104,6 +110,11 @@ def inspect(repo: Any, ruleset: Any) -> dict[str, Any]:
     status = require_object(indexed["required_status_checks"].get("parameters"), "status rules")
     if status.get("strict_required_status_checks_policy") is not True:
         raise DriftError("up-to-date protected check qualification must be strict")
+    if status.get("do_not_enforce_on_create") is not False:
+        raise DriftError("required status checks must not be exempt on branch creation")
+    quality = require_object(indexed["code_quality"].get("parameters"), "Code Quality rule")
+    if quality.get("severity") != "warnings":
+        raise DriftError("Code Quality must retain the live warnings severity threshold")
     rows = status.get("required_status_checks")
     if not isinstance(rows, list) or not all(isinstance(x, dict) for x in rows):
         raise DriftError("protected contexts must be structured GitHub check objects")
@@ -203,12 +214,14 @@ def self_test() -> None:
                 "type": "required_status_checks",
                 "parameters": {
                     "strict_required_status_checks_policy": True,
+                    "do_not_enforce_on_create": False,
                     "required_status_checks": [
                         {"context": c, "integration_id": GITHUB_ACTIONS_ID}
                         for c in sorted(REQUIRED_CHECKS)
                     ],
                 },
             },
+            {"type": "code_quality", "parameters": {"severity": "warnings"}},
         ],
     }
     if inspect(repo, ruleset)["human_review_scorecard"].startswith("PASS"):
@@ -283,6 +296,11 @@ def self_test() -> None:
         lambda r: r["rules"][3]["parameters"].update(
             {"strict_required_status_checks_policy": False}
         ),
+        lambda r: r["rules"][3]["parameters"].update({"do_not_enforce_on_create": True}),
+        lambda r: r["rules"][3]["parameters"].pop("do_not_enforce_on_create"),
+        lambda r: r["rules"].pop(),
+        lambda r: r["rules"][4]["parameters"].update({"severity": "errors"}),
+        lambda r: r["rules"][4]["parameters"].pop("severity"),
         lambda r: r["rules"][3]["parameters"]["required_status_checks"].pop(),
         lambda r: r["rules"][3]["parameters"]["required_status_checks"][0].update(
             {"integration_id": 100}
