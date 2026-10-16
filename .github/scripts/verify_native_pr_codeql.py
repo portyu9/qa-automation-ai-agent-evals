@@ -176,9 +176,8 @@ def _safe_analysis_metadata(rows: Any, *, head_sha: str) -> list[dict[str, str]]
             continue
         tool = entry.get("tool")
         category = entry.get("category")
-        if (
-            entry.get("commit_sha") != head_sha
-            and not (isinstance(category, str) and ACTIVE_CATEGORY in category)
+        if entry.get("commit_sha") != head_sha and not (
+            isinstance(category, str) and ACTIVE_CATEGORY in category
         ):
             continue
         result.append(
@@ -214,9 +213,10 @@ def verify_live(api: Any, *, repository: str, pr_number: int, head_sha: str) -> 
         print(
             "NATIVE_CODEQL_PR_ANALYSIS_DIAGNOSTIC "
             + json.dumps(
-                {"pr_rows": 0, "recent_exact_subject": _safe_analysis_metadata(
-                    recent, head_sha=head_sha
-                )},
+                {
+                    "pr_rows": 0,
+                    "recent_exact_subject": _safe_analysis_metadata(recent, head_sha=head_sha),
+                },
                 sort_keys=True,
             ),
             file=sys.stderr,
