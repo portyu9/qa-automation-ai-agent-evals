@@ -12,9 +12,13 @@ on:
 permissions:
   contents: read
 
+# Preserve genuine SAST evidence on each PR synchronization SHA: cancelling
+# superseded checks prevents Scorecard from recognizing scanned prior commits.
+# Serialize per-PR with GitHub's bounded 100-pending queue; never elevate tokens.
 concurrency:
   group: codeql-${{ github.repository }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
+  queue: max
 
 jobs:
   codeql:
