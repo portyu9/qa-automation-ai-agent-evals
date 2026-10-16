@@ -384,7 +384,7 @@ def _validate_codeql_pr_publication_contract(workflow: dict[str, Any], *, path: 
     if path.name != "codeql-pr-publisher.yml":
         return
     if workflow.get("on") != {
-        "schedule": [{"cron": "*/10 * * * *"}],
+        "schedule": [{"cron": "7,17,27,37,47,57 * * * *"}],
         "workflow_dispatch": None,
     }:
         raise WorkflowPolicyError(f"{path}: only main-owned scheduler/dispatch can publish PR SAST")
@@ -680,7 +680,8 @@ jobs:
             ("          persist-credentials: false", "          persist-credentials: true"),
             ("      security-events: write", "      contents: write"),
             ("          digest-mismatch: error", "          digest-mismatch: warn"),
-            ('    - cron: "*/10 * * * *"', '    - cron: "* * * * *"'),
+            ('    - cron: "7,17,27,37,47,57 * * * *"', '    - cron: "*/10 * * * *"'),
+            ('    - cron: "7,17,27,37,47,57 * * * *"', '    - cron: "* * * * *"'),
             ("  workflow_dispatch:", "  pull_request_target:"),
             (
                 "        run: python3 trusted/.github/scripts/verify_codeql_pr_publication.py --discover",
