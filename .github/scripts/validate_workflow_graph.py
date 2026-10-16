@@ -269,6 +269,17 @@ def _validate_codeql_fork_contract(workflow: dict[str, Any], *, path: Path) -> N
         or "workflow_run" in triggers
     ):
         raise WorkflowPolicyError(f"{path}: fork CodeQL must use unprivileged pull_request")
+    # Each PR synchronization SHA must retain its genuine CodeQL result.
+    # GitHub's default single-pending concurrency can also discard runs
+    # even without cancel-in-progress, so insist on its bounded 100-run queue.
+    if workflow.get("concurrency") != {
+        "group": "codeql-${{ github.repository }}-${{ github.event.pull_request.number || github.ref }}",
+        "cancel-in-progress": False,
+        "queue": "max",
+    }:
+        raise WorkflowPolicyError(
+            f"{path}: CodeQL per-commit evidence queue can be cancelled or dropped"
+        )
     jobs = workflow.get("jobs")
     if not isinstance(jobs, dict) or set(jobs) != {"codeql", "codeql-upload"}:
         raise WorkflowPolicyError(
@@ -590,6 +601,12 @@ jobs:
         candidate_codeql.write_text(source_codeql, encoding="utf-8")
         validate_workflow(candidate_codeql)
         changes = (
+            ("  cancel-in-progress: false", "  cancel-in-progress: true"),
+            ("  queue: max", "  queue: single"),
+            (
+                "  group: codeql-${{ github.repository }}-${{ github.event.pull_request.number || github.ref }}",
+                "  group: codeql-${{ github.repository }}",
+            ),
             (
                 "    permissions:\n      actions: read",
                 "    if: github.event_name != 'pull_request'\n    permissions:\n      actions: read",
