@@ -169,20 +169,25 @@ def validate_config(config: dict[str, Any]) -> list[str]:
 
     expected_workflows = [
         {
-            "workflow": "CI",
-            "gate": "ci-gate",
-            "file": "ci.yml",
-            "subjectInput": "subject_sha",
+            "workflow": "Security",
+            "gate": "security-gate",
+            "file": "security.yml",
         },
         {
             "workflow": "CodeQL",
             "gate": "CodeQL",
             "file": "codeql.yml",
         },
+        {
+            "workflow": "CI",
+            "gate": "ci-gate",
+            "file": "ci.yml",
+            "subjectInput": "subject_sha",
+        },
     ]
     if config.get("requiredWorkflows") != expected_workflows:
         errors.append(
-            "requiredWorkflows must exactly require exact-subject CI and CodeQL main requalification"
+            "requiredWorkflows must require ordered Security, CodeQL, and exact-subject CI main requalification"
         )
     allowed = config.get("allowedActionUpdateTypes")
     expected_allowed = {
@@ -1028,7 +1033,16 @@ def _merge(api: GitHubApi, subject: dict[str, Any], config: dict[str, Any]) -> d
     runs = _ensure_post_merge_qualification(api, merge_sha, config)
     evidence: dict[str, Any] = {"mergeSha": merge_sha, "postMergeRuns": runs}
     for run in runs:
-        if run["workflow"] == "CI":
+        if run["workflow"] == "Security":
+            evidence.update(
+                {
+                    "securityRunId": run["runId"],
+                    "securityRunAttempt": run["runAttempt"],
+                    "securityEvent": run["event"],
+                    "securityStatus": run["status"],
+                }
+            )
+        elif run["workflow"] == "CI":
             evidence.update(
                 {
                     "ciRunId": run["runId"],
@@ -1704,21 +1718,49 @@ dev = ["beta==2.0.0"]
                 "paginated collection parser accepted a missing, ambiguous, or malformed collection"
             )
 
-    for mutation in ("drop-codeql", "remove-subject-input", "rename-codeql"):
+    for mutation in (
+        "drop-security",
+        "drop-codeql",
+        "drop-ci",
+        "remove-subject-input",
+        "rename-security",
+        "rename-codeql",
+        "reorder-ci-before-security",
+    ):
         broken = copy.deepcopy(config)
-        if mutation == "drop-codeql":
-            broken["requiredWorkflows"] = broken["requiredWorkflows"][:1]
+        workflows = broken["requiredWorkflows"]
+        if mutation == "drop-security":
+            workflows.pop(0)
+        elif mutation == "drop-codeql":
+            workflows.pop(1)
+        elif mutation == "drop-ci":
+            workflows.pop(2)
         elif mutation == "remove-subject-input":
-            broken["requiredWorkflows"][0].pop("subjectInput", None)
+            workflows[2].pop("subjectInput", None)
+        elif mutation == "rename-security":
+            workflows[0]["workflow"] = "NotSecurity"
+        elif mutation == "rename-codeql":
+            workflows[1]["workflow"] = "NotCodeQL"
         else:
-            broken["requiredWorkflows"][1]["workflow"] = "NotCodeQL"
+            workflows[0], workflows[2] = workflows[2], workflows[0]
         if not validate_config(broken):
             raise GovernanceError(
                 f"config validator accepted unsafe post-merge workflow mutation: {mutation}"
             )
 
+    # GITHUB_TOKEN merges do not trigger a push Security workflow. The
+    # exact-main trusted controller must explicitly start Security *before*
+    # it starts CI, whose Package integrity job independently requires that
+    # Security run and both real scanner jobs.
+    security_text = (ROOT / ".github/workflows/security.yml").read_text(encoding="utf-8")
+    if (
+        "  workflow_dispatch:" not in security_text
+        or "    name: security-gate" not in security_text
+    ):
+        raise GovernanceError("post-merge Security manual-dispatch and gate contract missing")
+
     exact_sha = "1" * 40
-    ci_expected, codeql_expected = config["requiredWorkflows"]
+    security_expected, codeql_expected, ci_expected = config["requiredWorkflows"]
     canonical_ci = {
         "id": 101,
         "name": ci_expected["workflow"],
@@ -1754,6 +1796,82 @@ dev = ["beta==2.0.0"]
         raise GovernanceError(
             "post-merge CodeQL selector rejected canonical exact-subject dispatch"
         )
+
+    canonical_security = {
+        "id": 301,
+        "name": security_expected["workflow"],
+        "path": f".github/workflows/{security_expected['file']}",
+        "head_branch": config["baseBranch"],
+        "head_sha": exact_sha,
+        "event": "workflow_dispatch",
+        "run_attempt": 1,
+        "status": "queued",
+        "conclusion": None,
+    }
+    if (
+        _select_post_merge_workflow_run([canonical_security], exact_sha, security_expected, config)
+        != canonical_security
+    ):
+        raise GovernanceError("post-merge Security selector rejected canonical exact-subject run")
+    for wrong in (
+        dict(canonical_security, head_sha="2" * 40),
+        dict(canonical_security, path=".github/workflows/not-security.yml"),
+        dict(canonical_security, event="schedule"),
+        dict(canonical_security, head_branch="untrusted-branch"),
+    ):
+        if _select_post_merge_workflow_run([wrong], exact_sha, security_expected, config):
+            raise GovernanceError("post-merge Security selector accepted unrelated evidence")
+    for terminal in ("failure", "cancelled", "timed_out", "skipped"):
+        try:
+            _select_post_merge_workflow_run(
+                [dict(canonical_security, status="completed", conclusion=terminal)],
+                exact_sha,
+                security_expected,
+                config,
+            )
+        except GovernanceError:
+            pass
+        else:
+            raise GovernanceError(f"post-merge Security accepted terminal {terminal}")
+    try:
+        _select_post_merge_workflow_run(
+            [canonical_security, dict(canonical_security, id=302)],
+            exact_sha,
+            security_expected,
+            config,
+        )
+    except GovernanceError:
+        pass
+    else:
+        raise GovernanceError("post-merge Security accepted ambiguous duplicate runs")
+
+    # The production qualification loop is the *dispatch ordering authority*.
+    from unittest.mock import patch
+
+    observed_dispatches: list[str] = []
+
+    def _record_dispatch(
+        _api: Any, subject: str, expected: dict[str, Any], _config: dict[str, Any]
+    ) -> dict[str, Any]:
+        if subject != exact_sha:
+            raise GovernanceError("self-test changed post-merge subject")
+        observed_dispatches.append(expected["workflow"])
+        return {
+            **canonical_security,
+            "id": len(observed_dispatches),
+            "name": expected["workflow"],
+            "path": f".github/workflows/{expected['file']}",
+        }
+
+    with (
+        patch(__name__ + "._live_main_sha", return_value=exact_sha),
+        patch(__name__ + "._ensure_post_merge_workflow", side_effect=_record_dispatch),
+    ):
+        receipts = _ensure_post_merge_qualification(None, exact_sha, config)  # type: ignore[arg-type]
+    if observed_dispatches != ["Security", "CodeQL", "CI"]:
+        raise GovernanceError("post-merge qualification reordered or omitted Security")
+    if [r["gate"] for r in receipts] != ["security-gate", "CodeQL", "ci-gate"]:
+        raise GovernanceError("post-merge receipt inventory lost independent Security gate")
 
     for row in (
         dict(canonical_ci, head_sha="2" * 40),
