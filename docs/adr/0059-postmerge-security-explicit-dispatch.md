@@ -3,7 +3,7 @@
 **Status:** Accepted
 **Date:** 2026-10-19
 
-## Observed production evidence
+## Context
 
 The signed Dependabot group PR #397 merged under the actual main-owned
 governor with the configured owner's exact-head review, authentic native
@@ -50,7 +50,7 @@ Security, missing CI subject input, wrong SHA/ref/path/event, terminal
 Security failure, ambiguous duplicate runs, and wrong dispatch order.
 Issue #408 tracks the production defect.
 
-## Consequences and assurance bounds
+## Consequences
 
 The fix removes an event-trigger gap, **not** a security requirement.
 The exact #397 post-merge CI failure remains historical evidence; no
@@ -64,7 +64,7 @@ token identity, signed canonical Dependabot provenance, release
 attestation and GitHub-protected checks remain separate. Independent
 human review and unrelated external-fork proof are not inferred.
 
-## Branch and lineage preflight
+## Assurance impact
 
 Accepted main at the preflight was
 `fff647c09f4d848559725736b13268190c3e832f`,
