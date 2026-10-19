@@ -15,15 +15,11 @@ _APPROVED_ACTION_IDENTITIES = {
 def _only_canonical_immutable_actions(source: str) -> bool:
     """Guard read-only canary action identity and full immutable SHA, not a stale release."""
     uses = re.findall(r"(?m)^\s*uses:\s*([^\s#]+)", source)
-    parsed = [
-        re.fullmatch(r"([a-z0-9._-]+/[a-z0-9._/-]+)@([0-9a-f]{40})", ref)
-        for ref in uses
-    ]
+    parsed = [re.fullmatch(r"([a-z0-9._-]+/[a-z0-9._/-]+)@([0-9a-f]{40})", ref) for ref in uses]
     return (
         len(uses) == len(_APPROVED_ACTION_IDENTITIES)
         and all(item is not None for item in parsed)
-        and {item.group(1) for item in parsed if item is not None}
-        == _APPROVED_ACTION_IDENTITIES
+        and {item.group(1) for item in parsed if item is not None} == _APPROVED_ACTION_IDENTITIES
     )
 
 
