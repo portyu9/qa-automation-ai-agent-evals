@@ -2,6 +2,28 @@
 
 Thank you for improving `qa-automation-ai-agent-evals`. This project treats evaluation logic as assurance infrastructure: changes are reviewed not only for correctness, but also for whether they preserve trust boundaries, historical replay meaning, and fail-closed behavior.
 
+## Maintainer-only contribution model
+
+This repository is maintained by **`@portyu9` alone**, with explicitly
+authorized GitHub automation and verified Dependabot dependency updates.
+It does not operate an external-contributor or independent-reviewer program.
+Instructions below are for the maintainer and those authorized workflows,
+not an invitation to qualify outside fork pull requests as supported
+release/merge paths.
+
+Changes by the owner still require protected-branch pull requests, native
+CodeQL, the full existing CI/security status checks and normal merge
+governance. Dependabot is not a general external contributor: source identity,
+signed bot commits, vendor release provenance and exact-head owner
+authorization must be verified independently. Unknown/fork-origin source
+remains untrusted; no permission, check bypass, or credential promotion
+is granted simply because an outside PR can be submitted on GitHub.
+
+See [Repository Governance](docs/REPOSITORY_GOVERNANCE.md) and
+[ADR 0061](docs/adr/0061-owner-maintainer-scope.md) for the authorized scope
+and transparent non-claims. Supporting independent contributors later
+requires the owner's new explicit decision and separate qualification.
+
 ## Local setup
 
 Use a supported Python version declared by `pyproject.toml` and install the development dependencies:
