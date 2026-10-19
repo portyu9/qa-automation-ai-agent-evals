@@ -170,11 +170,14 @@ def main() -> int:
         ("Scorecard action", "ossf/scorecard-action"),
         ("Scorecard SARIF upload", "github/codeql-action/upload-sarif"),
     ):
-        if re.search(
-            r"^\s*uses:\s*" + re.escape(action) + r"@[0-9a-f]{40}(?:\s+#.*)?$",
-            scorecard_workflow_text,
-            flags=re.MULTILINE,
-        ) is None:
+        if (
+            re.search(
+                r"^\s*uses:\s*" + re.escape(action) + r"@[0-9a-f]{40}(?:\s+#.*)?$",
+                scorecard_workflow_text,
+                flags=re.MULTILINE,
+            )
+            is None
+        ):
             errors.append(f"Scorecard workflow lost immutable SHA for {label}")
 
     governance_drift_contracts = {

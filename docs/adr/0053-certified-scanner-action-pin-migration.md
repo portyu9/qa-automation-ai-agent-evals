@@ -17,7 +17,7 @@ be approved by a candidate's own tests or GitHub Actions checks.
 ADR 0052 and protected merged PR #400 introduced a trusted main-owned
 upstream tag/verified-release check for all signed bot workflow action
 diffs and **preapproved the exact candidate scanner script blob**
-`12eab86b64d4c9ec637150c4e76868dcc052a025`.
+`89d1eabbb866b16a43497df8aebc4610df35bec8`.
 The accepted-main trusted publisher may authenticate precisely that one
 already reviewed source file, not any newly declared validator hash.
 
@@ -79,3 +79,13 @@ Historical #389 was explicitly reverted by merged #390; PR #398 was
 already accepted. Preapproved scanner blob as above, accepted publisher
 blob `46aca6933294ccbdcb8cea2200b0006a22778dbb`.
 Issue #399 records outstanding live bot E2E validation.
+
+## Follow-up acceptance and certified format
+
+Protected PR #402 / ADR 0054 was independently qualified and merged into
+accepted main `6d6b62d37e4b67be2ea6ac4a4bf1960302805d58`. It corrected the one-time approved source from the
+unformatted candidate to the exact Ruff 0.17 compliant Git blob
+`89d1eabbb866b16a43497df8aebc4610df35bec8`. This migration uses only that certified source. The former
+candidate blob is no longer authorized. The original #401 branch and ADR are
+preserved by merging the accepted main into it (parents: original #401 head
+`9a134b1f1941f6d5bb27f4d6bf9bf1397bf34c30` and accepted main `6d6b62d37e4b67be2ea6ac4a4bf1960302805d58`), rather than creating an orphan lane.
