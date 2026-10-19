@@ -921,8 +921,7 @@ def self_test() -> None:
     require(verify(Fake(lookup), event)["head_sha"] == head, "valid exact-head evidence rejected")
     scanner_path = ".github/scripts/validate_security_stack.py"
     scanner_head_ref = (
-        f"/repos/{REPOSITORY}/contents/"
-        f"{urllib.parse.quote(scanner_path, safe='/')}?ref={head}"
+        f"/repos/{REPOSITORY}/contents/{urllib.parse.quote(scanner_path, safe='/')}?ref={head}"
     )
     approved_scanner = deepcopy(lookup)
     approved_scanner[scanner_head_ref] = {"sha": APPROVED_SCANNER_MIGRATION_BLOB}
