@@ -30,14 +30,16 @@ DIGEST = re.compile(r"^sha256:[0-9a-f]{64}$")
 # cannot mint or select its own executable validator approval.
 APPROVED_SCANNER_MIGRATION_BLOB = "12eab86b64d4c9ec637150c4e76868dcc052a025"
 
-VENDOR_ACTIONS = frozenset({
-    "actions/upload-artifact",
-    "actions/download-artifact",
-    "github/codeql-action/init",
-    "github/codeql-action/analyze",
-    "github/codeql-action/upload-sarif",
-    "ossf/scorecard-action",
-})
+VENDOR_ACTIONS = frozenset(
+    {
+        "actions/upload-artifact",
+        "actions/download-artifact",
+        "github/codeql-action/init",
+        "github/codeql-action/analyze",
+        "github/codeql-action/upload-sarif",
+        "ossf/scorecard-action",
+    }
+)
 VENDOR_PATH = re.compile(
     r"^/repos/(actions/(?:upload-artifact|download-artifact)|github/codeql-action|ossf/scorecard-action)/"
     r"(?:git/ref/tags/v\d+(?:\.\d+){1,2}|git/tags/[0-9a-f]{40}|commits/[0-9a-f]{40})$"
@@ -118,7 +120,6 @@ class GitHubRead:
             raise Blocked("GitHub read was not valid JSON") from exc
 
 
-
 def _verified_vendor_pin(api: Any, action: str, version: str, sha: str) -> None:
     """Bind the immutable commit to an independently queried official upstream tag.
 
@@ -137,13 +138,17 @@ def _verified_vendor_pin(api: Any, action: str, version: str, sha: str) -> None:
         tag_obj = obj(api.get(f"{prefix}/git/tags/{target.get('sha')}"), "annotated action tag")
         field(tag_obj, "tag", f"v{version}", "annotated action tag")
         target = obj(tag_obj.get("object"), "dereferenced upstream action tag")
-    require(target.get("type") == "commit" and target.get("sha") == sha,
-            "upstream official release tag disagrees with proposed immutable SHA")
+    require(
+        target.get("type") == "commit" and target.get("sha") == sha,
+        "upstream official release tag disagrees with proposed immutable SHA",
+    )
     commit = obj(api.get(f"{prefix}/commits/{sha}"), "upstream action commit")
     field(commit, "sha", sha, "upstream action commit identity")
     verification = obj(nested(commit, "commit", "verification"), "upstream commit signature")
-    require(verification.get("verified") is True and verification.get("reason") == "valid",
-            "upstream tagged commit is not signature-verified")
+    require(
+        verification.get("verified") is True and verification.get("reason") == "valid",
+        "upstream tagged commit is not signature-verified",
+    )
 
 
 def _authorize_signed_bot_workflow_pins(api: Any, pr: dict[str, Any], head: str) -> None:
@@ -156,40 +161,55 @@ def _authorize_signed_bot_workflow_pins(api: Any, pr: dict[str, Any], head: str)
     from dependency_governance import validate_action_semantics
 
     actor = obj(pr.get("user"), "PR author")
-    require(actor.get("login") == "dependabot[bot]" and actor.get("id") == 49699333,
-            "only canonical signed Dependabot PRs can change CodeQL producer action pins")
+    require(
+        actor.get("login") == "dependabot[bot]" and actor.get("id") == 49699333,
+        "only canonical signed Dependabot PRs can change CodeQL producer action pins",
+    )
     ref = nested(pr, "head", "ref")
-    require(isinstance(ref, str) and ref.startswith("dependabot/github_actions/"),
-            "unexpected bot branch or ecosystem")
+    require(
+        isinstance(ref, str) and ref.startswith("dependabot/github_actions/"),
+        "unexpected bot branch or ecosystem",
+    )
     commits = api.get(f"/repos/{REPOSITORY}/pulls/{pr['number']}/commits?per_page=100")
-    require(isinstance(commits, list) and len(commits) == 1 and
-            commits[0].get("sha") == head,
-            "bot action update must contain one exact signed source commit")
+    require(
+        isinstance(commits, list) and len(commits) == 1 and commits[0].get("sha") == head,
+        "bot action update must contain one exact signed source commit",
+    )
     commit = obj(api.get(f"/repos/{REPOSITORY}/commits/{head}"), "signed bot source commit")
     require(commit.get("sha") == head, "unbound bot commit")
-    require(obj(commit.get("author"), "bot author").get("id") == 49699333,
-            "source commit not attributed to Dependabot")
-    require(obj(commit.get("committer"), "bot committer").get("login") == "web-flow",
-            "noncanonical signed Dependabot committer")
+    require(
+        obj(commit.get("author"), "bot author").get("id") == 49699333,
+        "source commit not attributed to Dependabot",
+    )
+    require(
+        obj(commit.get("committer"), "bot committer").get("login") == "web-flow",
+        "noncanonical signed Dependabot committer",
+    )
     author = nested(commit, "commit", "author")
-    require(author.get("email") == "49699333+dependabot[bot]@users.noreply.github.com",
-            "bot author email not canonical")
-    require(nested(commit, "commit", "verification").get("verified") is True,
-            "bot commit signature is not verified")
+    require(
+        author.get("email") == "49699333+dependabot[bot]@users.noreply.github.com",
+        "bot author email not canonical",
+    )
+    require(
+        nested(commit, "commit", "verification").get("verified") is True,
+        "bot commit signature is not verified",
+    )
     message = nested(commit, "commit", "message")
-    require(isinstance(message, str) and
-            "Signed-off-by: dependabot[bot] <support@github.com>" in message,
-            "canonical Dependabot signed-off-by missing")
+    require(
+        isinstance(message, str)
+        and "Signed-off-by: dependabot[bot] <support@github.com>" in message,
+        "canonical Dependabot signed-off-by missing",
+    )
     versions = {
         name: version
         for name, version in re.findall(
             r"(?m)^- dependency-name:\s*([^\n]+)\n\s*dependency-version:\s*"
-            r"(\d+(?:\.\d+){1,2})\s*$", message
+            r"(\d+(?:\.\d+){1,2})\s*$",
+            message,
         )
     }
     rows = api.get(f"/repos/{REPOSITORY}/pulls/{pr['number']}/files?per_page=100")
-    require(isinstance(rows, list) and 0 < len(rows) < 100,
-            "bot changed-file inventory incomplete")
+    require(isinstance(rows, list) and 0 < len(rows) < 100, "bot changed-file inventory incomplete")
     try:
         validate_action_semantics(rows)
     except Exception as exc:
@@ -206,11 +226,15 @@ def _authorize_signed_bot_workflow_pins(api: Any, pr: dict[str, Any], head: str)
             version = versions.get(action)
             require(version is not None, "signed bot update metadata omits action version")
             annotated = match["version"]
-            require(annotated is None or annotated == version,
-                    "workflow action version conflicts with signed bot update metadata")
+            require(
+                annotated is None or annotated == version,
+                "workflow action version conflicts with signed bot update metadata",
+            )
             if action in upgrades:
-                require(upgrades[action] == (version, sha),
-                        "same action has conflicting version/SHA in bot patch")
+                require(
+                    upgrades[action] == (version, sha),
+                    "same action has conflicting version/SHA in bot patch",
+                )
             upgrades[action] = (version, sha)
     require(bool(upgrades), "bot action update has no checked upstream pins")
     for action, (version, sha) in upgrades.items():
@@ -787,7 +811,6 @@ def self_test() -> None:
             require(path in self.routes, "unexpected test API request")
             return self.routes[path]
 
-
     # Main-owned upstream release check rejects a moved tag, unverifiable
     # signer and mismatched annotated tag even when the SHA is 40 hex.
     upstream = "/repos/actions/upload-artifact"
@@ -806,10 +829,13 @@ def self_test() -> None:
     }
     _verified_vendor_pin(Fake(vendor_routes), "actions/upload-artifact", "7.0.2", upstream_sha)
     for altered in (
-        {upstream_ref: {"ref": "refs/tags/v7.0.2",
-                        "object": {"type": "commit", "sha": "2" * 40}}},
-        {upstream_commit: {"sha": upstream_sha,
-                           "commit": {"verification": {"verified": False, "reason": "unsigned"}}}},
+        {upstream_ref: {"ref": "refs/tags/v7.0.2", "object": {"type": "commit", "sha": "2" * 40}}},
+        {
+            upstream_commit: {
+                "sha": upstream_sha,
+                "commit": {"verification": {"verified": False, "reason": "unsigned"}},
+            }
+        },
     ):
         changed = {**vendor_routes, **altered}
         try:
