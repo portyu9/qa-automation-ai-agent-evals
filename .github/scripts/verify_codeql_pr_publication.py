@@ -7,7 +7,6 @@ This module neither executes nor imports any checked-out PR files.
 from __future__ import annotations
 
 import argparse
-import base64
 import json
 import os
 import re
@@ -29,7 +28,7 @@ DIGEST = re.compile(r"^sha256:[0-9a-f]{64}$")
 # One-time, previously reviewed migration of the scanner policy literal pins.
 # This blob is produced by and committed in a separate reviewed PR; a candidate
 # cannot mint or select its own executable validator approval.
-APPROVED_SCANNER_MIGRATION_BLOB = "ffc110a67b9dae9557370e66b2dc151f8a99e637"
+APPROVED_SCANNER_MIGRATION_BLOB = "12eab86b64d4c9ec637150c4e76868dcc052a025"
 
 VENDOR_ACTIONS = frozenset({
     "actions/upload-artifact",
@@ -41,11 +40,11 @@ VENDOR_ACTIONS = frozenset({
 })
 VENDOR_PATH = re.compile(
     r"^/repos/(actions/(?:upload-artifact|download-artifact)|github/codeql-action|ossf/scorecard-action)/"
-    r"(?:git/ref/tags/v\\d+(?:\\.\\d+){1,2}|git/tags/[0-9a-f]{40}|commits/[0-9a-f]{40})$"
+    r"(?:git/ref/tags/v\d+(?:\.\d+){1,2}|git/tags/[0-9a-f]{40}|commits/[0-9a-f]{40})$"
 )
 _ACTION_CHANGE = re.compile(
-    r"^\\s*(?:-\\s+)?uses:\\s+(?P<action>[a-z0-9_.-]+/[a-z0-9_./-]+)"
-    r"@(?P<sha>[0-9a-f]{40})(?:\\s+#\\s+v(?P<version>\\d+(?:\\.\\d+){0,2}))?\\s*$"
+    r"^\s*(?:-\s+)?uses:\s+(?P<action>[a-z0-9_.-]+/[a-z0-9_./-]+)"
+    r"@(?P<sha>[0-9a-f]{40})(?:\s+#\s+v(?P<version>\d+(?:\.\d+){0,2}))?\s*$"
 )
 
 SAFE_PRODUCER_FILES = (
@@ -127,7 +126,7 @@ def _verified_vendor_pin(api: Any, action: str, version: str, sha: str) -> None:
     commit signature is evidence of issuer verification, NOT software safety.
     """
     require(action in VENDOR_ACTIONS, "unapproved action identity in publisher")
-    require(re.fullmatch(r"\\d+(?:\\.\\d+){1,2}", version) is not None, "invalid tag version")
+    require(re.fullmatch(r"\d+(?:\.\d+){1,2}", version) is not None, "invalid tag version")
     require(SHA.fullmatch(sha) is not None, "invalid action pin SHA")
     owner_repo = "/".join(action.split("/")[:2])
     prefix = f"/repos/{owner_repo}"
@@ -162,6 +161,10 @@ def _authorize_signed_bot_workflow_pins(api: Any, pr: dict[str, Any], head: str)
     ref = nested(pr, "head", "ref")
     require(isinstance(ref, str) and ref.startswith("dependabot/github_actions/"),
             "unexpected bot branch or ecosystem")
+    commits = api.get(f"/repos/{REPOSITORY}/pulls/{pr['number']}/commits?per_page=100")
+    require(isinstance(commits, list) and len(commits) == 1 and
+            commits[0].get("sha") == head,
+            "bot action update must contain one exact signed source commit")
     commit = obj(api.get(f"/repos/{REPOSITORY}/commits/{head}"), "signed bot source commit")
     require(commit.get("sha") == head, "unbound bot commit")
     require(obj(commit.get("author"), "bot author").get("id") == 49699333,
@@ -180,8 +183,8 @@ def _authorize_signed_bot_workflow_pins(api: Any, pr: dict[str, Any], head: str)
     versions = {
         name: version
         for name, version in re.findall(
-            r"(?m)^- dependency-name:\\s*([^\\n]+)\\n\\s*dependency-version:\\s*"
-            r"(\\d+(?:\\.\\d+){1,2})\\s*$", message
+            r"(?m)^- dependency-name:\s*([^\n]+)\n\s*dependency-version:\s*"
+            r"(\d+(?:\.\d+){1,2})\s*$", message
         )
     }
     rows = api.get(f"/repos/{REPOSITORY}/pulls/{pr['number']}/files?per_page=100")

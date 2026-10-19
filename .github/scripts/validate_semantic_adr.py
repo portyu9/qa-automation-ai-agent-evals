@@ -18,7 +18,7 @@ _SHA = re.compile(r"^[0-9a-f]{40}$")
 _ADR_NAME = re.compile(r"^docs/adr/([0-9]{4})-[a-z0-9][a-z0-9-]*\.md$")
 _ACTION_LINE = re.compile(
     r"^\s*(?:-\s+)?uses:\s+(?P<action>[A-Za-z0-9_.-]+/[A-Za-z0-9_./-]+)"
-    r"@(?P<sha>[0-9a-f]{40})\s+#\s+v(?P<version>\d+(?:\.\d+){0,2})\s*$"
+    r"@(?P<sha>[0-9a-f]{40})(?:\s+#\s+v(?P<version>\d+(?:\.\d+){0,2}))?\s*$"
 )
 _REQUIRED_ADR_MARKERS = (
     "**Status:** Accepted",
@@ -153,20 +153,22 @@ def _is_accepted_adr(path: str, policy: Policy) -> bool:
     return match is not None and int(match.group(1)) >= 1
 
 
-def _parse_action_change(line: str) -> tuple[str, str, tuple[int, ...]] | None:
+def _parse_action_change(line: str) -> tuple[str, str, tuple[int, ...] | None] | None:
     match = _ACTION_LINE.fullmatch(line)
     if match is None:
         return None
     return (
         match.group("action"),
         match.group("sha"),
-        tuple(int(part) for part in match.group("version").split(".")),
+        tuple(int(part) for part in match.group("version").split("."))
+        if match.group("version") is not None
+        else None,
     )
 
 
 def _action_pin_patch_is_safe(patch: str) -> bool:
-    removed: list[tuple[str, str, tuple[int, ...]]] = []
-    added: list[tuple[str, str, tuple[int, ...]]] = []
+    removed: list[tuple[str, str, tuple[int, ...] | None]] = []
+    added: list[tuple[str, str, tuple[int, ...] | None]] = []
     for raw in patch.splitlines():
         if not raw or raw.startswith(("diff --git ", "index ", "--- ", "+++ ", "@@ ", "\\")):
             continue
@@ -195,7 +197,11 @@ def _action_pin_patch_is_safe(patch: str) -> bool:
             or len(new_shas) != 1
         ):
             return False
-        if next(iter(new_versions)) <= next(iter(old_versions)):
+        old_version = next(iter(old_versions))
+        new_version = next(iter(new_versions))
+        if (old_version is None) != (new_version is None):
+            return False
+        if old_version is not None and new_version is not None and new_version <= old_version:
             return False
         if next(iter(new_shas)) == next(iter(old_shas)):
             return False
@@ -348,6 +354,11 @@ def self_test(policy: Policy) -> None:
     )
     if not _action_pin_patch_is_safe(safe_patch):
         raise AdrPolicyError("canonical action-pin update was not recognized")
+    sha_only = safe_patch.replace(" # v7.0.0", "").replace(" # v7.0.1", "")
+    if not _action_pin_patch_is_safe(sha_only):
+        raise AdrPolicyError("immutable SHA-only action update was rejected")
+    if _action_pin_patch_is_safe(sha_only.replace("@" + new_sha + "\n", "@" + new_sha + " # v7.0.1\n")):
+        raise AdrPolicyError("mixed action version annotation bypassed policy")
     if _action_pin_patch_is_safe(safe_patch + "+run: echo bypass\n"):
         raise AdrPolicyError("non-action workflow change bypassed action-pin policy")
     workflow_change = (Change(status="M", paths=(".github/workflows/ci.yml",)),)
