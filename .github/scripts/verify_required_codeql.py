@@ -282,12 +282,32 @@ def require_security_job_success(jobs: list[dict[str, Any]], *, run_id: int, att
         )
 
 
+def _fetch_security_jobs_with_retry(
+    repository: str, token: str, *, run_id: int, attempt: int
+) -> list[dict[str, Any]]:
+    """Retry only transient transport/5xx evidence reads; never soften validation.
+
+    Exactly three attempts, short bounded delays. A permanent HTTP error or
+    malformed/failed/absent scanner evidence is never retried into success.
+    """
+    for retry_index in range(3):
+        try:
+            return fetch_security_jobs(repository, token, run_id=run_id, attempt=attempt)
+        except TransientApiError:
+            if retry_index == 2:
+                raise
+            time.sleep((1, 2)[retry_index])
+    raise AssertionError("unreachable bounded Security API retry")
+
+
 def require_all_security_jobs(repository: str, token: str, runs: list[dict[str, Any]]) -> None:
     """Prove that both required jobs passed in every independently successful run."""
     if not runs:
         raise GateError("no successful exact-subject Security workflows")
     for run in runs:
-        jobs = fetch_security_jobs(repository, token, run_id=run["id"], attempt=run["run_attempt"])
+        jobs = _fetch_security_jobs_with_retry(
+            repository, token, run_id=run["id"], attempt=run["run_attempt"]
+        )
         require_security_job_success(jobs, run_id=run["id"], attempt=run["run_attempt"])
 
 
@@ -568,6 +588,57 @@ def self_test() -> None:
         require_all_security_jobs("owner/repo", "fake", runs)
         if mocked.call_count != len(runs):
             raise GateError("self-test did not verify jobs in every matching Security run")
+
+    # A GitHub 502 transport failure is not a Security scan failure.
+    # Retry only the same immutable run/attempt, then validate every
+    # independent scanner job without substituting a different run.
+    from unittest.mock import call
+
+    with (
+        patch(
+            __name__ + ".fetch_security_jobs",
+            side_effect=[
+                TransientApiError("Security jobs API transient HTTP 502"),
+                good_jobs("owner/repo", "fake", run_id=101, attempt=1),
+            ],
+        ) as retry_fetch,
+        patch(__name__ + ".time.sleep") as retry_sleep,
+    ):
+        require_all_security_jobs("owner/repo", "fake", [security])
+        if retry_fetch.call_args_list != [
+            call("owner/repo", "fake", run_id=101, attempt=1),
+            call("owner/repo", "fake", run_id=101, attempt=1),
+        ] or retry_sleep.call_args_list != [call(1)]:
+            raise GateError("bounded 502 retry altered exact Security evidence subject")
+
+    with (
+        patch(
+            __name__ + ".fetch_security_jobs",
+            side_effect=TransientApiError("Security jobs API transient HTTP 502"),
+        ) as exhausted_fetch,
+        patch(__name__ + ".time.sleep") as exhausted_sleep,
+    ):
+        try:
+            require_all_security_jobs("owner/repo", "fake", [security])
+        except TransientApiError:
+            pass
+        else:
+            raise GateError("self-test silently accepted three failed Security API reads")
+        if exhausted_fetch.call_count != 3 or exhausted_sleep.call_args_list != [
+            call(1),
+            call(2),
+        ]:
+            raise GateError("Security API transient retry bound changed")
+
+    with patch(__name__ + ".fetch_security_jobs", side_effect=GateError("HTTP 403")) as denied:
+        try:
+            require_all_security_jobs("owner/repo", "fake", [security])
+        except GateError:
+            pass
+        else:
+            raise GateError("self-test accepted unauthorized Security evidence query")
+        if denied.call_count != 1:
+            raise GateError("permanent Security API refusal must not be retried")
 
     def bad_jobs(
         _repository: str, _token: str, *, run_id: int, attempt: int
