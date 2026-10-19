@@ -588,13 +588,13 @@ def _validate_native_pr_codeql_premerge_contract(workflow: dict[str, Any], *, pa
         },
         "run": "\n".join(
             (
-                'python .github/scripts/verify_required_codeql.py --workflow security \\',
+                "python .github/scripts/verify_required_codeql.py --workflow security \\",
                 '  --subject-sha "$SUBJECT_SHA" \\',
                 '  --branch "$SUBJECT_BRANCH" \\',
                 '  --trigger-event "$TRIGGER_EVENT" \\',
-                '  --attempts 90 \\',
-                '  --delay-seconds 10',
-                '',
+                "  --attempts 90 \\",
+                "  --delay-seconds 10",
+                "",
             )
         ),
     }:
