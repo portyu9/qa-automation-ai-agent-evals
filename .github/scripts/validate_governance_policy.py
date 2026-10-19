@@ -124,13 +124,27 @@ def self_test() -> int:
         {},
         None,
         {**EXPECTED_CONTRIBUTION_SCOPE, "human_maintainers": ["@someone-else"]},
-        {**EXPECTED_CONTRIBUTION_SCOPE, "human_maintainers": ["@portyu9", "@someone-else"]},
-        {**EXPECTED_CONTRIBUTION_SCOPE, "supported_pr_sources": ["owner-same-repository"]},
-        {**EXPECTED_CONTRIBUTION_SCOPE, "supported_pr_sources": [
-            "owner-same-repository", "verified-dependabot", "external-fork"
-        ]},
+        {
+            **EXPECTED_CONTRIBUTION_SCOPE,
+            "human_maintainers": ["@portyu9", "@someone-else"],
+        },
+        {
+            **EXPECTED_CONTRIBUTION_SCOPE,
+            "supported_pr_sources": ["owner-same-repository"],
+        },
+        {
+            **EXPECTED_CONTRIBUTION_SCOPE,
+            "supported_pr_sources": [
+                "owner-same-repository",
+                "verified-dependabot",
+                "external-fork",
+            ],
+        },
         {**EXPECTED_CONTRIBUTION_SCOPE, "external_fork_e2e_qualification": "verified"},
-        {**EXPECTED_CONTRIBUTION_SCOPE, "independent_non_author_human_review": "required"},
+        {
+            **EXPECTED_CONTRIBUTION_SCOPE,
+            "independent_non_author_human_review": "required",
+        },
         {**EXPECTED_CONTRIBUTION_SCOPE, "untrusted_pr_evidence": "promote-to-trusted"},
         {**EXPECTED_CONTRIBUTION_SCOPE, "untrusted_override": True},
     ]
