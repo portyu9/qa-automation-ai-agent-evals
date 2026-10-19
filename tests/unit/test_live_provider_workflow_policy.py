@@ -1,9 +1,26 @@
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _WORKFLOW = _REPO_ROOT / ".github/workflows/live-provider-canary.yml"
+_APPROVED_ACTION_IDENTITIES = {
+    "actions/checkout",
+    "actions/setup-python",
+    "actions/upload-artifact",
+}
+
+
+def _only_canonical_immutable_actions(source: str) -> bool:
+    """Guard read-only canary action identity and full immutable SHA, not a stale release."""
+    uses = re.findall(r"(?m)^\s*uses:\s*([^\s#]+)", source)
+    parsed = [re.fullmatch(r"([a-z0-9._-]+/[a-z0-9._/-]+)@([0-9a-f]{40})", ref) for ref in uses]
+    return (
+        len(uses) == len(_APPROVED_ACTION_IDENTITIES)
+        and all(item is not None for item in parsed)
+        and {item.group(1) for item in parsed if item is not None} == _APPROVED_ACTION_IDENTITIES
+    )
 
 
 def test_live_provider_canary_is_never_required_on_ordinary_pr_or_push() -> None:
@@ -40,6 +57,20 @@ def test_live_provider_canary_uses_immutable_actions_and_no_write_permission() -
     assert "id-token: write" not in source
     assert "attestations: write" not in source
     assert "contents: write" not in source
-    assert "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1" in source
-    assert "actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97" in source
-    assert "actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a" in source
+    assert _only_canonical_immutable_actions(source)
+
+
+def test_live_provider_action_integrity_rejects_mutable_and_foreign_refs() -> None:
+    source = _WORKFLOW.read_text(encoding="utf-8")
+    upload = re.search(r"actions/upload-artifact@[0-9a-f]{40}", source)
+    assert upload is not None
+
+    for bad_ref in (
+        "actions/upload-artifact@main",
+        "actions/upload-artifact@" + "A" * 40,
+        "attacker/upload-artifact@" + "c" * 40,
+    ):
+        assert not _only_canonical_immutable_actions(source.replace(upload.group(), bad_ref, 1))
+    assert not _only_canonical_immutable_actions(
+        source + "\n        uses: attacker/extra@" + "b" * 40 + "\n"
+    )
