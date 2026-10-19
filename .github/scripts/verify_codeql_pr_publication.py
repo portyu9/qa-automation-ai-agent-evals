@@ -28,7 +28,7 @@ DIGEST = re.compile(r"^sha256:[0-9a-f]{64}$")
 # One-time, previously reviewed migration of the scanner policy literal pins.
 # This blob is produced by and committed in a separate reviewed PR; a candidate
 # cannot mint or select its own executable validator approval.
-APPROVED_SCANNER_MIGRATION_BLOB = "12eab86b64d4c9ec637150c4e76868dcc052a025"
+APPROVED_SCANNER_MIGRATION_BLOB = "89d1eabbb866b16a43497df8aebc4610df35bec8"
 
 VENDOR_ACTIONS = frozenset(
     {
@@ -919,6 +919,24 @@ def self_test() -> None:
 
     event = {"action": "completed", "workflow_run": event_run}
     require(verify(Fake(lookup), event)["head_sha"] == head, "valid exact-head evidence rejected")
+    scanner_path = ".github/scripts/validate_security_stack.py"
+    scanner_head_ref = (
+        f"/repos/{REPOSITORY}/contents/{urllib.parse.quote(scanner_path, safe='/')}?ref={head}"
+    )
+    approved_scanner = deepcopy(lookup)
+    approved_scanner[scanner_head_ref] = {"sha": APPROVED_SCANNER_MIGRATION_BLOB}
+    require(
+        verify(Fake(approved_scanner), event)["head_sha"] == head,
+        "preapproved exact scanner migration was not admitted",
+    )
+    unapproved_scanner = deepcopy(approved_scanner)
+    unapproved_scanner[scanner_head_ref] = {"sha": "0" * 40}
+    try:
+        verify(Fake(unapproved_scanner), event)
+    except Blocked:
+        pass
+    else:
+        raise AssertionError("unapproved candidate scanner source was trusted")
 
     def blocked(routes: dict[str, Any], e: Any, label: str) -> None:
         try:
