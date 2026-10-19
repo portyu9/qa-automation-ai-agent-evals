@@ -28,6 +28,53 @@ This model deliberately does not depend on GitHub Actions review approval or Cop
 
 An optional human or automated review may still comment, request changes, or identify issues. Such review is advisory unless a future, explicitly reviewed governance revision changes the authority model.
 
+## Supported maintenance and contribution qualification scope
+
+**Owner authorization (2026-10-19):** this repository is maintained by exactly
+one human, `@portyu9`, assisted by authenticated Dependabot and the existing
+approved GitHub automation. The supported PR qualification paths are:
+
+- same-repository owner changes, merged via the protected current-head CI and
+  native CodeQL gates;
+- canonical signed `dependabot[bot]` updates that independently pass the
+  main-owned source/release trust policy, exact-head owner-account approval,
+  required native/security/package checks, and protected merge.
+
+There is **no approved program for independent outside maintainers**, no
+external-fork PR end-to-end qualification requirement, and no independent
+second-human approval quorum. Earlier fork-review requirements added to
+issues #360/#380 were **beyond this approved operating model** and are
+superseded by ADR 0061. OpenSSF CodeReviewID reflects the owner's deliberate
+single-maintainer review arrangement, not proof of an unauthorized bypass.
+
+This is a **scope limitation, not an untrusted-source exemption**. GitHub can
+still receive public fork PRs; no capability to prevent their submission is
+claimed. If one arrives, its source remains untrusted and receives no
+trusted-main publication privileges, bot identity exemption, or automatic
+owner/bot approval. Read-only checks and fail-closed protections stay intact;
+unverified fork origin must never silently become trusted. Supporting outside
+contributors would require a separate explicit owner decision, an append-only
+ADR, a policy change and independent live safety evidence.
+
+The executable declaration is
+`.github/repository-governance.json#contribution_scope`; CI pins its exact
+approved values through `.github/scripts/validate_governance_policy.py` and
+ten adversarial rejection fixtures. That declaration documents owner intent,
+not live administrator attestation or authentication of the PR author.
+
+**Dependabot lifecycle scope:** real signed bot #397 qualified and merged by
+GitHub automation under the normal protected rules. Its historic postmerge
+CI correctly failed for missing Security from a GITHUB_TOKEN-triggered merge.
+Later protected #409 and #410 repair ordered exact-main
+Security→CodeQL→CI dispatch and bounded scanner waits. The genuine current
+main **push** scan suite passed; the new postrepair **bot-triggered**
+workflow_dispatch sequence remains unobserved. Do not infer historical
+success from code fixtures or a different trigger. This is an explicit
+operational non-claim, not a reason to mandate outside contributors.
+
+The genuine unsuppressed OpenSSF BranchProtectionID, CodeReviewID and
+MaintainedID findings remain visible and are not reclassified as fixed.
+
 ## CI authority
 
 The protected ruleset binds the required check contexts. A green unprotected job, comment, label, hash, or repository-owned marker does not substitute for those contexts.

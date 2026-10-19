@@ -34,6 +34,23 @@ def string_list(value: object, *, label: str) -> list[str]:
     return value
 
 
+# Explicit owner-approved qualification *scope*, not a PR authentication oracle.
+# Unknown external sources remain untrusted; this policy does not disable read-only scans.
+EXPECTED_CONTRIBUTION_SCOPE: dict[str, object] = {
+    "human_maintainers": ["@portyu9"],
+    "supported_pr_sources": ["owner-same-repository", "verified-dependabot"],
+    "external_fork_e2e_qualification": "out-of-scope",
+    "independent_non_author_human_review": "not-required-single-maintainer",
+    "untrusted_pr_evidence": "fail-closed-no-privileged-promotion",
+}
+
+
+def verify_contribution_scope(scope: object) -> None:
+    """Reject accidental capability expansion and misleading out-of-scope claims."""
+    if scope != EXPECTED_CONTRIBUTION_SCOPE:
+        fail("owner-authorized PR qualification scope drift")
+
+
 def load_policy() -> dict[str, object]:
     try:
         raw = json.loads(POLICY_PATH.read_text(encoding="utf-8"))
@@ -102,7 +119,42 @@ def self_test() -> int:
             except SystemExit:
                 continue
             fail(f"admin precondition negative fixture accepted for {key}")
-    print("Repository administrator verification non-claim self-tests passed")
+    verify_contribution_scope(EXPECTED_CONTRIBUTION_SCOPE)
+    scope_mutants: list[object] = [
+        {},
+        None,
+        {**EXPECTED_CONTRIBUTION_SCOPE, "human_maintainers": ["@someone-else"]},
+        {
+            **EXPECTED_CONTRIBUTION_SCOPE,
+            "human_maintainers": ["@portyu9", "@someone-else"],
+        },
+        {
+            **EXPECTED_CONTRIBUTION_SCOPE,
+            "supported_pr_sources": ["owner-same-repository"],
+        },
+        {
+            **EXPECTED_CONTRIBUTION_SCOPE,
+            "supported_pr_sources": [
+                "owner-same-repository",
+                "verified-dependabot",
+                "external-fork",
+            ],
+        },
+        {**EXPECTED_CONTRIBUTION_SCOPE, "external_fork_e2e_qualification": "verified"},
+        {
+            **EXPECTED_CONTRIBUTION_SCOPE,
+            "independent_non_author_human_review": "required",
+        },
+        {**EXPECTED_CONTRIBUTION_SCOPE, "untrusted_pr_evidence": "promote-to-trusted"},
+        {**EXPECTED_CONTRIBUTION_SCOPE, "untrusted_override": True},
+    ]
+    for index, mutant in enumerate(scope_mutants):
+        try:
+            verify_contribution_scope(mutant)
+        except SystemExit:
+            continue
+        fail(f"contribution scope negative fixture {index} accepted")
+    print("Administrator non-claims and 10 owner-scope rejection fixtures passed")
     return 0
 
 
@@ -164,6 +216,8 @@ def main() -> int:
         fail("ownership model must remain CI-authoritative with one CODEOWNER")
     if maintainers.get("codeowner_role") != "routing-and-trust-ownership-not-merge-approval":
         fail("CODEOWNER role must not silently become merge approval authority")
+
+    verify_contribution_scope(policy.get("contribution_scope"))
 
     automation = object_field(policy, "automation_policy")
     if automation.get("required_status_checks_are_merge_authority") is not True:
@@ -231,6 +285,7 @@ def main() -> int:
     for required in (
         "Repository-owned intent is not live enforcement",
         "Single-CODEOWNER CI-authoritative model",
+        "Supported maintenance and contribution qualification scope",
         "Signed-commit tradeoff",
         "Auto-merge and update-branch",
         "External administration prerequisites",

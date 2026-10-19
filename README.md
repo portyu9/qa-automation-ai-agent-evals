@@ -14,7 +14,7 @@
 
 **A provider-neutral quality-engineering framework for evaluating autonomous agents by observable outcomes, side effects, authority boundaries, approval intent, adversarial conditions, protocol state, authorization behavior, reliability, and reproducible evidence—not persuasive final prose.**
 
-[Documentation](docs/README.md) · [Architecture](docs/ARCHITECTURE.md) · [Framework Surface](docs/FRAMEWORK_SURFACE.md) · [Evaluation Lifecycle](docs/EVALUATION_LIFECYCLE.md) · [Evidence Hierarchy](docs/EVIDENCE_HIERARCHY.md) · [OpenAI Adapter](docs/OPENAI_ADAPTER.md) · [Evidence & Replay](docs/EVIDENCE_AND_REPLAY.md) · [Release Provenance](RELEASE_PROVENANCE.md) · [Releases](https://github.com/portyu9/qa-automation-ai-agent-evals/releases) · [PyPI](https://pypi.org/project/qa-automation-ai-agent-evals/) · [Security](docs/SECURITY.md) · [Limitations](docs/LIMITATIONS.md)
+[Documentation](docs/README.md) · [Repository Governance](docs/REPOSITORY_GOVERNANCE.md) · [Architecture](docs/ARCHITECTURE.md) · [Framework Surface](docs/FRAMEWORK_SURFACE.md) · [Evaluation Lifecycle](docs/EVALUATION_LIFECYCLE.md) · [Evidence Hierarchy](docs/EVIDENCE_HIERARCHY.md) · [OpenAI Adapter](docs/OPENAI_ADAPTER.md) · [Evidence & Replay](docs/EVIDENCE_AND_REPLAY.md) · [Release Provenance](RELEASE_PROVENANCE.md) · [Releases](https://github.com/portyu9/qa-automation-ai-agent-evals/releases) · [PyPI](https://pypi.org/project/qa-automation-ai-agent-evals/) · [Security](docs/SECURITY.md) · [Limitations](docs/LIMITATIONS.md)
 
 </div>
 

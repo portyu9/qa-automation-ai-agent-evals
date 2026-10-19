@@ -20,6 +20,18 @@
     "ownership_model": "single-codeowner-ci-authoritative",
     "codeowner_role": "routing-and-trust-ownership-not-merge-approval"
   },
+  "contribution_scope": {
+    "human_maintainers": [
+      "@portyu9"
+    ],
+    "supported_pr_sources": [
+      "owner-same-repository",
+      "verified-dependabot"
+    ],
+    "external_fork_e2e_qualification": "out-of-scope",
+    "independent_non_author_human_review": "not-required-single-maintainer",
+    "untrusted_pr_evidence": "fail-closed-no-privileged-promotion"
+  },
   "automation_policy": {
     "required_status_checks_are_merge_authority": true,
     "github_actions_approval_required": false,
