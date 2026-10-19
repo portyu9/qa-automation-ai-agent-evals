@@ -597,9 +597,10 @@ def self_test() -> None:
     with (
         patch(
             __name__ + ".fetch_security_jobs",
-            side_effect=[TransientApiError("Security jobs API transient HTTP 502"), good_jobs(
-                "owner/repo", "fake", run_id=101, attempt=1
-            )],
+            side_effect=[
+                TransientApiError("Security jobs API transient HTTP 502"),
+                good_jobs("owner/repo", "fake", run_id=101, attempt=1),
+            ],
         ) as retry_fetch,
         patch(__name__ + ".time.sleep") as retry_sleep,
     ):
