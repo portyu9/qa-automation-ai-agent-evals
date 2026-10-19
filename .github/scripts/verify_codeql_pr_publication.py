@@ -883,22 +883,30 @@ def self_test() -> None:
         f"/repos/{REPOSITORY}/pulls/123/commits?per_page=100": [{"sha": head}],
         f"/repos/{REPOSITORY}/commits/{head}": bot_commit,
         f"/repos/{REPOSITORY}/pulls/123/files?per_page=100": [
-            {"filename": ".github/workflows/codeql.yml",
-             "status": "modified", "patch": bot_patch}
+            {"filename": ".github/workflows/codeql.yml", "status": "modified", "patch": bot_patch}
         ],
     }
     _authorize_signed_bot_workflow_pins(Fake(bot_routes), bot_pr, head)
     for label, mutate in (
         ("forged bot author", lambda routes, pr: pr["user"].update(id=123)),
-        ("invalid signed source", lambda routes, pr:
-            routes[f"/repos/{REPOSITORY}/commits/{head}"]["commit"]["verification"]
-            .update(verified=False)),
-        ("unscoped workflow semantic edit", lambda routes, pr:
-            routes[f"/repos/{REPOSITORY}/pulls/123/files?per_page=100"][0]
-            .update(patch=bot_patch + "+        run: echo untrusted\n")),
-        ("misclaimed dependency version", lambda routes, pr:
-            routes[f"/repos/{REPOSITORY}/commits/{head}"]["commit"]
-            .update(message=bot_commit["commit"]["message"].replace("7.0.2", "7.0.3"))),
+        (
+            "invalid signed source",
+            lambda routes, pr: routes[f"/repos/{REPOSITORY}/commits/{head}"]["commit"][
+                "verification"
+            ].update(verified=False),
+        ),
+        (
+            "unscoped workflow semantic edit",
+            lambda routes, pr: routes[f"/repos/{REPOSITORY}/pulls/123/files?per_page=100"][
+                0
+            ].update(patch=bot_patch + "+        run: echo untrusted\n"),
+        ),
+        (
+            "misclaimed dependency version",
+            lambda routes, pr: routes[f"/repos/{REPOSITORY}/commits/{head}"]["commit"].update(
+                message=bot_commit["commit"]["message"].replace("7.0.2", "7.0.3")
+            ),
+        ),
     ):
         mutated_routes, mutated_pr = deepcopy(bot_routes), deepcopy(bot_pr)
         mutate(mutated_routes, mutated_pr)
