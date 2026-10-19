@@ -917,9 +917,7 @@ def self_test() -> None:
     # grandfathering privilege after accepted main evolves.
     old_scanner = deepcopy(lookup)
     old_scanner[scanner_main_ref] = {"sha": "2" * 40}
-    old_scanner[scanner_head_ref] = {
-        "sha": "89d1eabbb866b16a43497df8aebc4610df35bec8"
-    }
+    old_scanner[scanner_head_ref] = {"sha": "89d1eabbb866b16a43497df8aebc4610df35bec8"}
     for label, routes in (
         ("formerly certified scanner source", old_scanner),
         (
