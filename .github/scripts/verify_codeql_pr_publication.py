@@ -25,11 +25,6 @@ CODEQL_ANALYSIS_KEY = ".github/workflows/codeql-pr-publisher.yml:publish"
 SHA = re.compile(r"^[0-9a-f]{40}$")
 BRANCH = re.compile(r"^[A-Za-z0-9._/-]{1,200}$")
 DIGEST = re.compile(r"^sha256:[0-9a-f]{64}$")
-# One-time, previously reviewed migration of the scanner policy literal pins.
-# This blob is produced by and committed in a separate reviewed PR; a candidate
-# cannot mint or select its own executable validator approval.
-APPROVED_SCANNER_MIGRATION_BLOB = "89d1eabbb866b16a43497df8aebc4610df35bec8"
-
 VENDOR_ACTIONS = frozenset(
     {
         "actions/upload-artifact",
@@ -368,11 +363,6 @@ def verify(api: Any, event: Any, *, trusted_main_sha: str | None = None) -> dict
         )
         if path == WORKFLOW_PATH and sha_candidate != sha_trusted:
             _authorize_signed_bot_workflow_pins(api, pr, head)
-        elif path == ".github/scripts/validate_security_stack.py":
-            require(
-                sha_candidate in {sha_trusted, APPROVED_SCANNER_MIGRATION_BLOB},
-                "scanner validator changed outside reviewed one-time migration",
-            )
         else:
             require(
                 sha_candidate == sha_trusted,
@@ -920,23 +910,29 @@ def self_test() -> None:
     event = {"action": "completed", "workflow_run": event_run}
     require(verify(Fake(lookup), event)["head_sha"] == head, "valid exact-head evidence rejected")
     scanner_path = ".github/scripts/validate_security_stack.py"
-    scanner_head_ref = (
-        f"/repos/{REPOSITORY}/contents/{urllib.parse.quote(scanner_path, safe='/')}?ref={head}"
-    )
-    approved_scanner = deepcopy(lookup)
-    approved_scanner[scanner_head_ref] = {"sha": APPROVED_SCANNER_MIGRATION_BLOB}
-    require(
-        verify(Fake(approved_scanner), event)["head_sha"] == head,
-        "preapproved exact scanner migration was not admitted",
-    )
-    unapproved_scanner = deepcopy(approved_scanner)
-    unapproved_scanner[scanner_head_ref] = {"sha": "0" * 40}
-    try:
-        verify(Fake(unapproved_scanner), event)
-    except Blocked:
-        pass
-    else:
-        raise AssertionError("unapproved candidate scanner source was trusted")
+    scanner_url = f"/repos/{REPOSITORY}/contents/{urllib.parse.quote(scanner_path, safe='/')}"
+    scanner_head_ref = f"{scanner_url}?ref={head}"
+    scanner_main_ref = f"{scanner_url}?ref={main}"
+    # A formerly authorized migration blob must have *no* permanent
+    # grandfathering privilege after accepted main evolves.
+    old_scanner = deepcopy(lookup)
+    old_scanner[scanner_main_ref] = {"sha": "2" * 40}
+    old_scanner[scanner_head_ref] = {
+        "sha": "89d1eabbb866b16a43497df8aebc4610df35bec8"
+    }
+    for label, routes in (
+        ("formerly certified scanner source", old_scanner),
+        (
+            "arbitrary candidate scanner source",
+            {**lookup, scanner_head_ref: {"sha": "0" * 40}},
+        ),
+    ):
+        try:
+            verify(Fake(routes), event)
+        except Blocked:
+            pass
+        else:
+            raise AssertionError(f"accepted-main scanner source equality bypassed: {label}")
 
     def blocked(routes: dict[str, Any], e: Any, label: str) -> None:
         try:
