@@ -91,15 +91,11 @@ _APPROVED_ACTION_IDENTITIES = {
 def _only_canonical_immutable_actions(workflow: str) -> bool:
     """Preserve action issuers, quantity and full Git SHA without pin-version rot."""
     uses = re.findall(r"(?m)^\s*uses:\s*([^\s#]+)", workflow)
-    parsed = [
-        re.fullmatch(r"([a-z0-9._-]+/[a-z0-9._/-]+)@([0-9a-f]{40})", ref)
-        for ref in uses
-    ]
+    parsed = [re.fullmatch(r"([a-z0-9._-]+/[a-z0-9._/-]+)@([0-9a-f]{40})", ref) for ref in uses]
     return (
         len(uses) == len(_APPROVED_ACTION_IDENTITIES)
         and all(item is not None for item in parsed)
-        and {item.group(1) for item in parsed if item is not None}
-        == _APPROVED_ACTION_IDENTITIES
+        and {item.group(1) for item in parsed if item is not None} == _APPROVED_ACTION_IDENTITIES
     )
 
 
@@ -280,9 +276,7 @@ def test_deep_workflow_refusals_preserve_action_issuers_and_sha_integrity() -> N
         "actions/upload-artifact@" + "A" * 40,
         "attacker/upload-artifact@" + "a" * 40,
     ):
-        assert not _only_canonical_immutable_actions(
-            workflow.replace(upload.group(), bad_ref, 1)
-        )
+        assert not _only_canonical_immutable_actions(workflow.replace(upload.group(), bad_ref, 1))
     assert not _only_canonical_immutable_actions(
         workflow + "\n        uses: attacker/extra@" + "b" * 40 + "\n"
     )
