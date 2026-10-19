@@ -848,6 +848,67 @@ def self_test() -> None:
         else:
             raise AssertionError("unverified upstream action tag or signer accepted")
 
+    # Canonical signed-bot workflow diff fixtures exercise the *actual*
+    # trusted-main source scope guard, not just isolated upstream tag lookup.
+    from copy import deepcopy
+
+    bot_patch = (
+        "@@ -1 +1 @@\n"
+        "-        uses: actions/upload-artifact@" + "2" * 40 + " # v7.0.1\n"
+        "+        uses: actions/upload-artifact@" + upstream_sha + " # v7.0.2\n"
+    )
+    bot_pr = {
+        "number": 123,
+        "user": {"login": "dependabot[bot]", "id": 49699333},
+        "head": {"ref": "dependabot/github_actions/canonical"},
+    }
+    bot_commit = {
+        "sha": head,
+        "author": {"id": 49699333},
+        "committer": {"login": "web-flow"},
+        "commit": {
+            "author": {"email": "49699333+dependabot[bot]@users.noreply.github.com"},
+            "verification": {"verified": True, "reason": "valid"},
+            "message": (
+                "deps: update pinned action\n"
+                "- dependency-name: actions/upload-artifact\n"
+                "  dependency-version: 7.0.2\n"
+                "  update-type: version-update:semver-patch\n"
+                "Signed-off-by: dependabot[bot] <support@github.com>"
+            ),
+        },
+    }
+    bot_routes = {
+        **vendor_routes,
+        f"/repos/{REPOSITORY}/pulls/123/commits?per_page=100": [{"sha": head}],
+        f"/repos/{REPOSITORY}/commits/{head}": bot_commit,
+        f"/repos/{REPOSITORY}/pulls/123/files?per_page=100": [
+            {"filename": ".github/workflows/codeql.yml",
+             "status": "modified", "patch": bot_patch}
+        ],
+    }
+    _authorize_signed_bot_workflow_pins(Fake(bot_routes), bot_pr, head)
+    for label, mutate in (
+        ("forged bot author", lambda routes, pr: pr["user"].update(id=123)),
+        ("invalid signed source", lambda routes, pr:
+            routes[f"/repos/{REPOSITORY}/commits/{head}"]["commit"]["verification"]
+            .update(verified=False)),
+        ("unscoped workflow semantic edit", lambda routes, pr:
+            routes[f"/repos/{REPOSITORY}/pulls/123/files?per_page=100"][0]
+            .update(patch=bot_patch + "+        run: echo untrusted\n")),
+        ("misclaimed dependency version", lambda routes, pr:
+            routes[f"/repos/{REPOSITORY}/commits/{head}"]["commit"]
+            .update(message=bot_commit["commit"]["message"].replace("7.0.2", "7.0.3"))),
+    ):
+        mutated_routes, mutated_pr = deepcopy(bot_routes), deepcopy(bot_pr)
+        mutate(mutated_routes, mutated_pr)
+        try:
+            _authorize_signed_bot_workflow_pins(Fake(mutated_routes), mutated_pr, head)
+        except Blocked:
+            pass
+        else:
+            raise AssertionError(f"main-owned signed action guard accepted {label}")
+
     event = {"action": "completed", "workflow_run": event_run}
     require(verify(Fake(lookup), event)["head_sha"] == head, "valid exact-head evidence rejected")
 

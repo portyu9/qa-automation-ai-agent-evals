@@ -11,7 +11,7 @@ on:
     # Keep the same 10-minute period away from highly contended minute :00.
     # GitHub's schedule remains best-effort; no privileged PR event is enabled.
     - cron: "7,17,27,37,47,57 * * * *"
-  workflow_run:
+  workflow_run: # zizmor: ignore[dangerous-triggers] -- main-owned verifier reauthenticates exact SARIF; never checks out PR code
     workflows: [CodeQL]
     types: [completed]
   workflow_dispatch:
