@@ -52,7 +52,7 @@ jobs:
         run: python3 trusted/.github/scripts/verify_codeql_pr_publication.py --discover
       - name: Download only canonical completed-run CodeQL evidence
         if: steps.provenance.outputs.has_target == 'true'
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           repository: ${{ github.repository }}
           run-id: ${{ steps.provenance.outputs.run_id }}
@@ -79,7 +79,7 @@ jobs:
         run: python3 trusted/.github/scripts/verify_codeql_pr_publication.py --revalidate-target
       - name: Publish authentic PR-head CodeQL result
         if: steps.provenance.outputs.has_target == 'true'
-        uses: github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
+        uses: github/codeql-action/upload-sarif@24c54180a607b1449ed407dd24f251e4e9147c8d # v4.38.3
         with:
           sarif_file: reports/security/pr-codeql
           ref: refs/pull/${{ steps.provenance.outputs.pr_number }}/head
