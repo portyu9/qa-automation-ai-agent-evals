@@ -1445,5 +1445,7 @@ jobs:
           python .github/scripts/verify_required_codeql.py --workflow security \
             --subject-sha "$SUBJECT_SHA" \
             --branch "$SUBJECT_BRANCH" \
-            --trigger-event "$TRIGGER_EVENT"
+            --trigger-event "$TRIGGER_EVENT" \
+            --attempts 90 \
+            --delay-seconds 10
 
