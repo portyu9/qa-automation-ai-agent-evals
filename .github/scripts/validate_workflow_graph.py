@@ -31,9 +31,10 @@ def _pinned_action_use(step: dict[str, Any], action: str) -> bool:
     accepted-main publisher before privileged Code Scanning publication.
     """
     value = step.get("uses")
-    return isinstance(value, str) and re.fullmatch(
-        re.escape(action) + r"@[0-9a-f]{40}", value
-    ) is not None
+    return (
+        isinstance(value, str)
+        and re.fullmatch(re.escape(action) + r"@[0-9a-f]{40}", value) is not None
+    )
 
 
 # Validator-owned exceptions: narrowly scoped writes needed by trusted workflows.
@@ -384,7 +385,9 @@ def _validate_codeql_fork_contract(workflow: dict[str, Any], *, path: Path) -> N
     ):
         raise WorkflowPolicyError(f"{path}: CodeQL publisher lost independent SARIF veto")
     upload = steps_by_name["Upload verified CodeQL SARIF to Code Scanning"]
-    if not _pinned_action_use(upload, "github/codeql-action/upload-sarif") or upload.get("with") != {"sarif_file": "reports/security/codeql-source"}:
+    if not _pinned_action_use(upload, "github/codeql-action/upload-sarif") or upload.get(
+        "with"
+    ) != {"sarif_file": "reports/security/codeql-source"}:
         raise WorkflowPolicyError(f"{path}: CodeQL publisher lost verified SARIF destination")
 
 
@@ -483,7 +486,9 @@ def _validate_codeql_pr_publication_contract(workflow: dict[str, Any], *, path: 
     }:
         raise WorkflowPolicyError(f"{path}: post-download exact-target revalidation bypass")
 
-    if not _pinned_action_use(upload, "github/codeql-action/upload-sarif") or upload.get("with") != {
+    if not _pinned_action_use(upload, "github/codeql-action/upload-sarif") or upload.get(
+        "with"
+    ) != {
         "sarif_file": "reports/security/pr-codeql",
         "ref": "refs/pull/${{ steps.provenance.outputs.pr_number }}/head",
         "sha": "${{ steps.provenance.outputs.head_sha }}",

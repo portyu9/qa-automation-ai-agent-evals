@@ -357,7 +357,9 @@ def self_test(policy: Policy) -> None:
     sha_only = safe_patch.replace(" # v7.0.0", "").replace(" # v7.0.1", "")
     if not _action_pin_patch_is_safe(sha_only):
         raise AdrPolicyError("immutable SHA-only action update was rejected")
-    if _action_pin_patch_is_safe(sha_only.replace("@" + new_sha + "\n", "@" + new_sha + " # v7.0.1\n")):
+    if _action_pin_patch_is_safe(
+        sha_only.replace("@" + new_sha + "\n", "@" + new_sha + " # v7.0.1\n")
+    ):
         raise AdrPolicyError("mixed action version annotation bypassed policy")
     if _action_pin_patch_is_safe(safe_patch + "+run: echo bypass\n"):
         raise AdrPolicyError("non-action workflow change bypassed action-pin policy")
