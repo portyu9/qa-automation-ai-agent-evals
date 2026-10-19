@@ -513,7 +513,9 @@ def validate_action_semantics(files: list[dict[str, Any]]) -> None:
             old_v = next(iter(old_versions))
             new_v = next(iter(new_versions))
             if (old_v is None) != (new_v is None):
-                raise PolicyBlock(f"action version annotations must be consistently present: {action}")
+                raise PolicyBlock(
+                    f"action version annotations must be consistently present: {action}"
+                )
             # Older pinned workflow actions can lack version comments. The signed
             # Dependabot source, immutable SHA changes and one-for-one action
             # identity are enforceable; do not invent a semver claim when absent.
