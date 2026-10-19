@@ -574,6 +574,34 @@ def _validate_native_pr_codeql_premerge_contract(workflow: dict[str, Any], *, pa
     }:
         raise WorkflowPolicyError(f"{path}: exact-head native CodeQL veto changed or bypassed")
 
+    # The trusted governor dispatches Security before CI but cannot promise
+    # scheduler completion ordering. CI must poll independent exact-subject
+    # Security evidence as long as CodeQL, without weakening the veto.
+    security = steps[7]
+    if security != {
+        "name": "Require independent exact-subject Security workflow and job success",
+        "env": {
+            "GITHUB_TOKEN": "${{ secrets.GITHUB_TOKEN }}",
+            "SUBJECT_SHA": "${{ github.event.pull_request.head.sha || github.sha }}",
+            "SUBJECT_BRANCH": "${{ github.event.pull_request.head.ref || github.ref_name }}",
+            "TRIGGER_EVENT": "${{ github.event_name }}",
+        },
+        "run": "\n".join(
+            (
+                'python .github/scripts/verify_required_codeql.py --workflow security \\',
+                '  --subject-sha "$SUBJECT_SHA" \\',
+                '  --branch "$SUBJECT_BRANCH" \\',
+                '  --trigger-event "$TRIGGER_EVENT" \\',
+                '  --attempts 90 \\',
+                '  --delay-seconds 10',
+                '',
+            )
+        ),
+    }:
+        raise WorkflowPolicyError(
+            f"{path}: required exact-subject Security wait/authority/veto contract drift"
+        )
+
 
 def validate_workflow(path: Path) -> None:
     workflow = _load_workflow(path)
@@ -886,6 +914,35 @@ jobs:
             except WorkflowPolicyError:
                 continue
             raise WorkflowPolicyError("native CodeQL premerge bypass was accepted")
+
+        # Mutation-test the last (Security) protected-gate step separately.
+        # A 3-minute window can time out after legitimate queue delay; accept
+        # only authentic completed-success within the explicit 15-minute bound.
+        security_marker = (
+            "      - name: Require independent exact-subject Security workflow and job success\n"
+        )
+        if source_ci.count(security_marker) != 1:
+            raise WorkflowPolicyError("independent Security gate fixture drift")
+        security_prefix, security_tail = source_ci.split(security_marker)
+        security_mutations = (
+            ("--attempts 90", "--attempts 1"),
+            ("--delay-seconds 10", "--delay-seconds 0"),
+            ("--workflow security", "--workflow codeql"),
+            ('--subject-sha "$SUBJECT_SHA"', '--subject-sha "$GITHUB_SHA"'),
+            ("TRIGGER_EVENT: ${{ github.event_name }}", "TRIGGER_EVENT: hardcoded"),
+        )
+        for original, malicious in security_mutations:
+            if security_tail.count(original) != 1:
+                raise WorkflowPolicyError("Security queue-window negative fixture drift")
+            candidate_ci.write_text(
+                security_prefix + security_marker + security_tail.replace(original, malicious),
+                encoding="utf-8",
+            )
+            try:
+                validate_workflow(candidate_ci)
+            except WorkflowPolicyError:
+                continue
+            raise WorkflowPolicyError("post-merge Security evidence veto weakening accepted")
 
         # A Scorecard run with no read access to checks can produce misleading
         # 0/N SAST history; disallow that invisible regression (and new writes).
