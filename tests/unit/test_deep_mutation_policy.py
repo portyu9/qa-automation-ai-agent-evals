@@ -81,11 +81,26 @@ _INITIAL_PR_TARGETS = {
     "src/agent_evals/evidence/limits.py",
     "src/agent_evals/statistics/limits.py",
 }
-_APPROVED_ACTION_REFS = {
-    "3d3c42e5aac5ba805825da76410c181273ba90b1",
-    "5fda3b95a4ea91299a34e894583c3862153e4b97",
-    "043fb46d1a93c77aae656e7c1c64a875d1fc6a0a",
+_APPROVED_ACTION_IDENTITIES = {
+    "actions/checkout",
+    "actions/setup-python",
+    "actions/upload-artifact",
 }
+
+
+def _only_canonical_immutable_actions(workflow: str) -> bool:
+    """Preserve action issuers, quantity and full Git SHA without pin-version rot."""
+    uses = re.findall(r"(?m)^\s*uses:\s*([^\s#]+)", workflow)
+    parsed = [
+        re.fullmatch(r"([a-z0-9._-]+/[a-z0-9._/-]+)@([0-9a-f]{40})", ref)
+        for ref in uses
+    ]
+    return (
+        len(uses) == len(_APPROVED_ACTION_IDENTITIES)
+        and all(item is not None for item in parsed)
+        and {item.group(1) for item in parsed if item is not None}
+        == _APPROVED_ACTION_IDENTITIES
+    )
 
 
 def _load_runner() -> ModuleType:
@@ -252,9 +267,25 @@ def test_deep_workflow_is_least_privilege_exact_head_and_non_release_authority()
     assert "contents: write" not in workflow
     assert "actions: write" not in workflow
 
-    action_refs = re.findall(r"uses:\s+[^@\s]+@([^\s]+)", workflow)
-    assert set(action_refs) == _APPROVED_ACTION_REFS
-    assert all(re.fullmatch(r"[0-9a-f]{40}", ref) for ref in action_refs)
+    assert _only_canonical_immutable_actions(workflow)
+
+
+def test_deep_workflow_refusals_preserve_action_issuers_and_sha_integrity() -> None:
+    workflow = _WORKFLOW.read_text(encoding="utf-8")
+    upload = re.search(r"actions/upload-artifact@[0-9a-f]{40}", workflow)
+    assert upload is not None
+
+    for bad_ref in (
+        "actions/upload-artifact@v7.0.2",
+        "actions/upload-artifact@" + "A" * 40,
+        "attacker/upload-artifact@" + "a" * 40,
+    ):
+        assert not _only_canonical_immutable_actions(
+            workflow.replace(upload.group(), bad_ref, 1)
+        )
+    assert not _only_canonical_immutable_actions(
+        workflow + "\n        uses: attacker/extra@" + "b" * 40 + "\n"
+    )
 
 
 def test_deep_workflow_pr_trigger_is_limited_to_assurance_infrastructure() -> None:
