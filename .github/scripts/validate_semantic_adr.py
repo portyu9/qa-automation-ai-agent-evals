@@ -385,9 +385,7 @@ def self_test(policy: Policy) -> None:
     # The same upload-artifact action is annotated in ci.yml and SHA-only
     # in deep-fuzz.yml; cross-file global version grouping is not a valid
     # semantic invariant and must not force a manual-ADR false negative.
-    sha_only_fuzz = sha_only.replace(
-        ".github/workflows/ci.yml", ".github/workflows/deep-fuzz.yml"
-    )
+    sha_only_fuzz = sha_only.replace(".github/workflows/ci.yml", ".github/workflows/deep-fuzz.yml")
     mixed_group = safe_patch + sha_only_fuzz
     if not _action_pin_patch_is_safe(mixed_group):
         raise AdrPolicyError("signed mixed-comment multi-workflow action pins rejected")
