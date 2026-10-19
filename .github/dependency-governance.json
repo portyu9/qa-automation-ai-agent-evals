@@ -21,15 +21,20 @@
   ],
   "requiredWorkflows": [
     {
-      "workflow": "CI",
-      "gate": "ci-gate",
-      "file": "ci.yml",
-      "subjectInput": "subject_sha"
+      "workflow": "Security",
+      "gate": "security-gate",
+      "file": "security.yml"
     },
     {
       "workflow": "CodeQL",
       "gate": "CodeQL",
       "file": "codeql.yml"
+    },
+    {
+      "workflow": "CI",
+      "gate": "ci-gate",
+      "file": "ci.yml",
+      "subjectInput": "subject_sha"
     }
   ],
   "allowedActionUpdateTypes": [
