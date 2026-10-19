@@ -166,7 +166,7 @@ def _parse_action_change(line: str) -> tuple[str, str, tuple[int, ...] | None] |
     )
 
 
-def _action_pin_patch_is_safe(patch: str) -> bool:
+def _single_file_action_pin_patch_is_safe(patch: str) -> bool:
     removed: list[tuple[str, str, tuple[int, ...] | None]] = []
     added: list[tuple[str, str, tuple[int, ...] | None]] = []
     for raw in patch.splitlines():
@@ -206,6 +206,23 @@ def _action_pin_patch_is_safe(patch: str) -> bool:
         if next(iter(new_shas)) == next(iter(old_shas)):
             return False
     return True
+
+
+def _action_pin_patch_is_safe(patch: str) -> bool:
+    """Review each touched workflow independently, never flatten pin annotations.
+
+    GitHub's unified diff contains separate file sections. A canonical bot
+    group can contain both fully annotated workflows and SHA-only workflows,
+    while *each* file must still retain a one-for-one immutable action pin
+    identity and consistent version semantics. Treat any malformed chunk or
+    non-action line as manual review instead of compensating across files.
+    """
+    chunks = re.split(r"(?=^diff --git )", patch, flags=re.MULTILINE)
+    if chunks and chunks[0] == "":
+        chunks = chunks[1:]
+    return bool(chunks) and all(
+        bool(chunk) and _single_file_action_pin_patch_is_safe(chunk) for chunk in chunks
+    )
 
 
 def _dependabot_action_pin_exempt(
@@ -363,6 +380,31 @@ def self_test(policy: Policy) -> None:
         raise AdrPolicyError("mixed action version annotation bypassed policy")
     if _action_pin_patch_is_safe(safe_patch + "+run: echo bypass\n"):
         raise AdrPolicyError("non-action workflow change bypassed action-pin policy")
+
+    # The real signed routine-actions group spans many workflow files.
+    # The same upload-artifact action is annotated in ci.yml and SHA-only
+    # in deep-fuzz.yml; cross-file global version grouping is not a valid
+    # semantic invariant and must not force a manual-ADR false negative.
+    sha_only_fuzz = sha_only.replace(".github/workflows/ci.yml", ".github/workflows/deep-fuzz.yml")
+    mixed_group = safe_patch + sha_only_fuzz
+    if not _action_pin_patch_is_safe(mixed_group):
+        raise AdrPolicyError("signed mixed-comment multi-workflow action pins rejected")
+
+    for corrupted in (
+        mixed_group + "+run: echo bypass\n",
+        mixed_group.replace(
+            f"+uses: actions/checkout@{new_sha}\n",
+            f"+uses: evil/checkout@{new_sha}\n",
+        ),
+        mixed_group.replace(
+            f"+uses: actions/checkout@{new_sha}\n",
+            f"+uses: actions/checkout@{old_sha}\n",
+        ),
+        mixed_group + "diff --git a/.github/workflows/other.yml b/.github/workflows/other.yml\n",
+    ):
+        if _action_pin_patch_is_safe(corrupted):
+            raise AdrPolicyError("cross-file action-only policy accepted unsafe diff")
+
     workflow_change = (Change(status="M", paths=(".github/workflows/ci.yml",)),)
     if _dependabot_action_pin_exempt(
         policy,
