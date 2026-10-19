@@ -23,6 +23,20 @@ ROOT = Path(__file__).resolve().parents[2]
 WORKFLOW_DIR = ROOT / ".github" / "workflows"
 _SHA = re.compile(r"^[0-9a-f]{40}$")
 
+
+def _pinned_action_use(step: dict[str, Any], action: str) -> bool:
+    """Preserve the accepted action identity and immutable SHA without pin rot.
+
+    Exact upgraded SHA provenance is independently qualified by the trusted
+    accepted-main publisher before privileged Code Scanning publication.
+    """
+    value = step.get("uses")
+    return (
+        isinstance(value, str)
+        and re.fullmatch(re.escape(action) + r"@[0-9a-f]{40}", value) is not None
+    )
+
+
 # Validator-owned exceptions: narrowly scoped writes needed by trusted workflows.
 # This is not a permission granted by the workflow declaring itself trusted.
 # Any new entry requires review of triggers, source trust, and allowed API effects.
@@ -361,9 +375,7 @@ def _validate_codeql_fork_contract(workflow: dict[str, Any], *, path: Path) -> N
     ) or checkout.get("with") != {"persist-credentials": False}:
         raise WorkflowPolicyError(f"{path}: trusted CodeQL publisher checkout drift")
     download = steps_by_name["Download exact-run verified CodeQL SARIF"]
-    if download.get("uses") != (
-        "actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c"
-    ) or download.get("with") != {
+    if not _pinned_action_use(download, "actions/download-artifact") or download.get("with") != {
         "name": "codeql-sarif-${{ github.run_id }}",
         "path": "reports/security/codeql-source",
     }:
@@ -373,9 +385,9 @@ def _validate_codeql_fork_contract(workflow: dict[str, Any], *, path: Path) -> N
     ):
         raise WorkflowPolicyError(f"{path}: CodeQL publisher lost independent SARIF veto")
     upload = steps_by_name["Upload verified CodeQL SARIF to Code Scanning"]
-    if upload.get("uses") != (
-        "github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2"
-    ) or upload.get("with") != {"sarif_file": "reports/security/codeql-source"}:
+    if not _pinned_action_use(upload, "github/codeql-action/upload-sarif") or upload.get(
+        "with"
+    ) != {"sarif_file": "reports/security/codeql-source"}:
         raise WorkflowPolicyError(f"{path}: CodeQL publisher lost verified SARIF destination")
 
 
@@ -386,9 +398,12 @@ def _validate_codeql_pr_publication_contract(workflow: dict[str, Any], *, path: 
     if workflow.get("on") != {
         "push": {"branches": ["main"]},
         "schedule": [{"cron": "7,17,27,37,47,57 * * * *"}],
+        # Completion events merely wake the accepted-main verifier, never
+        # authorize PR code execution or consume untrusted event fields.
+        "workflow_run": {"workflows": ["CodeQL"], "types": ["completed"]},
         "workflow_dispatch": None,
     }:
-        raise WorkflowPolicyError(f"{path}: only main-owned scheduler/dispatch can publish PR SAST")
+        raise WorkflowPolicyError(f"{path}: only main-owned trusted triggers can publish PR SAST")
     if workflow.get("permissions") != {"contents": "read"}:
         raise WorkflowPolicyError(f"{path}: default authority must be read only")
     jobs = workflow.get("jobs")
@@ -446,9 +461,7 @@ def _validate_codeql_pr_publication_contract(workflow: dict[str, Any], *, path: 
         }
     ):
         raise WorkflowPolicyError(f"{path}: publisher source discovery bypass")
-    if download.get("uses") != (
-        "actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c"
-    ) or download.get("with") != {
+    if not _pinned_action_use(download, "actions/download-artifact") or download.get("with") != {
         "repository": "${{ github.repository }}",
         "run-id": "${{ steps.provenance.outputs.run_id }}",
         "name": "codeql-sarif-${{ steps.provenance.outputs.run_id }}",
@@ -476,9 +489,9 @@ def _validate_codeql_pr_publication_contract(workflow: dict[str, Any], *, path: 
     }:
         raise WorkflowPolicyError(f"{path}: post-download exact-target revalidation bypass")
 
-    if upload.get("uses") != (
-        "github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2"
-    ) or upload.get("with") != {
+    if not _pinned_action_use(upload, "github/codeql-action/upload-sarif") or upload.get(
+        "with"
+    ) != {
         "sarif_file": "reports/security/pr-codeql",
         "ref": "refs/pull/${{ steps.provenance.outputs.pr_number }}/head",
         "sha": "${{ steps.provenance.outputs.head_sha }}",
@@ -774,6 +787,8 @@ jobs:
             ('    - cron: "7,17,27,37,47,57 * * * *"', '    - cron: "*/10 * * * *"'),
             ('    - cron: "7,17,27,37,47,57 * * * *"', '    - cron: "* * * * *"'),
             ("  workflow_dispatch:", "  pull_request_target:"),
+            ("    workflows: [CodeQL]", "    workflows: [CI]"),
+            ("    types: [completed]", "    types: [requested]"),
             (
                 "        run: python3 trusted/.github/scripts/verify_codeql_pr_publication.py --discover",
                 "        run: echo bypass",
