@@ -1,4 +1,4 @@
-# ADR 0059 — Trigger independent Security before post-merge CI for governed bot merges
+# ADR 0059: Trigger independent Security before post-merge CI for governed bot merges
 
 **Status:** Accepted
 **Date:** 2026-10-19
