@@ -157,15 +157,25 @@ def main() -> int:
             errors.append(f"CI workflow is missing mandatory {name} scanner contract")
 
     scorecard_contracts = {
-        "pinned Scorecard action": "ossf/scorecard-action@2d1146689b8cda280b9bc96326124645441f03bc",
+        "pinned Scorecard action": "ossf/scorecard-action@",
         "scheduled Scorecard trigger": 'cron: "41 8 * * 2"',
-        "Scorecard SARIF upload": "github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2",
+        "Scorecard SARIF upload": "github/codeql-action/upload-sarif@",
         "post-merge genuine SARIF posture regression gate": "python3 .github/scripts/classify_scorecard_sarif.py reports/security/scorecard.sarif --report reports/security/scorecard-triage.json",
         "retained triage evidence": "reports/security/scorecard-triage.json",
     }
     for name, needle in scorecard_contracts.items():
         if needle not in scorecard_workflow_text:
             errors.append(f"Scorecard workflow is missing {name}")
+    for label, action in (
+        ("Scorecard action", "ossf/scorecard-action"),
+        ("Scorecard SARIF upload", "github/codeql-action/upload-sarif"),
+    ):
+        if re.search(
+            r"^\s*uses:\s*" + re.escape(action) + r"@[0-9a-f]{40}(?:\s+#.*)?$",
+            scorecard_workflow_text,
+            flags=re.MULTILINE,
+        ) is None:
+            errors.append(f"Scorecard workflow lost immutable SHA for {label}")
 
     governance_drift_contracts = {
         "trusted main push trigger": "branches: [main]",
