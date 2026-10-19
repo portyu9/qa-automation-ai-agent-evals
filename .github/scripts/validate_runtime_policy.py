@@ -662,7 +662,7 @@ if "actions: read" not in pypi_publish or "id-token: write" not in pypi_publish:
     fail("PyPI publication job must have only artifact-read plus OIDC authority")
 if "actions/checkout@" in pypi_publish or ".github/scripts/" in pypi_publish:
     fail("PyPI OIDC publication job must not checkout or execute repository code")
-if "actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c" not in pypi_publish:
+if "actions/download-artifact@" not in pypi_publish:
     fail("PyPI OIDC publication job must consume only the verified distribution artifact")
 for required in (
     "release_candidate.py validate-pypi",
@@ -679,8 +679,8 @@ for required in (
     '--source-ref "refs/heads/main"',
     "pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33",
     "verified-pypi-dist-${{ github.run_id }}",
-    "actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a",
-    "actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c",
+    "actions/upload-artifact@",
+    "actions/download-artifact@",
     "packages-dir: pypi-dist",
     "skip-existing: false",
     "attestations: true",

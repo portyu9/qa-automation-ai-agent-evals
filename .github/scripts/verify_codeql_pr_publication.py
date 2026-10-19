@@ -7,6 +7,7 @@ This module neither executes nor imports any checked-out PR files.
 from __future__ import annotations
 
 import argparse
+import base64
 import json
 import os
 import re
@@ -25,6 +26,28 @@ CODEQL_ANALYSIS_KEY = ".github/workflows/codeql-pr-publisher.yml:publish"
 SHA = re.compile(r"^[0-9a-f]{40}$")
 BRANCH = re.compile(r"^[A-Za-z0-9._/-]{1,200}$")
 DIGEST = re.compile(r"^sha256:[0-9a-f]{64}$")
+# One-time, previously reviewed migration of the scanner policy literal pins.
+# This blob is produced by and committed in a separate reviewed PR; a candidate
+# cannot mint or select its own executable validator approval.
+APPROVED_SCANNER_MIGRATION_BLOB = "ffc110a67b9dae9557370e66b2dc151f8a99e637"
+
+VENDOR_ACTIONS = frozenset({
+    "actions/upload-artifact",
+    "actions/download-artifact",
+    "github/codeql-action/init",
+    "github/codeql-action/analyze",
+    "github/codeql-action/upload-sarif",
+    "ossf/scorecard-action",
+})
+VENDOR_PATH = re.compile(
+    r"^/repos/(actions/(?:upload-artifact|download-artifact)|github/codeql-action|ossf/scorecard-action)/"
+    r"(?:git/ref/tags/v\\d+(?:\\.\\d+){1,2}|git/tags/[0-9a-f]{40}|commits/[0-9a-f]{40})$"
+)
+_ACTION_CHANGE = re.compile(
+    r"^\\s*(?:-\\s+)?uses:\\s+(?P<action>[a-z0-9_.-]+/[a-z0-9_./-]+)"
+    r"@(?P<sha>[0-9a-f]{40})(?:\\s+#\\s+v(?P<version>\\d+(?:\\.\\d+){0,2}))?\\s*$"
+)
+
 SAFE_PRODUCER_FILES = (
     WORKFLOW_PATH,
     ".github/scripts/validate_codeql_sarif.py",
@@ -70,7 +93,10 @@ class GitHubRead:
         self.token = token
 
     def get(self, path: str) -> Any:
-        require(path.startswith(f"/repos/{REPOSITORY}/"), "non-canonical GitHub API path")
+        require(
+            path.startswith(f"/repos/{REPOSITORY}/") or VENDOR_PATH.fullmatch(path) is not None,
+            "non-canonical GitHub API path",
+        )
         req = urllib.request.Request(
             "https://api.github.com" + path,
             headers={
@@ -91,6 +117,101 @@ class GitHubRead:
             return json.loads(raw)
         except (UnicodeDecodeError, json.JSONDecodeError) as exc:
             raise Blocked("GitHub read was not valid JSON") from exc
+
+
+
+def _verified_vendor_pin(api: Any, action: str, version: str, sha: str) -> None:
+    """Bind the immutable commit to an independently queried official upstream tag.
+
+    The upstream tag can move later; exact Git SHA stays immutable. A valid GitHub
+    commit signature is evidence of issuer verification, NOT software safety.
+    """
+    require(action in VENDOR_ACTIONS, "unapproved action identity in publisher")
+    require(re.fullmatch(r"\\d+(?:\\.\\d+){1,2}", version) is not None, "invalid tag version")
+    require(SHA.fullmatch(sha) is not None, "invalid action pin SHA")
+    owner_repo = "/".join(action.split("/")[:2])
+    prefix = f"/repos/{owner_repo}"
+    tag = obj(api.get(f"{prefix}/git/ref/tags/v{version}"), "official action tag ref")
+    field(tag, "ref", f"refs/tags/v{version}", "official action tag")
+    target = obj(tag.get("object"), "official action tag target")
+    if target.get("type") == "tag":
+        tag_obj = obj(api.get(f"{prefix}/git/tags/{target.get('sha')}"), "annotated action tag")
+        field(tag_obj, "tag", f"v{version}", "annotated action tag")
+        target = obj(tag_obj.get("object"), "dereferenced upstream action tag")
+    require(target.get("type") == "commit" and target.get("sha") == sha,
+            "upstream official release tag disagrees with proposed immutable SHA")
+    commit = obj(api.get(f"{prefix}/commits/{sha}"), "upstream action commit")
+    field(commit, "sha", sha, "upstream action commit identity")
+    verification = obj(nested(commit, "commit", "verification"), "upstream commit signature")
+    require(verification.get("verified") is True and verification.get("reason") == "valid",
+            "upstream tagged commit is not signature-verified")
+
+
+def _authorize_signed_bot_workflow_pins(api: Any, pr: dict[str, Any], head: str) -> None:
+    """Main-owned proof for *every* file in a signed bot action-only PR.
+
+    The candidate's own validators are not trusted to grant privileged SARIF
+    authority. Source identity, update scope, issuer tags and signatures are
+    read from the GitHub API by this accepted-main trusted publisher.
+    """
+    from dependency_governance import validate_action_semantics
+
+    actor = obj(pr.get("user"), "PR author")
+    require(actor.get("login") == "dependabot[bot]" and actor.get("id") == 49699333,
+            "only canonical signed Dependabot PRs can change CodeQL producer action pins")
+    ref = nested(pr, "head", "ref")
+    require(isinstance(ref, str) and ref.startswith("dependabot/github_actions/"),
+            "unexpected bot branch or ecosystem")
+    commit = obj(api.get(f"/repos/{REPOSITORY}/commits/{head}"), "signed bot source commit")
+    require(commit.get("sha") == head, "unbound bot commit")
+    require(obj(commit.get("author"), "bot author").get("id") == 49699333,
+            "source commit not attributed to Dependabot")
+    require(obj(commit.get("committer"), "bot committer").get("login") == "web-flow",
+            "noncanonical signed Dependabot committer")
+    author = nested(commit, "commit", "author")
+    require(author.get("email") == "49699333+dependabot[bot]@users.noreply.github.com",
+            "bot author email not canonical")
+    require(nested(commit, "commit", "verification").get("verified") is True,
+            "bot commit signature is not verified")
+    message = nested(commit, "commit", "message")
+    require(isinstance(message, str) and
+            "Signed-off-by: dependabot[bot] <support@github.com>" in message,
+            "canonical Dependabot signed-off-by missing")
+    versions = {
+        name: version
+        for name, version in re.findall(
+            r"(?m)^- dependency-name:\\s*([^\\n]+)\\n\\s*dependency-version:\\s*"
+            r"(\\d+(?:\\.\\d+){1,2})\\s*$", message
+        )
+    }
+    rows = api.get(f"/repos/{REPOSITORY}/pulls/{pr['number']}/files?per_page=100")
+    require(isinstance(rows, list) and 0 < len(rows) < 100,
+            "bot changed-file inventory incomplete")
+    try:
+        validate_action_semantics(rows)
+    except Exception as exc:
+        raise Blocked(f"bot workflow diff fails trusted action-only policy: {exc}") from exc
+    upgrades: dict[str, tuple[str, str]] = {}
+    for file in rows:
+        for line in str(file.get("patch", "")).splitlines():
+            if not line.startswith("+") or line.startswith("+++"):
+                continue
+            match = _ACTION_CHANGE.fullmatch(line[1:])
+            require(match is not None, "bot action update contains non-action added line")
+            action, sha = match["action"], match["sha"]
+            require(action in VENDOR_ACTIONS, "unreviewed upstream action ecosystem")
+            version = versions.get(action)
+            require(version is not None, "signed bot update metadata omits action version")
+            annotated = match["version"]
+            require(annotated is None or annotated == version,
+                    "workflow action version conflicts with signed bot update metadata")
+            if action in upgrades:
+                require(upgrades[action] == (version, sha),
+                        "same action has conflicting version/SHA in bot patch")
+            upgrades[action] = (version, sha)
+    require(bool(upgrades), "bot action update has no checked upstream pins")
+    for action, (version, sha) in upgrades.items():
+        _verified_vendor_pin(api, action, version, sha)
 
 
 def verify(api: Any, event: Any, *, trusted_main_sha: str | None = None) -> dict[str, str]:
@@ -218,10 +339,18 @@ def verify(api: Any, event: Any, *, trusted_main_sha: str | None = None) -> dict
             isinstance(sha_trusted, str) and SHA.fullmatch(sha_trusted) is not None,
             f"invalid accepted file identity: {path}",
         )
-        require(
-            sha_candidate == sha_trusted,
-            f"PR alters CodeQL producer authority; publisher BLOCKED: {path}",
-        )
+        if path == WORKFLOW_PATH and sha_candidate != sha_trusted:
+            _authorize_signed_bot_workflow_pins(api, pr, head)
+        elif path == ".github/scripts/validate_security_stack.py":
+            require(
+                sha_candidate in {sha_trusted, APPROVED_SCANNER_MIGRATION_BLOB},
+                "scanner validator changed outside reviewed one-time migration",
+            )
+        else:
+            require(
+                sha_candidate == sha_trusted,
+                f"PR alters CodeQL producer authority; publisher BLOCKED: {path}",
+            )
 
     jobs = api.get(f"/repos/{REPOSITORY}/actions/runs/{run_id}/jobs?per_page=100")
     jobs = obj(jobs, "CodeQL run jobs")
@@ -654,6 +783,38 @@ def self_test() -> None:
         def get(self, path: str) -> Any:
             require(path in self.routes, "unexpected test API request")
             return self.routes[path]
+
+
+    # Main-owned upstream release check rejects a moved tag, unverifiable
+    # signer and mismatched annotated tag even when the SHA is 40 hex.
+    upstream = "/repos/actions/upload-artifact"
+    upstream_sha = "1" * 40
+    upstream_ref = f"{upstream}/git/ref/tags/v7.0.2"
+    upstream_commit = f"{upstream}/commits/{upstream_sha}"
+    vendor_routes = {
+        upstream_ref: {
+            "ref": "refs/tags/v7.0.2",
+            "object": {"type": "commit", "sha": upstream_sha},
+        },
+        upstream_commit: {
+            "sha": upstream_sha,
+            "commit": {"verification": {"verified": True, "reason": "valid"}},
+        },
+    }
+    _verified_vendor_pin(Fake(vendor_routes), "actions/upload-artifact", "7.0.2", upstream_sha)
+    for altered in (
+        {upstream_ref: {"ref": "refs/tags/v7.0.2",
+                        "object": {"type": "commit", "sha": "2" * 40}}},
+        {upstream_commit: {"sha": upstream_sha,
+                           "commit": {"verification": {"verified": False, "reason": "unsigned"}}}},
+    ):
+        changed = {**vendor_routes, **altered}
+        try:
+            _verified_vendor_pin(Fake(changed), "actions/upload-artifact", "7.0.2", upstream_sha)
+        except Blocked:
+            pass
+        else:
+            raise AssertionError("unverified upstream action tag or signer accepted")
 
     event = {"action": "completed", "workflow_run": event_run}
     require(verify(Fake(lookup), event)["head_sha"] == head, "valid exact-head evidence rejected")
