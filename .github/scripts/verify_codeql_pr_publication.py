@@ -665,7 +665,10 @@ def discover(api: Any, *, trusted_main_sha: str | None = None) -> dict[str, str]
                 "BLOCKED pending Code Scanning inventory reconciliation, not reupload",
             )
             return result
-        if len(runs) < 100:
+        # All current heads have been classified. Never scan 300 unrelated
+        # historical runs and falsely fail with "lookback exceeded" merely
+        # because the relevant exact heads appeared on page one.
+        if seen_heads == active or len(runs) < 100:
             if blocked_heads:
                 raise Blocked(
                     f"{len(blocked_heads)} live PR head(s) have no completed-success newest "

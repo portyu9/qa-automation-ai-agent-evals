@@ -398,9 +398,12 @@ def _validate_codeql_pr_publication_contract(workflow: dict[str, Any], *, path: 
     if workflow.get("on") != {
         "push": {"branches": ["main"]},
         "schedule": [{"cron": "7,17,27,37,47,57 * * * *"}],
+        # Completion events merely wake the accepted-main verifier, never
+        # authorize PR code execution or consume untrusted event fields.
+        "workflow_run": {"workflows": ["CodeQL"], "types": ["completed"]},
         "workflow_dispatch": None,
     }:
-        raise WorkflowPolicyError(f"{path}: only main-owned scheduler/dispatch can publish PR SAST")
+        raise WorkflowPolicyError(f"{path}: only main-owned trusted triggers can publish PR SAST")
     if workflow.get("permissions") != {"contents": "read"}:
         raise WorkflowPolicyError(f"{path}: default authority must be read only")
     jobs = workflow.get("jobs")
@@ -784,6 +787,8 @@ jobs:
             ('    - cron: "7,17,27,37,47,57 * * * *"', '    - cron: "*/10 * * * *"'),
             ('    - cron: "7,17,27,37,47,57 * * * *"', '    - cron: "* * * * *"'),
             ("  workflow_dispatch:", "  pull_request_target:"),
+            ("    workflows: [CodeQL]", "    workflows: [CI]"),
+            ("    types: [completed]", "    types: [requested]"),
             (
                 "        run: python3 trusted/.github/scripts/verify_codeql_pr_publication.py --discover",
                 "        run: echo bypass",

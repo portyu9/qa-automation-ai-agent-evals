@@ -44,6 +44,16 @@ unsigned target commits BLOCK rather than silently passing. GitHub tag/signature
 verification establishes an issuer-observed release mapping at verification time,
 not intrinsic safety of upstream code or immunity to a future compromised maintainer.
 
+The trusted main publisher also accepts a **completion event** from the single
+canonical read-only CodeQL workflow as a wake-up, alongside its existing
+main-owned push/schedule/owner dispatch triggers. The wake-up never consumes
+untrusted PR event fields to identify a publish target, never checks out
+candidate code, and always re-reads exact trusted run/head/base/tree/artifact
+proof before any security-events write. Discovery terminates once every live
+head has been evaluated instead of failing spuriously against a repository
+with more than 300 historical CodeQL runs. Missing or failed newest scans
+remain explicitly BLOCKED.
+
 The reviewed scanner policy migration is staged separately; its exact Git blob SHA
 is preapproved by this accepted-main decision before the candidate can run.
 The acceptance path must still pass real CI, native PR-head CodeQL, branch rules
