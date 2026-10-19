@@ -33,7 +33,7 @@ TRUSTED_COMMITTER_EMAIL = "noreply@github.com"
 SIGNED_OFF_BY = "Signed-off-by: dependabot[bot] <support@github.com>"
 ACTION_LINE = re.compile(
     r"^\s*(?:-\s+)?uses:\s+(?P<action>[A-Za-z0-9_.-]+/[A-Za-z0-9_./-]+)"
-    r"@(?P<sha>[0-9a-f]{40})\s+#\s+v(?P<version>\d+(?:\.\d+){0,2})\s*$"
+    r"@(?P<sha>[0-9a-f]{40})(?:\s+#\s+v(?P<version>\d+(?:\.\d+){0,2}))?\s*$"
 )
 UPDATE_TYPE = re.compile(
     r"^\s*update-type:\s*(?P<kind>(?:version|security)-update:semver-(?:patch|minor|major))\s*$",
@@ -454,14 +454,16 @@ def require_unprotected_non_action_scope(
                 raise PolicyBlock(f"control-plane path requires manual review: {path}")
 
 
-def parse_action_change(line: str) -> tuple[str, str, tuple[int, ...]] | None:
+def parse_action_change(line: str) -> tuple[str, str, tuple[int, ...] | None] | None:
     match = ACTION_LINE.fullmatch(line)
     if match is None:
         return None
     return (
         match.group("action"),
         match.group("sha"),
-        tuple(int(part) for part in match.group("version").split(".")),
+        tuple(int(part) for part in match.group("version").split("."))
+        if match.group("version") is not None
+        else None,
     )
 
 
@@ -475,8 +477,8 @@ def validate_action_semantics(files: list[dict[str, Any]]) -> None:
         patch = row.get("patch")
         if not isinstance(patch, str) or not patch:
             raise PolicyBlock(f"workflow patch is unavailable or too large: {path}")
-        removed: list[tuple[str, str, tuple[int, ...]]] = []
-        added: list[tuple[str, str, tuple[int, ...]]] = []
+        removed: list[tuple[str, str, tuple[int, ...] | None]] = []
+        added: list[tuple[str, str, tuple[int, ...] | None]] = []
         for raw in patch.splitlines():
             if not raw or raw.startswith(("@@", " ", "\\")):
                 continue
@@ -510,7 +512,12 @@ def validate_action_semantics(files: list[dict[str, Any]]) -> None:
                 )
             old_v = next(iter(old_versions))
             new_v = next(iter(new_versions))
-            if new_v <= old_v:
+            if (old_v is None) != (new_v is None):
+                raise PolicyBlock(f"action version annotations must be consistently present: {action}")
+            # Older pinned workflow actions can lack version comments. The signed
+            # Dependabot source, immutable SHA changes and one-for-one action
+            # identity are enforceable; do not invent a semver claim when absent.
+            if old_v is not None and new_v is not None and new_v <= old_v:
                 raise PolicyBlock(f"action update must advance the semantic version: {action}")
             if next(iter(old_shas)) == next(iter(new_shas)):
                 raise PolicyBlock(f"action SHA did not change: {action}")
@@ -741,6 +748,19 @@ def latest_checks(api: GitHubApi, head_sha: str) -> dict[str, dict[str, Any]]:
     for row in rows:
         name = row.get("name")
         if not isinstance(name, str) or not name:
+            continue
+        # The real GitHub Code Scanning service publishes a native check also
+        # named CodeQL. It cannot replace the distinct required Actions check.
+        # Ignore ONLY the observed, verified GitHub Advanced Security app ID,
+        # exact head and slug; arbitrary newer same-name apps still veto.
+        app = row.get("app")
+        if (
+            name == "CodeQL"
+            and isinstance(app, dict)
+            and app.get("id") == 57789
+            and app.get("slug") == "github-advanced-security"
+            and row.get("head_sha") == head_sha
+        ):
             continue
         stamp = row.get("completed_at") or row.get("started_at") or ""
         prior = latest.get(name)
@@ -1354,6 +1374,12 @@ def selftest(config: dict[str, Any]) -> None:
             return self.rows
 
     require_green_checks(_ChecksApi(mandatory), signed_head, config)  # type: ignore[arg-type]
+    native_codeql = dict(
+        mandatory[1],
+        app={"id": 57789, "slug": "github-advanced-security"},
+        completed_at="2026-10-14T15:05:00Z",
+    )
+    require_green_checks(_ChecksApi([*mandatory, native_codeql]), signed_head, config)  # type: ignore[arg-type]
 
     def reject_check_history(rows: list[dict[str, Any]], context: str) -> None:
         try:
@@ -1381,6 +1407,10 @@ def selftest(config: dict[str, Any]) -> None:
         completed_at="2026-10-14T15:05:00Z",
     )
     reject_check_history([*mandatory, rogue], "newer same-name foreign check-run")
+    reject_check_history(
+        [*mandatory, dict(native_codeql, app={"id": 12345, "slug": "github-advanced-security"})],
+        "spoofed native CodeQL app identity",
+    )
     # The exact mandatory checks must be native GitHub Actions even when the
     # untrusted check is CodeQL or the aggregate CI gate, not only Package integrity.
     for i, name in enumerate(config["requiredChecks"][:-1]):
@@ -1525,6 +1555,25 @@ def selftest(config: dict[str, Any]) -> None:
         }
     ]
     validate_action_semantics(synthetic)
+    sha_only = [
+        {
+            "filename": ".github/workflows/deep-fuzz.yml",
+            "status": "modified",
+            "patch": "@@ -1 +1 @@\n-        uses: actions/upload-artifact@" + "a" * 40 + "\n"
+            "+        uses: actions/upload-artifact@" + "b" * 40 + "\n",
+        }
+    ]
+    validate_action_semantics(sha_only)
+    mixed_annotations = copy.deepcopy(sha_only)
+    mixed_annotations[0]["patch"] = mixed_annotations[0]["patch"].replace(
+        "@" + "b" * 40 + "\n", "@" + "b" * 40 + " # v7.0.2\n"
+    )
+    try:
+        validate_action_semantics(mixed_annotations)
+    except PolicyBlock:
+        pass
+    else:
+        raise GovernanceError("mismatched action version annotation admitted")
     protected_action = [
         {
             "filename": ".github/workflows/codeql.yml",
