@@ -1753,7 +1753,10 @@ dev = ["beta==2.0.0"]
     # it starts CI, whose Package integrity job independently requires that
     # Security run and both real scanner jobs.
     security_text = (ROOT / ".github/workflows/security.yml").read_text(encoding="utf-8")
-    if "  workflow_dispatch:" not in security_text or "    name: security-gate" not in security_text:
+    if (
+        "  workflow_dispatch:" not in security_text
+        or "    name: security-gate" not in security_text
+    ):
         raise GovernanceError("post-merge Security manual-dispatch and gate contract missing")
 
     exact_sha = "1" * 40
@@ -1806,9 +1809,7 @@ dev = ["beta==2.0.0"]
         "conclusion": None,
     }
     if (
-        _select_post_merge_workflow_run(
-            [canonical_security], exact_sha, security_expected, config
-        )
+        _select_post_merge_workflow_run([canonical_security], exact_sha, security_expected, config)
         != canonical_security
     ):
         raise GovernanceError("post-merge Security selector rejected canonical exact-subject run")
