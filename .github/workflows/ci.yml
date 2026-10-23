@@ -1205,6 +1205,7 @@ jobs:
           path: retained-release-statement
       - name: Reverify exact retained subjects before signing
         run: |
+          test "$GITHUB_WORKFLOW" = "ci"
           python .github/scripts/package_artifact_manifest.py verify \
             --dist-dir retained-dist \
             --repository "$GITHUB_REPOSITORY" \
@@ -1227,7 +1228,7 @@ jobs:
             --repository "$GITHUB_REPOSITORY" \
             --commit-sha "$GITHUB_SHA" \
             --ref "$GITHUB_REF" \
-            --workflow "$GITHUB_WORKFLOW" \
+            --workflow "CI" \
             --run-id "$GITHUB_RUN_ID" \
             --run-attempt "$GITHUB_RUN_ATTEMPT" \
             --event "$GITHUB_EVENT_NAME"
@@ -1240,7 +1241,7 @@ jobs:
             --repository "$GITHUB_REPOSITORY" \
             --commit-sha "$GITHUB_SHA" \
             --ref "$GITHUB_REF" \
-            --workflow "$GITHUB_WORKFLOW" \
+            --workflow "CI" \
             --run-id "$GITHUB_RUN_ID" \
             --run-attempt "$GITHUB_RUN_ATTEMPT"
       - name: Generate keyless SLSA provenance
