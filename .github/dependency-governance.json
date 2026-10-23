@@ -21,7 +21,7 @@
   ],
   "requiredWorkflows": [
     {
-      "workflow": "Security",
+      "workflow": "security",
       "gate": "security-gate",
       "file": "security.yml"
     },
@@ -31,7 +31,7 @@
       "file": "codeql.yml"
     },
     {
-      "workflow": "CI",
+      "workflow": "ci",
       "gate": "ci-gate",
       "file": "ci.yml",
       "subjectInput": "subject_sha"

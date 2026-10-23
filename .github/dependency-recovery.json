@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "enabled": true,
   "maxRunAttempts": 2,
-  "workflow": "CI",
+  "workflow": "ci",
   "aggregateJobs": [
     "ci-gate"
   ],

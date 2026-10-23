@@ -84,7 +84,7 @@ NON_TRANSIENT_SIGNATURES: tuple[tuple[str, re.Pattern[str]], ...] = (
 
 SAFE_POLICIES = {
     "portyu9/ai-qa-automation": {
-        "workflow": "CI — ƳƤ AI QA Automation Framework",
+        "workflow": "ci",
         "aggregateJobs": {"Required PR Gate"},
         "steps": {
             "Set up Python",
@@ -100,7 +100,7 @@ SAFE_POLICIES = {
         },
     },
     "portyu9/qa-automation-ai-agent-evals": {
-        "workflow": "CI",
+        "workflow": "ci",
         "aggregateJobs": {"ci-gate"},
         "steps": {
             "Set up Python",

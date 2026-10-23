@@ -20,7 +20,7 @@ CLOSURE = {
     "pip": "25.3",
     "pip-tools": "7.5.2",
     "pyproject-hooks": "1.3.3",
-    "setuptools": "84.0.0",
+    "setuptools": "84.2.1",
     "wheel": "0.48.0",
 }
 HASH = re.compile(r"--hash=sha256:([0-9a-f]{64})(?:\s|$)")
