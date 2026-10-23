@@ -169,7 +169,7 @@ def validate_config(config: dict[str, Any]) -> list[str]:
 
     expected_workflows = [
         {
-            "workflow": "Security",
+            "workflow": "security",
             "gate": "security-gate",
             "file": "security.yml",
         },
@@ -179,7 +179,7 @@ def validate_config(config: dict[str, Any]) -> list[str]:
             "file": "codeql.yml",
         },
         {
-            "workflow": "CI",
+            "workflow": "ci",
             "gate": "ci-gate",
             "file": "ci.yml",
             "subjectInput": "subject_sha",
@@ -1033,7 +1033,7 @@ def _merge(api: GitHubApi, subject: dict[str, Any], config: dict[str, Any]) -> d
     runs = _ensure_post_merge_qualification(api, merge_sha, config)
     evidence: dict[str, Any] = {"mergeSha": merge_sha, "postMergeRuns": runs}
     for run in runs:
-        if run["workflow"] == "Security":
+        if run["workflow"] == "security":
             evidence.update(
                 {
                     "securityRunId": run["runId"],
@@ -1042,7 +1042,7 @@ def _merge(api: GitHubApi, subject: dict[str, Any], config: dict[str, Any]) -> d
                     "securityStatus": run["status"],
                 }
             )
-        elif run["workflow"] == "CI":
+        elif run["workflow"] == "ci":
             evidence.update(
                 {
                     "ciRunId": run["runId"],
@@ -1868,7 +1868,7 @@ dev = ["beta==2.0.0"]
         patch(__name__ + "._ensure_post_merge_workflow", side_effect=_record_dispatch),
     ):
         receipts = _ensure_post_merge_qualification(None, exact_sha, config)  # type: ignore[arg-type]
-    if observed_dispatches != ["Security", "CodeQL", "CI"]:
+    if observed_dispatches != ["security", "CodeQL", "ci"]:
         raise GovernanceError("post-merge qualification reordered or omitted Security")
     if [r["gate"] for r in receipts] != ["security-gate", "CodeQL", "ci-gate"]:
         raise GovernanceError("post-merge receipt inventory lost independent Security gate")

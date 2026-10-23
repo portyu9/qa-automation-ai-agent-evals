@@ -55,3 +55,17 @@ Changing case does not repair a failing CI/Security check, guarantee that a
 scheduled workflow executes on time, or provide evidence that a workflow result
 is trustworthy. First-party badges are presentation only; the portfolio's
 attested evidence ledger remains its separate validation authority.
+
+## Follow-up: preserve canonical evidence identity after renaming
+
+The first native `main` CI run following this ADR passed the aggregate test gate but
+failed its retained qualification job: `GITHUB_WORKFLOW` became `ci`, while the
+canonical signed release/CI qualification evidence schema continues to require
+`CI`. They are separate identities. The production workflow now proves the exact
+native `ci` display name before passing the unchanged `CI` internal evidence
+identity to qualification and release-statement tools. This preserves historical
+release-evidence schema compatibility without accepting an alias in attested
+inputs. GitHub Actions API consumers, recovery selectors, and governed
+Dependabot configuration match the new exact native display identities (`ci`
+and `security`) instead. Negative tests and contracts retain fail-closed name
+checks and prohibit arbitrary aliasing.

@@ -1029,11 +1029,12 @@ jobs:
           python-version: "3.11"
       - name: Create canonical CI qualification evidence
         run: |
+          test "$GITHUB_WORKFLOW" = "ci"
           python .github/scripts/ci_qualification_evidence.py create \
             --repository "$GITHUB_REPOSITORY" \
             --commit-sha "$GITHUB_SHA" \
             --ref "$GITHUB_REF" \
-            --workflow "$GITHUB_WORKFLOW" \
+            --workflow "CI" \
             --run-id "$GITHUB_RUN_ID" \
             --run-attempt "$GITHUB_RUN_ATTEMPT" \
             --event "$GITHUB_EVENT_NAME" \
@@ -1057,12 +1058,13 @@ jobs:
             --output qualification/ci-qualification-evidence.json
       - name: Reverify canonical CI qualification evidence before retention
         run: |
+          test "$GITHUB_WORKFLOW" = "ci"
           python .github/scripts/ci_qualification_evidence.py verify \
             --evidence qualification/ci-qualification-evidence.json \
             --repository "$GITHUB_REPOSITORY" \
             --commit-sha "$GITHUB_SHA" \
             --ref "$GITHUB_REF" \
-            --workflow "$GITHUB_WORKFLOW" \
+            --workflow "CI" \
             --run-id "$GITHUB_RUN_ID" \
             --run-attempt "$GITHUB_RUN_ATTEMPT" \
             --event "$GITHUB_EVENT_NAME"
@@ -1112,6 +1114,7 @@ jobs:
           path: retained-qualification
       - name: Create canonical release statement
         run: |
+          test "$GITHUB_WORKFLOW" = "ci"
           python .github/scripts/release_statement.py create \
             --repo-root . \
             --package-dir retained-dist \
@@ -1120,12 +1123,13 @@ jobs:
             --repository "$GITHUB_REPOSITORY" \
             --commit-sha "$GITHUB_SHA" \
             --ref "$GITHUB_REF" \
-            --workflow "$GITHUB_WORKFLOW" \
+            --workflow "CI" \
             --run-id "$GITHUB_RUN_ID" \
             --run-attempt "$GITHUB_RUN_ATTEMPT" \
             --output release-statement/release-statement.json
       - name: Reverify canonical release statement before retention
         run: |
+          test "$GITHUB_WORKFLOW" = "ci"
           python .github/scripts/release_statement.py verify \
             --statement release-statement/release-statement.json \
             --repo-root . \
@@ -1135,7 +1139,7 @@ jobs:
             --repository "$GITHUB_REPOSITORY" \
             --commit-sha "$GITHUB_SHA" \
             --ref "$GITHUB_REF" \
-            --workflow "$GITHUB_WORKFLOW" \
+            --workflow "CI" \
             --run-id "$GITHUB_RUN_ID" \
             --run-attempt "$GITHUB_RUN_ATTEMPT"
       - name: Upload retained release statement

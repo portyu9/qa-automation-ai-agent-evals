@@ -15,7 +15,7 @@ from typing import Any
 CANDIDATE_SCHEMA = "agent-evals/release-candidate/v1"
 DISPATCH_TYPE = "release-request"
 PYPI_DISPATCH_TYPE = "pypi-publish-request"
-CI_WORKFLOW_NAME = "CI"
+CI_WORKFLOW_NAME = "ci"
 CI_WORKFLOW_PATH = ".github/workflows/ci.yml"
 REPRODUCIBILITY_JOB_NAME = "Reproduce package artifacts independently"
 SUPPLY_CHAIN_JOB_NAME = "Reverify release supply-chain evidence"

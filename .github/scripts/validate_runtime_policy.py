@@ -1000,6 +1000,7 @@ for job in (*REQUIRED_JOBS, "ci-gate", "protected-gate"):
     if not any(reference in qualification_evidence for reference in needs_result_reference(job)):
         fail(f"qualification-evidence must bind the exact {job} result")
 for required in (
+    'test "$GITHUB_WORKFLOW" = "ci"',
     "ci_qualification_evidence.py create",
     "ci_qualification_evidence.py verify",
     "qualification/ci-qualification-evidence.json",
@@ -1007,7 +1008,7 @@ for required in (
     '--repository "$GITHUB_REPOSITORY"',
     '--commit-sha "$GITHUB_SHA"',
     '--ref "$GITHUB_REF"',
-    '--workflow "$GITHUB_WORKFLOW"',
+    '--workflow "CI"',
     '--run-id "$GITHUB_RUN_ID"',
     '--run-attempt "$GITHUB_RUN_ATTEMPT"',
     '--event "$GITHUB_EVENT_NAME"',
@@ -1034,6 +1035,7 @@ for dependency in ("package", "release-supply-chain-reverify", "qualification-ev
 if "      - release-statement\n" in release_statement:
     fail("release-statement must not depend on itself")
 for required in (
+    'test "$GITHUB_WORKFLOW" = "ci"',
     "release_statement.py create",
     "release_statement.py verify",
     "package-artifacts-${{ github.run_id }}",
@@ -1044,7 +1046,7 @@ for required in (
     '--repository "$GITHUB_REPOSITORY"',
     '--commit-sha "$GITHUB_SHA"',
     '--ref "$GITHUB_REF"',
-    '--workflow "$GITHUB_WORKFLOW"',
+    '--workflow "CI"',
     '--run-id "$GITHUB_RUN_ID"',
     '--run-attempt "$GITHUB_RUN_ATTEMPT"',
 ):
