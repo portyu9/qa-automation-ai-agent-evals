@@ -1138,10 +1138,7 @@ for identity in ("ci_qualification_evidence.py verify", "release_statement.py ve
         .split("          python .github/scripts/", 1)[0]
         .split("      - name:", 1)[0]
     )
-    if (
-        segment.count('--workflow "CI"') != 1
-        or '--workflow "$GITHUB_WORKFLOW"' in segment
-    ):
+    if segment.count('--workflow "CI"') != 1 or '--workflow "$GITHUB_WORKFLOW"' in segment:
         fail(f"attestation signer internal evidence identity is not canonical: {identity}")
 
 if "release-provenance" in REQUIRED_JOBS:
