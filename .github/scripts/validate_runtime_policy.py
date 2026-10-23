@@ -1122,6 +1122,17 @@ for required in (
         fail(f"release-provenance is missing required contract text: {required}")
 if "github.event.pull_request" in release_provenance:
     fail("release-provenance must not derive signing authority from pull-request context")
+if release_provenance.count('test "$GITHUB_WORKFLOW" = "ci"') != 1:
+    fail("attestation must require exact native lowercase ci workflow identity")
+if release_provenance.count('--workflow "CI"') != 2:
+    fail("attestation qualification and statement must retain exactly two canonical CI evidence identities")
+if release_provenance.count('--workflow "$GITHUB_WORKFLOW"') != 2:
+    fail("attestation package and supply-chain provenance must retain exactly two native workflow identities")
+for identity in ("ci_qualification_evidence.py verify", "release_statement.py verify"):
+    segment = release_provenance.split(identity, 1)[1].split("          python .github/scripts/", 1)[0].split("      - name:", 1)[0]
+    if segment.count('--workflow "CI"') != 1 or '--workflow "$GITHUB_WORKFLOW"' in segment:
+        fail(f"attestation signer internal evidence identity is not canonical: {identity}")
+
 if "release-provenance" in REQUIRED_JOBS:
     fail("release-provenance must not become a PR-required ci-gate dependency")
 
