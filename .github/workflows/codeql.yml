@@ -41,13 +41,13 @@ jobs:
           python3 .github/scripts/validate_codeql_sarif_selfcheck.py
           python3 .github/scripts/validate_security_stack.py
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@24c54180a607b1449ed407dd24f251e4e9147c8d # v4.38.3
+        uses: github/codeql-action/init@6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee # v4.39.0
         with:
           languages: python,actions
           queries: security-extended
       - name: Analyze
         id: analyze-source
-        uses: github/codeql-action/analyze@24c54180a607b1449ed407dd24f251e4e9147c8d # v4.38.3
+        uses: github/codeql-action/analyze@6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee # v4.39.0
         with:
           output: reports/security/codeql-source
           # Never upload from a job that executes checked-out PR scripts.
@@ -90,6 +90,6 @@ jobs:
       - name: Reverify retained CodeQL zero-alert evidence
         run: python3 .github/scripts/validate_codeql_sarif.py reports/security/codeql-source
       - name: Upload verified CodeQL SARIF to Code Scanning
-        uses: github/codeql-action/upload-sarif@24c54180a607b1449ed407dd24f251e4e9147c8d # v4.38.3
+        uses: github/codeql-action/upload-sarif@6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee # v4.39.0
         with:
           sarif_file: reports/security/codeql-source
