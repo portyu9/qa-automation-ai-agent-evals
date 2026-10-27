@@ -72,9 +72,7 @@ ZIZMOR_STEP = re.compile(
 
 def zizmor_contract_is_secure(source: str) -> bool:
     """Require exactly one immutable-SHA scanner step and all secure options."""
-    return len(ZIZMOR_USES.findall(source)) == 1 and len(
-        ZIZMOR_STEP.findall(source)
-    ) == 1
+    return len(ZIZMOR_USES.findall(source)) == 1 and len(ZIZMOR_STEP.findall(source)) == 1
 
 
 def zizmor_adversarial_self_test(source: str) -> None:
@@ -89,15 +87,12 @@ def zizmor_adversarial_self_test(source: str) -> None:
             "zizmorcore/zizmor-action@", "attacker/zizmor-action@", 1
         ),
         "mutable action ref": source.replace(matched.group("sha"), "main", 1),
-        "abbreviated SHA": source.replace(
-            matched.group("sha"), matched.group("sha")[:12], 1
-        ),
-        "unversioned action": source.replace(
-            " # v" + matched.group("release"), "", 1
-        ),
+        "abbreviated SHA": source.replace(matched.group("sha"), matched.group("sha")[:12], 1),
+        "unversioned action": source.replace(" # v" + matched.group("release"), "", 1),
         "missing scanner": source.replace(matched.group(0), "", 1),
         "duplicate scanner": source
-        + "\n        uses: zizmorcore/zizmor-action@" + matched.group("sha"),
+        + "\n        uses: zizmorcore/zizmor-action@"
+        + matched.group("sha"),
         "online audits enabled": source.replace(
             '          online-audits: "false"', '          online-audits: "true"', 1
         ),
