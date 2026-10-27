@@ -1144,7 +1144,9 @@ def _next_native_refresh_action(
         try:
             recovered = _parse_time(owned["recreate"][0].get("created_at"))
         except PolicyBlock as exc:
-            raise PolicyBlock("owner native recreate evidence lacks an authentic timestamp") from exc
+            raise PolicyBlock(
+                "owner native recreate evidence lacks an authentic timestamp"
+            ) from exc
         if recovered > now or (recovered - issued).total_seconds() < threshold:
             raise PolicyBlock("owner native recreate does not follow the bounded rebase interval")
         return None
