@@ -1090,7 +1090,6 @@ def _verified_owner_token(api: GitHubApi, config: dict[str, Any]) -> str:
     return token
 
 
-
 def _next_native_refresh_action(
     comments: list[dict[str, Any]],
     head_sha: str,
@@ -1193,9 +1192,15 @@ def _request_stale_dependabot_refresh(
         # Re-establish exact leases immediately before issuing either
         # native-only command; a stale candidate must never be promoted.
         latest = api.get(f"/pulls/{number}")
-        if require_sha(((latest or {}).get("head") or {}).get("sha"), "latest head SHA") != head_sha:
+        if (
+            require_sha(((latest or {}).get("head") or {}).get("sha"), "latest head SHA")
+            != head_sha
+        ):
             raise PolicyBlock("Dependabot head moved before native recovery command")
-        if require_sha(((latest or {}).get("base") or {}).get("sha"), "latest base SHA") != base_sha:
+        if (
+            require_sha(((latest or {}).get("base") or {}).get("sha"), "latest base SHA")
+            != base_sha
+        ):
             raise PolicyBlock("Dependabot base moved before native recovery command")
         if _live_main_sha(api, config) != live_sha:
             raise PolicyBlock("accepted main moved before native recovery command")
