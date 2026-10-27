@@ -49,6 +49,30 @@ requirements before a normal protected merge. Then retire this exception
 with another separately protected source-only PR, not by reverting or
 weakening the validated scanner.
 
+## Bounded native CodeQL evidence liveness
+
+The exact-head certificate's own protected CI revealed a separate
+production race. The read-only native CodeQL gate treated any authentic
+`queued` or `in_progress` check as immediate `Blocked`, even though its
+existing polling loop already distinguishes temporary `Pending` and
+hard security failures. The trusted main-owned SARIF publisher later
+successfully published PR #419's original CodeQL result, but early
+Package integrity had already exited before native CodeQL finished.
+
+Extend only the existing read-only native validation module so precisely
+an authenticated exact-head CodeQL check with status `queued` or
+`in_progress` and null conclusion is `Pending`, never `SUCCESS`.
+The preexisting finite retry budget still limits polling. Invalid
+status/conclusion pairings, wrong app/ref/SHA, completed failure,
+neutral scans, ambiguous rows, missing or invalid SARIF and stale
+main remain fail-closed. Deterministic adversarial tests explicitly
+verify both pending states are retries and forged completed states
+are hard vetoes. No new workflow, permissions or retry bypass is added.
+The additional source's accepted blob was
+`af804d2728e8066ab3d9b3577cfaed74fc86f646`.
+This separate liveness correction does not weaken the scanner
+source-blob preauthorization or alter the frozen PR #418 scanner blob.
+
 ## Consequences
 
 The certificate cannot promote an arbitrary 40-hex candidate source,
