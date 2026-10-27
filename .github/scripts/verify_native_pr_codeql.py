@@ -301,18 +301,18 @@ def self_test() -> None:
     # Real in-progress native checks must consume the bounded retry lease,
     # never qualify an unfinished scan or ignore its eventual failure.
     for state in ("queued", "in_progress"):
-        for waiting in (dict(valid, status=state, conclusion=None),):
-            try:
-                validate_snapshot(
-                    **{
-                        **params,
-                        "native_checks": {"total_count": 1, "check_runs": [waiting]},
-                    }
-                )
-            except Pending:
-                pass
-            else:
-                raise AssertionError("unfinished exact-head native CodeQL did not wait")
+        waiting = dict(valid, status=state, conclusion=None)
+        try:
+            validate_snapshot(
+                **{
+                    **params,
+                    "native_checks": {"total_count": 1, "check_runs": [waiting]},
+                }
+            )
+        except Pending:
+            pass
+        else:
+            raise AssertionError("unfinished exact-head native CodeQL did not wait")
     for forged in (
         dict(valid, status="in_progress", conclusion="success"),
         dict(valid, status="queued", conclusion="failure"),
