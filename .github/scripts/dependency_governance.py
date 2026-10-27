@@ -1518,7 +1518,7 @@ def selftest(config: dict[str, Any]) -> None:
     ):
         expected = "rebase" if "rebase" in mutated["body"] else "recreate"
         parent = [] if expected == "rebase" else [overdue]
-        if next_step(parent + [mutated]) != expected:
+        if next_step([*parent, mutated]) != expected:
             raise GovernanceError("App-attributed owner comment consumed native recovery")
 
     for invalid_delay in (0, 29, 1441, True, "120"):
