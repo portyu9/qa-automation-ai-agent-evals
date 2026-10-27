@@ -325,8 +325,8 @@ def self_test() -> None:
                     "native_checks": {"total_count": 1, "check_runs": [forged]},
                 }
             )
-        except Pending:
-            raise AssertionError("forged native CodeQL terminal state used retry lease")
+        except Pending as exc:
+            raise AssertionError("forged native CodeQL terminal state used retry lease") from exc
         except Blocked:
             pass
         else:
