@@ -1124,12 +1124,14 @@ def _next_native_refresh_action(
             continue
         for action, marker in markers.items():
             if marker in body:
+                if not body.startswith(f"@dependabot {action}\n\n"):
+                    raise PolicyBlock("owner Dependabot marker is not an actual native command")
                 owned[action].append(row)
     if any(len(items) > 1 for items in owned.values()):
         raise GovernanceError("duplicate owner commands for the same exact bot head and main")
-    if owned["recreate"]:
-        return None
     if not owned["rebase"]:
+        if owned["recreate"]:
+            raise PolicyBlock("native recreate lacks a prior authenticated rebase request")
         return "rebase"
     try:
         issued = _parse_time(owned["rebase"][0].get("created_at"))
@@ -1138,6 +1140,14 @@ def _next_native_refresh_action(
     if issued > now:
         raise PolicyBlock("owner Dependabot rebase timestamp is in the future")
     threshold = config["nativeRefreshEscalationMinutes"] * 60
+    if owned["recreate"]:
+        try:
+            recovered = _parse_time(owned["recreate"][0].get("created_at"))
+        except PolicyBlock as exc:
+            raise PolicyBlock("owner native recreate evidence lacks an authentic timestamp") from exc
+        if recovered > now or (recovered - issued).total_seconds() < threshold:
+            raise PolicyBlock("owner native recreate does not follow the bounded rebase interval")
+        return None
     return "recreate" if (now - issued).total_seconds() >= threshold else None
 
 
@@ -1419,13 +1429,13 @@ def selftest(config: dict[str, Any]) -> None:
     recreate_marker = f"{OWNER_RECOVERY_MARKER}{signed}:{accepted}:recreate -->"
     rebase = {
         "user": verified_owner,
-        "body": "@dependabot rebase\\n" + rebase_marker,
+        "body": "@dependabot rebase\n\n" + rebase_marker,
         "created_at": "2026-10-27T16:00:00Z",
     }
     overdue = dict(rebase, created_at="2026-10-27T14:00:00Z")
     recovery = {
         "user": verified_owner,
-        "body": "@dependabot recreate\\n" + recreate_marker,
+        "body": "@dependabot recreate\n\n" + recreate_marker,
         "created_at": "2026-10-27T16:30:00Z",
     }
 
@@ -1460,6 +1470,10 @@ def selftest(config: dict[str, Any]) -> None:
         [dict(rebase, created_at="2026-10-27T18:00:00Z")],
         [dict(rebase, created_at="invalid")],
         [dict(rebase, created_at=None)],
+        [dict(overdue, body="quoted " + rebase_marker)],
+        [recovery],
+        [overdue, dict(recovery, created_at="2026-10-27T14:30:00Z")],
+        [overdue, dict(recovery, created_at="2026-10-27T18:00:00Z")],
     ):
         try:
             next_step(bad_rows)
