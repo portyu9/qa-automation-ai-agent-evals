@@ -48,6 +48,7 @@ MAX_MANIFEST_BYTES = 256 * 1024
 OWNER_REVIEW_MARKER = "<!-- dependency-governance:owner-review:"
 OWNER_APPROVAL_MARKER = "<!-- dependency-governance:owner-approval:"
 OWNER_REFRESH_MARKER = "<!-- dependency-governance:owner-refresh:"
+OWNER_RECOVERY_MARKER = "<!-- dependency-governance:owner-recovery:"
 # Security-control files acquired since the original Dependabot governance
 # contract. These are not themselves bot-editable authority declarations.
 # The existing reviewed action-pin-only workflow exception remains separate.
@@ -117,6 +118,13 @@ def validate_config(config: dict[str, Any]) -> list[str]:
     owner_id = config.get("ownerApprovalUserId")
     if not isinstance(owner_id, int) or isinstance(owner_id, bool) or owner_id <= 0:
         errors.append("ownerApprovalUserId must be a positive integer")
+    escalation_minutes = config.get("nativeRefreshEscalationMinutes")
+    if (
+        not isinstance(escalation_minutes, int)
+        or isinstance(escalation_minutes, bool)
+        or not 30 <= escalation_minutes <= 1440
+    ):
+        errors.append("nativeRefreshEscalationMinutes must be an integer from 30 to 1440")
     if config.get("pipMode") != "exact-subject-green":
         errors.append("pipMode must equal exact-subject-green")
     if config.get("pipManifestPaths") != ["pyproject.toml"]:
@@ -1082,6 +1090,58 @@ def _verified_owner_token(api: GitHubApi, config: dict[str, Any]) -> str:
     return token
 
 
+
+def _next_native_refresh_action(
+    comments: list[dict[str, Any]],
+    head_sha: str,
+    main_sha: str,
+    config: dict[str, Any],
+    *,
+    now: datetime,
+) -> str | None:
+    """At most one owner-authorized command per exact signed head and accepted main.
+
+    An untrusted commenter cannot trigger escalation. The second request is
+    finite and only asks Dependabot itself to issue a fresh, signed branch;
+    neither this controller nor an owner token ever edits the bot branch.
+    """
+    markers = {
+        "rebase": f"{OWNER_REFRESH_MARKER}{head_sha}:{main_sha}:rebase -->",
+        "recreate": f"{OWNER_RECOVERY_MARKER}{head_sha}:{main_sha}:recreate -->",
+    }
+    owned: dict[str, list[dict[str, Any]]] = {"rebase": [], "recreate": []}
+    for row in comments:
+        if not isinstance(row, dict):
+            raise GovernanceError("Dependabot owner command evidence is malformed")
+        actor = row.get("user") or {}
+        if (
+            not isinstance(actor, dict)
+            or actor.get("login") != config["ownerApprovalLogin"]
+            or actor.get("id") != config["ownerApprovalUserId"]
+        ):
+            continue
+        body = row.get("body")
+        if not isinstance(body, str):
+            continue
+        for action, marker in markers.items():
+            if marker in body:
+                owned[action].append(row)
+    if any(len(items) > 1 for items in owned.values()):
+        raise GovernanceError("duplicate owner commands for the same exact bot head and main")
+    if owned["recreate"]:
+        return None
+    if not owned["rebase"]:
+        return "rebase"
+    try:
+        issued = _parse_time(owned["rebase"][0].get("created_at"))
+    except PolicyBlock as exc:
+        raise PolicyBlock("owner Dependabot rebase evidence lacks an authentic timestamp") from exc
+    if issued > now:
+        raise PolicyBlock("owner Dependabot rebase timestamp is in the future")
+    threshold = config["nativeRefreshEscalationMinutes"] * 60
+    return "recreate" if (now - issued).total_seconds() >= threshold else None
+
+
 def _request_stale_dependabot_refresh(
     api: GitHubApi, pr: dict[str, Any], config: dict[str, Any]
 ) -> bool:
@@ -1125,29 +1185,31 @@ def _request_stale_dependabot_refresh(
         raise PolicyBlock("main changed before owner-authenticated refresh; retry reconciliation")
 
     owner_token = _verified_owner_token(api, config)
-    marker = f"{OWNER_REFRESH_MARKER}{head_sha}:{live_sha}:rebase -->"
     comments = api.list_all(f"/issues/{number}/comments", max_pages=config["maxPaginationPages"])
-    matches = [
-        row
-        for row in comments
-        if marker in str(row.get("body") or "")
-        and (row.get("user") or {}).get("login") == config["ownerApprovalLogin"]
-        and (row.get("user") or {}).get("id") == config["ownerApprovalUserId"]
-    ]
-    if len(matches) > 1:
-        raise GovernanceError(
-            f"PR #{number} has duplicate owner refresh commands for the same exact head"
-        )
-    if not matches:
+    action = _next_native_refresh_action(
+        comments, head_sha, live_sha, config, now=datetime.now(UTC)
+    )
+    if action is not None:
+        # Re-establish exact leases immediately before issuing either
+        # native-only command; a stale candidate must never be promoted.
+        latest = api.get(f"/pulls/{number}")
+        if require_sha(((latest or {}).get("head") or {}).get("sha"), "latest head SHA") != head_sha:
+            raise PolicyBlock("Dependabot head moved before native recovery command")
+        if require_sha(((latest or {}).get("base") or {}).get("sha"), "latest base SHA") != base_sha:
+            raise PolicyBlock("Dependabot base moved before native recovery command")
+        if _live_main_sha(api, config) != live_sha:
+            raise PolicyBlock("accepted main moved before native recovery command")
+        marker_prefix = OWNER_REFRESH_MARKER if action == "rebase" else OWNER_RECOVERY_MARKER
+        marker = f"{marker_prefix}{head_sha}:{live_sha}:{action} -->"
         api.post(
             f"/issues/{number}/comments",
             {
                 "body": (
-                    "@dependabot rebase\n\n"
+                    f"@dependabot {action}\n\n"
                     f"{marker}\n"
-                    "Requested by the configured push-capable repository owner because this exact "
-                    "Dependabot proposal is no longer based on current main. Qualification restarts "
-                    "on the new exact head; no merge, review, or security gate is bypassed."
+                    "Owner-authenticated, exact-head Dependabot recovery request. "
+                    "Only Dependabot may recreate its native signed release commit; "
+                    "no bot branch rewrite, check waiver, approval or merge is authorized."
                 )
             },
             token=owner_token,
@@ -1338,6 +1400,72 @@ def selftest(config: dict[str, Any]) -> None:
     errors = validate_config(config)
     if errors:
         raise GovernanceError("config self-test failed: " + "; ".join(errors))
+
+    # Native bot recovery is bounded, repeat-safe and authenticated by the
+    # exact owner login AND immutable numeric identity; no bot branch mutation.
+    stamp = datetime(2026, 10, 27, 17, 0, tzinfo=UTC)
+    signed = "a" * 40
+    accepted = "b" * 40
+    verified_owner = {
+        "login": config["ownerApprovalLogin"],
+        "id": config["ownerApprovalUserId"],
+    }
+    rebase_marker = f"{OWNER_REFRESH_MARKER}{signed}:{accepted}:rebase -->"
+    recreate_marker = f"{OWNER_RECOVERY_MARKER}{signed}:{accepted}:recreate -->"
+    rebase = {
+        "user": verified_owner,
+        "body": "@dependabot rebase\\n" + rebase_marker,
+        "created_at": "2026-10-27T16:00:00Z",
+    }
+    overdue = dict(rebase, created_at="2026-10-27T14:00:00Z")
+    recovery = {
+        "user": verified_owner,
+        "body": "@dependabot recreate\\n" + recreate_marker,
+        "created_at": "2026-10-27T16:30:00Z",
+    }
+
+    def next_step(rows: list[dict[str, Any]]) -> str | None:
+        return _next_native_refresh_action(rows, signed, accepted, config, now=stamp)
+
+    for rows, expected in (
+        ([], "rebase"),
+        ([rebase], None),
+        ([overdue], "recreate"),
+        ([overdue, recovery], None),
+        ([dict(overdue, user={"login": "not-owner", "id": 9})], "rebase"),
+        ([dict(overdue, user={"login": verified_owner["login"], "id": 9})], "rebase"),
+        ([dict(overdue, user={"login": "not-owner", "id": verified_owner["id"]})], "rebase"),
+        ([dict(overdue, body=rebase_marker.replace(signed, "c" * 40))], "rebase"),
+        ([dict(overdue, body=rebase_marker.replace(accepted, "d" * 40))], "rebase"),
+    ):
+        if next_step(rows) != expected:
+            raise GovernanceError("native Dependabot escalation state machine violated")
+
+    for bad_rows in (
+        [overdue, dict(overdue)],
+        [overdue, recovery, dict(recovery)],
+    ):
+        try:
+            next_step(bad_rows)
+        except GovernanceError:
+            pass
+        else:
+            raise GovernanceError("duplicate owner-native recovery command was accepted")
+    for bad_rows in (
+        [dict(rebase, created_at="2026-10-27T18:00:00Z")],
+        [dict(rebase, created_at="invalid")],
+        [dict(rebase, created_at=None)],
+    ):
+        try:
+            next_step(bad_rows)
+        except PolicyBlock:
+            pass
+        else:
+            raise GovernanceError("unverifiable native refresh timestamp permitted recovery")
+    for invalid_delay in (0, 29, 1441, True, "120"):
+        changed = dict(config, nativeRefreshEscalationMinutes=invalid_delay)
+        if not validate_config(changed):
+            raise GovernanceError("unbounded or malformed Dependabot escalation delay accepted")
 
     # Regression proof: each newly accepted SAST/governance authority path
     # is pinned by the validator and manual-review scope, even if edited
