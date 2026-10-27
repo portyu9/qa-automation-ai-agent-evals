@@ -954,13 +954,43 @@ def self_test() -> None:
         "exact trusted-main prior-authorized scanner candidate was rejected",
     )
     for label, mutated, path, old_blob, new_blob in (
-        ("wrong PR", {**approved, "number": 419}, scanner_path, PR418_SCANNER_PREVIOUS_BLOB, PR418_SCANNER_APPROVED_BLOB),
-        ("boolean PR", {**approved, "number": True}, scanner_path, PR418_SCANNER_PREVIOUS_BLOB, PR418_SCANNER_APPROVED_BLOB),
-        ("wrong owner", {**approved, "user": {"login": "attacker", "id": 35150859}}, scanner_path, PR418_SCANNER_PREVIOUS_BLOB, PR418_SCANNER_APPROVED_BLOB),
-        ("wrong owner ID", {**approved, "user": {"login": "portyu9", "id": 1}}, scanner_path, PR418_SCANNER_PREVIOUS_BLOB, PR418_SCANNER_APPROVED_BLOB),
+        (
+            "wrong PR",
+            {**approved, "number": 419},
+            scanner_path,
+            PR418_SCANNER_PREVIOUS_BLOB,
+            PR418_SCANNER_APPROVED_BLOB,
+        ),
+        (
+            "boolean PR",
+            {**approved, "number": True},
+            scanner_path,
+            PR418_SCANNER_PREVIOUS_BLOB,
+            PR418_SCANNER_APPROVED_BLOB,
+        ),
+        (
+            "wrong owner",
+            {**approved, "user": {"login": "attacker", "id": 35150859}},
+            scanner_path,
+            PR418_SCANNER_PREVIOUS_BLOB,
+            PR418_SCANNER_APPROVED_BLOB,
+        ),
+        (
+            "wrong owner ID",
+            {**approved, "user": {"login": "portyu9", "id": 1}},
+            scanner_path,
+            PR418_SCANNER_PREVIOUS_BLOB,
+            PR418_SCANNER_APPROVED_BLOB,
+        ),
         ("wrong preimage", approved, scanner_path, "a" * 40, PR418_SCANNER_APPROVED_BLOB),
         ("wrong candidate blob", approved, scanner_path, PR418_SCANNER_PREVIOUS_BLOB, "b" * 40),
-        ("other producer input", approved, WORKFLOW_PATH, PR418_SCANNER_PREVIOUS_BLOB, PR418_SCANNER_APPROVED_BLOB),
+        (
+            "other producer input",
+            approved,
+            WORKFLOW_PATH,
+            PR418_SCANNER_PREVIOUS_BLOB,
+            PR418_SCANNER_APPROVED_BLOB,
+        ),
     ):
         require(
             not prior_approved_scanner_pr418(mutated, path, old_blob, new_blob),
