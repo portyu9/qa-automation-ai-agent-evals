@@ -127,9 +127,14 @@ def validate_snapshot(
     if native:
         check = native[0]
         require(check.get("head_sha") == head_sha, "native CodeQL checked a different SHA")
-        require(check.get("status") == "completed", "native CodeQL has not completed")
+        status, conclusion = check.get("status"), check.get("conclusion")
+        if status in {"queued", "in_progress"} and conclusion is None:
+            # Only actual nonterminal, null-conclusion native checks may use
+            # the existing bounded Pending retry; never accept them as PASS.
+            raise Pending("native CodeQL still running on exact PR head")
+        require(status == "completed", "native CodeQL has invalid terminal state")
         # Unlike Scorecard's historical count, NEUTRAL is not a security approval.
-        require(check.get("conclusion") == "success", "native CodeQL is not genuinely SUCCESS")
+        require(conclusion == "success", "native CodeQL is not genuinely SUCCESS")
 
     require(isinstance(analyses, list) and len(analyses) < 100, "Code Scanning analyses incomplete")
     ref = f"refs/pull/{pr_number}/head"
@@ -292,6 +297,40 @@ def self_test() -> None:
     rejected(native_checks={"total_count": 0, "check_runs": []}, analyses=[])
     rejected(native_checks={"total_count": 1, "check_runs": [dict(valid, conclusion="neutral")]})
     rejected(native_checks={"total_count": 1, "check_runs": [dict(valid, status="queued")]})
+
+    # Real in-progress native checks must consume the bounded retry lease,
+    # never qualify an unfinished scan or ignore its eventual failure.
+    for state in ("queued", "in_progress"):
+        for waiting in (dict(valid, status=state, conclusion=None),):
+            try:
+                validate_snapshot(
+                    **{
+                        **params,
+                        "native_checks": {"total_count": 1, "check_runs": [waiting]},
+                    }
+                )
+            except Pending:
+                pass
+            else:
+                raise AssertionError("unfinished exact-head native CodeQL did not wait")
+    for forged in (
+        dict(valid, status="in_progress", conclusion="success"),
+        dict(valid, status="queued", conclusion="failure"),
+        dict(valid, status="unknown", conclusion=None),
+    ):
+        try:
+            validate_snapshot(
+                **{
+                    **params,
+                    "native_checks": {"total_count": 1, "check_runs": [forged]},
+                }
+            )
+        except Pending:
+            raise AssertionError("forged native CodeQL terminal state used retry lease")
+        except Blocked:
+            pass
+        else:
+            raise AssertionError("forged native CodeQL terminal state passed")
     rejected(native_checks={"total_count": 1, "check_runs": [dict(valid, head_sha="c" * 40)]})
     rejected(native_checks={"total_count": 1, "check_runs": [dict(valid, conclusion="failure")]})
     rejected(
