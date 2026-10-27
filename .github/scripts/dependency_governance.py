@@ -1124,6 +1124,13 @@ def _next_native_refresh_action(
             continue
         for action, marker in markers.items():
             if marker in body:
+                # An App-attributed comment may display the owner login/ID
+                # without being a native owner-token Dependabot command.
+                # Such a comment must not consume the finite refresh budget.
+                if "performed_via_github_app" not in row:
+                    raise GovernanceError("native Dependabot command origin is missing")
+                if row["performed_via_github_app"] is not None:
+                    continue
                 if not body.startswith(f"@dependabot {action}\n\n"):
                     raise PolicyBlock("owner Dependabot marker is not an actual native command")
                 owned[action].append(row)
@@ -1432,14 +1439,25 @@ def selftest(config: dict[str, Any]) -> None:
     rebase = {
         "user": verified_owner,
         "body": "@dependabot rebase\n\n" + rebase_marker,
+        "performed_via_github_app": None,
         "created_at": "2026-10-27T16:00:00Z",
     }
     overdue = dict(rebase, created_at="2026-10-27T14:00:00Z")
     recovery = {
         "user": verified_owner,
         "body": "@dependabot recreate\n\n" + recreate_marker,
+        "performed_via_github_app": None,
         "created_at": "2026-10-27T16:30:00Z",
     }
+
+    connector_recovery = dict(
+        recovery,
+        performed_via_github_app={"id": 17, "slug": "chatgpt-codex-connector"},
+    )
+    connector_rebase = dict(
+        overdue,
+        performed_via_github_app={"id": 17, "slug": "chatgpt-codex-connector"},
+    )
 
     def next_step(rows: list[dict[str, Any]]) -> str | None:
         return _next_native_refresh_action(rows, signed, accepted, config, now=stamp)
@@ -1449,6 +1467,8 @@ def selftest(config: dict[str, Any]) -> None:
         ([rebase], None),
         ([overdue], "recreate"),
         ([overdue, recovery], None),
+        ([overdue, connector_recovery], "recreate"),
+        ([connector_rebase], "rebase"),
         ([dict(overdue, user={"login": "not-owner", "id": 9})], "rebase"),
         ([dict(overdue, user={"login": verified_owner["login"], "id": 9})], "rebase"),
         ([dict(overdue, user={"login": "not-owner", "id": verified_owner["id"]})], "rebase"),
@@ -1483,6 +1503,24 @@ def selftest(config: dict[str, Any]) -> None:
             pass
         else:
             raise GovernanceError("unverifiable native refresh timestamp permitted recovery")
+    for originless in (overdue, recovery):
+        missing = dict(originless)
+        del missing["performed_via_github_app"]
+        try:
+            next_step([missing])
+        except GovernanceError:
+            pass
+        else:
+            raise GovernanceError("originless owner-native command was accepted")
+    for mutated in (
+        dict(overdue, performed_via_github_app={"slug": "unexpected-app"}),
+        dict(recovery, performed_via_github_app="malformed-app"),
+    ):
+        expected = "rebase" if "rebase" in mutated["body"] else "recreate"
+        parent = [] if expected == "rebase" else [overdue]
+        if next_step([*parent, mutated]) != expected:
+            raise GovernanceError("App-attributed owner comment consumed native recovery")
+
     for invalid_delay in (0, 29, 1441, True, "120"):
         changed = dict(config, nativeRefreshEscalationMinutes=invalid_delay)
         if not validate_config(changed):
