@@ -50,6 +50,66 @@ KNOWN_CODE_SUFFIXES = set(CODEQL_BY_SUFFIX) | {
 SHELL_SHEBANG = re.compile(r"^#!.*\b(?:ba|da|k|z)?sh\b")
 
 
+# Dependabot may update the immutable *action* source independently of the
+# hash-pinned zizmor CLI. Require the complete unchanged scanner invocation,
+# not an obsolete action SHA. Native Dependabot release/commit provenance and
+# one-for-one workflow mutation checks remain separately mandatory.
+ZIZMOR_USES = re.compile(r"(?m)^\s+uses:\s+zizmorcore/zizmor-action@")
+ZIZMOR_STEP = re.compile(
+    r"(?m)^      - name: Audit GitHub Actions with pinned zizmor\n"
+    r"        uses: zizmorcore/zizmor-action@(?P<sha>[0-9a-f]{40})"
+    r" # v(?P<release>[0-9]+\.[0-9]+\.[0-9]+)\n"
+    r"        with:\n"
+    r'          version: "1.30.1"\n'
+    r'          online-audits: "false"\n'
+    r'          advanced-security: "false"\n'
+    r'          annotations: "true"\n'
+    r'          persona: "regular"\n'
+    r'          min-severity: "medium"\n'
+    r'          min-confidence: "medium"(?=\n|$)'
+)
+
+
+def zizmor_contract_is_secure(source: str) -> bool:
+    """Require exactly one immutable-SHA scanner step and all secure options."""
+    return len(ZIZMOR_USES.findall(source)) == 1 and len(
+        ZIZMOR_STEP.findall(source)
+    ) == 1
+
+
+def zizmor_adversarial_self_test(source: str) -> None:
+    """Prove mutable, duplicate, substituted and weakened steps are rejected."""
+    if not zizmor_contract_is_secure(source):
+        raise ValueError("canonical zizmor scanner fixture was not accepted")
+    matched = ZIZMOR_STEP.search(source)
+    if matched is None:
+        raise ValueError("canonical zizmor scanner fixture disappeared")
+    mutations = {
+        "untrusted publisher": source.replace(
+            "zizmorcore/zizmor-action@", "attacker/zizmor-action@", 1
+        ),
+        "mutable action ref": source.replace(matched.group("sha"), "main", 1),
+        "abbreviated SHA": source.replace(
+            matched.group("sha"), matched.group("sha")[:12], 1
+        ),
+        "unversioned action": source.replace(
+            " # v" + matched.group("release"), "", 1
+        ),
+        "missing scanner": source.replace(matched.group(0), "", 1),
+        "duplicate scanner": source
+        + "\n        uses: zizmorcore/zizmor-action@" + matched.group("sha"),
+        "online audits enabled": source.replace(
+            '          online-audits: "false"', '          online-audits: "true"', 1
+        ),
+        "scanner severity weakened": source.replace(
+            '          min-severity: "medium"', '          min-severity: "none"', 1
+        ),
+    }
+    for label, changed in mutations.items():
+        if zizmor_contract_is_secure(changed):
+            raise ValueError(f"unsafe zizmor mutation accepted: {label}")
+
+
 def tracked_files() -> list[Path]:
     result = subprocess.run(
         ["git", "ls-files", "-z"],
@@ -135,7 +195,6 @@ def main() -> int:
         "Bandit": "bandit -q -r src",
         "pip-audit": "pip-audit",
         "actionlint": "actionlint_1.7.12_linux_amd64.tar.gz",
-        "zizmor": "zizmorcore/zizmor-action@cc914d7f3750a2d13d75c7f184a1060aa0e9d482",
         "zizmor version": 'version: "1.30.1"',
         "Actions security gate": "- actions-security",
         "dependency review": "actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294",
@@ -155,6 +214,14 @@ def main() -> int:
     for name, needle in ci_scanner_contracts.items():
         if needle not in ci_workflow_text:
             errors.append(f"CI workflow is missing mandatory {name} scanner contract")
+
+    if not zizmor_contract_is_secure(ci_workflow_text):
+        errors.append("CI workflow is missing mandatory zizmor scanner contract")
+    else:
+        try:
+            zizmor_adversarial_self_test(ci_workflow_text)
+        except ValueError as exc:
+            errors.append(f"zizmor scanner integrity self-test failed: {exc}")
 
     scorecard_contracts = {
         "pinned Scorecard action": "ossf/scorecard-action@",
