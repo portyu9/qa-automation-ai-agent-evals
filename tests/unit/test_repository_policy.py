@@ -542,7 +542,6 @@ def test_policy_rejects_pypi_token_input(tmp_path: Path) -> None:
     assert "forbidden publication behavior: password:" in result.stderr
 
 
-
 def _publisher_line(source: str) -> str:
     matches = [line for line in source.splitlines() if "uses: pypa/gh-action-pypi-publish@" in line]
     assert len(matches) == 1
