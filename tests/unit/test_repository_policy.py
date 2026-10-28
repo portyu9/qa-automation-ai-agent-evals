@@ -544,10 +544,7 @@ def test_policy_rejects_pypi_token_input(tmp_path: Path) -> None:
 
 
 def _publisher_line(source: str) -> str:
-    matches = [
-        line for line in source.splitlines()
-        if "uses: pypa/gh-action-pypi-publish@" in line
-    ]
+    matches = [line for line in source.splitlines() if "uses: pypa/gh-action-pypi-publish@" in line]
     assert len(matches) == 1
     return matches[0]
 
