@@ -48,6 +48,8 @@ on:
       - 'requirements/locks/**'
       - 'requirements/compatibility/**'
       - 'pyproject.toml'
+  push:
+    branches: [main]
   schedule:
     - cron: '17 * * * *'
   workflow_dispatch:
@@ -116,7 +118,7 @@ jobs:
 
   govern:
     name: govern-dependabot
-    if: github.event_name != 'pull_request'
+    if: github.event_name != 'pull_request' && (github.event_name != 'push' || (github.ref == 'refs/heads/main' && github.event.repository.default_branch == 'main'))
     runs-on: ubuntu-24.04
     timeout-minutes: 8
     permissions:
@@ -127,6 +129,17 @@ jobs:
       pull-requests: write
       statuses: read
     steps:
+      - name: Authorize only exact-current-main native push wake
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = "refs/heads/main"
+          test "$GITHUB_WORKFLOW_REF" = "$GITHUB_REPOSITORY/.github/workflows/dependency-governance.yml@refs/heads/main"
+          live_main="$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/heads/main" --jq .object.sha)"
+          test "$live_main" = "$GITHUB_SHA"
       - name: Checkout trusted default-branch governance code only
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -153,6 +166,6 @@ jobs:
         run: |
           args=(--reconcile)
           case "$GITHUB_EVENT_NAME" in
-            schedule|workflow_dispatch) args+=(--allow-merge) ;;
+            schedule|workflow_dispatch|push) args+=(--allow-merge) ;;
           esac
           python .github/scripts/dependency_governance.py "${args[@]}"
