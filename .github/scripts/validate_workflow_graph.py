@@ -64,7 +64,12 @@ _TRUSTED_JOB_GUARDS: dict[tuple[str, str], str] = {
         "github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && needs.codeql.result == 'success'"
     ),
     ("codeql-pr-publisher.yml", "publish"): "github.ref == 'refs/heads/main'",
-    ("dependency-governance.yml", "govern"): "github.event_name != 'pull_request'",
+    ("dependency-governance.yml", "govern"): (
+        "github.event_name != 'pull_request' && "
+        "(github.event_name != 'push' || "
+        "(github.ref == 'refs/heads/main' && "
+        "github.event.repository.default_branch == 'main'))"
+    ),
     ("publish-release.yml", "publish"): "github.ref == 'refs/heads/main'",
 }
 
