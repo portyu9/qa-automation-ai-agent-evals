@@ -550,11 +550,14 @@ def validate_action_semantics(files: list[dict[str, Any]]) -> None:
                     or old_v != new_v
                 ):
                     raise PolicyBlock("native PyPI release/v1 annotation changed")
-            elif isinstance(old_v, tuple) and isinstance(new_v, tuple):
-                if new_v <= old_v:
-                    raise PolicyBlock(
-                        f"action update must advance the semantic version: {action}"
-                    )
+            elif (
+                isinstance(old_v, tuple)
+                and isinstance(new_v, tuple)
+                and new_v <= old_v
+            ):
+                raise PolicyBlock(
+                    f"action update must advance the semantic version: {action}"
+                )
             if next(iter(old_shas)) == next(iter(new_shas)):
                 raise PolicyBlock(f"action SHA did not change: {action}")
 
