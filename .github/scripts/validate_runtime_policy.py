@@ -662,6 +662,24 @@ if "actions: read" not in pypi_publish or "id-token: write" not in pypi_publish:
     fail("PyPI publication job must have only artifact-read plus OIDC authority")
 if "actions/checkout@" in pypi_publish or ".github/scripts/" in pypi_publish:
     fail("PyPI OIDC publication job must not checkout or execute repository code")
+
+# The native, signed Dependabot revision is allowed to advance without a source
+# repair PR. Preserve the complete isolated OIDC publisher step, exact action
+# identity, pinned Git SHA and stable major release channel. One such step only.
+publisher_step = re.compile(
+    r"(?m)^      - name: Publish distributions with PyPI Trusted Publishing\n"
+    r"        uses: pypa/gh-action-pypi-publish@[0-9a-f]{40}"
+    r" # release/v1(?: [0-9]{4}-[0-9]{2}-[0-9]{2})?\n"
+    r"        with:\n"
+)
+if (
+    len(publisher_step.findall(pypi_publish)) != 1
+    or publish_pypi.count("pypa/gh-action-pypi-publish@") != 1
+):
+    fail(
+        "PyPI OIDC publisher must use exactly one reviewed release/v1 action "
+        "with a full immutable commit pin in its dedicated final step"
+    )
 if "actions/download-artifact@" not in pypi_publish:
     fail("PyPI OIDC publication job must consume only the verified distribution artifact")
 for required in (
@@ -677,7 +695,6 @@ for required in (
     "gh attestation verify",
     '--signer-workflow "$GITHUB_REPOSITORY/.github/workflows/ci.yml"',
     '--source-ref "refs/heads/main"',
-    "pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33",
     "verified-pypi-dist-${{ github.run_id }}",
     "actions/upload-artifact@",
     "actions/download-artifact@",
