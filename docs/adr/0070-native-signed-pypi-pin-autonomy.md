@@ -17,7 +17,7 @@ An updated bot-signed, action-pin-only PyPI publisher can pass source-level runt
 
 ## Assurance impact
 
-The existing repository policy test workspace now proves a changed immutable revision is permitted **only in the reviewed publisher step**, while mutations to floating refs, duplicate actions, foreign action identity, wrong step name, and release/v2 are rejected. Existing auth boundaries and negative tests stay active. Signed bot #422 is preserved and never manually rewritten.
+The existing repository policy test workspace now proves a changed immutable revision is permitted **only in the reviewed publisher step**, while mutations to floating refs, duplicate actions, foreign action identity, wrong step name, and release/v2 are rejected. The separately signed Dependabot one-for-one workflow-patch parser also recognizes only the exact PyPI publisher `# release/v1 YYYY-MM-DD` comment and rejects changed dates, removed annotations, foreign actions, and use outside the dedicated PyPI workflow; other Actions retain version-advance enforcement. Existing auth boundaries and negative tests stay active. Signed bot #422 is preserved and never manually rewritten.
 
 ## Non-claims
 
