@@ -1019,19 +1019,19 @@ def self_test() -> None:
         ),
         (
             "unsigned publisher commit",
-            lambda routes: routes[
-                f"/repos/pypa/gh-action-pypi-publish/commits/{'5' * 40}"
-            ]["commit"]["verification"].update(verified=False),
+            lambda routes: routes[f"/repos/pypa/gh-action-pypi-publish/commits/{'5' * 40}"][
+                "commit"
+            ]["verification"].update(verified=False),
         ),
         (
             "changed publisher release annotation",
-            lambda routes: routes[
-                f"/repos/{REPOSITORY}/pulls/123/files?per_page=100"
-            ][-1].update(
+            lambda routes: routes[f"/repos/{REPOSITORY}/pulls/123/files?per_page=100"][-1].update(
                 patch=rows[-1]["patch"].replace(
-                    "+        uses: pypa/gh-action-pypi-publish@" + "5" * 40
+                    "+        uses: pypa/gh-action-pypi-publish@"
+                    + "5" * 40
                     + " # release/v1 2026-07-28",
-                    "+        uses: pypa/gh-action-pypi-publish@" + "5" * 40
+                    "+        uses: pypa/gh-action-pypi-publish@"
+                    + "5" * 40
                     + " # release/v1 2026-08-01",
                 )
             ),
