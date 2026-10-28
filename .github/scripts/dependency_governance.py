@@ -33,7 +33,8 @@ TRUSTED_COMMITTER_EMAIL = "noreply@github.com"
 SIGNED_OFF_BY = "Signed-off-by: dependabot[bot] <support@github.com>"
 ACTION_LINE = re.compile(
     r"^\s*(?:-\s+)?uses:\s+(?P<action>[A-Za-z0-9_.-]+/[A-Za-z0-9_./-]+)"
-    r"@(?P<sha>[0-9a-f]{40})(?:\s+#\s+v(?P<version>\d+(?:\.\d+){0,2}))?\s*$"
+    r"@(?P<sha>[0-9a-f]{40})(?:\s+#\s+(?:v(?P<version>\d+(?:\.\d+){0,2})"
+    r"|(?P<release>release/v1 \d{4}-\d{2}-\d{2})))?\s*$"
 )
 UPDATE_TYPE = re.compile(
     r"^\s*update-type:\s*(?P<kind>(?:version|security)-update:semver-(?:patch|minor|major))\s*$",
@@ -467,16 +468,22 @@ def require_unprotected_non_action_scope(
                 raise PolicyBlock(f"control-plane path requires manual review: {path}")
 
 
-def parse_action_change(line: str) -> tuple[str, str, tuple[int, ...] | None] | None:
+def parse_action_change(
+    line: str,
+) -> tuple[str, str, tuple[int, ...] | str | None] | None:
     match = ACTION_LINE.fullmatch(line)
     if match is None:
         return None
+    release = match.group("release")
+    # This fixed major-channel annotation exists only on the isolated PyPI
+    # publisher; otherwise require the existing vX.Y.Z or bare pin grammar.
+    if release is not None and match.group("action") != "pypa/gh-action-pypi-publish":
+        return None
+    version = match.group("version")
     return (
         match.group("action"),
         match.group("sha"),
-        tuple(int(part) for part in match.group("version").split("."))
-        if match.group("version") is not None
-        else None,
+        tuple(int(part) for part in version.split(".")) if version is not None else release,
     )
 
 
@@ -490,8 +497,8 @@ def validate_action_semantics(files: list[dict[str, Any]]) -> None:
         patch = row.get("patch")
         if not isinstance(patch, str) or not patch:
             raise PolicyBlock(f"workflow patch is unavailable or too large: {path}")
-        removed: list[tuple[str, str, tuple[int, ...] | None]] = []
-        added: list[tuple[str, str, tuple[int, ...] | None]] = []
+        removed: list[tuple[str, str, tuple[int, ...] | str | None]] = []
+        added: list[tuple[str, str, tuple[int, ...] | str | None]] = []
         for raw in patch.splitlines():
             if not raw or raw.startswith(("@@", " ", "\\")):
                 continue
@@ -529,10 +536,19 @@ def validate_action_semantics(files: list[dict[str, Any]]) -> None:
                 raise PolicyBlock(
                     f"action version annotations must be consistently present: {action}"
                 )
-            # Older pinned workflow actions can lack version comments. The signed
-            # Dependabot source, immutable SHA changes and one-for-one action
-            # identity are enforceable; do not invent a semver claim when absent.
-            if old_v is not None and new_v is not None and new_v <= old_v:
+            # Older pins can lack version annotations. A fixed PyPI release/v1
+            # channel instead carries a release date, not a semver number:
+            # preserve it byte-for-byte and only within the isolated workflow.
+            if isinstance(old_v, str) or isinstance(new_v, str):
+                if (
+                    action != "pypa/gh-action-pypi-publish"
+                    or path != ".github/workflows/publish-pypi.yml"
+                    or not isinstance(old_v, str)
+                    or not isinstance(new_v, str)
+                    or old_v != new_v
+                ):
+                    raise PolicyBlock("native PyPI release/v1 annotation changed")
+            elif isinstance(old_v, tuple) and isinstance(new_v, tuple) and new_v <= old_v:
                 raise PolicyBlock(f"action update must advance the semantic version: {action}")
             if next(iter(old_shas)) == next(iter(new_shas)):
                 raise PolicyBlock(f"action SHA did not change: {action}")
@@ -1758,6 +1774,51 @@ def selftest(config: dict[str, Any]) -> None:
         }
     ]
     validate_action_semantics(synthetic)
+    pypi_release = [
+        {
+            "filename": ".github/workflows/publish-pypi.yml",
+            "status": "modified",
+            "patch": (
+                "@@ -1 +1 @@\n"
+                "-        uses: pypa/gh-action-pypi-publish@"
+                + "a"
+                * 40
+                + " # release/v1 2026-07-28\n"
+                "+        uses: pypa/gh-action-pypi-publish@"
+                + "b" * 40
+                + " # release/v1 2026-07-28\n"
+            ),
+        }
+    ]
+    validate_action_semantics(pypi_release)
+    if (
+        parse_action_change(
+            "        uses: other/malicious@" + "a" * 40 + " # release/v1 2026-07-28"
+        )
+        is not None
+    ):
+        raise GovernanceError("unrelated action acquired PyPI annotation authority")
+    bad_pypi = (
+        pypi_release[0]["patch"].replace(
+            "+        uses: pypa/gh-action-pypi-publish@" + "b" * 40 + " # release/v1 2026-07-28",
+            "+        uses: pypa/gh-action-pypi-publish@" + "b" * 40 + " # release/v1 2026-08-01",
+        ),
+        pypi_release[0]["patch"].replace(" # release/v1 2026-07-28\n", "\n", 1),
+    )
+    for changed in bad_pypi:
+        try:
+            validate_action_semantics([dict(pypi_release[0], patch=changed)])
+        except PolicyBlock:
+            pass
+        else:
+            raise GovernanceError("unreviewed PyPI release annotation mutation passed")
+    try:
+        validate_action_semantics([dict(pypi_release[0], filename=".github/workflows/ci.yml")])
+    except PolicyBlock:
+        pass
+    else:
+        raise GovernanceError("PyPI release annotation was accepted in non-PyPI CI")
+
     sha_only = [
         {
             "filename": ".github/workflows/deep-fuzz.yml",

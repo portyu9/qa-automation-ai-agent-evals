@@ -542,6 +542,97 @@ def test_policy_rejects_pypi_token_input(tmp_path: Path) -> None:
     assert "forbidden publication behavior: password:" in result.stderr
 
 
+def _publisher_line(source: str) -> str:
+    matches = [line for line in source.splitlines() if "uses: pypa/gh-action-pypi-publish@" in line]
+    assert len(matches) == 1
+    return matches[0]
+
+
+def test_policy_accepts_new_full_pypi_action_revision_in_isolated_oidc_step(
+    tmp_path: Path,
+) -> None:
+    workspace = _policy_workspace(tmp_path)
+    workflow = workspace / ".github/workflows/publish-pypi.yml"
+    source = workflow.read_text(encoding="utf-8")
+    original = _publisher_line(source)
+    sha = original.split("@", 1)[1].split(" ", 1)[0]
+    assert len(sha) == 40
+    updated = original.replace("@" + sha, "@" + "a" * 40, 1)
+    assert updated != original
+    workflow.write_text(source.replace(original, updated, 1), encoding="utf-8")
+    result = _run_policy(workspace)
+    assert result.returncode == 0, result.stderr
+
+
+def test_policy_rejects_floating_pypi_release_ref(tmp_path: Path) -> None:
+    workspace = _policy_workspace(tmp_path)
+    workflow = workspace / ".github/workflows/publish-pypi.yml"
+    source = workflow.read_text(encoding="utf-8")
+    original = _publisher_line(source)
+    workflow.write_text(
+        source.replace(original, "        uses: pypa/gh-action-pypi-publish@release/v1", 1),
+        encoding="utf-8",
+    )
+    result = _run_policy(workspace)
+    assert result.returncode != 0
+    assert "pinned to a full commit SHA" in result.stderr
+
+
+def test_policy_rejects_duplicated_pypi_oidc_publisher(tmp_path: Path) -> None:
+    workspace = _policy_workspace(tmp_path)
+    workflow = workspace / ".github/workflows/publish-pypi.yml"
+    source = workflow.read_text(encoding="utf-8")
+    action_line = _publisher_line(source)
+    workflow.write_text(
+        source + "\n      - name: Unreviewed duplicate publisher\n" + action_line + "\n",
+        encoding="utf-8",
+    )
+    result = _run_policy(workspace)
+    assert result.returncode != 0
+    assert "exactly one reviewed release/v1 action" in result.stderr
+
+
+def test_policy_rejects_foreign_immutable_pypi_publisher(tmp_path: Path) -> None:
+    workspace = _policy_workspace(tmp_path)
+    workflow = workspace / ".github/workflows/publish-pypi.yml"
+    source = workflow.read_text(encoding="utf-8")
+    _publisher_line(source)
+    workflow.write_text(
+        source.replace("pypa/gh-action-pypi-publish@", "other/gh-action-pypi-publish@", 1),
+        encoding="utf-8",
+    )
+    result = _run_policy(workspace)
+    assert result.returncode != 0
+    assert "exactly one reviewed release/v1 action" in result.stderr
+
+
+def test_policy_rejects_repositioned_pypi_publisher(tmp_path: Path) -> None:
+    workspace = _policy_workspace(tmp_path)
+    workflow = workspace / ".github/workflows/publish-pypi.yml"
+    source = workflow.read_text(encoding="utf-8")
+    source = source.replace(
+        "      - name: Publish distributions with PyPI Trusted Publishing\n",
+        "      - name: Publish unauthorized distributions\n",
+        1,
+    )
+    workflow.write_text(source, encoding="utf-8")
+    result = _run_policy(workspace)
+    assert result.returncode != 0
+    assert "exactly one reviewed release/v1 action" in result.stderr
+
+
+def test_policy_rejects_pypi_major_release_channel_change(tmp_path: Path) -> None:
+    workspace = _policy_workspace(tmp_path)
+    workflow = workspace / ".github/workflows/publish-pypi.yml"
+    source = workflow.read_text(encoding="utf-8")
+    original = _publisher_line(source)
+    assert "# release/v1" in original
+    workflow.write_text(source.replace("# release/v1", "# release/v2", 1), encoding="utf-8")
+    result = _run_policy(workspace)
+    assert result.returncode != 0
+    assert "exactly one reviewed release/v1 action" in result.stderr
+
+
 def test_policy_rejects_provenance_signing_outside_trusted_main_push(tmp_path: Path) -> None:
     workspace = _policy_workspace(tmp_path)
     workflow = workspace / ".github/workflows/ci.yml"
