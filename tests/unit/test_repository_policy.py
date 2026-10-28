@@ -600,7 +600,7 @@ def test_policy_rejects_foreign_immutable_pypi_publisher(tmp_path: Path) -> None
     workspace = _policy_workspace(tmp_path)
     workflow = workspace / ".github/workflows/publish-pypi.yml"
     source = workflow.read_text(encoding="utf-8")
-    original = _publisher_line(source)
+    _publisher_line(source)
     workflow.write_text(
         source.replace("pypa/gh-action-pypi-publish@", "other/gh-action-pypi-publish@", 1),
         encoding="utf-8",
