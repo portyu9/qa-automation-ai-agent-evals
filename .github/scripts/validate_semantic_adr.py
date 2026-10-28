@@ -214,9 +214,11 @@ def _single_file_action_pin_patch_is_safe(patch: str) -> bool:
             # a new version. Its exact bytes must not change as an ADR escape.
             if not isinstance(old_version, str) or old_version != new_version:
                 return False
-        elif (old_version is None) != (new_version is None):
-            return False
-        elif old_version is not None and new_version is not None and new_version <= old_version:
+        elif (old_version is None) != (new_version is None) or (
+            old_version is not None
+            and new_version is not None
+            and new_version <= old_version
+        ):
             return False
         if next(iter(new_shas)) == next(iter(old_shas)):
             return False
