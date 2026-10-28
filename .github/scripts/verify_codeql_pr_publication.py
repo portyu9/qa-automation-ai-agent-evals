@@ -29,6 +29,9 @@ VENDOR_ACTIONS = frozenset(
     {
         "actions/upload-artifact",
         "actions/download-artifact",
+        "actions/setup-python",
+        "zizmorcore/zizmor-action",
+        "pypa/gh-action-pypi-publish",
         "github/codeql-action/init",
         "github/codeql-action/analyze",
         "github/codeql-action/upload-sarif",
@@ -36,12 +39,15 @@ VENDOR_ACTIONS = frozenset(
     }
 )
 VENDOR_PATH = re.compile(
-    r"^/repos/(actions/(?:upload-artifact|download-artifact)|github/codeql-action|ossf/scorecard-action)/"
+    r"^/repos/(actions/(?:upload-artifact|download-artifact|setup-python)"
+    r"|github/codeql-action|ossf/scorecard-action|zizmorcore/zizmor-action"
+    r"|pypa/gh-action-pypi-publish)/"
     r"(?:git/ref/tags/v\d+(?:\.\d+){1,2}|git/tags/[0-9a-f]{40}|commits/[0-9a-f]{40})$"
 )
 _ACTION_CHANGE = re.compile(
     r"^\s*(?:-\s+)?uses:\s+(?P<action>[a-z0-9_.-]+/[a-z0-9_./-]+)"
-    r"@(?P<sha>[0-9a-f]{40})(?:\s+#\s+v(?P<version>\d+(?:\.\d+){0,2}))?\s*$"
+    r"@(?P<sha>[0-9a-f]{40})(?:\s+#\s+(?:v(?P<version>\d+(?:\.\d+){0,2})"
+    r"|(?P<release>release/v1 \d{4}-\d{2}-\d{2})))?\s*$"
 )
 
 SAFE_PRODUCER_FILES = (
@@ -246,10 +252,20 @@ def _authorize_signed_bot_workflow_pins(api: Any, pr: dict[str, Any], head: str)
             version = versions.get(action)
             require(version is not None, "signed bot update metadata omits action version")
             annotated = match["version"]
-            require(
-                annotated is None or annotated == version,
-                "workflow action version conflicts with signed bot update metadata",
-            )
+            release_annotation = match["release"]
+            if release_annotation is not None:
+                require(
+                    action == "pypa/gh-action-pypi-publish"
+                    and release_annotation.startswith("release/v1 ")
+                    and version.startswith("1."),
+                    "only native PyPI major-v1 release-channel annotations are allowed",
+                )
+            elif annotated is not None:
+                require(
+                    annotated == version
+                    or ("." not in annotated and annotated == version.split(".")[0]),
+                    "workflow action version conflicts with signed bot update metadata",
+                )
             if action in upgrades:
                 require(
                     upgrades[action] == (version, sha),
@@ -934,6 +950,130 @@ def self_test() -> None:
             pass
         else:
             raise AssertionError(f"main-owned signed action guard accepted {label}")
+
+    # A canonical signed group can include a major-only label, a frozen
+    # isolated PyPI release-channel comment and independently verified vendor
+    # tags. The publisher must prove all three, never silently skip a changed
+    # workflow merely because it is not the direct CodeQL producer.
+    group = deepcopy(bot_routes)
+    rows = group[f"/repos/{REPOSITORY}/pulls/123/files?per_page=100"]
+    group_commit = group[f"/repos/{REPOSITORY}/commits/{head}"]["commit"]
+    new_pins = (
+        ("actions/setup-python", "7.1.0", "3" * 40, " # v7", " # v7"),
+        ("zizmorcore/zizmor-action", "0.7.1", "4" * 40, " # v0.6.4", " # v0.7.1"),
+        (
+            "pypa/gh-action-pypi-publish",
+            "1.14.3",
+            "5" * 40,
+            " # release/v1 2026-07-28",
+            " # release/v1 2026-07-28",
+        ),
+    )
+    for action, version, sha, old_label, new_label in new_pins:
+        row_path = (
+            ".github/workflows/publish-pypi.yml"
+            if action == "pypa/gh-action-pypi-publish"
+            else f".github/workflows/{action.split('/')[-1]}.yml"
+        )
+        rows.append(
+            {
+                "filename": row_path,
+                "status": "modified",
+                "patch": (
+                    "@@ -1 +1 @@\n"
+                    f"-        uses: {action}@{'6' * 40}{old_label}\n"
+                    f"+        uses: {action}@{sha}{new_label}\n"
+                ),
+            }
+        )
+        group_commit["message"] = group_commit["message"].replace(
+            "Signed-off-by: dependabot[bot] <support@github.com>",
+            f"- dependency-name: {action}\n  dependency-version: {version}\n"
+            "  update-type: version-update:semver-minor\n"
+            "Signed-off-by: dependabot[bot] <support@github.com>",
+        )
+        vendor = "/".join(action.split("/")[:2])
+        target_type = "tag" if action == "pypa/gh-action-pypi-publish" else "commit"
+        target_sha = "7" * 40 if target_type == "tag" else sha
+        group[f"/repos/{vendor}/git/ref/tags/v{version}"] = {
+            "ref": f"refs/tags/v{version}",
+            "object": {"type": target_type, "sha": target_sha},
+        }
+        if target_type == "tag":
+            group[f"/repos/{vendor}/git/tags/{target_sha}"] = {
+                "tag": f"v{version}",
+                "object": {"type": "commit", "sha": sha},
+            }
+        group[f"/repos/{vendor}/commits/{sha}"] = {
+            "sha": sha,
+            "commit": {"verification": {"verified": True, "reason": "valid"}},
+        }
+    _authorize_signed_bot_workflow_pins(Fake(group), bot_pr, head)
+
+    for label, mutate in (
+        (
+            "moved major vendor tag",
+            lambda routes: routes["/repos/actions/setup-python/git/ref/tags/v7.1.0"][
+                "object"
+            ].update(sha="8" * 40),
+        ),
+        (
+            "unsigned publisher commit",
+            lambda routes: routes[
+                f"/repos/pypa/gh-action-pypi-publish/commits/{'5' * 40}"
+            ]["commit"]["verification"].update(verified=False),
+        ),
+        (
+            "changed publisher release annotation",
+            lambda routes: routes[
+                f"/repos/{REPOSITORY}/pulls/123/files?per_page=100"
+            ][-1].update(
+                patch=rows[-1]["patch"].replace(
+                    "+        uses: pypa/gh-action-pypi-publish@" + "5" * 40
+                    + " # release/v1 2026-07-28",
+                    "+        uses: pypa/gh-action-pypi-publish@" + "5" * 40
+                    + " # release/v1 2026-08-01",
+                )
+            ),
+        ),
+        (
+            "falsified major label",
+            lambda routes: routes[
+                f"/repos/{REPOSITORY}/pulls/123/files?per_page=100"
+            ][1].update(
+                patch=rows[1]["patch"].replace(
+                    "+        uses: actions/setup-python@" + "3" * 40 + " # v7",
+                    "+        uses: actions/setup-python@" + "3" * 40 + " # v6",
+                )
+            ),
+        ),
+        (
+            "mismatched signed metadata",
+            lambda routes: routes[f"/repos/{REPOSITORY}/commits/{head}"][
+                "commit"
+            ].update(
+                message=group_commit["message"].replace(
+                    "dependency-version: 7.1.0", "dependency-version: 8.1.0"
+                )
+            ),
+        ),
+    ):
+        modified = deepcopy(group)
+        mutate(modified)
+        try:
+            _authorize_signed_bot_workflow_pins(Fake(modified), bot_pr, head)
+        except Blocked:
+            pass
+        else:
+            raise AssertionError(f"privileged vendor source accepted {label}")
+
+    for bad_vendor in (
+        "/repos/untrusted/evil/git/ref/tags/v1.2.3",
+        "/repos/actions/setup-python/branches/main",
+        "/repos/zizmorcore/zizmor-action/git/ref/tags/latest",
+        "/repos/pypa/gh-action-pypi-publish/git/ref/tags/v1.14.3/extra",
+    ):
+        require(VENDOR_PATH.fullmatch(bad_vendor) is None, "unsafe external publisher API origin")
 
     event = {"action": "completed", "workflow_run": event_run}
     require(verify(Fake(lookup), event)["head_sha"] == head, "valid exact-head evidence rejected")
