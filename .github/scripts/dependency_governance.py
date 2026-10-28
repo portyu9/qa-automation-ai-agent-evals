@@ -548,8 +548,14 @@ def validate_action_semantics(files: list[dict[str, Any]]) -> None:
                     or old_v != new_v
                 ):
                     raise PolicyBlock("native PyPI release/v1 annotation changed")
-            elif isinstance(old_v, tuple) and isinstance(new_v, tuple) and new_v <= old_v:
-                raise PolicyBlock(f"action update must advance the semantic version: {action}")
+            elif (
+                isinstance(old_v, tuple)
+                and isinstance(new_v, tuple)
+                and (new_v < old_v or (new_v == old_v and len(old_v) != 1))
+            ):
+                raise PolicyBlock(
+                    f"action release must advance, except unchanged major-only pin: {action}"
+                )
             if next(iter(old_shas)) == next(iter(new_shas)):
                 raise PolicyBlock(f"action SHA did not change: {action}")
 
@@ -1774,6 +1780,41 @@ def selftest(config: dict[str, Any]) -> None:
         }
     ]
     validate_action_semantics(synthetic)
+    major_only = [
+        {
+            "filename": ".github/workflows/deep-fuzz.yml",
+            "status": "modified",
+            "patch": (
+                "@@ -1 +1 @@\n"
+                "-        uses: actions/setup-python@" + "a" * 40 + " # v7\n"
+                "+        uses: actions/setup-python@" + "b" * 40 + " # v7\n"
+            ),
+        }
+    ]
+    validate_action_semantics(major_only)
+    for mutated_patch in (
+        major_only[0]["patch"].replace(
+            "+        uses: actions/setup-python@" + "b" * 40,
+            "+        uses: actions/setup-python@" + "a" * 40,
+        ),
+        major_only[0]["patch"].replace(
+            "+        uses: actions/setup-python@" + "b" * 40,
+            "+        uses: malicious/setup-python@" + "b" * 40,
+        ),
+        major_only[0]["patch"].replace(
+            "+        uses: actions/setup-python@" + "b" * 40 + " # v7",
+            "+        uses: actions/setup-python@" + "b" * 40 + " # v6",
+        ),
+        major_only[0]["patch"] + "+        run: echo bypass\n",
+        synthetic[0]["patch"].replace("# v7.0.1", "# v7.0.0"),
+    ):
+        try:
+            validate_action_semantics([dict(major_only[0], patch=mutated_patch)])
+        except PolicyBlock:
+            pass
+        else:
+            raise GovernanceError("same-major signed bot update accepted unsafe mutation")
+
     pypi_release = [
         {
             "filename": ".github/workflows/publish-pypi.yml",
