@@ -1038,9 +1038,7 @@ def self_test() -> None:
         ),
         (
             "falsified major label",
-            lambda routes: routes[
-                f"/repos/{REPOSITORY}/pulls/123/files?per_page=100"
-            ][1].update(
+            lambda routes: routes[f"/repos/{REPOSITORY}/pulls/123/files?per_page=100"][1].update(
                 patch=rows[1]["patch"].replace(
                     "+        uses: actions/setup-python@" + "3" * 40 + " # v7",
                     "+        uses: actions/setup-python@" + "3" * 40 + " # v6",
@@ -1049,9 +1047,7 @@ def self_test() -> None:
         ),
         (
             "mismatched signed metadata",
-            lambda routes: routes[f"/repos/{REPOSITORY}/commits/{head}"][
-                "commit"
-            ].update(
+            lambda routes: routes[f"/repos/{REPOSITORY}/commits/{head}"]["commit"].update(
                 message=group_commit["message"].replace(
                     "dependency-version: 7.1.0", "dependency-version: 8.1.0"
                 )
