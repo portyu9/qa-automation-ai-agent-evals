@@ -10,7 +10,7 @@ Signed Dependabot PR #425, exact head `f55ca6a978f746b9ddb369e1a6acf8ebbf5baacb`
 
 ## Decision
 
-Recognize the preexisting literal form `# release/v1 YYYY-MM-DD` as an annotation **only** on `pypa/gh-action-pypi-publish`. Parse it separately from numeric semver, never infer release-version order from the annotation. Require the previous and proposed annotation to match exactly, the same publisher action identity, a changed 40-character immutable SHA, and a one-for-one modification in an already-existing workflow. All other actions retain the exact previous `# vX.Y.Z`/SHA-only rules; all non-action lines, changed release annotations, foreign publishers, mixed/renamed files, and new powers require normal human-authored, appended ADR governance.
+Recognize the preexisting literal form `# release/v1 YYYY-MM-DD` as an annotation **only** on `pypa/gh-action-pypi-publish`. Parse it separately from numeric semver, never infer release-version order from the annotation. Require the previous and proposed annotation to match exactly, the same publisher action identity, a changed 40-character immutable SHA, and a one-for-one modification in an already-existing workflow. Independently, a single-component major-only compatibility label such as `# v7` or `# v1` may remain unchanged when the *same immutable Action identity* moves to a *different SHA* in a signed native bot patch. A full dotted version annotation such as `# v7.1.0` must still strictly increase, and a changed major version must not downgrade. Both cases remain subject to the existing exact-action, one-for-one, per-file, bot-actor and zero-unreviewed-lines controls. All other full-dotted version and SHA-only rules are unchanged; all non-action lines, changed release annotations, foreign publishers, mixed/renamed files, and new powers require normal human-authored, appended ADR governance.
 
 ## Consequences
 
@@ -18,7 +18,7 @@ The legitimate native bot can be recognized as a pinned SHA-only release change 
 
 ## Assurance impact
 
-The embedded fail-closed self-test exercises native publisher SHA updates, equal frozen release annotation, prior/adversarial unchanged SHA, foreign action identity, changed annotation date, changed format, appended arbitrary workflow code, and malformed multi-file diff. It also retains every existing negative ADR/action version test. The test must run successfully under the exact PR source on the protected native CI and policy lanes. The original native signed #425 branch and its 18 changed workflows remain untouched.
+The embedded fail-closed self-test exercises native publisher SHA updates, equal frozen release annotation, prior/adversarial unchanged SHA, foreign action identity, changed annotation date, changed format, appended arbitrary workflow code, and malformed multi-file diff. It adds tests of same-major signed SHA rotation across independent workflow files, rejects immutable-SHA replay, Action substitutions, major downgrades, dotted-version replay/downgrade, mixed annotations, new permissions and non-Action command lines. It also retains every existing negative ADR/action version test. The test must run successfully under the exact PR source on the protected native CI and policy lanes. The original native signed #425 branch and its 18 changed workflows remain untouched.
 
 ## Non-claims
 

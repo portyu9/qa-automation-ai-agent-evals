@@ -214,11 +214,14 @@ def _single_file_action_pin_patch_is_safe(patch: str) -> bool:
             # a new version. Its exact bytes must not change as an ADR escape.
             if not isinstance(old_version, str) or old_version != new_version:
                 return False
-        elif (old_version is None) != (new_version is None) or (
-            old_version is not None
-            and new_version is not None
-            and new_version <= old_version
-        ):
+        elif old_version is not None and new_version is not None:
+            if new_version < old_version:
+                return False
+            # A single-component major compatibility label is not an exact
+            # minor/patch release. Signed SHA rotation within it is allowed.
+            if new_version == old_version and len(old_version) != 1:
+                return False
+        elif (old_version is None) != (new_version is None):
             return False
         if next(iter(new_shas)) == next(iter(old_shas)):
             return False
@@ -388,6 +391,38 @@ def self_test(policy: Policy) -> None:
     )
     if not _action_pin_patch_is_safe(safe_patch):
         raise AdrPolicyError("canonical action-pin update was not recognized")
+    # A signed bot may rotate an immutable Action SHA within a major-only
+    # compatibility annotation such as v7. Dotted versions must still advance.
+    major_patch = safe_patch.replace("# v7.0.0", "# v7").replace("# v7.0.1", "# v7")
+    if not _action_pin_patch_is_safe(major_patch):
+        raise AdrPolicyError("signed same-major SHA rotation was rejected")
+    for unsafe in (
+        major_patch.replace(
+            f"+uses: actions/checkout@{new_sha}",
+            f"+uses: actions/checkout@{old_sha}",
+        ),
+        major_patch.replace(
+            "+uses: actions/checkout@", "+uses: adversarial/checkout@"
+        ),
+        major_patch.replace(
+            f"+uses: actions/checkout@{new_sha} # v7",
+            f"+uses: actions/checkout@{new_sha} # v6",
+        ),
+        safe_patch.replace("# v7.0.1", "# v7.0.0"),
+        safe_patch.replace("# v7.0.1", "# v7.0"),
+        major_patch.replace("# v7\n", "# v7.1\n", 1),
+        major_patch + "+permissions: write\n",
+    ):
+        if _action_pin_patch_is_safe(unsafe):
+            raise AdrPolicyError("unsafe same-major immutable Action patch bypassed ADR")
+    mixed_major = major_patch + major_patch.replace(
+        ".github/workflows/ci.yml", ".github/workflows/deep-fuzz.yml"
+    )
+    if not _action_pin_patch_is_safe(mixed_major):
+        raise AdrPolicyError("valid multi-workflow signed major-only update rejected")
+    if _action_pin_patch_is_safe(mixed_major + "+run: echo bypass\n"):
+        raise AdrPolicyError("mixed workflow source bypassed bot-only ADR policy")
+
     sha_only = safe_patch.replace(" # v7.0.0", "").replace(" # v7.0.1", "")
     if not _action_pin_patch_is_safe(sha_only):
         raise AdrPolicyError("immutable SHA-only action update was rejected")
