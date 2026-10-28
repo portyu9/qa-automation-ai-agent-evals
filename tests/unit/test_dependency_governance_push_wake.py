@@ -43,7 +43,9 @@ def require_exact_source(source: str) -> None:
             raise ValueError("native push wake authority drifted")
     guard = source.index("      - name: Authorize only exact-current-main native push wake")
     checkout = source.index("      - name: Checkout trusted default-branch governance code only")
-    token_use = source.index("          DEPENDABOT_OWNER_TOKEN: ${{ secrets.DEPENDABOT_OWNER_TOKEN }}")
+    token_use = source.index(
+        "          DEPENDABOT_OWNER_TOKEN: ${{ secrets.DEPENDABOT_OWNER_TOKEN }}"
+    )
     if not (guard < checkout < token_use):
         raise ValueError("native main guard must precede source or secret authority")
     if "pull_request_target:" in source or "workflow_run:" in source:
@@ -63,10 +65,14 @@ def test_accepted_trusted_main_push_wake() -> None:
         ("        if: github.event_name == 'push'", "        if: always()"),
         ('test "$GITHUB_REF" = "refs/heads/main"', 'test "$GITHUB_REF" != "refs/heads/main"'),
         ('test "$live_main" = "$GITHUB_SHA"', 'test "$live_main" != "$GITHUB_SHA"'),
-        ("/dependency-governance.yml@refs/heads/main",
-         "/dependency-governance.yml@refs/heads/candidate"),
-        ("            schedule|workflow_dispatch|push) args+=(--allow-merge) ;;",
-         "            schedule|workflow_dispatch) args+=(--allow-merge) ;;"),
+        (
+            "/dependency-governance.yml@refs/heads/main",
+            "/dependency-governance.yml@refs/heads/candidate",
+        ),
+        (
+            "            schedule|workflow_dispatch|push) args+=(--allow-merge) ;;",
+            "            schedule|workflow_dispatch) args+=(--allow-merge) ;;",
+        ),
     ],
 )
 def test_unreviewed_push_wake_mutation_is_rejected(before: str, after: str) -> None:
