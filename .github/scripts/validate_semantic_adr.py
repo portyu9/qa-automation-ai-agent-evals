@@ -18,7 +18,8 @@ _SHA = re.compile(r"^[0-9a-f]{40}$")
 _ADR_NAME = re.compile(r"^docs/adr/([0-9]{4})-[a-z0-9][a-z0-9-]*\.md$")
 _ACTION_LINE = re.compile(
     r"^\s*(?:-\s+)?uses:\s+(?P<action>[A-Za-z0-9_.-]+/[A-Za-z0-9_./-]+)"
-    r"@(?P<sha>[0-9a-f]{40})(?:\s+#\s+v(?P<version>\d+(?:\.\d+){0,2}))?\s*$"
+    r"@(?P<sha>[0-9a-f]{40})(?:\s+#\s+(?:v(?P<version>\d+(?:\.\d+){0,2})"
+    r"|(?P<release_annotation>release/v1 \d{4}-\d{2}-\d{2})))?\s*$"
 )
 _REQUIRED_ADR_MARKERS = (
     "**Status:** Accepted",
@@ -153,12 +154,21 @@ def _is_accepted_adr(path: str, policy: Policy) -> bool:
     return match is not None and int(match.group(1)) >= 1
 
 
-def _parse_action_change(line: str) -> tuple[str, str, tuple[int, ...] | None] | None:
+def _parse_action_change(line: str) -> tuple[str, str, tuple[int, ...] | str | None] | None:
     match = _ACTION_LINE.fullmatch(line)
     if match is None:
         return None
+    action = match.group("action")
+    release_annotation = match.group("release_annotation")
+    if release_annotation is not None:
+        # This legacy release-channel comment is deliberately NOT a semver
+        # attestation. Keep it byte-identical for the isolated PyPI publisher;
+        # only the immutable pinned Git SHA may change in a native bot patch.
+        if action != "pypa/gh-action-pypi-publish":
+            return None
+        return action, match.group("sha"), release_annotation
     return (
-        match.group("action"),
+        action,
         match.group("sha"),
         tuple(int(part) for part in match.group("version").split("."))
         if match.group("version") is not None
@@ -167,8 +177,8 @@ def _parse_action_change(line: str) -> tuple[str, str, tuple[int, ...] | None] |
 
 
 def _single_file_action_pin_patch_is_safe(patch: str) -> bool:
-    removed: list[tuple[str, str, tuple[int, ...] | None]] = []
-    added: list[tuple[str, str, tuple[int, ...] | None]] = []
+    removed: list[tuple[str, str, tuple[int, ...] | str | None]] = []
+    added: list[tuple[str, str, tuple[int, ...] | str | None]] = []
     for raw in patch.splitlines():
         if not raw or raw.startswith(("diff --git ", "index ", "--- ", "+++ ", "@@ ", "\\")):
             continue
@@ -199,9 +209,19 @@ def _single_file_action_pin_patch_is_safe(patch: str) -> bool:
             return False
         old_version = next(iter(old_versions))
         new_version = next(iter(new_versions))
-        if (old_version is None) != (new_version is None):
-            return False
-        if old_version is not None and new_version is not None and new_version <= old_version:
+        if isinstance(old_version, str) or isinstance(new_version, str):
+            # The PyPI release-channel annotation is metadata, not evidence of
+            # a new version. Its exact bytes must not change as an ADR escape.
+            if not isinstance(old_version, str) or old_version != new_version:
+                return False
+        elif old_version is not None and new_version is not None:
+            if new_version < old_version:
+                return False
+            # A single-component major compatibility label is not an exact
+            # minor/patch release. Signed SHA rotation within it is allowed.
+            if new_version == old_version and len(old_version) != 1:
+                return False
+        elif (old_version is None) != (new_version is None):
             return False
         if next(iter(new_shas)) == next(iter(old_shas)):
             return False
@@ -371,6 +391,36 @@ def self_test(policy: Policy) -> None:
     )
     if not _action_pin_patch_is_safe(safe_patch):
         raise AdrPolicyError("canonical action-pin update was not recognized")
+    # A signed bot may rotate an immutable Action SHA within a major-only
+    # compatibility annotation such as v7. Dotted versions must still advance.
+    major_patch = safe_patch.replace("# v7.0.0", "# v7").replace("# v7.0.1", "# v7")
+    if not _action_pin_patch_is_safe(major_patch):
+        raise AdrPolicyError("signed same-major SHA rotation was rejected")
+    for unsafe in (
+        major_patch.replace(
+            f"+uses: actions/checkout@{new_sha}",
+            f"+uses: actions/checkout@{old_sha}",
+        ),
+        major_patch.replace("+uses: actions/checkout@", "+uses: adversarial/checkout@"),
+        major_patch.replace(
+            f"+uses: actions/checkout@{new_sha} # v7",
+            f"+uses: actions/checkout@{new_sha} # v6",
+        ),
+        safe_patch.replace("# v7.0.1", "# v7.0.0"),
+        safe_patch.replace("# v7.0.1", "# v7.0"),
+        major_patch.replace("# v7\n", "# v7.1\n", 1),
+        major_patch + "+permissions: write\n",
+    ):
+        if _action_pin_patch_is_safe(unsafe):
+            raise AdrPolicyError("unsafe same-major immutable Action patch bypassed ADR")
+    mixed_major = major_patch + major_patch.replace(
+        ".github/workflows/ci.yml", ".github/workflows/deep-fuzz.yml"
+    )
+    if not _action_pin_patch_is_safe(mixed_major):
+        raise AdrPolicyError("valid multi-workflow signed major-only update rejected")
+    if _action_pin_patch_is_safe(mixed_major + "+run: echo bypass\n"):
+        raise AdrPolicyError("mixed workflow source bypassed bot-only ADR policy")
+
     sha_only = safe_patch.replace(" # v7.0.0", "").replace(" # v7.0.1", "")
     if not _action_pin_patch_is_safe(sha_only):
         raise AdrPolicyError("immutable SHA-only action update was rejected")
@@ -378,6 +428,51 @@ def self_test(policy: Policy) -> None:
         sha_only.replace("@" + new_sha + "\n", "@" + new_sha + " # v7.0.1\n")
     ):
         raise AdrPolicyError("mixed action version annotation bypassed policy")
+    # Native PyPI pinned publisher has a stable legacy `release/v1 YYYY-MM-DD`
+    # annotation, not a semver label. A bot may advance its immutable SHA
+    # without turning the unmodified comment into a new unreviewed ADR.
+    pypi_patch = (
+        "diff --git a/.github/workflows/publish-pypi.yml b/.github/workflows/publish-pypi.yml\n"
+        "index 1111111..2222222 100644\n"
+        "--- a/.github/workflows/publish-pypi.yml\n"
+        "+++ b/.github/workflows/publish-pypi.yml\n"
+        "@@ -1 +1 @@\n"
+        f"-uses: pypa/gh-action-pypi-publish@{old_sha} # release/v1 2026-07-28\n"
+        f"+uses: pypa/gh-action-pypi-publish@{new_sha} # release/v1 2026-07-28\n"
+    )
+    if not _action_pin_patch_is_safe(pypi_patch):
+        raise AdrPolicyError("signed PyPI release-channel immutable action update rejected")
+    for unsafe in (
+        pypi_patch.replace(
+            f"+uses: pypa/gh-action-pypi-publish@{new_sha}",
+            f"+uses: pypa/gh-action-pypi-publish@{old_sha}",
+        ),
+        pypi_patch.replace(
+            "+uses: pypa/gh-action-pypi-publish",
+            "+uses: adversarial/gh-action-pypi-publish",
+        ),
+        pypi_patch.replace(
+            "+uses: pypa/gh-action-pypi-publish@" + new_sha + " # release/v1 2026-07-28",
+            "+uses: pypa/gh-action-pypi-publish@" + new_sha + " # release/v1 2026-07-29",
+        ),
+        pypi_patch.replace(
+            "+uses: pypa/gh-action-pypi-publish@" + new_sha + " # release/v1 2026-07-28",
+            "+uses: pypa/gh-action-pypi-publish@" + new_sha + " # v1.14.3",
+        ),
+        pypi_patch.replace(
+            "+uses: pypa/gh-action-pypi-publish@" + new_sha + " # release/v1 2026-07-28",
+            "+uses: evil/gh-action-pypi-publish@" + new_sha + " # release/v1 2026-07-28",
+        ),
+        pypi_patch + "+run: echo bypass\n",
+        pypi_patch.replace(" # release/v1 2026-07-28", " # release/v2 2026-07-28"),
+    ):
+        if _action_pin_patch_is_safe(unsafe):
+            raise AdrPolicyError("unsafe PyPI release-channel annotation bypassed ADR")
+    if _action_pin_patch_is_safe(
+        pypi_patch + "diff --git a/.github/workflows/extra.yml b/.github/workflows/extra.yml\n"
+    ):
+        raise AdrPolicyError("incomplete mixed action patch bypassed ADR")
+
     if _action_pin_patch_is_safe(safe_patch + "+run: echo bypass\n"):
         raise AdrPolicyError("non-action workflow change bypassed action-pin policy")
 
