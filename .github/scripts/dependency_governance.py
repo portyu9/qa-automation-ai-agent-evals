@@ -483,9 +483,7 @@ def parse_action_change(
     return (
         match.group("action"),
         match.group("sha"),
-        tuple(int(part) for part in version.split("."))
-        if version is not None
-        else release,
+        tuple(int(part) for part in version.split(".")) if version is not None else release,
     )
 
 
@@ -550,14 +548,8 @@ def validate_action_semantics(files: list[dict[str, Any]]) -> None:
                     or old_v != new_v
                 ):
                     raise PolicyBlock("native PyPI release/v1 annotation changed")
-            elif (
-                isinstance(old_v, tuple)
-                and isinstance(new_v, tuple)
-                and new_v <= old_v
-            ):
-                raise PolicyBlock(
-                    f"action update must advance the semantic version: {action}"
-                )
+            elif isinstance(old_v, tuple) and isinstance(new_v, tuple) and new_v <= old_v:
+                raise PolicyBlock(f"action update must advance the semantic version: {action}")
             if next(iter(old_shas)) == next(iter(new_shas)):
                 raise PolicyBlock(f"action SHA did not change: {action}")
 
@@ -1789,7 +1781,8 @@ def selftest(config: dict[str, Any]) -> None:
             "patch": (
                 "@@ -1 +1 @@\n"
                 "-        uses: pypa/gh-action-pypi-publish@"
-                + "a" * 40
+                + "a"
+                * 40
                 + " # release/v1 2026-07-28\n"
                 "+        uses: pypa/gh-action-pypi-publish@"
                 + "b" * 40
@@ -1798,22 +1791,19 @@ def selftest(config: dict[str, Any]) -> None:
         }
     ]
     validate_action_semantics(pypi_release)
-    if parse_action_change(
-        "        uses: other/malicious@" + "a" * 40 + " # release/v1 2026-07-28"
-    ) is not None:
+    if (
+        parse_action_change(
+            "        uses: other/malicious@" + "a" * 40 + " # release/v1 2026-07-28"
+        )
+        is not None
+    ):
         raise GovernanceError("unrelated action acquired PyPI annotation authority")
     bad_pypi = (
         pypi_release[0]["patch"].replace(
-            "+        uses: pypa/gh-action-pypi-publish@"
-            + "b" * 40
-            + " # release/v1 2026-07-28",
-            "+        uses: pypa/gh-action-pypi-publish@"
-            + "b" * 40
-            + " # release/v1 2026-08-01",
+            "+        uses: pypa/gh-action-pypi-publish@" + "b" * 40 + " # release/v1 2026-07-28",
+            "+        uses: pypa/gh-action-pypi-publish@" + "b" * 40 + " # release/v1 2026-08-01",
         ),
-        pypi_release[0]["patch"].replace(
-            " # release/v1 2026-07-28\n", "\n", 1
-        ),
+        pypi_release[0]["patch"].replace(" # release/v1 2026-07-28\n", "\n", 1),
     )
     for changed in bad_pypi:
         try:
@@ -1823,9 +1813,7 @@ def selftest(config: dict[str, Any]) -> None:
         else:
             raise GovernanceError("unreviewed PyPI release annotation mutation passed")
     try:
-        validate_action_semantics(
-            [dict(pypi_release[0], filename=".github/workflows/ci.yml")]
-        )
+        validate_action_semantics([dict(pypi_release[0], filename=".github/workflows/ci.yml")])
     except PolicyBlock:
         pass
     else:
