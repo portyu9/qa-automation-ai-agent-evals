@@ -401,9 +401,7 @@ def self_test(policy: Policy) -> None:
             f"+uses: actions/checkout@{new_sha}",
             f"+uses: actions/checkout@{old_sha}",
         ),
-        major_patch.replace(
-            "+uses: actions/checkout@", "+uses: adversarial/checkout@"
-        ),
+        major_patch.replace("+uses: actions/checkout@", "+uses: adversarial/checkout@"),
         major_patch.replace(
             f"+uses: actions/checkout@{new_sha} # v7",
             f"+uses: actions/checkout@{new_sha} # v6",
