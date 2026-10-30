@@ -56,31 +56,6 @@ SAFE_PRODUCER_FILES = (
     ".github/scripts/validate_codeql_sarif_selfcheck.py",
     ".github/scripts/validate_security_stack.py",
 )
-# ONE-TIME accepted-main prior authorization for the exact, independently
-# reviewed scanner inventory fix in protected owner PR #418. This is not a
-# generic alternate producer-script trust path; retire after merge of #418.
-PR418_SCANNER_PREVIOUS_BLOB = "89d1eabbb866b16a43497df8aebc4610df35bec8"
-PR418_SCANNER_APPROVED_BLOB = "f755168b966a9f5ded03351d7c2e09029fa72e6a"
-
-
-def prior_approved_scanner_pr418(
-    pr: dict[str, Any], path: str, accepted_blob: Any, candidate_blob: Any
-) -> bool:
-    """Permit only the exact pre-reviewed one-time scanner semantic repair."""
-    user = pr.get("user")
-    return (
-        path == ".github/scripts/validate_security_stack.py"
-        and type(pr.get("number")) is int
-        and pr["number"] == 418
-        and isinstance(user, dict)
-        and user.get("login") == "portyu9"
-        and type(user.get("id")) is int
-        and user["id"] == 35150859
-        and accepted_blob == PR418_SCANNER_PREVIOUS_BLOB
-        and candidate_blob == PR418_SCANNER_APPROVED_BLOB
-    )
-
-
 CHECK_NAMES = (
     "Validate zero-alert gate implementation",
     "Initialize CodeQL",
@@ -404,9 +379,6 @@ def verify(api: Any, event: Any, *, trusted_main_sha: str | None = None) -> dict
         )
         if path == WORKFLOW_PATH and sha_candidate != sha_trusted:
             _authorize_signed_bot_workflow_pins(api, pr, head)
-        elif prior_approved_scanner_pr418(pr, path, sha_trusted, sha_candidate):
-            # Prior certified bytes, not candidate-declared authorization.
-            pass
         else:
             require(
                 sha_candidate == sha_trusted,
@@ -1074,64 +1046,8 @@ def self_test() -> None:
     event = {"action": "completed", "workflow_run": event_run}
     require(verify(Fake(lookup), event)["head_sha"] == head, "valid exact-head evidence rejected")
     scanner_path = ".github/scripts/validate_security_stack.py"
-    # This migration certificate is scoped to one native owner PR, one
-    # previously accepted trusted source, and one frozen replacement blob.
-    approved = {
-        "number": 418,
-        "user": {"login": "portyu9", "id": 35150859},
-    }
-    require(
-        prior_approved_scanner_pr418(
-            approved,
-            ".github/scripts/validate_security_stack.py",
-            PR418_SCANNER_PREVIOUS_BLOB,
-            PR418_SCANNER_APPROVED_BLOB,
-        ),
-        "exact trusted-main prior-authorized scanner candidate was rejected",
-    )
-    for label, mutated, path, old_blob, new_blob in (
-        (
-            "wrong PR",
-            {**approved, "number": 419},
-            scanner_path,
-            PR418_SCANNER_PREVIOUS_BLOB,
-            PR418_SCANNER_APPROVED_BLOB,
-        ),
-        (
-            "boolean PR",
-            {**approved, "number": True},
-            scanner_path,
-            PR418_SCANNER_PREVIOUS_BLOB,
-            PR418_SCANNER_APPROVED_BLOB,
-        ),
-        (
-            "wrong owner",
-            {**approved, "user": {"login": "attacker", "id": 35150859}},
-            scanner_path,
-            PR418_SCANNER_PREVIOUS_BLOB,
-            PR418_SCANNER_APPROVED_BLOB,
-        ),
-        (
-            "wrong owner ID",
-            {**approved, "user": {"login": "portyu9", "id": 1}},
-            scanner_path,
-            PR418_SCANNER_PREVIOUS_BLOB,
-            PR418_SCANNER_APPROVED_BLOB,
-        ),
-        ("wrong preimage", approved, scanner_path, "a" * 40, PR418_SCANNER_APPROVED_BLOB),
-        ("wrong candidate blob", approved, scanner_path, PR418_SCANNER_PREVIOUS_BLOB, "b" * 40),
-        (
-            "other producer input",
-            approved,
-            WORKFLOW_PATH,
-            PR418_SCANNER_PREVIOUS_BLOB,
-            PR418_SCANNER_APPROVED_BLOB,
-        ),
-    ):
-        require(
-            not prior_approved_scanner_pr418(mutated, path, old_blob, new_blob),
-            f"unreviewed one-time scanner source accepted: {label}",
-        )
+    # The once-certified scanner migration has merged. The publisher may no
+    # longer treat any historical source/PR/blob tuple as privileged authority.
     scanner_url = f"/repos/{REPOSITORY}/contents/{urllib.parse.quote(scanner_path, safe='/')}"
     scanner_head_ref = f"{scanner_url}?ref={head}"
     scanner_main_ref = f"{scanner_url}?ref={main}"
@@ -1140,8 +1056,14 @@ def self_test() -> None:
     old_scanner = deepcopy(lookup)
     old_scanner[scanner_main_ref] = {"sha": "2" * 40}
     old_scanner[scanner_head_ref] = {"sha": "89d1eabbb866b16a43497df8aebc4610df35bec8"}
+    # Even the exact historical preimage/replacement blob pair from PR #418
+    # must now be rejected. Successful merge retires that prior grant.
+    retired_grant = deepcopy(lookup)
+    retired_grant[scanner_main_ref] = {"sha": "89d1eabbb866b16a43497df8aebc4610df35bec8"}
+    retired_grant[scanner_head_ref] = {"sha": "f755168b966a9f5ded03351d7c2e09029fa72e6a"}
     for label, routes in (
         ("formerly certified scanner source", old_scanner),
+        ("retired exact PR418 scanner source grant", retired_grant),
         (
             "arbitrary candidate scanner source",
             {**lookup, scanner_head_ref: {"sha": "0" * 40}},
