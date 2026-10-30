@@ -1,6 +1,7 @@
-# ADR 0074 — Retire merged PR #418 CodeQL publisher scanner grant
+# ADR 0074: Retire merged PR #418 CodeQL publisher scanner grant
 
-**Status:** Accepted for review, October 30, 2026.
+**Status:** Accepted
+**Date:** 2026-10-30
 
 ## Context
 
@@ -17,3 +18,15 @@ Retain adversarial checks proving that the exact historical scanner blob pair, f
 ## Security and rollback
 
 No new secret, actor authority, approval or merge path. The publisher still never executes untrusted PR source. Revert only through a newly reviewed PR with explicit immutable Git blob provenance if a future migration is legitimately required.
+
+## Consequences
+
+A formerly permitted exact one-time source change is now rejected. Future script changes must be identical to accepted main for privileged publication and require a separate, explicit reviewed authorization before merge when necessary.
+
+## Assurance impact
+
+The self-test retains a known-good original source equality fixture and verifies negative cases for the exact historical grant preimage and replacement, a formerly certified scanner version, and arbitrary candidate code. CI, CodeQL, Security, and trusted SARIF provenance remain mandatory.
+
+## Non-claims
+
+This does not assert that a queued CodeQL scan is successful, or that Dependency Review/enterprise Advanced Security APIs are available. Pending or failed latest scans must continue to block publication rather than use an older successful scan. No GitHub repository administrative setting was changed.
