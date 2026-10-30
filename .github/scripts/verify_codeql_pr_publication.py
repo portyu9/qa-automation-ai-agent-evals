@@ -1056,8 +1056,14 @@ def self_test() -> None:
     old_scanner = deepcopy(lookup)
     old_scanner[scanner_main_ref] = {"sha": "2" * 40}
     old_scanner[scanner_head_ref] = {"sha": "89d1eabbb866b16a43497df8aebc4610df35bec8"}
+    # Even the exact historical preimage/replacement blob pair from PR #418
+    # must now be rejected. Successful merge retires that prior grant.
+    retired_grant = deepcopy(lookup)
+    retired_grant[scanner_main_ref] = {"sha": "89d1eabbb866b16a43497df8aebc4610df35bec8"}
+    retired_grant[scanner_head_ref] = {"sha": "f755168b966a9f5ded03351d7c2e09029fa72e6a"}
     for label, routes in (
         ("formerly certified scanner source", old_scanner),
+        ("retired exact PR418 scanner source grant", retired_grant),
         (
             "arbitrary candidate scanner source",
             {**lookup, scanner_head_ref: {"sha": "0" * 40}},
