@@ -14,7 +14,7 @@ from typing import Any, Final
 
 SCHEMA_VERSION: Final = 1
 MUTATION_TOOL: Final = "mutmut"
-MUTATION_TOOL_VERSION: Final = "3.8.0"
+MUTATION_TOOL_VERSION: Final = "3.8.1"
 MINIMUM_ALLOWED_SCORE: Final = 95.0
 _REQUIRED_CAMPAIGNS: Final = frozenset(
     {
