@@ -608,10 +608,7 @@ def _validate_native_pr_codeql_premerge_contract(workflow: dict[str, Any], *, pa
         )
 
 
-
-def _validate_dependabot_reconciliation_contract(
-    workflow: dict[str, Any], *, path: Path
-) -> None:
+def _validate_dependabot_reconciliation_contract(workflow: dict[str, Any], *, path: Path) -> None:
     """Keep trusted owner reconciliation prompt without widening its write authority.
 
     Dependabot may rebase after main advances and CI/CodeQL qualification may
@@ -623,14 +620,15 @@ def _validate_dependabot_reconciliation_contract(
         return
     triggers = workflow.get("on")
     if not isinstance(triggers, dict) or set(triggers) != {
-        "pull_request", "push", "schedule", "workflow_dispatch"
+        "pull_request",
+        "push",
+        "schedule",
+        "workflow_dispatch",
     }:
         raise WorkflowPolicyError(f"{path}: unexpected governance reconciliation trigger")
     if triggers.get("push") != {"branches": ["main"]}:
         raise WorkflowPolicyError(f"{path}: governance push must remain main-only")
-    if triggers.get("schedule") != [
-        {"cron": "2,12,22,32,42,52 * * * *"}
-    ]:
+    if triggers.get("schedule") != [{"cron": "2,12,22,32,42,52 * * * *"}]:
         raise WorkflowPolicyError(
             f"{path}: governance must reconcile every ten minutes on the trusted phase"
         )
@@ -746,9 +744,7 @@ jobs:
         validate_workflow(good)
         # Treat the actual trusted governance workflow as a positive fixture.
         # Individually reject hourly drift, wildcard pushes, and privileged PR triggers.
-        source_governance = (WORKFLOW_DIR / "dependency-governance.yml").read_text(
-            encoding="utf-8"
-        )
+        source_governance = (WORKFLOW_DIR / "dependency-governance.yml").read_text(encoding="utf-8")
         candidate_governance = root / "dependency-governance.yml"
         candidate_governance.write_text(source_governance, encoding="utf-8")
         validate_workflow(candidate_governance)
