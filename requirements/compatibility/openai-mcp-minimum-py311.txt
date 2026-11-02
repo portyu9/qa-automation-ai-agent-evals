@@ -4,7 +4,7 @@
 # Boundary: minimum
 # Python: 3.11
 # Artifact-Selection: linux-x86_64
-# Input-SHA256: ecd9edeb060698f498d2936fae6c5cfa82f279d28300958771716f244e20c893
+# Input-SHA256: 2f4a10ca93d3a3a7ac4773833669f8e4c54e5c5ece43590f442b9ba221111af2
 # Compiler: pip==25.3; pip-tools==7.5.2
 # Regeneration contract: CI_DEPENDENCY_LOCKS.md
 
