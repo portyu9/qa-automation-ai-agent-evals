@@ -15,7 +15,9 @@ WORKFLOW = ROOT / ".github/workflows/dependency-governance.yml"
 TRIGGER = """  push:
     branches: [main]
   schedule:
-    - cron: '17 * * * *'"""
+    # Follow the trusted CodeQL publisher on a separate 10-minute phase;
+    # never grant privileged PR-head execution or bypass current-main checks.
+    - cron: '2,12,22,32,42,52 * * * *'"""
 JOB_GUARD = (
     "    if: github.event_name != 'pull_request' && "
     "(github.event_name != 'push' || "
@@ -62,6 +64,8 @@ def test_accepted_trusted_main_push_wake() -> None:
     ("before", "after"),
     [
         ("    branches: [main]", "    branches: ['*']"),
+        ("    - cron: '2,12,22,32,42,52 * * * *'", "    - cron: '17 * * * *'"),
+        ("    - cron: '2,12,22,32,42,52 * * * *'", "    - cron: '* * * * *'"),
         ("        if: github.event_name == 'push'", "        if: always()"),
         ('test "$GITHUB_REF" = "refs/heads/main"', 'test "$GITHUB_REF" != "refs/heads/main"'),
         ('test "$live_main" = "$GITHUB_SHA"', 'test "$live_main" != "$GITHUB_SHA"'),
