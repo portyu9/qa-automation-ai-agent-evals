@@ -811,7 +811,10 @@ jobs:
                 '    workflows: ["CodeQL"]',
             ),
             (".workflow_id == $publisher_id", ".workflow_id != $publisher_id"),
-            ('test "$live_main" = "$GITHUB_SHA"', 'test "$live_main" != "$GITHUB_SHA"'),
+            (
+                '.head_branch == "main" and .head_sha == $main',
+                '.head_branch == "main" and .head_sha != $main',
+            ),
         )
         for original, unsafe in governance_mutations:
             if source_governance.count(original) != 1:
