@@ -72,7 +72,9 @@ PUBLISHER_GUARD = """      - name: Authenticate exact-current-main trusted publi
                .event == "schedule" or .event == "workflow_dispatch")
               ' >/dev/null
 """
-MERGE_ADMISSION = "            schedule|workflow_dispatch|push|workflow_run) args+=(--allow-merge) ;;"
+MERGE_ADMISSION = (
+    "            schedule|workflow_dispatch|push|workflow_run) args+=(--allow-merge) ;;"
+)
 
 
 def require_exact_source(source: str) -> None:
@@ -80,7 +82,9 @@ def require_exact_source(source: str) -> None:
         if source.count(fragment) != 1:
             raise ValueError("native push wake authority drifted")
     guard = source.index("      - name: Authorize only exact-current-main native push wake")
-    publisher_guard = source.index("      - name: Authenticate exact-current-main trusted publisher completion")
+    publisher_guard = source.index(
+        "      - name: Authenticate exact-current-main trusted publisher completion"
+    )
     checkout = source.index("      - name: Checkout trusted default-branch governance code only")
     token_use = source.index(
         "          DEPENDABOT_OWNER_TOKEN: ${{ secrets.DEPENDABOT_OWNER_TOKEN }}"
@@ -109,8 +113,8 @@ def test_accepted_trusted_main_push_wake() -> None:
         ),
         (".workflow_id == $publisher_id", ".workflow_id != $publisher_id"),
         (
-            ".head_branch == \"main\" and .head_sha == $main",
-            ".head_branch == \"main\" and .head_sha != $main",
+            '.head_branch == "main" and .head_sha == $main',
+            '.head_branch == "main" and .head_sha != $main',
         ),
         (
             "github.event.workflow_run.conclusion == 'success'",
