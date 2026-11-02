@@ -16,11 +16,19 @@ Retain the trusted ten-minute scheduled retry and exact-main push/dispatch paths
 
 Execute the existing `dependency_governance.py --reconcile --allow-merge` only after that preflight. It re-fetches each exact current PR head; enforces signed bot and trusted lock-graph provenance, semantic scope, actual security/CodeQL/CI status, time and label vetoes; and obtains separate authenticated owner approval only after passing its current exact-head qualification. No source from candidate PRs is checked out, evaluated or executed in this privileged job; no untrusted artifact is consumed; and no permission or token scope changes. The ten-minute schedule remains the fallback when no successful publisher run arrives.
 
+## Consequences
+
+Successful, GitHub-authenticated main-owned CodeQL publication now provides a bounded event-driven reconciliation opportunity independent of cron delivery. Every wake still performs live exact-main and exact-bot-head assessment; absent publisher completion or failed provenance cannot approve or merge. Multiple publisher completions may enqueue redundant governance executions, but the existing serialized reconciliation group and exact-head checks prevent stale duplicate merges. GitHub schedule remains an independent best-effort fallback and is not promoted to an SLA.
+
 ## Threat model and regression evidence
 
 The `workflow_run` event is **a wake hint, not an authorization credential**. An attacker can potentially cause a same-name workflow or re-run a stale workflow. Reject every case whose GitHub-verified `workflow_id`, source repository, main ref, completed-success state, or exact live SHA differs from the accepted provenance. Validate this in the semantic workflow graph validator, including independent negative mutations for publisher source identity and live main validation; retain exact-source checks in `test_dependency_governance_push_wake.py` so altering either the original push guard or new publisher guard fails closed. Retain `pull_request_target` prohibition, exact single owner-token placement, and no extra event-trigger privileges.
 
 GitHub `workflow_run` cascade depth remains limited; the upstream CodeQL PR run, accepted main publisher and main reconciliation are within the permitted chain depth. The fallback schedule and main push are independent paths if the publisher does not run.
+
+## Assurance impact
+
+The new privileged trigger requires an additional separately verified GitHub workflow ID and exact live current-main proof before checking out trusted source or exposing owner approval credentials. Existing post-merge protected qualification, zero-alert CodeQL, signed source and lock graph, approved reviewer identity, and owner-veto constraints are unchanged. The extra trigger widens the wake surface, not the set of approvable or mergeable PRs. Any change to event origin, token placement, or source provenance must fail the independently pinned workflow-graph and unit exact-source regression suites.
 
 ## Lineage and salvage preflight
 
