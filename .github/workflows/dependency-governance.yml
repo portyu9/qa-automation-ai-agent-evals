@@ -50,6 +50,10 @@ on:
       - 'pyproject.toml'
   push:
     branches: [main]
+  workflow_run: # zizmor: ignore[dangerous-triggers] -- exact current-main publisher ID verified before trusted checkout or owner-token access
+    workflows: ["Trusted CodeQL PR-head publication"]
+    types: [completed]
+    branches: [main]
   schedule:
     # Follow the trusted CodeQL publisher on a separate 10-minute phase;
     # never grant privileged PR-head execution or bypass current-main checks.
@@ -120,7 +124,15 @@ jobs:
 
   govern:
     name: govern-dependabot
-    if: github.event_name != 'pull_request' && (github.event_name != 'push' || (github.ref == 'refs/heads/main' && github.event.repository.default_branch == 'main'))
+    if: >-
+      github.event_name != 'pull_request' &&
+      (github.event_name != 'push' ||
+      (github.ref == 'refs/heads/main' && github.event.repository.default_branch == 'main')) &&
+      (github.event_name != 'workflow_run' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_repository.full_name == github.repository &&
+      github.event.workflow_run.head_branch == 'main' &&
+      github.event.workflow_run.head_sha == github.sha))
     runs-on: ubuntu-24.04
     timeout-minutes: 8
     permissions:
@@ -142,6 +154,34 @@ jobs:
           test "$GITHUB_WORKFLOW_REF" = "$GITHUB_REPOSITORY/.github/workflows/dependency-governance.yml@refs/heads/main"
           live_main="$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/heads/main" --jq .object.sha)"
           test "$live_main" = "$GITHUB_SHA"
+      - name: Authenticate exact-current-main trusted publisher completion
+        if: github.event_name == 'workflow_run'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = "refs/heads/main"
+          test "$GITHUB_WORKFLOW_REF" = "$GITHUB_REPOSITORY/.github/workflows/dependency-governance.yml@refs/heads/main"
+          live_main="$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/heads/main" --jq .object.sha)"
+          test "$live_main" = "$GITHUB_SHA"
+          publisher_id="$(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/codeql-pr-publisher.yml" --jq .id)"
+          [[ "$publisher_id" =~ ^[1-9][0-9]*$ ]]
+          publisher_run="$(jq -er '.workflow_run.id' "$GITHUB_EVENT_PATH")"
+          [[ "$publisher_run" =~ ^[1-9][0-9]*$ ]]
+          # The webhook is only a wake signal: independently verify its
+          # original GitHub record, never trust a PR artifact or run title.
+          gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${publisher_run}" |
+            jq -e --argjson publisher_id "$publisher_id" --arg main "$live_main" \
+              --arg repo "$GITHUB_REPOSITORY" '
+              .workflow_id == $publisher_id and
+              .name == "Trusted CodeQL PR-head publication" and
+              .status == "completed" and .conclusion == "success" and
+              .head_branch == "main" and .head_sha == $main and
+              .repository.full_name == $repo and
+              (.event == "workflow_run" or .event == "push" or
+               .event == "schedule" or .event == "workflow_dispatch")
+              ' >/dev/null
       - name: Checkout trusted default-branch governance code only
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -168,6 +208,6 @@ jobs:
         run: |
           args=(--reconcile)
           case "$GITHUB_EVENT_NAME" in
-            schedule|workflow_dispatch|push) args+=(--allow-merge) ;;
+            schedule|workflow_dispatch|push|workflow_run) args+=(--allow-merge) ;;
           esac
           python .github/scripts/dependency_governance.py "${args[@]}"

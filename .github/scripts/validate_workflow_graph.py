@@ -68,7 +68,12 @@ _TRUSTED_JOB_GUARDS: dict[tuple[str, str], str] = {
         "github.event_name != 'pull_request' && "
         "(github.event_name != 'push' || "
         "(github.ref == 'refs/heads/main' && "
-        "github.event.repository.default_branch == 'main'))"
+        "github.event.repository.default_branch == 'main')) && "
+        "(github.event_name != 'workflow_run' || "
+        "(github.event.workflow_run.conclusion == 'success' && "
+        "github.event.workflow_run.head_repository.full_name == github.repository && "
+        "github.event.workflow_run.head_branch == 'main' && "
+        "github.event.workflow_run.head_sha == github.sha))"
     ),
     ("publish-release.yml", "publish"): "github.ref == 'refs/heads/main'",
 }
@@ -624,14 +629,60 @@ def _validate_dependabot_reconciliation_contract(workflow: dict[str, Any], *, pa
         "push",
         "schedule",
         "workflow_dispatch",
+        "workflow_run",
     }:
         raise WorkflowPolicyError(f"{path}: unexpected governance reconciliation trigger")
     if triggers.get("push") != {"branches": ["main"]}:
         raise WorkflowPolicyError(f"{path}: governance push must remain main-only")
+    if triggers.get("workflow_run") != {
+        "workflows": ["Trusted CodeQL PR-head publication"],
+        "types": ["completed"],
+        "branches": ["main"],
+    }:
+        raise WorkflowPolicyError(f"{path}: only the trusted main publisher may wake governance")
     if triggers.get("schedule") != [{"cron": "2,12,22,32,42,52 * * * *"}]:
         raise WorkflowPolicyError(
             f"{path}: governance must reconcile every ten minutes on the trusted phase"
         )
+    job = workflow.get("jobs", {}).get("govern", {})
+    steps = job.get("steps", []) if isinstance(job, dict) else []
+    if not isinstance(steps, list):
+        raise WorkflowPolicyError(f"{path}: governance steps are not a list")
+    names = [step.get("name") for step in steps if isinstance(step, dict)]
+    expected_order = (
+        "Authorize only exact-current-main native push wake",
+        "Authenticate exact-current-main trusted publisher completion",
+        "Checkout trusted default-branch governance code only",
+        "Reconcile Dependabot merge authority",
+    )
+    if any(names.count(name) != 1 for name in expected_order):
+        raise WorkflowPolicyError(f"{path}: missing or duplicated trusted main guard")
+    if [names.index(name) for name in expected_order] != sorted(
+        names.index(name) for name in expected_order
+    ):
+        raise WorkflowPolicyError(f"{path}: trusted publisher guard must precede checkout")
+    guard = steps[names.index(expected_order[1])]
+    if guard.get("if") != "github.event_name == 'workflow_run'":
+        raise WorkflowPolicyError(f"{path}: trusted publisher guard must run for every wake")
+    if guard.get("env") != {"GH_TOKEN": "${{ github.token }}"}:
+        raise WorkflowPolicyError(f"{path}: publisher provenance guard must use only GITHUB_TOKEN")
+    command = guard.get("run", "")
+    for fragment in (
+        'test "$GITHUB_REF" = "refs/heads/main"',
+        'test "$live_main" = "$GITHUB_SHA"',
+        "actions/workflows/codeql-pr-publisher.yml",
+        "publisher_run=",
+        "actions/runs/${publisher_run}",
+        ".workflow_id == $publisher_id",
+        '.status == "completed" and .conclusion == "success"',
+        '.head_branch == "main" and .head_sha == $main',
+        ".repository.full_name == $repo",
+    ):
+        if command.count(fragment) != 1:
+            raise WorkflowPolicyError(f"{path}: exact publisher provenance check drift")
+    admission = steps[names.index(expected_order[3])].get("run", "")
+    if "schedule|workflow_dispatch|push|workflow_run) args+=(--allow-merge)" not in admission:
+        raise WorkflowPolicyError(f"{path}: authenticated publisher wake lost merge admission")
 
 
 def validate_workflow(path: Path) -> None:
@@ -755,6 +806,15 @@ jobs:
             ),
             ("  push:\n    branches: [main]", "  push:\n    branches: ['*']"),
             ("  workflow_dispatch:", "  pull_request_target:"),
+            (
+                '    workflows: ["Trusted CodeQL PR-head publication"]',
+                '    workflows: ["CodeQL"]',
+            ),
+            (".workflow_id == $publisher_id", ".workflow_id != $publisher_id"),
+            (
+                '.head_branch == "main" and .head_sha == $main',
+                '.head_branch == "main" and .head_sha != $main',
+            ),
         )
         for original, unsafe in governance_mutations:
             if source_governance.count(original) != 1:
