@@ -148,8 +148,8 @@ def test_manifest_pins_same_mutmut_version_as_development_dependency() -> None:
     payload = _payload()
     project = tomllib.loads(_PYPROJECT.read_text(encoding="utf-8"))
 
-    assert payload["tool"] == {"name": "mutmut", "version": "3.8.0"}
-    assert "mutmut==3.8.0" in project["project"]["optional-dependencies"]["dev"]
+    assert payload["tool"] == {"name": "mutmut", "version": "3.8.1"}
+    assert "mutmut==3.8.1" in project["project"]["optional-dependencies"]["dev"]
 
 
 def test_manifest_rejects_lower_score(tmp_path: Path) -> None:

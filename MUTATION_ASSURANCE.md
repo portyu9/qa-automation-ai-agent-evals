@@ -4,7 +4,7 @@ Mutation testing is a test-quality signal for selected deterministic trust kerne
 
 ## Authoritative ordinary-CI contract
 
-The ordinary CI mutation job uses `mutmut==3.8.0` on Ubuntu with Python 3.11. Mutmut 3.x requires POSIX `fork` support; these lanes therefore do not claim native Windows execution. The ordinary package/runtime dependency set does not depend on Mutmut: it is a development/CI dependency only.
+The ordinary CI mutation job uses `mutmut==3.8.1` (upstream pytest 9.2 compatibility fix for Mutmut's test-node identification) on Ubuntu with Python 3.11. Mutmut 3.x requires POSIX `fork` support; these lanes therefore do not claim native Windows execution. The ordinary package/runtime dependency set does not depend on Mutmut: it is a development/CI dependency only.
 
 Every authoritative mutation run starts by deleting `mutants/`. Cached classifications from an earlier commit therefore cannot satisfy the gate. CI runs Mutmut, exports `mutants/mutmut-cicd-stats.json`, records human-readable survivor diagnostics, and evaluates the exported JSON with `.github/scripts/check_mutation_score.py`.
 
@@ -18,7 +18,7 @@ The checked-in minimum mutation score is **95.00%**. For an accepted campaign:
 - `no_tests`, `skipped`, `suspicious`, `timeout`, `check_was_interrupted_by_user`, and `segfault` must all be zero; and
 - `killed / total * 100` must be at least 95.00%.
 
-Mutmut 3.8.0 includes `not_checked` and `caught_by_type_check` in `total` but does not export those fields from `export-cicd-stats`. The repository gate therefore treats any difference between `total` and the sum of exported statuses as unreported/incomplete authority and fails closed. Type-check filtering is not enabled for these mutation lanes.
+Mutmut 3.8.1 includes `not_checked` and `caught_by_type_check` in `total` but does not export those fields from `export-cicd-stats`. The repository gate therefore treats any difference between `total` and the sum of exported statuses as unreported/incomplete authority and fails closed. Type-check filtering is not enabled for these mutation lanes.
 
 Surviving mutants are part of the denominator. A survivor is not automatically waived because it appears equivalent: equivalent-mutant claims require explicit review and either a test improvement, a narrowly justified mutation exclusion attached to the relevant code, or a deliberate policy change. The minimum score must not be lowered merely to make a particular run pass.
 

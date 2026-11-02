@@ -2,7 +2,7 @@
   "schema_version": 1,
   "tool": {
     "name": "mutmut",
-    "version": "3.8.0"
+    "version": "3.8.1"
   },
   "minimum_score": 95,
   "max_children": 2,
