@@ -672,7 +672,7 @@ def _validate_dependabot_reconciliation_contract(workflow: dict[str, Any], *, pa
         'test "$live_main" = "$GITHUB_SHA"',
         "actions/workflows/codeql-pr-publisher.yml",
         "publisher_run=",
-        'actions/runs/${publisher_run}',
+        "actions/runs/${publisher_run}",
         ".workflow_id == $publisher_id",
         '.status == "completed" and .conclusion == "success"',
         '.head_branch == "main" and .head_sha == $main',
