@@ -51,7 +51,9 @@ on:
   push:
     branches: [main]
   schedule:
-    - cron: '17 * * * *'
+    # Follow the trusted CodeQL publisher on a separate 10-minute phase;
+    # never grant privileged PR-head execution or bypass current-main checks.
+    - cron: '2,12,22,32,42,52 * * * *'
   workflow_dispatch:
 
 permissions:
