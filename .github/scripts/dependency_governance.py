@@ -2361,7 +2361,7 @@ dev = ["beta==2.0.0"]
             raise GovernanceError("recovery qualified the wrong accepted-main SHA")
 
     for mutation in ("human", "not-main-merge", "no-pr"):
-        routes = _copy.deepcopy(recovered_routes)
+        routes = copy.deepcopy(recovered_routes)
         if mutation == "human":
             routes[pr_inventory][0]["user"]["login"] = "human"
         elif mutation == "not-main-merge":
@@ -2384,7 +2384,7 @@ dev = ["beta==2.0.0"]
         "invalid-inventory",
         "invalid-parents",
     ):
-        routes = _copy.deepcopy(recovered_routes)
+        routes = copy.deepcopy(recovered_routes)
         row = routes[pr_inventory][0]
         if mutation == "wrong-parent":
             routes[f"/git/commits/{recovered_sha}"]["parents"][1]["sha"] = "d" * 40
