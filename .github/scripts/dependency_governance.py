@@ -1061,7 +1061,6 @@ def _ensure_post_merge_qualification(
     return evidence
 
 
-
 def _repair_current_main_bot_qualification(
     api: GitHubApi, config: dict[str, Any]
 ) -> list[dict[str, Any]]:
@@ -1075,8 +1074,10 @@ def _repair_current_main_bot_qualification(
     # Accepted main's most recently merged PR must remain on the first page
     # when a merge is the live main tip; limit the reconciliation read.
     rows = api.get("/pulls?state=closed&sort=updated&direction=desc&per_page=25&page=1")
-    if not isinstance(rows, list) or len(rows) > 25 or not all(
-        isinstance(row, dict) for row in rows
+    if (
+        not isinstance(rows, list)
+        or len(rows) > 25
+        or not all(isinstance(row, dict) for row in rows)
     ):
         raise GovernanceError("incomplete current-main merged PR inventory")
     matched = [row for row in rows if row.get("merge_commit_sha") == main_sha]
@@ -1085,19 +1086,16 @@ def _repair_current_main_bot_qualification(
     if not matched:
         return []
     pr = matched[0]
-    if (
-        (pr.get("user") or {}).get("login") != BOT_LOGIN
-        or (pr.get("user") or {}).get("id") != BOT_USER_ID
-    ):
+    if (pr.get("user") or {}).get("login") != BOT_LOGIN or (pr.get("user") or {}).get(
+        "id"
+    ) != BOT_USER_ID:
         return []
     if (
         pr.get("state") != "closed"
         or not isinstance(pr.get("merged_at"), str)
         or (pr.get("base") or {}).get("ref") != config["baseBranch"]
-        or ((pr.get("head") or {}).get("repo") or {}).get("full_name")
-        != config["repository"]
-        or ((pr.get("base") or {}).get("repo") or {}).get("full_name")
-        != config["repository"]
+        or ((pr.get("head") or {}).get("repo") or {}).get("full_name") != config["repository"]
+        or ((pr.get("base") or {}).get("repo") or {}).get("full_name") != config["repository"]
     ):
         raise GovernanceError("accepted bot merge lacks canonical PR identity")
     commit = api.get(f"/git/commits/{main_sha}")
@@ -1105,8 +1103,7 @@ def _repair_current_main_bot_qualification(
     if not isinstance(parents, list) or len(parents) != 2:
         raise GovernanceError("accepted bot merge must have exactly two parents")
     parent_shas = [
-        require_sha((parent or {}).get("sha"), "accepted bot merge parent")
-        for parent in parents
+        require_sha((parent or {}).get("sha"), "accepted bot merge parent") for parent in parents
     ]
     if parent_shas != [
         require_sha((pr.get("base") or {}).get("sha"), "bot merge PR base"),
@@ -2349,12 +2346,11 @@ dev = ["beta==2.0.0"]
                 raise GovernanceError(f"unexpected post-merge recovery API read: {path}")
             return self.routes[path]
 
-    with patch(
-        __name__ + "._ensure_post_merge_qualification", return_value=receipts
-    ) as qualify:
-        if _repair_current_main_bot_qualification(
-            _PostMergeRecoveryApi(recovered_routes), config
-        ) != receipts:
+    with patch(__name__ + "._ensure_post_merge_qualification", return_value=receipts) as qualify:
+        if (
+            _repair_current_main_bot_qualification(_PostMergeRecoveryApi(recovered_routes), config)
+            != receipts
+        ):
             raise GovernanceError("accepted bot merge did not repair lost CI registration")
         qualify.assert_called_once()
         if qualify.call_args.args[1] != recovered_sha:
@@ -2369,9 +2365,7 @@ dev = ["beta==2.0.0"]
         else:
             routes[pr_inventory] = []
         with patch(__name__ + "._ensure_post_merge_qualification") as qualify:
-            if _repair_current_main_bot_qualification(
-                _PostMergeRecoveryApi(routes), config
-            ):
+            if _repair_current_main_bot_qualification(_PostMergeRecoveryApi(routes), config):
                 raise GovernanceError("non-bot or absent merge scheduled privileged repair")
             qualify.assert_not_called()
 
@@ -2402,15 +2396,11 @@ dev = ["beta==2.0.0"]
             routes[f"/git/commits/{recovered_sha}"]["parents"] = []
         with patch(__name__ + "._ensure_post_merge_qualification") as qualify:
             try:
-                _repair_current_main_bot_qualification(
-                    _PostMergeRecoveryApi(routes), config
-                )
+                _repair_current_main_bot_qualification(_PostMergeRecoveryApi(routes), config)
             except GovernanceError:
                 pass
             else:
-                raise GovernanceError(
-                    f"post-merge repair accepted forged/malformed {mutation}"
-                )
+                raise GovernanceError(f"post-merge repair accepted forged/malformed {mutation}")
             qualify.assert_not_called()
 
     for row in (
