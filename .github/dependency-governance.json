@@ -10,7 +10,7 @@
   ],
   "maxChangedFiles": 25,
   "maxPullRequestAgeDays": 14,
-  "nativeRefreshEscalationMinutes": 120,
+  "nativeRefreshEscalationMinutes": 30,
   "manualReviewLabels": [
     "manual-review",
     "do-not-merge"
