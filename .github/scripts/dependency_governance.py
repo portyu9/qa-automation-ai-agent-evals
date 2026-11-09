@@ -1465,6 +1465,7 @@ def selftest(config: dict[str, Any]) -> None:
     rebase_at = stamp - timedelta(minutes=min(15, threshold - 1))
     overdue_at = stamp - timedelta(minutes=threshold + 1)
     recovery_at = overdue_at + timedelta(minutes=threshold)
+
     def iso(moment: datetime) -> str:
         return moment.isoformat().replace("+00:00", "Z")
 
