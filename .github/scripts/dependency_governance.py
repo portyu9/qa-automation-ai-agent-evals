@@ -915,11 +915,29 @@ def _post_merge_workflow_candidates(
             raise GovernanceError(f"exact-subject {workflow} run has invalid run id")
         status = row.get("status")
         conclusion = row.get("conclusion")
-        if status not in {"queued", "in_progress", "completed"}:
+        # GitHub may register a newly dispatched workflow as pending, requested
+        # or waiting before it enters queued/in_progress. These are authentic
+        # *registration* states, never successful qualification evidence.
+        # A false terminal conclusion, including contradictory non-null state
+        # in a pending run, must still fail closed.
+        if status not in {
+            "pending",
+            "requested",
+            "waiting",
+            "queued",
+            "in_progress",
+            "completed",
+        }:
             raise GovernanceError(f"exact-subject {workflow} run has invalid status: {status}")
-        if status == "completed" and conclusion != "success":
+        if status == "completed":
+            if conclusion != "success":
+                raise GovernanceError(
+                    f"exact-subject {workflow} run completed non-successfully: {conclusion}"
+                )
+        elif conclusion is not None:
             raise GovernanceError(
-                f"exact-subject {workflow} run completed non-successfully: {conclusion}"
+                f"exact-subject {workflow} run has nonterminal status "
+                f"{status} with unexpected conclusion: {conclusion}"
             )
         candidates.append(row)
     return candidates
@@ -1041,6 +1059,60 @@ def _ensure_post_merge_qualification(
             }
         )
     return evidence
+
+
+def _repair_current_main_bot_qualification(
+    api: GitHubApi, config: dict[str, Any]
+) -> list[dict[str, Any]]:
+    """Compensate if a prior bot merge committed but workflow registration crashed.
+
+    Only the uniquely identified accepted-main Dependabot merge can trigger
+    repair. The repair dispatches standard trusted-main verification workflows,
+    never approves a PR or manufactures a successful check.
+    """
+    main_sha = _live_main_sha(api, config)
+    # Accepted main's most recently merged PR must remain on the first page
+    # when a merge is the live main tip; limit the reconciliation read.
+    rows = api.get("/pulls?state=closed&sort=updated&direction=desc&per_page=25&page=1")
+    if (
+        not isinstance(rows, list)
+        or len(rows) > 25
+        or not all(isinstance(row, dict) for row in rows)
+    ):
+        raise GovernanceError("incomplete current-main merged PR inventory")
+    matched = [row for row in rows if row.get("merge_commit_sha") == main_sha]
+    if len(matched) > 1:
+        raise GovernanceError("ambiguous PR identity for accepted main merge")
+    if not matched:
+        return []
+    pr = matched[0]
+    if (pr.get("user") or {}).get("login") != BOT_LOGIN or (pr.get("user") or {}).get(
+        "id"
+    ) != BOT_USER_ID:
+        return []
+    if (
+        pr.get("state") != "closed"
+        or not isinstance(pr.get("merged_at"), str)
+        or (pr.get("base") or {}).get("ref") != config["baseBranch"]
+        or ((pr.get("head") or {}).get("repo") or {}).get("full_name") != config["repository"]
+        or ((pr.get("base") or {}).get("repo") or {}).get("full_name") != config["repository"]
+    ):
+        raise GovernanceError("accepted bot merge lacks canonical PR identity")
+    commit = api.get(f"/git/commits/{main_sha}")
+    parents = (commit or {}).get("parents")
+    if not isinstance(parents, list) or len(parents) != 2:
+        raise GovernanceError("accepted bot merge must have exactly two parents")
+    parent_shas = [
+        require_sha((parent or {}).get("sha"), "accepted bot merge parent") for parent in parents
+    ]
+    if parent_shas != [
+        require_sha((pr.get("base") or {}).get("sha"), "bot merge PR base"),
+        require_sha((pr.get("head") or {}).get("sha"), "bot merge PR head"),
+    ]:
+        raise GovernanceError("accepted main bot merge parents differ from canonical PR")
+    # Repeat the exact-main lease for EACH dispatched workflow. Existing red
+    # results stay blocking; missing ones are registered for real execution.
+    return _ensure_post_merge_qualification(api, main_sha, config)
 
 
 def _merge(api: GitHubApi, subject: dict[str, Any], config: dict[str, Any]) -> dict[str, Any]:
@@ -1437,6 +1509,15 @@ def reconcile(config: dict[str, Any], *, allow_merge: bool) -> int:
             print(
                 json.dumps(
                     {"pr": number, "decision": "blocked", "reason": str(exc)}, sort_keys=True
+                )
+            )
+    if allow_merge and config["automergeEnabled"]:
+        recovered = _repair_current_main_bot_qualification(api, config)
+        if recovered:
+            print(
+                json.dumps(
+                    {"decision": "reconciled-post-merge", "workflows": recovered},
+                    sort_keys=True,
                 )
             )
     return eligible
@@ -2097,6 +2178,58 @@ dev = ["beta==2.0.0"]
             "post-merge CodeQL selector rejected canonical exact-subject dispatch"
         )
 
+    # GitHub observed an authentic freshly dispatched CodeQL run with
+    # status='pending' after PR #437 merged, and the old selector raised
+    # after main advanced, leaving exact-main CI undispatched.
+    for expected in (security_expected, codeql_expected, ci_expected):
+        for transient in ("pending", "requested", "waiting", "queued", "in_progress"):
+            receipt = {
+                **canonical_ci,
+                "name": expected["workflow"],
+                "path": f".github/workflows/{expected['file']}",
+                "status": transient,
+                "conclusion": None,
+            }
+            if _select_post_merge_workflow_run([receipt], exact_sha, expected, config) != receipt:
+                raise GovernanceError(
+                    f"post-merge {expected['workflow']} rejected authentic {transient} "
+                    "registration without a conclusion"
+                )
+            for contradiction in ("success", "failure", "cancelled"):
+                try:
+                    _select_post_merge_workflow_run(
+                        [dict(receipt, conclusion=contradiction)],
+                        exact_sha,
+                        expected,
+                        config,
+                    )
+                except GovernanceError:
+                    pass
+                else:
+                    raise GovernanceError(
+                        f"post-merge {expected['workflow']} trusted nonterminal "
+                        f"{transient} with forged {contradiction} conclusion"
+                    )
+        for malformed in ("unknown", "", None, "ready"):
+            try:
+                _select_post_merge_workflow_run(
+                    [
+                        dict(
+                            canonical_ci,
+                            name=expected["workflow"],
+                            path=f".github/workflows/{expected['file']}",
+                            status=malformed,
+                        )
+                    ],
+                    exact_sha,
+                    expected,
+                    config,
+                )
+            except GovernanceError:
+                pass
+            else:
+                raise GovernanceError("post-merge selector accepted unsupported workflow state")
+
     canonical_security = {
         "id": 301,
         "name": security_expected["workflow"],
@@ -2161,6 +2294,9 @@ dev = ["beta==2.0.0"]
             "id": len(observed_dispatches),
             "name": expected["workflow"],
             "path": f".github/workflows/{expected['file']}",
+            # Reproduce the real post-merge failure: CodeQL is registered but
+            # still "pending" when the controller must dispatch CI next.
+            "status": "pending" if expected["workflow"] == "CodeQL" else "queued",
         }
 
     with (
@@ -2172,6 +2308,100 @@ dev = ["beta==2.0.0"]
         raise GovernanceError("post-merge qualification reordered or omitted Security")
     if [r["gate"] for r in receipts] != ["security-gate", "CodeQL", "ci-gate"]:
         raise GovernanceError("post-merge receipt inventory lost independent Security gate")
+    if [r["status"] for r in receipts] != ["queued", "pending", "queued"]:
+        raise GovernanceError("post-merge workflow registration lost pending-state evidence")
+
+    # If a bot merge succeeded but the previous privileged controller died
+    # before dispatching CI, a later trusted-main run must recover missing
+    # workflow registration. The recovery never touches an unaccepted PR.
+    recovered_sha = exact_sha
+    bot_base = "a" * 40
+    bot_head = "b" * 40
+    canonical_bot = {
+        "number": 123,
+        "merge_commit_sha": recovered_sha,
+        "state": "closed",
+        "merged_at": "2026-11-09T17:52:46Z",
+        "user": {"login": BOT_LOGIN, "id": BOT_USER_ID},
+        "head": {"sha": bot_head, "repo": {"full_name": config["repository"]}},
+        "base": {
+            "ref": config["baseBranch"],
+            "sha": bot_base,
+            "repo": {"full_name": config["repository"]},
+        },
+    }
+    pr_inventory = "/pulls?state=closed&sort=updated&direction=desc&per_page=25&page=1"
+    recovered_routes = {
+        f"/branches/{config['baseBranch']}": {"commit": {"sha": recovered_sha}},
+        pr_inventory: [canonical_bot],
+        f"/git/commits/{recovered_sha}": {"parents": [{"sha": bot_base}, {"sha": bot_head}]},
+    }
+
+    class _PostMergeRecoveryApi:
+        def __init__(self, routes: dict[str, Any]) -> None:
+            self.routes = routes
+
+        def get(self, path: str) -> Any:
+            if path not in self.routes:
+                raise GovernanceError(f"unexpected post-merge recovery API read: {path}")
+            return self.routes[path]
+
+    with patch(__name__ + "._ensure_post_merge_qualification", return_value=receipts) as qualify:
+        if (
+            _repair_current_main_bot_qualification(_PostMergeRecoveryApi(recovered_routes), config)
+            != receipts
+        ):
+            raise GovernanceError("accepted bot merge did not repair lost CI registration")
+        qualify.assert_called_once()
+        if qualify.call_args.args[1] != recovered_sha:
+            raise GovernanceError("recovery qualified the wrong accepted-main SHA")
+
+    for mutation in ("human", "not-main-merge", "no-pr"):
+        routes = copy.deepcopy(recovered_routes)
+        if mutation == "human":
+            routes[pr_inventory][0]["user"]["login"] = "human"
+        elif mutation == "not-main-merge":
+            routes[pr_inventory][0]["merge_commit_sha"] = "c" * 40
+        else:
+            routes[pr_inventory] = []
+        with patch(__name__ + "._ensure_post_merge_qualification") as qualify:
+            if _repair_current_main_bot_qualification(_PostMergeRecoveryApi(routes), config):
+                raise GovernanceError("non-bot or absent merge scheduled privileged repair")
+            qualify.assert_not_called()
+
+    for mutation in (
+        "wrong-parent",
+        "wrong-repo",
+        "wrong-ref",
+        "unmerged",
+        "duplicated",
+        "invalid-inventory",
+        "invalid-parents",
+    ):
+        routes = copy.deepcopy(recovered_routes)
+        row = routes[pr_inventory][0]
+        if mutation == "wrong-parent":
+            routes[f"/git/commits/{recovered_sha}"]["parents"][1]["sha"] = "d" * 40
+        elif mutation == "wrong-repo":
+            row["head"]["repo"]["full_name"] = "untrusted/repository"
+        elif mutation == "wrong-ref":
+            row["base"]["ref"] = "untrusted"
+        elif mutation == "unmerged":
+            row["merged_at"] = None
+        elif mutation == "duplicated":
+            routes[pr_inventory].append(copy.deepcopy(row))
+        elif mutation == "invalid-inventory":
+            routes[pr_inventory] = {"forged": "list"}
+        else:
+            routes[f"/git/commits/{recovered_sha}"]["parents"] = []
+        with patch(__name__ + "._ensure_post_merge_qualification") as qualify:
+            try:
+                _repair_current_main_bot_qualification(_PostMergeRecoveryApi(routes), config)
+            except GovernanceError:
+                pass
+            else:
+                raise GovernanceError(f"post-merge repair accepted forged/malformed {mutation}")
+            qualify.assert_not_called()
 
     for row in (
         dict(canonical_ci, head_sha="2" * 40),
