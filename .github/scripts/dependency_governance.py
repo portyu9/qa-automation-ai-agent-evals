@@ -2231,6 +2231,9 @@ dev = ["beta==2.0.0"]
             "id": len(observed_dispatches),
             "name": expected["workflow"],
             "path": f".github/workflows/{expected['file']}",
+            # Reproduce the real post-merge failure: CodeQL is registered but
+            # still "pending" when the controller must dispatch CI next.
+            "status": "pending" if expected["workflow"] == "CodeQL" else "queued",
         }
 
     with (
@@ -2242,6 +2245,8 @@ dev = ["beta==2.0.0"]
         raise GovernanceError("post-merge qualification reordered or omitted Security")
     if [r["gate"] for r in receipts] != ["security-gate", "CodeQL", "ci-gate"]:
         raise GovernanceError("post-merge receipt inventory lost independent Security gate")
+    if [r["status"] for r in receipts] != ["queued", "pending", "queued"]:
+        raise GovernanceError("post-merge workflow registration lost pending-state evidence")
 
     for row in (
         dict(canonical_ci, head_sha="2" * 40),
