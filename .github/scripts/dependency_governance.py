@@ -2320,7 +2320,7 @@ dev = ["beta==2.0.0"]
     bot_base = "a" * 40
     bot_head = "b" * 40
     canonical_bot = {
-        "number": 437,
+        "number": 123,
         "merge_commit_sha": recovered_sha,
         "state": "closed",
         "merged_at": "2026-11-09T17:52:46Z",
@@ -2361,8 +2361,6 @@ dev = ["beta==2.0.0"]
         if qualify.call_args.args[1] != recovered_sha:
             raise GovernanceError("recovery qualified the wrong accepted-main SHA")
 
-    import copy as _copy
-
     for mutation in ("human", "not-main-merge", "no-pr"):
         routes = _copy.deepcopy(recovered_routes)
         if mutation == "human":
@@ -2379,8 +2377,13 @@ dev = ["beta==2.0.0"]
             qualify.assert_not_called()
 
     for mutation in (
-        "wrong-parent", "wrong-repo", "wrong-ref", "unmerged", "duplicated",
-        "invalid-inventory", "invalid-parents",
+        "wrong-parent",
+        "wrong-repo",
+        "wrong-ref",
+        "unmerged",
+        "duplicated",
+        "invalid-inventory",
+        "invalid-parents",
     ):
         routes = _copy.deepcopy(recovered_routes)
         row = routes[pr_inventory][0]
@@ -2393,7 +2396,7 @@ dev = ["beta==2.0.0"]
         elif mutation == "unmerged":
             row["merged_at"] = None
         elif mutation == "duplicated":
-            routes[pr_inventory].append(_copy.deepcopy(row))
+            routes[pr_inventory].append(copy.deepcopy(row))
         elif mutation == "invalid-inventory":
             routes[pr_inventory] = {"forged": "list"}
         else:
