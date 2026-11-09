@@ -542,22 +542,50 @@ def revalidate_before_upload(api: Any, expected: dict[str, str], *, trusted_main
 
 def discover(api: Any, *, trusted_main_sha: str | None = None) -> dict[str, str] | None:
     """Re-read canonical completed PR runs; do not trust caller-supplied run IDs."""
+    main_ref = obj(api.get(f"/repos/{REPOSITORY}/git/ref/heads/main"), "scheduled main ref")
+    main_sha = nested(main_ref, "object", "sha")
+    require(
+        main_ref.get("ref") == "refs/heads/main"
+        and isinstance(main_sha, str)
+        and SHA.fullmatch(main_sha) is not None,
+        "malformed current main ref",
+    )
     if trusted_main_sha is not None:
-        main_ref = obj(api.get(f"/repos/{REPOSITORY}/git/ref/heads/main"), "scheduled main ref")
         require(
-            main_ref.get("ref") == "refs/heads/main"
-            and isinstance(trusted_main_sha, str)
+            isinstance(trusted_main_sha, str)
             and SHA.fullmatch(trusted_main_sha) is not None
-            and nested(main_ref, "object", "sha") == trusted_main_sha,
+            and main_sha == trusted_main_sha,
             "current main no longer matches immutable scheduled-workflow source",
         )
     prs = api.get(f"/repos/{REPOSITORY}/pulls?state=open&base=main&per_page=100&page=1")
     require(isinstance(prs, list) and len(prs) < 100, "open PR listing incomplete")
     active = set()
+    stale_bases = 0
     for pr in prs:
         pr = obj(pr, "candidate open PR")
-        if nested(pr, "head", "repo", "full_name") == REPOSITORY:
-            active.add((nested(pr, "head", "sha"), nested(pr, "head", "ref")))
+        if nested(pr, "head", "repo", "full_name") != REPOSITORY:
+            continue
+        require(nested(pr, "base", "ref") == "main", "invalid candidate base branch")
+        base_sha = nested(pr, "base", "sha")
+        require(
+            isinstance(base_sha, str) and SHA.fullmatch(base_sha) is not None,
+            "malformed candidate base SHA",
+        )
+        if base_sha != main_sha:
+            # A still-open Dependabot PR can lag newly merged main. Its old
+            # CodeQL evidence is ineligible, but absence of a publishable
+            # current-base subject is not a failure of trusted main CI.
+            # Never publish a stale subject, reuse an earlier green run, or
+            # treat a base move *during* verification as a harmless skip.
+            stale_bases += 1
+            continue
+        active.add((nested(pr, "head", "sha"), nested(pr, "head", "ref")))
+    if stale_bases:
+        print(
+            f"DEFERRED: {stale_bases} open PR(s) use a superseded base; "
+            "native bot refresh and new exact-head CodeQL qualification are required",
+            file=sys.stderr,
+        )
     if not active:
         return None
     # A blocked newest run must shadow older successes for THAT head, but
@@ -1263,6 +1291,46 @@ def self_test() -> None:
         discover(Fake(peer_pending))["head_sha"] == head,
         "in-progress unrelated CodeQL scan starved valid exact-head publication",
     )
+    # A stale-but-genuine PR requires a native bot refresh, not a failed
+    # trusted-main publisher. No SARIF can be uploaded against its old base.
+    stale = deepcopy(discover_lookup)
+    stale[prs_path][0]["base"]["sha"] = "9" * 40
+    require(
+        discover(Fake(stale), trusted_main_sha=main) is None,
+        "superseded-base PR incorrectly failed the trusted main publisher",
+    )
+    malformed_base = deepcopy(stale)
+    malformed_base[prs_path][0]["base"]["sha"] = "not-a-sha"
+    try:
+        discover(Fake(malformed_base), trusted_main_sha=main)
+    except Blocked:
+        pass
+    else:
+        raise AssertionError("malformed candidate base was silently treated as stale")
+    stale_peer = deepcopy(discover_lookup)
+    superseded_pr = deepcopy(pr)
+    superseded_pr["number"] = prnum + 1
+    superseded_pr["head"]["sha"] = "9" * 40
+    superseded_pr["head"]["ref"] = "dependabot/superseded"
+    superseded_pr["base"]["sha"] = "8" * 40
+    stale_peer[prs_path].append(superseded_pr)
+    require(
+        discover(Fake(stale_peer), trusted_main_sha=main)["head_sha"] == head,
+        "stale peer prevented independent exact-base CodeQL publication",
+    )
+    moved_midflight = deepcopy(discover_lookup)
+    # Separate the list snapshot from the detail snapshot: deepcopy
+    # intentionally preserves shared test-object aliases.
+    detail_path = f"/repos/{REPOSITORY}/pulls/{prnum}"
+    moved_midflight[detail_path] = deepcopy(pr)
+    moved_midflight[detail_path]["base"]["sha"] = "9" * 40
+    try:
+        discover(Fake(moved_midflight), trusted_main_sha=main)
+    except Blocked:
+        pass
+    else:
+        raise AssertionError("base movement after candidate admission bypassed revalidation")
+
     newest_failed = deepcopy(discover_lookup)
     newer = deepcopy(run)
     newer["id"] = 102
