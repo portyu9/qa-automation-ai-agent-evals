@@ -1105,7 +1105,8 @@ def _repair_current_main_bot_qualification(
     if not isinstance(parents, list) or len(parents) != 2:
         raise GovernanceError("accepted bot merge must have exactly two parents")
     parent_shas = [
-        require_sha((parent or {}).get("sha"), "accepted bot merge parent") for parent in parents
+        require_sha((parent or {}).get("sha"), "accepted bot merge parent")
+        for parent in parents
     ]
     if parent_shas != [
         require_sha((pr.get("base") or {}).get("sha"), "bot merge PR base"),
@@ -2336,9 +2337,7 @@ dev = ["beta==2.0.0"]
     recovered_routes = {
         f"/branches/{config['baseBranch']}": {"commit": {"sha": recovered_sha}},
         pr_inventory: [canonical_bot],
-        f"/git/commits/{recovered_sha}": {
-            "parents": [{"sha": bot_base}, {"sha": bot_head}]
-        },
+        f"/git/commits/{recovered_sha}": {"parents": [{"sha": bot_base}, {"sha": bot_head}]},
     }
 
     class _PostMergeRecoveryApi:
