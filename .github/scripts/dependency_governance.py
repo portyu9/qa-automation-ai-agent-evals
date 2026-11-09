@@ -1061,6 +1061,62 @@ def _ensure_post_merge_qualification(
     return evidence
 
 
+
+def _repair_current_main_bot_qualification(
+    api: GitHubApi, config: dict[str, Any]
+) -> list[dict[str, Any]]:
+    """Compensate if a prior bot merge committed but workflow registration crashed.
+
+    Only the uniquely identified accepted-main Dependabot merge can trigger
+    repair. The repair dispatches standard trusted-main verification workflows,
+    never approves a PR or manufactures a successful check.
+    """
+    main_sha = _live_main_sha(api, config)
+    # Accepted main's most recently merged PR must remain on the first page
+    # when a merge is the live main tip; limit the reconciliation read.
+    rows = api.get("/pulls?state=closed&sort=updated&direction=desc&per_page=25&page=1")
+    if not isinstance(rows, list) or len(rows) > 25 or not all(
+        isinstance(row, dict) for row in rows
+    ):
+        raise GovernanceError("incomplete current-main merged PR inventory")
+    matched = [row for row in rows if row.get("merge_commit_sha") == main_sha]
+    if len(matched) > 1:
+        raise GovernanceError("ambiguous PR identity for accepted main merge")
+    if not matched:
+        return []
+    pr = matched[0]
+    if (
+        (pr.get("user") or {}).get("login") != BOT_LOGIN
+        or (pr.get("user") or {}).get("id") != BOT_USER_ID
+    ):
+        return []
+    if (
+        pr.get("state") != "closed"
+        or not isinstance(pr.get("merged_at"), str)
+        or (pr.get("base") or {}).get("ref") != config["baseBranch"]
+        or ((pr.get("head") or {}).get("repo") or {}).get("full_name")
+        != config["repository"]
+        or ((pr.get("base") or {}).get("repo") or {}).get("full_name")
+        != config["repository"]
+    ):
+        raise GovernanceError("accepted bot merge lacks canonical PR identity")
+    commit = api.get(f"/git/commits/{main_sha}")
+    parents = (commit or {}).get("parents")
+    if not isinstance(parents, list) or len(parents) != 2:
+        raise GovernanceError("accepted bot merge must have exactly two parents")
+    parent_shas = [
+        require_sha((parent or {}).get("sha"), "accepted bot merge parent") for parent in parents
+    ]
+    if parent_shas != [
+        require_sha((pr.get("base") or {}).get("sha"), "bot merge PR base"),
+        require_sha((pr.get("head") or {}).get("sha"), "bot merge PR head"),
+    ]:
+        raise GovernanceError("accepted main bot merge parents differ from canonical PR")
+    # Repeat the exact-main lease for EACH dispatched workflow. Existing red
+    # results stay blocking; missing ones are registered for real execution.
+    return _ensure_post_merge_qualification(api, main_sha, config)
+
+
 def _merge(api: GitHubApi, subject: dict[str, Any], config: dict[str, Any]) -> dict[str, Any]:
     fresh = api.get(f"/pulls/{subject['number']}")
     rebound = assess(api, fresh, config, require_checks=True)
@@ -1455,6 +1511,15 @@ def reconcile(config: dict[str, Any], *, allow_merge: bool) -> int:
             print(
                 json.dumps(
                     {"pr": number, "decision": "blocked", "reason": str(exc)}, sort_keys=True
+                )
+            )
+    if allow_merge and config["automergeEnabled"]:
+        recovered = _repair_current_main_bot_qualification(api, config)
+        if recovered:
+            print(
+                json.dumps(
+                    {"decision": "reconciled-post-merge", "workflows": recovered},
+                    sort_keys=True,
                 )
             )
     return eligible
