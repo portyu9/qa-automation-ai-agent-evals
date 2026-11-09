@@ -2127,10 +2127,7 @@ dev = ["beta==2.0.0"]
                 "status": transient,
                 "conclusion": None,
             }
-            if (
-                _select_post_merge_workflow_run([receipt], exact_sha, expected, config)
-                != receipt
-            ):
+            if _select_post_merge_workflow_run([receipt], exact_sha, expected, config) != receipt:
                 raise GovernanceError(
                     f"post-merge {expected['workflow']} rejected authentic {transient} "
                     "registration without a conclusion"
@@ -2153,8 +2150,14 @@ dev = ["beta==2.0.0"]
         for malformed in ("unknown", "", None, "ready"):
             try:
                 _select_post_merge_workflow_run(
-                    [dict(canonical_ci, name=expected["workflow"],
-                          path=f".github/workflows/{expected['file']}", status=malformed)],
+                    [
+                        dict(
+                            canonical_ci,
+                            name=expected["workflow"],
+                            path=f".github/workflows/{expected['file']}",
+                            status=malformed,
+                        )
+                    ],
                     exact_sha,
                     expected,
                     config,
