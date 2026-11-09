@@ -13,7 +13,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from collections import Counter
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -1458,18 +1458,28 @@ def selftest(config: dict[str, Any]) -> None:
     }
     rebase_marker = f"{OWNER_REFRESH_MARKER}{signed}:{accepted}:rebase -->"
     recreate_marker = f"{OWNER_RECOVERY_MARKER}{signed}:{accepted}:recreate -->"
+    # Parameterize the native-recovery boundary fixtures by the accepted
+    # policy, not a previous delay. This exercises the precise last
+    # pre-escalation minute and earliest safe escalation for any valid policy.
+    threshold = config["nativeRefreshEscalationMinutes"]
+    rebase_at = stamp - timedelta(minutes=min(15, threshold - 1))
+    overdue_at = stamp - timedelta(minutes=threshold + 1)
+    recovery_at = overdue_at + timedelta(minutes=threshold)
+    def iso(moment: datetime) -> str:
+        return moment.isoformat().replace("+00:00", "Z")
+
     rebase = {
         "user": verified_owner,
         "body": "@dependabot rebase\n\n" + rebase_marker,
         "performed_via_github_app": None,
-        "created_at": "2026-10-27T16:00:00Z",
+        "created_at": iso(rebase_at),
     }
-    overdue = dict(rebase, created_at="2026-10-27T14:00:00Z")
+    overdue = dict(rebase, created_at=iso(overdue_at))
     recovery = {
         "user": verified_owner,
         "body": "@dependabot recreate\n\n" + recreate_marker,
         "performed_via_github_app": None,
-        "created_at": "2026-10-27T16:30:00Z",
+        "created_at": iso(recovery_at),
     }
 
     connector_recovery = dict(
@@ -1511,13 +1521,13 @@ def selftest(config: dict[str, Any]) -> None:
         else:
             raise GovernanceError("duplicate owner-native recovery command was accepted")
     for bad_rows in (
-        [dict(rebase, created_at="2026-10-27T18:00:00Z")],
+        [dict(rebase, created_at=iso(stamp + timedelta(minutes=1)))],
         [dict(rebase, created_at="invalid")],
         [dict(rebase, created_at=None)],
         [dict(overdue, body="quoted " + rebase_marker)],
         [recovery],
-        [overdue, dict(recovery, created_at="2026-10-27T14:30:00Z")],
-        [overdue, dict(recovery, created_at="2026-10-27T18:00:00Z")],
+        [overdue, dict(recovery, created_at=iso(recovery_at - timedelta(minutes=1)))],
+        [overdue, dict(recovery, created_at=iso(stamp + timedelta(minutes=1)))],
     ):
         try:
             next_step(bad_rows)
