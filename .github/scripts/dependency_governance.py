@@ -2313,6 +2313,104 @@ dev = ["beta==2.0.0"]
     if [r["status"] for r in receipts] != ["queued", "pending", "queued"]:
         raise GovernanceError("post-merge workflow registration lost pending-state evidence")
 
+    # If a bot merge succeeded but the previous privileged controller died
+    # before dispatching CI, a later trusted-main run must recover missing
+    # workflow registration. The recovery never touches an unaccepted PR.
+    recovered_sha = exact_sha
+    bot_base = "a" * 40
+    bot_head = "b" * 40
+    canonical_bot = {
+        "number": 437,
+        "merge_commit_sha": recovered_sha,
+        "state": "closed",
+        "merged_at": "2026-11-09T17:52:46Z",
+        "user": {"login": BOT_LOGIN, "id": BOT_USER_ID},
+        "head": {"sha": bot_head, "repo": {"full_name": config["repository"]}},
+        "base": {
+            "ref": config["baseBranch"],
+            "sha": bot_base,
+            "repo": {"full_name": config["repository"]},
+        },
+    }
+    pr_inventory = "/pulls?state=closed&sort=updated&direction=desc&per_page=25&page=1"
+    recovered_routes = {
+        f"/branches/{config['baseBranch']}": {"commit": {"sha": recovered_sha}},
+        pr_inventory: [canonical_bot],
+        f"/git/commits/{recovered_sha}": {
+            "parents": [{"sha": bot_base}, {"sha": bot_head}]
+        },
+    }
+
+    class _PostMergeRecoveryApi:
+        def __init__(self, routes: dict[str, Any]) -> None:
+            self.routes = routes
+
+        def get(self, path: str) -> Any:
+            if path not in self.routes:
+                raise GovernanceError(f"unexpected post-merge recovery API read: {path}")
+            return self.routes[path]
+
+    with patch(
+        __name__ + "._ensure_post_merge_qualification", return_value=receipts
+    ) as qualify:
+        if _repair_current_main_bot_qualification(
+            _PostMergeRecoveryApi(recovered_routes), config
+        ) != receipts:
+            raise GovernanceError("accepted bot merge did not repair lost CI registration")
+        qualify.assert_called_once()
+        if qualify.call_args.args[1] != recovered_sha:
+            raise GovernanceError("recovery qualified the wrong accepted-main SHA")
+
+    import copy as _copy
+
+    for mutation in ("human", "not-main-merge", "no-pr"):
+        routes = _copy.deepcopy(recovered_routes)
+        if mutation == "human":
+            routes[pr_inventory][0]["user"]["login"] = "human"
+        elif mutation == "not-main-merge":
+            routes[pr_inventory][0]["merge_commit_sha"] = "c" * 40
+        else:
+            routes[pr_inventory] = []
+        with patch(__name__ + "._ensure_post_merge_qualification") as qualify:
+            if _repair_current_main_bot_qualification(
+                _PostMergeRecoveryApi(routes), config
+            ):
+                raise GovernanceError("non-bot or absent merge scheduled privileged repair")
+            qualify.assert_not_called()
+
+    for mutation in (
+        "wrong-parent", "wrong-repo", "wrong-ref", "unmerged", "duplicated",
+        "invalid-inventory", "invalid-parents",
+    ):
+        routes = _copy.deepcopy(recovered_routes)
+        row = routes[pr_inventory][0]
+        if mutation == "wrong-parent":
+            routes[f"/git/commits/{recovered_sha}"]["parents"][1]["sha"] = "d" * 40
+        elif mutation == "wrong-repo":
+            row["head"]["repo"]["full_name"] = "untrusted/repository"
+        elif mutation == "wrong-ref":
+            row["base"]["ref"] = "untrusted"
+        elif mutation == "unmerged":
+            row["merged_at"] = None
+        elif mutation == "duplicated":
+            routes[pr_inventory].append(_copy.deepcopy(row))
+        elif mutation == "invalid-inventory":
+            routes[pr_inventory] = {"forged": "list"}
+        else:
+            routes[f"/git/commits/{recovered_sha}"]["parents"] = []
+        with patch(__name__ + "._ensure_post_merge_qualification") as qualify:
+            try:
+                _repair_current_main_bot_qualification(
+                    _PostMergeRecoveryApi(routes), config
+                )
+            except GovernanceError:
+                pass
+            else:
+                raise GovernanceError(
+                    f"post-merge repair accepted forged/malformed {mutation}"
+                )
+            qualify.assert_not_called()
+
     for row in (
         dict(canonical_ci, head_sha="2" * 40),
         dict(canonical_ci, path=".github/workflows/not-ci.yml"),
