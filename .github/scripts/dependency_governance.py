@@ -915,11 +915,29 @@ def _post_merge_workflow_candidates(
             raise GovernanceError(f"exact-subject {workflow} run has invalid run id")
         status = row.get("status")
         conclusion = row.get("conclusion")
-        if status not in {"queued", "in_progress", "completed"}:
+        # GitHub may register a newly dispatched workflow as pending, requested
+        # or waiting before it enters queued/in_progress. These are authentic
+        # *registration* states, never successful qualification evidence.
+        # A false terminal conclusion, including contradictory non-null state
+        # in a pending run, must still fail closed.
+        if status not in {
+            "pending",
+            "requested",
+            "waiting",
+            "queued",
+            "in_progress",
+            "completed",
+        }:
             raise GovernanceError(f"exact-subject {workflow} run has invalid status: {status}")
-        if status == "completed" and conclusion != "success":
+        if status == "completed":
+            if conclusion != "success":
+                raise GovernanceError(
+                    f"exact-subject {workflow} run completed non-successfully: {conclusion}"
+                )
+        elif conclusion is not None:
             raise GovernanceError(
-                f"exact-subject {workflow} run completed non-successfully: {conclusion}"
+                f"exact-subject {workflow} run has nonterminal status "
+                f"{status} with unexpected conclusion: {conclusion}"
             )
         candidates.append(row)
     return candidates
@@ -2096,6 +2114,55 @@ dev = ["beta==2.0.0"]
         raise GovernanceError(
             "post-merge CodeQL selector rejected canonical exact-subject dispatch"
         )
+
+    # GitHub observed an authentic freshly dispatched CodeQL run with
+    # status='pending' after PR #437 merged, and the old selector raised
+    # after main advanced, leaving exact-main CI undispatched.
+    for expected in (security_expected, codeql_expected, ci_expected):
+        for transient in ("pending", "requested", "waiting", "queued", "in_progress"):
+            receipt = {
+                **canonical_ci,
+                "name": expected["workflow"],
+                "path": f".github/workflows/{expected['file']}",
+                "status": transient,
+                "conclusion": None,
+            }
+            if (
+                _select_post_merge_workflow_run([receipt], exact_sha, expected, config)
+                != receipt
+            ):
+                raise GovernanceError(
+                    f"post-merge {expected['workflow']} rejected authentic {transient} "
+                    "registration without a conclusion"
+                )
+            for contradiction in ("success", "failure", "cancelled"):
+                try:
+                    _select_post_merge_workflow_run(
+                        [dict(receipt, conclusion=contradiction)],
+                        exact_sha,
+                        expected,
+                        config,
+                    )
+                except GovernanceError:
+                    pass
+                else:
+                    raise GovernanceError(
+                        f"post-merge {expected['workflow']} trusted nonterminal "
+                        f"{transient} with forged {contradiction} conclusion"
+                    )
+        for malformed in ("unknown", "", None, "ready"):
+            try:
+                _select_post_merge_workflow_run(
+                    [dict(canonical_ci, name=expected["workflow"],
+                          path=f".github/workflows/{expected['file']}", status=malformed)],
+                    exact_sha,
+                    expected,
+                    config,
+                )
+            except GovernanceError:
+                pass
+            else:
+                raise GovernanceError("post-merge selector accepted unsupported workflow state")
 
     canonical_security = {
         "id": 301,
