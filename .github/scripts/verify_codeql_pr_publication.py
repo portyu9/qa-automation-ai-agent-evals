@@ -1291,6 +1291,42 @@ def self_test() -> None:
         discover(Fake(peer_pending))["head_sha"] == head,
         "in-progress unrelated CodeQL scan starved valid exact-head publication",
     )
+    # A stale-but-genuine PR requires a native bot refresh, not a failed
+    # trusted-main publisher. No SARIF can be uploaded against its old base.
+    stale = deepcopy(discover_lookup)
+    stale[prs_path][0]["base"]["sha"] = "9" * 40
+    require(
+        discover(Fake(stale), trusted_main_sha=main) is None,
+        "superseded-base PR incorrectly failed the trusted main publisher",
+    )
+    malformed_base = deepcopy(stale)
+    malformed_base[prs_path][0]["base"]["sha"] = "not-a-sha"
+    try:
+        discover(Fake(malformed_base), trusted_main_sha=main)
+    except Blocked:
+        pass
+    else:
+        raise AssertionError("malformed candidate base was silently treated as stale")
+    stale_peer = deepcopy(discover_lookup)
+    superseded_pr = deepcopy(pr)
+    superseded_pr["number"] = prnum + 1
+    superseded_pr["head"]["sha"] = "9" * 40
+    superseded_pr["head"]["ref"] = "dependabot/superseded"
+    superseded_pr["base"]["sha"] = "8" * 40
+    stale_peer[prs_path].append(superseded_pr)
+    require(
+        discover(Fake(stale_peer), trusted_main_sha=main)["head_sha"] == head,
+        "stale peer prevented independent exact-base CodeQL publication",
+    )
+    moved_midflight = deepcopy(discover_lookup)
+    moved_midflight[f"/repos/{REPOSITORY}/pulls/{prnum}"]["base"]["sha"] = "9" * 40
+    try:
+        discover(Fake(moved_midflight), trusted_main_sha=main)
+    except Blocked:
+        pass
+    else:
+        raise AssertionError("base movement after candidate admission bypassed revalidation")
+
     newest_failed = deepcopy(discover_lookup)
     newer = deepcopy(run)
     newer["id"] = 102
