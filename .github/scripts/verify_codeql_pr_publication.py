@@ -1319,7 +1319,11 @@ def self_test() -> None:
         "stale peer prevented independent exact-base CodeQL publication",
     )
     moved_midflight = deepcopy(discover_lookup)
-    moved_midflight[f"/repos/{REPOSITORY}/pulls/{prnum}"]["base"]["sha"] = "9" * 40
+    # Separate the list snapshot from the detail snapshot: deepcopy
+    # intentionally preserves shared test-object aliases.
+    detail_path = f"/repos/{REPOSITORY}/pulls/{prnum}"
+    moved_midflight[detail_path] = deepcopy(pr)
+    moved_midflight[detail_path]["base"]["sha"] = "9" * 40
     try:
         discover(Fake(moved_midflight), trusted_main_sha=main)
     except Blocked:
