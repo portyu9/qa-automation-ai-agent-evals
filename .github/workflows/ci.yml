@@ -194,7 +194,7 @@ jobs:
               ;;
             403|404)
               echo "state=blocked-admin-prerequisite" >> "$GITHUB_OUTPUT"
-              echo "::warning::Dependency review BLOCKED: repository dependency graph is not enabled; tracked by #193."
+              echo "::warning::Dependency review BLOCKED (HTTP $status): native dependency comparison unavailable. HTTP 403/404 alone cannot establish whether graph configuration, token authorization or feature entitlement is responsible; active issue #440."
               ;;
             *)
               cat "$response" >&2 || true
@@ -214,7 +214,7 @@ jobs:
       - name: Record blocked repository prerequisite
         if: github.event_name == 'pull_request' && steps.dependency_graph.outputs.state == 'blocked-admin-prerequisite'
         run: |
-          echo "Dependency review is BLOCKED, not PASS or FAIL: dependency graph requires repository-administrator enablement."
+          echo "Dependency review is BLOCKED, not PASS or FAIL: native dependency comparison did not run. HTTP 403/404 cause is unverified; see active issue #440."
       - name: Record non-PR applicability
         if: github.event_name != 'pull_request'
         run: echo "Dependency review is PR-delta authority; no dependency delta exists for this event."
@@ -1367,7 +1367,7 @@ jobs:
             passed|not-applicable)
               ;;
             blocked-admin-prerequisite)
-              echo "::warning::dependency-review state=BLOCKED because the repository dependency graph is disabled; see #193"
+              echo "::warning::dependency-review state=BLOCKED: native change-aware review was not performed; graph configuration, token authorization, or feature entitlement must be diagnosed (issue #440)."
               ;;
             *)
               echo "::error::unrecognized dependency-review state=$DEPENDENCY_REVIEW_STATE"
