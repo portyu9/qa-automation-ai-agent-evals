@@ -22,6 +22,9 @@ DEFAULT_CONFIG = ROOT / ".github" / "dependency-governance.json"
 API_ROOT = "https://api.github.com"
 API_VERSION = "2022-11-28"
 MAX_RESPONSE_BYTES = 8 * 1024 * 1024
+GET_SERVER_RETRY_STATUSES = frozenset({500, 502, 503, 504})
+GET_SERVER_RETRY_ATTEMPTS = 3
+GET_SERVER_RETRY_DELAY_SECONDS = 0.25
 BOT_LOGIN = "dependabot[bot]"
 BOT_USER_ID = 49699333
 # Native protected branch-rule check-run integration identity, not user-controlled labels.
@@ -275,16 +278,29 @@ class GitHubApi:
                 **({"Content-Type": "application/json"} if data is not None else {}),
             },
         )
-        try:
-            with urllib.request.urlopen(request, timeout=30) as response:
-                raw = response.read(max_bytes + 1)
-        except urllib.error.HTTPError as exc:
-            detail = exc.read(4096).decode("utf-8", errors="replace")
-            raise GovernanceError(
-                f"GitHub API {method} {path} failed HTTP {exc.code}: {detail}"
-            ) from exc
-        except urllib.error.URLError as exc:
-            raise GovernanceError(f"GitHub API {method} {path} transport failure: {exc}") from exc
+        # Retry only idempotent, authenticated reads after transient GitHub
+        # server responses. Never replay a write or a policy/auth failure.
+        for attempt in range(GET_SERVER_RETRY_ATTEMPTS):
+            try:
+                with urllib.request.urlopen(request, timeout=30) as response:
+                    raw = response.read(max_bytes + 1)
+                break
+            except urllib.error.HTTPError as exc:
+                detail = exc.read(4096).decode("utf-8", errors="replace")
+                if (
+                    method == "GET"
+                    and exc.code in GET_SERVER_RETRY_STATUSES
+                    and attempt + 1 < GET_SERVER_RETRY_ATTEMPTS
+                ):
+                    time.sleep(GET_SERVER_RETRY_DELAY_SECONDS * (attempt + 1))
+                    continue
+                raise GovernanceError(
+                    f"GitHub API {method} {path} failed HTTP {exc.code}: {detail}"
+                ) from exc
+            except urllib.error.URLError as exc:
+                raise GovernanceError(
+                    f"GitHub API {method} {path} transport failure: {exc}"
+                ) from exc
         if len(raw) > max_bytes:
             raise GovernanceError(f"GitHub API {method} {path} exceeded bounded response size")
         return raw
