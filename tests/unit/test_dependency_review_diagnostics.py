@@ -2,7 +2,6 @@
 
 from pathlib import Path
 
-
 CI = Path(__file__).resolve().parents[2] / ".github" / "workflows" / "ci.yml"
 
 
