@@ -12,7 +12,7 @@ def _ci() -> str:
 def test_403_404_cannot_claim_dependency_graph_is_disabled() -> None:
     workflow = _ci()
     review = workflow.split("  dependency-review:\n", 1)[1].split("\n  quality:", 1)[0]
-    assert '403|404)' in review
+    assert "403|404)" in review
     assert 'echo "state=blocked-admin-prerequisite" >> "$GITHUB_OUTPUT"' in review
     assert "HTTP 403/404 alone cannot establish" in review
     assert "graph configuration, token authorization or feature entitlement" in review
@@ -26,7 +26,7 @@ def test_403_404_cannot_claim_dependency_graph_is_disabled() -> None:
 def test_native_dependency_review_is_not_bypassed_or_mislabeled_green() -> None:
     workflow = _ci()
     review = workflow.split("  dependency-review:\n", 1)[1].split("\n  quality:", 1)[0]
-    assert '200)' in review
+    assert "200)" in review
     assert 'echo "state=available" >> "$GITHUB_OUTPUT"' in review
     assert (
         "if: github.event_name == 'pull_request' && "
@@ -44,7 +44,7 @@ def test_native_dependency_review_is_not_bypassed_or_mislabeled_green() -> None:
 def test_final_gate_preserves_degraded_coverage_notice() -> None:
     workflow = _ci()
     gate = workflow.split('case "$DEPENDENCY_REVIEW_STATE" in', 1)[1]
-    assert 'blocked-admin-prerequisite)' in gate
+    assert "blocked-admin-prerequisite)" in gate
     assert "native change-aware review was not performed" in gate
     assert "issue #440" in gate
     assert "dependency graph is disabled; see #193" not in gate
