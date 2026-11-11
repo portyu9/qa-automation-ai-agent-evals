@@ -22,6 +22,9 @@ DEFAULT_CONFIG = ROOT / ".github" / "dependency-governance.json"
 API_ROOT = "https://api.github.com"
 API_VERSION = "2022-11-28"
 MAX_RESPONSE_BYTES = 8 * 1024 * 1024
+GET_SERVER_RETRY_STATUSES = frozenset({500, 502, 503, 504})
+GET_SERVER_RETRY_ATTEMPTS = 3
+GET_SERVER_RETRY_DELAY_SECONDS = 0.25
 BOT_LOGIN = "dependabot[bot]"
 BOT_USER_ID = 49699333
 # Native protected branch-rule check-run integration identity, not user-controlled labels.
@@ -275,16 +278,29 @@ class GitHubApi:
                 **({"Content-Type": "application/json"} if data is not None else {}),
             },
         )
-        try:
-            with urllib.request.urlopen(request, timeout=30) as response:
-                raw = response.read(max_bytes + 1)
-        except urllib.error.HTTPError as exc:
-            detail = exc.read(4096).decode("utf-8", errors="replace")
-            raise GovernanceError(
-                f"GitHub API {method} {path} failed HTTP {exc.code}: {detail}"
-            ) from exc
-        except urllib.error.URLError as exc:
-            raise GovernanceError(f"GitHub API {method} {path} transport failure: {exc}") from exc
+        # Retry only idempotent, authenticated reads after transient GitHub
+        # server responses. Never replay a write or a policy/auth failure.
+        for attempt in range(GET_SERVER_RETRY_ATTEMPTS):
+            try:
+                with urllib.request.urlopen(request, timeout=30) as response:
+                    raw = response.read(max_bytes + 1)
+                break
+            except urllib.error.HTTPError as exc:
+                detail = exc.read(4096).decode("utf-8", errors="replace")
+                if (
+                    method == "GET"
+                    and exc.code in GET_SERVER_RETRY_STATUSES
+                    and attempt + 1 < GET_SERVER_RETRY_ATTEMPTS
+                ):
+                    time.sleep(GET_SERVER_RETRY_DELAY_SECONDS * (attempt + 1))
+                    continue
+                raise GovernanceError(
+                    f"GitHub API {method} {path} failed HTTP {exc.code}: {detail}"
+                ) from exc
+            except urllib.error.URLError as exc:
+                raise GovernanceError(
+                    f"GitHub API {method} {path} transport failure: {exc}"
+                ) from exc
         if len(raw) > max_bytes:
             raise GovernanceError(f"GitHub API {method} {path} exceeded bounded response size")
         return raw
@@ -1528,6 +1544,109 @@ def selftest(config: dict[str, Any]) -> None:
     if errors:
         raise GovernanceError("config self-test failed: " + "; ".join(errors))
 
+    import io
+    from unittest.mock import patch
+
+    # Real GitHubApi calls, with deterministic upstream failures: retries must
+    # be safe, bounded and incapable of replaying owner approval or merge.
+    api = GitHubApi("fixture-github-token", config["repository"])
+
+    def github_error(status: int) -> urllib.error.HTTPError:
+        return urllib.error.HTTPError(
+            f"{API_ROOT}/user",
+            status,
+            "fixture",
+            {},
+            io.BytesIO(b"upstream GitHub fixture"),
+        )
+
+    for status in (500, 502, 503, 504):
+        with (
+            patch(
+                __name__ + ".urllib.request.urlopen",
+                side_effect=[github_error(status), io.BytesIO(b'{"login":"owner"}')],
+            ) as urlopen,
+            patch(__name__ + ".time.sleep") as sleep,
+        ):
+            identity = api.request("GET", f"{API_ROOT}/user", token="fixture-owner-token")
+            if identity != {"login": "owner"} or urlopen.call_count != 2:
+                raise GovernanceError("transient authenticated GET did not recover")
+            if sleep.call_count != 1 or sleep.call_args.args[0] != 0.25:
+                raise GovernanceError("transient authenticated GET backoff changed")
+            for call in urlopen.call_args_list:
+                request = call.args[0]
+                if request.get_method() != "GET":
+                    raise GovernanceError("transient GET replay used another HTTP method")
+                if request.get_header("Authorization") != "Bearer fixture-owner-token":
+                    raise GovernanceError("transient GET lost exact authenticated identity")
+
+    with (
+        patch(
+            __name__ + ".urllib.request.urlopen",
+            side_effect=[github_error(500) for _ in range(3)],
+        ) as urlopen,
+        patch(__name__ + ".time.sleep") as sleep,
+    ):
+        try:
+            api.get("/pulls/17")
+        except GovernanceError as exc:
+            if "failed HTTP 500" not in str(exc):
+                raise
+        else:
+            raise GovernanceError("exhausted authenticated GET was accepted")
+        if urlopen.call_count != 3:
+            raise GovernanceError("transient GET exceeded bounded retry limit")
+        if [call.args[0] for call in sleep.call_args_list] != [0.25, 0.5]:
+            raise GovernanceError("transient GET retry delays exceeded safe bound")
+
+    for status in (400, 401, 403, 404, 409, 422, 429):
+        with (
+            patch(
+                __name__ + ".urllib.request.urlopen", side_effect=github_error(status)
+            ) as urlopen,
+            patch(__name__ + ".time.sleep") as sleep,
+        ):
+            try:
+                api.get("/pulls/17")
+            except GovernanceError as exc:
+                if f"failed HTTP {status}" not in str(exc):
+                    raise
+            else:
+                raise GovernanceError(f"non-retryable HTTP {status} passed")
+            if urlopen.call_count != 1:
+                raise GovernanceError(f"non-retryable HTTP {status} was retried")
+            sleep.assert_not_called()
+
+    for method in ("POST", "PATCH", "PUT"):
+        with (
+            patch(__name__ + ".urllib.request.urlopen", side_effect=github_error(500)) as urlopen,
+            patch(__name__ + ".time.sleep") as sleep,
+        ):
+            try:
+                api.request(method, "/pulls/17", {"event": "APPROVE"})
+            except GovernanceError:
+                pass
+            else:
+                raise GovernanceError(f"{method} upstream HTTP 500 was accepted")
+            if urlopen.call_count != 1 or urlopen.call_args.args[0].get_method() != method:
+                raise GovernanceError(f"{method} mutation was replayed")
+            sleep.assert_not_called()
+
+    with (
+        patch(__name__ + ".urllib.request.urlopen", return_value=io.BytesIO(b"9" * 9)) as urlopen,
+        patch(__name__ + ".time.sleep") as sleep,
+    ):
+        try:
+            api.raw("GET", "/pulls/17", max_bytes=8)
+        except GovernanceError as exc:
+            if "exceeded bounded response size" not in str(exc):
+                raise
+        else:
+            raise GovernanceError("oversized authenticated response was accepted")
+        if urlopen.call_count != 1:
+            raise GovernanceError("oversized response was retried")
+        sleep.assert_not_called()
+
     # Native bot recovery is bounded, repeat-safe and authenticated by the
     # exact owner login AND immutable numeric identity; no bot branch mutation.
     stamp = datetime(2026, 10, 27, 17, 0, tzinfo=UTC)
@@ -2279,8 +2398,6 @@ dev = ["beta==2.0.0"]
         raise GovernanceError("post-merge Security accepted ambiguous duplicate runs")
 
     # The production qualification loop is the *dispatch ordering authority*.
-    from unittest.mock import patch
-
     observed_dispatches: list[str] = []
 
     def _record_dispatch(
