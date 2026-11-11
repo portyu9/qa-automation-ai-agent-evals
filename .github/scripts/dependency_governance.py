@@ -1553,7 +1553,10 @@ def selftest(config: dict[str, Any]) -> None:
 
     def github_error(status: int) -> urllib.error.HTTPError:
         return urllib.error.HTTPError(
-            f"{API_ROOT}/user", status, "fixture", {},
+            f"{API_ROOT}/user",
+            status,
+            "fixture",
+            {},
             io.BytesIO(b"upstream GitHub fixture"),
         )
 
@@ -1598,7 +1601,9 @@ def selftest(config: dict[str, Any]) -> None:
 
     for status in (400, 401, 403, 404, 409, 422, 429):
         with (
-            patch(__name__ + ".urllib.request.urlopen", side_effect=github_error(status)) as urlopen,
+            patch(
+                __name__ + ".urllib.request.urlopen", side_effect=github_error(status)
+            ) as urlopen,
             patch(__name__ + ".time.sleep") as sleep,
         ):
             try:
