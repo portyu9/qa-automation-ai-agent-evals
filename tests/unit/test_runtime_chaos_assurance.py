@@ -33,9 +33,7 @@ def test_chaos_blocked_requires_evaluator_error_code_after_linter_upgrade() -> N
     observation = _observation(ChaosDomain.DNS, 123, outcome=ChaosOutcome.BLOCKED)
     assert observation.error_code == "evaluator-unavailable"
     with pytest.raises(ValidationError, match="BLOCKED chaos observation requires evaluator error code"):
-        observation.model_copy(update={"error_code": None}).model_validate(
-            observation.model_dump(exclude={"error_code"})
-        )
+        ChaosObservation.model_validate({**observation.model_dump(), "error_code": None})
 
 
 def test_chaos_recovered_still_disallows_evaluator_error_code() -> None:
