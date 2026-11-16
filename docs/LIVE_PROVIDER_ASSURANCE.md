@@ -4,7 +4,7 @@
 
 The framework separates deterministic adapter conformance from credentialed live-provider observation.
 
-Ordinary pull requests and deterministic CI prove repository-owned contracts without network credentials. A separate scheduled/manual live canary can make a bounded historical observation against a configured provider. Neither path gives provider output grading authority, and neither path lets a third-party adapter declare itself a trusted producer of evaluator-owned evidence.
+Ordinary pull requests and deterministic CI prove repository-owned contracts without network credentials. The credential-dependent live canary has been retired because credentials and paid provider calls are intentionally outside this repository's scope. Deterministic offline provider-boundary simulation remains available. Neither path gives provider output grading authority, and neither path lets a third-party adapter declare itself a trusted producer of evaluator-owned evidence.
 
 ## Evaluator-owned adapter conformance
 
@@ -42,93 +42,44 @@ When public provider/runtime interfaces expose them, the adapter may retain boun
 
 A non-successful transport result becomes adapter uncertainty (`BLOCKED`), not a behavioral failure.
 
-## Credentialed live-provider canary
+## Approved credential-free execution boundary
 
-`.github/workflows/live-provider-canary.yml` is deliberately separate from ordinary CI. It runs only:
+The QA Agent Evals repository requires **no provider account, API key, paid model, pricing variable, network call, or live provider observation** for its automated assurance. This is an intentional scope decision, not a missing configuration.
 
-- on an explicit manual dispatch; or
-- on its weekly schedule.
+The previously installed weekly/manual GitHub Actions live-provider canary and its credentialed HTTP runner were removed. No workflow dispatch, schedule, PR job, release gate, or other repository automation may call the provider API as a canary or require provider secrets. The repository's native GitHub governance authentication is separate from provider credentials and is not altered by this decision.
 
-There is no `pull_request` or ordinary `push` trigger. The job has read-only repository permission and no OIDC, attestation, or repository-write authority.
+The versioned runtime policy `.github/scripts/validate_runtime_policy.py` and the `tests/unit/test_live_provider_workflow_policy.py` contract reject restoration of the retired canary entry points or active workflows containing provider-key or canary configuration markers. Those checks are part of ordinary CI. In particular, the absence of an API key must **not** produce a red scheduled workflow or a request to provision a secret.
 
-The current canary uses the provider's public HTTP API through `.github/scripts/run_live_provider_canary.py`. Credentials come only from the GitHub secret environment. The script does not print the credential.
+A previous scheduled live-provider workflow did fail on 2026-11-16 because it incorrectly expected `OPENAI_API_KEY` and pricing/model configuration. That historical run is immutable GitHub evidence, **not** an ongoing operational requirement. The incorrect provisioning request in issue #447 was closed as not planned.
 
-The executable ceilings are intentionally small:
+## Deterministic provider-boundary and retry classification
 
-| Boundary | Default ceiling |
-|---|---:|
-| Attempts | 3 |
-| Request timeout | 15 seconds |
-| Total wall clock | 45 seconds |
-| Request rate | 6/minute |
-| Input tokens | 256 |
-| Output tokens | 32 |
-| Total estimated cost across all attempts | $0.01 |
+`src/agent_evals/live_provider.py` remains a credential-free **pure control-plane test seam**: `run_provider_canary` accepts an injected transport function supplied by tests. No live HTTP adapter or automatically invoked provider call is attached to that seam. `tests/unit/test_live_provider_canary.py` verifies simulated successful observations, behavioral mismatches, throttling, timeouts, malformed responses, policy ceilings, and distinct uncertainty outcomes without external I/O.
 
-The cost preflight uses an operator/repository-supplied price snapshot. It multiplies the maximum per-request token cost by the maximum attempt count, so a retry-capable configuration whose worst-case total bounded usage would exceed the canary cost ceiling is rejected before any provider request. Runtime observations also accumulate validated usage/cost across retries and fail closed if the total ceiling is exceeded. The resulting cost value is an estimate under that configured price snapshot, not a provider bill or authenticated pricing claim.
-
-## Retry and verdict classification
-
-Live observations have three explicit dispositions:
+The simulated dispositions retain their original meaning:
 
 | Disposition | Meaning |
 |---|---|
-| `observed` | A structurally valid successful provider response satisfied the predeclared canary assertion. |
-| `subject_failure` | A structurally valid successful provider response was observed but violated the predeclared behavioral assertion. |
-| `provider_uncertain` | The provider/runtime relation could not be resolved safely: retryable service failure, timeout, malformed response, bounded-usage violation, or another provider/transport uncertainty. |
+| `observed` | A deterministic injected transport returned a structurally valid response matching the declared assertion. |
+| `subject_failure` | A deterministic injected transport returned a valid response violating the test assertion. |
+| `provider_uncertain` | A simulated provider or transport result could not be resolved safely (rate limiting, timeout, malformed response, or budget violation). |
 
-HTTP 429 and selected 5xx responses are retried only within the attempt/rate/wall-clock limits. Timeouts follow the same bounded retry policy. A retry delay that would consume the remaining wall-clock budget fails closed as provider uncertainty.
+These are **offline test observations only**. Even a simulated `observed` result is not proof that a public provider was contacted, a model ran, a real request ID was generated, or a paid inference request succeeded.
 
-This distinction is intentional:
-
-```text
-provider unavailable / throttled / malformed / timed out
-    = provider_uncertain
-    != subject_failure
-
-valid successful response that violates declared canary assertion
-    = subject_failure
-```
-
-## Retained metadata and artifacts
-
-Where the public interface exposes them, the observation retains:
-
-- provider request identifier;
-- provider model/revision label;
-- cumulative observed input/output token counts across validated attempts;
-- cumulative configured-price estimated cost across validated attempts;
-- attempt count and disposition.
-
-The workflow retains the canonical JSON observation as `live-provider-canary-<run_id>` for 14 days. The schema explicitly records:
-
-- `historical_observation: true`
-- `provider_attestation: false`
-
-The artifact is therefore a record of what the repository observed in one bounded run. It is not automatically promoted into release authority, a provider attestation, or a framework-signed truth claim.
-
-## Deterministic testing without credentials
-
-All conformance rules, the JSON runtime adapter, retry classification, rate/cost/wall-clock policy, malformed-response behavior, and non-attestation semantics are tested deterministically without live credentials.
-
-The credentialed workflow is an additional observation tier. It is not required to determine whether an ordinary pull request is structurally correct.
+The remaining attempt, token, time, and estimated-cost limits are deterministic **contract inputs** for the injected transport and are exercised in unit tests. They are not a live spending authorization, configured price snapshot, or enabled provider billing workflow. The `historical_observation: true` and `provider_attestation: false` schema flags in simulated observations continue to prevent promotion into evaluator-owned authority.
 
 ## Non-claims
 
 This layer does not establish:
 
 - authenticated provider or model identity from a request ID or model string;
-- provider-side execution provenance or non-repudiation;
-- a trusted provider timestamp;
-- SLA or general availability guarantees;
-- universal correctness across models, regions, accounts, or future provider revisions;
-- independent token accounting or billing correctness;
-- freshness/correctness of an operator-supplied price snapshot;
-- external side-effect truth unless another evidence contract observes that boundary;
-- automatic release acceptance from a live canary result;
+- a real provider-side execution, SLA, availability guarantee, or receipt;
+- a provider-attested timestamp, billing amount, or price;
+- external side-effect truth without independent evaluator-owned evidence;
+- automatic release acceptance based on synthetic or historical provider observations;
 - authorization for third-party adapters to emit evaluator-owned evidence;
-- retroactive authentication of historical live observations.
+- permission to create API secrets, enable paid requests, or revive the removed live canary.
 
-A future deployment may separately authenticate a retained live observation, but that would be a distinct trust relation and must not be inferred from this canary artifact itself.
+Any future credentialed execution would require a separately requested scope decision, an append-only architecture decision, and governed security review. It must not be inferred from this document or the presence of the deterministic test seam.
 
 [← Documentation hub](README.md)
