@@ -88,9 +88,8 @@ class ChaosObservation(BaseModel):
                 raise ValueError("recovered chaos observation requires recovery ticks")
             if self.error_code is not None:
                 raise ValueError("recovered chaos observation cannot carry evaluator error code")
-        elif self.outcome is ChaosOutcome.BLOCKED:
-            if self.error_code is None:
-                raise ValueError("BLOCKED chaos observation requires evaluator error code")
+        elif self.outcome is ChaosOutcome.BLOCKED and self.error_code is None:
+            raise ValueError("BLOCKED chaos observation requires evaluator error code")
         return self
 
 
