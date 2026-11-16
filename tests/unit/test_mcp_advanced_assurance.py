@@ -401,6 +401,73 @@ def test_advanced_oauth_rotation_refresh_revocation_replay_and_sender_binding() 
         OAuthAdvancedReceipt.model_validate(tampered)
 
 
+@pytest.mark.parametrize(
+    ("accepted", "expected_rejection"),
+    [
+        (True, True),
+        (False, False),
+    ],
+)
+def test_revoked_oauth_token_request_remains_fail_closed_after_linter_upgrade(
+    accepted: bool,
+    expected_rejection: bool,
+) -> None:
+    from agent_evals.mcp.oauth_advanced import _check_events
+
+    events = (
+        _oauth_event(
+            event_id="event.initial",
+            kind=OAuthSessionEventKind.INITIAL,
+            epoch=0,
+            token="token-revoked",
+            kid="kid-a",
+        ),
+        _oauth_event(
+            event_id="event.revoke",
+            kind=OAuthSessionEventKind.REVOKE,
+            epoch=1,
+            token="token-revoked",
+            kid="kid-a",
+            accepted=False,
+        ),
+        _oauth_event(
+            event_id="event.request",
+            kind=OAuthSessionEventKind.REQUEST,
+            epoch=2,
+            token="token-revoked",
+            kid="kid-a",
+            accepted=accepted,
+        ),
+    )
+    if expected_rejection:
+        with pytest.raises(ValueError, match="revoked OAuth token cannot be accepted"):
+            _check_events(events)
+    else:
+        assert _check_events(events) == events
+
+
+def test_nonrevoked_oauth_request_remains_permitted_after_linter_upgrade() -> None:
+    from agent_evals.mcp.oauth_advanced import _check_events
+
+    events = (
+        _oauth_event(
+            event_id="event.initial",
+            kind=OAuthSessionEventKind.INITIAL,
+            epoch=0,
+            token="token-current",
+            kid="kid-a",
+        ),
+        _oauth_event(
+            event_id="event.request",
+            kind=OAuthSessionEventKind.REQUEST,
+            epoch=1,
+            token="token-current",
+            kid="kid-a",
+        ),
+    )
+    assert _check_events(events) == events
+
+
 def test_oauth_active_session_authorization_drift_requires_post_contraction_denial() -> None:
     receipt = OAuthAuthorizationDriftReceipt.create(
         (
