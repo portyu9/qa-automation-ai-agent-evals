@@ -427,9 +427,12 @@ def _check_events(values: tuple[OAuthSessionEvent, ...]) -> tuple[OAuthSessionEv
         elif item.kind is OAuthSessionEventKind.REPLAY:
             if item.token_sha256 not in seen_tokens:
                 raise ValueError("OAuth replay must reference a previously observed token")
-        elif item.kind is OAuthSessionEventKind.REQUEST:
-            if item.token_sha256 in revoked_tokens and item.accepted_by_resource:
-                raise ValueError("revoked OAuth token cannot be accepted after revocation")
+        elif (
+            item.kind is OAuthSessionEventKind.REQUEST
+            and item.token_sha256 in revoked_tokens
+            and item.accepted_by_resource
+        ):
+            raise ValueError("revoked OAuth token cannot be accepted after revocation")
     return tuple(checked)
 
 
