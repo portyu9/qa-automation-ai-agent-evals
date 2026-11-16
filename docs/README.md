@@ -64,7 +64,7 @@ Approval decision receipt     ≠ human identity or external authorization
 Duplicate-looking tool result ≠ proof of idempotent physical effect
 Legacy approval               ≠ stronger native HITL approval decision
 Provider availability         ≠ subject correctness
-Live canary observation       ≠ provider attestation or general availability proof
+Offline provider simulation  ≠ live provider attestation or availability proof
 Adapter conformance           ≠ evaluator-owned producer authority
 Model confidence              ≠ grading authority
 Semantic PASS                 ≠ external state, authorization, or safety proof
