@@ -592,6 +592,7 @@ def discover(api: Any, *, trusted_main_sha: str | None = None) -> dict[str, str]
     # cannot veto a distinct, independently authenticated green PR.
     seen_heads: set[tuple[str, str]] = set()
     blocked_heads: set[tuple[str, str]] = set()
+    pending_heads: set[tuple[str, str]] = set()
     for page in range(1, 4):
         payload = obj(
             api.get(
@@ -614,7 +615,21 @@ def discover(api: Any, *, trusted_main_sha: str | None = None) -> dict[str, str]
                 run.get("workflow_id") == WORKFLOW_ID and run.get("event") == "pull_request",
                 "canonical CodeQL producer workflow identity drift",
             )
-            if run.get("status") != "completed" or run.get("conclusion") != "success":
+            status = run.get("status")
+            conclusion = run.get("conclusion")
+            if status in {"queued", "in_progress", "waiting", "requested", "pending"}:
+                require(
+                    conclusion is None,
+                    "incomplete CodeQL run advertises a terminal conclusion",
+                )
+                pending_heads.add(subject)
+                print(
+                    "DEFERRED: live PR's newest CodeQL run has not completed; "
+                    "older runs for that head are ineligible and no SARIF can be published yet",
+                    file=sys.stderr,
+                )
+                continue
+            if status != "completed" or conclusion != "success":
                 blocked_heads.add(subject)
                 print(
                     "BLOCKED: live PR's newest CodeQL run is not completed-success; "
@@ -707,6 +722,12 @@ def discover(api: Any, *, trusted_main_sha: str | None = None) -> dict[str, str]
                 raise Blocked(
                     f"{len(blocked_heads)} live PR head(s) have no completed-success newest "
                     "CodeQL run; no ineligible evidence was published"
+                )
+            if pending_heads:
+                print(
+                    f"DEFERRED: {len(pending_heads)} PR CodeQL head(s) still running; "
+                    "no SARIF was published, and completed scans will trigger a new read",
+                    file=sys.stderr,
                 )
             return None
     raise Blocked("CodeQL workflow run inventory exceeds bounded 300-run lookback")
@@ -1330,6 +1351,29 @@ def self_test() -> None:
         pass
     else:
         raise AssertionError("base movement after candidate admission bypassed revalidation")
+
+    # A genuinely pending newest PR CodeQL run is not itself a failure
+    # of the trusted main-owned publisher. It MUST shadow an older green
+    # run, emit no publication target, and rely on the completed-run wake.
+    for pending_state in ("queued", "in_progress", "waiting", "requested", "pending"):
+        newest_pending = deepcopy(discover_lookup)
+        pending_run = deepcopy(run)
+        pending_run.update(id=102, status=pending_state, conclusion=None)
+        newest_pending[runs_path]["workflow_runs"] = [pending_run, run]
+        require(
+            discover(Fake(newest_pending)) is None,
+            f"unfinished {pending_state} scan was treated as publishable CodeQL evidence",
+        )
+        inconsistent = deepcopy(newest_pending)
+        inconsistent[runs_path]["workflow_runs"][0]["conclusion"] = "success"
+        try:
+            discover(Fake(inconsistent))
+        except Blocked:
+            pass
+        else:
+            raise AssertionError(
+                "pending CodeQL scan with a forged terminal conclusion was silently deferred"
+            )
 
     newest_failed = deepcopy(discover_lookup)
     newer = deepcopy(run)
