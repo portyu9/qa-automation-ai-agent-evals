@@ -107,15 +107,15 @@ The framework does not infer resource authority from external locator text. URLs
 
 See the repository-level [Typed Resource Authority](../RESOURCE_AUTHORITY.md), plus [Security](SECURITY.md) and [Limitations](LIMITATIONS.md).
 
-## Adapter conformance and live-provider observation
+## Adapter conformance and offline provider-boundary simulation
 
 Every adapter result entering the public `TrialRunner` passes an evaluator-owned normalized-result conformance check before evidence conversion. The original adapter object remains the execution, error-provenance, and producer-authority subject, so structural conformance cannot replace or broaden the existing exact-type checks for evaluator-owned attack, retrieval, approval, side-effect, and MCP protocol evidence.
 
 `JsonHttpRuntimeAdapter` provides a genuinely distinct provider-neutral JSON runtime boundary. The remote side may report terminal output/state and non-authoritative usage telemetry, but it cannot inject framework events or declare trusted evidence roles.
 
-A separate `Live provider canary` workflow performs bounded scheduled/manual credentialed observation with explicit attempt, request-timeout, wall-clock, rate, token, and estimated-cost ceilings. Retryable 429/5xx and timeout conditions remain provider uncertainty; only a structurally valid successful response that violates the predeclared assertion is classified as subject failure. Request/model identifiers are retained when exposed, but remain diagnostic labels rather than authenticated provider identity.
+The repository intentionally does **not** run credentialed live provider canaries, scheduled provider calls, or paid model observations. The former workflow and credentialed HTTP runner were retired by [ADR 0088](adr/0088-retire-credentialed-live-provider-canary.md). No provider credentials, model selection, or pricing variables are required in automated CI.
 
-The live artifact explicitly records a historical observation and denies provider-attestation status. It is not a required ordinary-PR gate and carries no signing or repository-write authority.
+The retained `run_provider_canary` model accepts an **injected deterministic test transport**. Unit tests still prove bounded attempts, wall-clock, rate, token, and simulated estimated-cost limits; retryable 429/5xx and timeout responses remain provider uncertainty. A valid simulated response violating the predeclared assertion is a subject failure. These results are not evidence that any public provider was called or that a model ran. Simulated request/model identifiers are diagnostic, not authenticated provider identity.
 
 See [Live Provider Assurance and Adapter Conformance](LIVE_PROVIDER_ASSURANCE.md).
 ## OpenAI Agents SDK tier
@@ -310,7 +310,7 @@ CI remains the canonical repository-wide integration surface because it exercise
 
 The executable surface does not itself establish:
 
-- general live-provider correctness or availability from a bounded historical canary observation;
+- general live-provider correctness or availability from an offline injected-transport simulation;
 - hosted or arbitrary remote MCP correctness;
 - production IAM, human identity, or enterprise approval attestation;
 - target-side attestation or cryptographic publisher identity;
