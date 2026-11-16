@@ -21,9 +21,7 @@ def test_credentialed_live_provider_entry_points_are_absent_by_design() -> None:
 
 
 def test_no_workflow_requires_provider_credentials_or_schedules_live_canary() -> None:
-    workflows = sorted(
-        (*_WORKFLOW_DIRECTORY.glob("*.yml"), *_WORKFLOW_DIRECTORY.glob("*.yaml"))
-    )
+    workflows = sorted((*_WORKFLOW_DIRECTORY.glob("*.yml"), *_WORKFLOW_DIRECTORY.glob("*.yaml")))
     assert workflows
     for workflow in workflows:
         source = workflow.read_text(encoding="utf-8")
