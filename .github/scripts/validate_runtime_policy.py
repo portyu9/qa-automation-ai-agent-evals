@@ -81,6 +81,32 @@ def validate_action_pins(sources: dict[Path, str]) -> None:
 
 pyproject = tomllib.loads(Path("pyproject.toml").read_text(encoding="utf-8"))
 workflows = workflow_sources()
+
+# Live provider calls require credentials and are outside this repository's
+# approved credential-free execution contract. Reject their reintroduction
+# in ALL workflow files, rather than merely skipping a scheduled job when a
+# secret happens to be absent. Do not reject the normal GitHub automation
+# credentials used for repository governance.
+retired_canary_paths = (
+    Path(".github/workflows/live-provider-canary.yml"),
+    Path(".github/scripts/run_live_provider_canary.py"),
+)
+for retired in retired_canary_paths:
+    if retired.exists():
+        fail(f"out-of-scope live provider canary entry point restored: {retired.as_posix()}")
+for path, source in workflows.items():
+    if any(
+        forbidden in source
+        for forbidden in (
+            "OPENAI_API_KEY",
+            "OPENAI_CANARY_",
+            "run_live_provider_canary.py",
+            "live-provider-canary",
+            "api.openai.com/v1/responses",
+        )
+    ):
+        fail(f"credentialed live provider execution is out of scope: {path.as_posix()}")
+
 ci_path = Path(".github/workflows/ci.yml")
 workflow = workflows.get(ci_path)
 if workflow is None:
