@@ -2,7 +2,7 @@
 
 ## Purpose
 
-The framework separates deterministic adapter conformance from credentialed live-provider observation.
+The framework provides deterministic adapter conformance and an offline simulated provider-boundary test seam; credentialed live-provider observation is intentionally out of scope.
 
 Ordinary pull requests and deterministic CI prove repository-owned contracts without network credentials. The credential-dependent live canary has been retired because credentials and paid provider calls are intentionally outside this repository's scope. Deterministic offline provider-boundary simulation remains available. Neither path gives provider output grading authority, and neither path lets a third-party adapter declare itself a trusted producer of evaluator-owned evidence.
 
