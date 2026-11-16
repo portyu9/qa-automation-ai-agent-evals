@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import pytest
+from pydantic import ValidationError
+
 from agent_evals.runtime.chaos import (
     ChaosAssuranceReceipt,
     ChaosDomain,
@@ -24,6 +27,25 @@ def _observation(
         resource_peak_bytes=1024,
         error_code="evaluator-unavailable" if outcome is ChaosOutcome.BLOCKED else None,
     )
+
+
+def test_chaos_blocked_requires_evaluator_error_code_after_linter_upgrade() -> None:
+    observation = _observation(ChaosDomain.DNS, 123, outcome=ChaosOutcome.BLOCKED)
+    assert observation.error_code == "evaluator-unavailable"
+    with pytest.raises(
+        ValidationError, match="BLOCKED chaos observation requires evaluator error code"
+    ):
+        ChaosObservation.model_validate({**observation.model_dump(), "error_code": None})
+
+
+def test_chaos_recovered_still_disallows_evaluator_error_code() -> None:
+    observation = _observation(ChaosDomain.DNS, 124)
+    with pytest.raises(
+        ValidationError, match="recovered chaos observation cannot carry evaluator error code"
+    ):
+        ChaosObservation.model_validate(
+            {**observation.model_dump(), "error_code": "evaluator-unavailable"}
+        )
 
 
 def test_chaos_assurance_covers_all_domains_without_flattening_subject_failure() -> None:
