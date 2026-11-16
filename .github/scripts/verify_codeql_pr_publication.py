@@ -1279,9 +1279,7 @@ def self_test() -> None:
     pending = dict(run, id=run_id + 1, status="in_progress", conclusion=None)
     newest_pending[exact_path]["workflow_runs"] = [pending, run]
     newest_pending[exact_path]["total_count"] = 2
-    newest_pending[f"{feed}?event=pull_request&per_page=100&page=3"][
-        "workflow_runs"
-    ][50] = run
+    newest_pending[f"{feed}?event=pull_request&per_page=100&page=3"]["workflow_runs"][50] = run
     require(
         discover(Fake(newest_pending), trusted_main_sha=main) is None,
         "older global-success scan shadowed newer exact-head pending run",
