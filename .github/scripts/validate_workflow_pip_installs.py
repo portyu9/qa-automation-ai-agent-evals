@@ -42,7 +42,6 @@ EXPECTED_LOCAL = {
     "deep-property-stress.yml": {".": 1},
     "deterministic-performance.yml": {".": 1},
     "free-threaded-probe.yml": {".": 1},
-    "live-provider-canary.yml": {".": 1},
     "platform-smoke.yml": {".": 1},
     "publish-pypi.yml": {"retained-dist/*.whl": 1},
     "publish-release.yml": {"retained-dist/*.whl": 1},
