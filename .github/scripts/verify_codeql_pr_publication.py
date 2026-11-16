@@ -1251,6 +1251,65 @@ def self_test() -> None:
         "trusted scheduler discovery rejected valid PR run",
     )
 
+    # A brand-new authenticated PR head can be absent from the bounded
+    # global 300-run feed even while older unrelated scans fill every page.
+    # The canonical SHA-filtered fallback must find it without guessing
+    # historical IDs or substituting an older completed run.
+    saturated = deepcopy(discover_lookup)
+    feed = f"/repos/{REPOSITORY}/actions/workflows/{WORKFLOW_ID}/runs"
+    for page in (1, 2, 3):
+        saturated[f"{feed}?event=pull_request&per_page=100&page={page}"] = {
+            "workflow_runs": [
+                dict(
+                    run,
+                    id=1000 + page * 100 + index,
+                    head_sha="f" * 40,
+                    head_branch="security/unrelated-history",
+                )
+                for index in range(100)
+            ]
+        }
+    exact_path = f"{feed}?event=pull_request&head_sha={head}&per_page=100&page=1"
+    saturated[exact_path] = {"total_count": 1, "workflow_runs": [run]}
+    require(
+        discover(Fake(saturated), trusted_main_sha=main)["head_sha"] == head,
+        "bounded historical feed hid a valid exact-head signed CodeQL scan",
+    )
+    newest_pending = deepcopy(saturated)
+    pending = dict(run, id=run_id + 1, status="in_progress", conclusion=None)
+    newest_pending[exact_path]["workflow_runs"] = [pending, run]
+    newest_pending[exact_path]["total_count"] = 2
+    newest_pending[f"{feed}?event=pull_request&per_page=100&page=3"][
+        "workflow_runs"
+    ][50] = run
+    require(
+        discover(Fake(newest_pending), trusted_main_sha=main) is None,
+        "older global-success scan shadowed newer exact-head pending run",
+    )
+    not_registered = deepcopy(saturated)
+    not_registered[exact_path] = {"total_count": 0, "workflow_runs": []}
+    require(
+        discover(Fake(not_registered), trusted_main_sha=main) is None,
+        "missing yet-to-register exact-head CodeQL run was misclassified as final failure",
+    )
+    for label, invalid in (
+        ("wrong SHA", {"total_count": 1, "workflow_runs": [dict(run, head_sha="f" * 40)]}),
+        ("incomplete result count", {"total_count": 0, "workflow_runs": [run]}),
+        ("untrusted shape", {"total_count": 1, "workflow_runs": ["malformed"]}),
+        (
+            "failed newest source",
+            {"total_count": 1, "workflow_runs": [dict(run, conclusion="failure")]},
+        ),
+    ):
+        corrupt = deepcopy(saturated)
+        corrupt[exact_path] = invalid
+        try:
+            discover(Fake(corrupt), trusted_main_sha=main)
+        except Blocked:
+            pass
+        else:
+            raise AssertionError(f"exact-head fallback accepted {label}")
+
     # Preupload authority must be revalidated AFTER a download: stale results
     # and conflicting native publications cannot consume write authority.
     snapshot = verify(Fake(lookup), event, trusted_main_sha=main)
