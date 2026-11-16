@@ -2511,6 +2511,73 @@ dev = ["beta==2.0.0"]
         if qualify.call_args.args[1] != recovered_sha:
             raise GovernanceError("recovery qualified the wrong accepted-main SHA")
 
+    # Regression: another protected PR can merge while the trusted repair
+    # process is still registering a previous bot merge's real workflows.
+    # The controller must never dispatch another job for the displaced SHA
+    # or report stale CI/CodeQL/Security evidence as current.
+    superseding_sha = "f" * 40
+    observed_dispatches.clear()
+    with (
+        patch(__name__ + "._live_main_sha", side_effect=[exact_sha, superseding_sha]),
+        patch(__name__ + "._ensure_post_merge_workflow", side_effect=_record_dispatch) as dispatch,
+    ):
+        try:
+            _ensure_post_merge_qualification(None, exact_sha, config)  # type: ignore[arg-type]
+        except MainSuperseded as exc:
+            if exc.expected_sha != exact_sha or exc.observed_sha != superseding_sha:
+                raise GovernanceError("main transition exception lost exact SHA evidence") from exc
+        else:
+            raise GovernanceError("main moved mid-repair but stale dispatch was accepted")
+        if dispatch.call_count != 1 or observed_dispatches != ["security"]:
+            raise GovernanceError("superseded main allowed further stale workflow dispatch")
+
+    class _ChangingMainRecoveryApi(_PostMergeRecoveryApi):
+        def __init__(self, routes: dict[str, Any], replacement_sha: str) -> None:
+            super().__init__(routes)
+            self.replacement_sha = replacement_sha
+            self.main_reads = 0
+
+        def get(self, path: str) -> Any:
+            if path == f"/branches/{config['baseBranch']}":
+                self.main_reads += 1
+                if self.main_reads > 1:
+                    return {"commit": {"sha": self.replacement_sha}}
+            return super().get(path)
+
+    with patch(
+        __name__ + "._ensure_post_merge_qualification",
+        side_effect=MainSuperseded(recovered_sha, superseding_sha),
+    ) as qualify:
+        if _repair_current_main_bot_qualification(
+            _ChangingMainRecoveryApi(recovered_routes, superseding_sha), config
+        ):
+            raise GovernanceError("superseded repair forged old-main qualification receipts")
+        qualify.assert_called_once()
+    for label, raised, routes in (
+        (
+            "main did not actually move",
+            MainSuperseded(recovered_sha, superseding_sha),
+            _PostMergeRecoveryApi(recovered_routes),
+        ),
+        (
+            "exception refers to wrong base",
+            MainSuperseded("1" * 40, superseding_sha),
+            _ChangingMainRecoveryApi(recovered_routes, superseding_sha),
+        ),
+        (
+            "independent actual governance failure",
+            GovernanceError("upstream post-merge dispatch was refused"),
+            _ChangingMainRecoveryApi(recovered_routes, superseding_sha),
+        ),
+    ):
+        with patch(__name__ + "._ensure_post_merge_qualification", side_effect=raised):
+            try:
+                _repair_current_main_bot_qualification(routes, config)
+            except GovernanceError:
+                pass
+            else:
+                raise GovernanceError(f"superseded repair ignored {label}")
+
     for mutation in ("human", "not-main-merge", "no-pr"):
         routes = copy.deepcopy(recovered_routes)
         if mutation == "human":
