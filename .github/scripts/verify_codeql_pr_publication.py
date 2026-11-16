@@ -593,6 +593,7 @@ def discover(api: Any, *, trusted_main_sha: str | None = None) -> dict[str, str]
     seen_heads: set[tuple[str, str]] = set()
     blocked_heads: set[tuple[str, str]] = set()
     pending_heads: set[tuple[str, str]] = set()
+    unregistered_heads: set[tuple[str, str]] = set()
     for page in range(1, 4):
         payload = obj(
             api.get(
@@ -603,6 +604,55 @@ def discover(api: Any, *, trusted_main_sha: str | None = None) -> dict[str, str]
         )
         runs = payload.get("workflow_runs")
         require(isinstance(runs, list) and len(runs) <= 100, "CodeQL run page malformed")
+        page_count = len(runs)
+        if page == 3 and active != seen_heads:
+            # An exact new PR head may have no registered source run while
+            # 300 unrelated historical CodeQL runs fill the bounded feed.
+            # The GitHub workflow-runs API supports a canonical head_sha
+            # filter; do not treat a global lookback limit as final evidence.
+            remaining = sorted(active - seen_heads)
+            require(len(remaining) <= 20, "unbounded CodeQL exact-head fallback inventory")
+            exact_runs: list[dict[str, Any]] = []
+            for head, branch in remaining:
+                require(
+                    isinstance(head, str)
+                    and SHA.fullmatch(head) is not None
+                    and isinstance(branch, str)
+                    and BRANCH.fullmatch(branch) is not None,
+                    "noncanonical CodeQL PR subject identity",
+                )
+                targeted = obj(
+                    api.get(
+                        f"/repos/{REPOSITORY}/actions/workflows/{WORKFLOW_ID}/runs"
+                        f"?event=pull_request&head_sha={head}&per_page=100&page=1"
+                    ),
+                    "exact-head CodeQL source run listing",
+                )
+                rows = targeted.get("workflow_runs")
+                count = targeted.get("total_count")
+                require(
+                    type(count) is int
+                    and 0 <= count <= 1000
+                    and isinstance(rows, list)
+                    and len(rows) <= 100
+                    and count >= len(rows)
+                    and all(isinstance(row, dict) and row.get("head_sha") == head for row in rows),
+                    "malformed exact-head CodeQL source inventory",
+                )
+                candidates = [row for row in rows if row.get("head_branch") == branch]
+                if candidates:
+                    # GitHub returns the newest matching workflow run first.
+                    exact_runs.append(candidates[0])
+                else:
+                    unregistered_heads.add((head, branch))
+                    print(
+                        "DEFERRED: latest live PR head has no registered canonical CodeQL "
+                        "source run yet; no SARIF can be published",
+                        file=sys.stderr,
+                    )
+            # Process the exact-head newest observations FIRST. Existing
+            # seen-head identity prevents an old global result shadowing them.
+            runs = [*exact_runs, *runs]
         for run in runs:
             run = obj(run, "CodeQL workflow run")
             subject = (run.get("head_sha"), run.get("head_branch"))
@@ -717,7 +767,7 @@ def discover(api: Any, *, trusted_main_sha: str | None = None) -> dict[str, str]
         # All current heads have been classified. Never scan 300 unrelated
         # historical runs and falsely fail with "lookback exceeded" merely
         # because the relevant exact heads appeared on page one.
-        if seen_heads == active or len(runs) < 100:
+        if seen_heads == active or page_count < 100:
             if blocked_heads:
                 raise Blocked(
                     f"{len(blocked_heads)} live PR head(s) have no completed-success newest "
@@ -730,7 +780,19 @@ def discover(api: Any, *, trusted_main_sha: str | None = None) -> dict[str, str]
                     file=sys.stderr,
                 )
             return None
-    raise Blocked("CodeQL workflow run inventory exceeds bounded 300-run lookback")
+    if active - seen_heads and (active - seen_heads).issubset(unregistered_heads):
+        if blocked_heads:
+            raise Blocked(
+                f"{len(blocked_heads)} live PR head(s) have a completed unsuccessful "
+                "CodeQL scan; no ineligible evidence was published"
+            )
+        print(
+            f"DEFERRED: {len(active - seen_heads)} exact PR head(s) have no registered "
+            "CodeQL producer run yet; completed-run and scheduled wakes will recheck",
+            file=sys.stderr,
+        )
+        return None
+    raise Blocked("CodeQL run inventory inconsistent after exact-head fallback")
 
 
 def verify_sarif(directory: Path) -> None:
@@ -1188,6 +1250,63 @@ def self_test() -> None:
         discover(Fake(discover_lookup), trusted_main_sha=main)["head_sha"] == head,
         "trusted scheduler discovery rejected valid PR run",
     )
+
+    # A brand-new authenticated PR head can be absent from the bounded
+    # global 300-run feed even while older unrelated scans fill every page.
+    # The canonical SHA-filtered fallback must find it without guessing
+    # historical IDs or substituting an older completed run.
+    saturated = deepcopy(discover_lookup)
+    feed = f"/repos/{REPOSITORY}/actions/workflows/{WORKFLOW_ID}/runs"
+    for page in (1, 2, 3):
+        saturated[f"{feed}?event=pull_request&per_page=100&page={page}"] = {
+            "workflow_runs": [
+                dict(
+                    run,
+                    id=1000 + page * 100 + index,
+                    head_sha="f" * 40,
+                    head_branch="security/unrelated-history",
+                )
+                for index in range(100)
+            ]
+        }
+    exact_path = f"{feed}?event=pull_request&head_sha={head}&per_page=100&page=1"
+    saturated[exact_path] = {"total_count": 1, "workflow_runs": [run]}
+    require(
+        discover(Fake(saturated), trusted_main_sha=main)["head_sha"] == head,
+        "bounded historical feed hid a valid exact-head signed CodeQL scan",
+    )
+    newest_pending = deepcopy(saturated)
+    pending = dict(run, id=run_id + 1, status="in_progress", conclusion=None)
+    newest_pending[exact_path]["workflow_runs"] = [pending, run]
+    newest_pending[exact_path]["total_count"] = 2
+    newest_pending[f"{feed}?event=pull_request&per_page=100&page=3"]["workflow_runs"][50] = run
+    require(
+        discover(Fake(newest_pending), trusted_main_sha=main) is None,
+        "older global-success scan shadowed newer exact-head pending run",
+    )
+    not_registered = deepcopy(saturated)
+    not_registered[exact_path] = {"total_count": 0, "workflow_runs": []}
+    require(
+        discover(Fake(not_registered), trusted_main_sha=main) is None,
+        "missing yet-to-register exact-head CodeQL run was misclassified as final failure",
+    )
+    for label, invalid in (
+        ("wrong SHA", {"total_count": 1, "workflow_runs": [dict(run, head_sha="f" * 40)]}),
+        ("incomplete result count", {"total_count": 0, "workflow_runs": [run]}),
+        ("untrusted shape", {"total_count": 1, "workflow_runs": ["malformed"]}),
+        (
+            "failed newest source",
+            {"total_count": 1, "workflow_runs": [dict(run, conclusion="failure")]},
+        ),
+    ):
+        corrupt = deepcopy(saturated)
+        corrupt[exact_path] = invalid
+        try:
+            discover(Fake(corrupt), trusted_main_sha=main)
+        except Blocked:
+            pass
+        else:
+            raise AssertionError(f"exact-head fallback accepted {label}")
 
     # Preupload authority must be revalidated AFTER a download: stale results
     # and conflicting native publications cannot consume write authority.
