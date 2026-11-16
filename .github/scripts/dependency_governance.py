@@ -78,6 +78,20 @@ class PolicyBlock(RuntimeError):
     """Expected fail-closed decision: leave the pull request open."""
 
 
+class MainSuperseded(GovernanceError):
+    """The exact trusted-main post-merge subject was displaced during recovery."""
+
+    def __init__(self, expected_sha: str, observed_sha: str):
+        self.expected_sha = require_sha(expected_sha, "superseded main expected SHA")
+        self.observed_sha = require_sha(observed_sha, "superseded main observed SHA")
+        if self.expected_sha == self.observed_sha:
+            raise GovernanceError("superseded-main evidence must prove a different head")
+        super().__init__(
+            f"main advanced during post-merge qualification: "
+            f"expected {self.expected_sha}, observed {self.observed_sha}"
+        )
+
+
 def unique(values: list[str]) -> list[str]:
     return list(dict.fromkeys(value for value in values if value))
 
@@ -1020,8 +1034,9 @@ def _ensure_post_merge_workflow(
 ) -> dict[str, Any]:
     subject_sha = require_sha(subject_sha, "post-merge workflow subject SHA")
     workflow = str(expected["workflow"])
-    if _live_main_sha(api, config) != subject_sha:
-        raise GovernanceError(f"post-merge {workflow} dispatch subject is no longer current main")
+    live_sha = _live_main_sha(api, config)
+    if live_sha != subject_sha:
+        raise MainSuperseded(subject_sha, live_sha)
 
     existing = _select_post_merge_workflow_run(
         _post_merge_runs(api, subject_sha), subject_sha, expected, config
@@ -1059,10 +1074,9 @@ def _ensure_post_merge_qualification(
 ) -> list[dict[str, Any]]:
     evidence: list[dict[str, Any]] = []
     for expected in config["requiredWorkflows"]:
-        if _live_main_sha(api, config) != subject_sha:
-            raise GovernanceError(
-                "main advanced while registering required post-merge qualification workflows"
-            )
+        live_sha = _live_main_sha(api, config)
+        if live_sha != subject_sha:
+            raise MainSuperseded(subject_sha, live_sha)
         run = _ensure_post_merge_workflow(api, subject_sha, expected, config)
         evidence.append(
             {
@@ -1128,7 +1142,31 @@ def _repair_current_main_bot_qualification(
         raise GovernanceError("accepted main bot merge parents differ from canonical PR")
     # Repeat the exact-main lease for EACH dispatched workflow. Existing red
     # results stay blocking; missing ones are registered for real execution.
-    return _ensure_post_merge_qualification(api, main_sha, config)
+    # A separate trusted PR can merge during this read-only reconciliation.
+    # In that case our old subject is explicitly superseded, not an error
+    # about its security state: no previous run is made green or reused.
+    try:
+        return _ensure_post_merge_qualification(api, main_sha, config)
+    except MainSuperseded as exc:
+        if exc.expected_sha != main_sha:
+            raise GovernanceError("post-merge recovery observed wrong lease subject") from exc
+        live_sha = _live_main_sha(api, config)
+        if live_sha == main_sha:
+            raise GovernanceError(
+                "post-merge recovery claimed a main transition that is not observable"
+            ) from exc
+        print(
+            json.dumps(
+                {
+                    "decision": "deferred-superseded-main",
+                    "subjectSha": main_sha,
+                    "liveMainSha": live_sha,
+                    "note": "new main push must independently qualify under its own SHA",
+                },
+                sort_keys=True,
+            )
+        )
+        return []
 
 
 def _merge(api: GitHubApi, subject: dict[str, Any], config: dict[str, Any]) -> dict[str, Any]:
@@ -2472,6 +2510,73 @@ dev = ["beta==2.0.0"]
         qualify.assert_called_once()
         if qualify.call_args.args[1] != recovered_sha:
             raise GovernanceError("recovery qualified the wrong accepted-main SHA")
+
+    # Regression: another protected PR can merge while the trusted repair
+    # process is still registering a previous bot merge's real workflows.
+    # The controller must never dispatch another job for the displaced SHA
+    # or report stale CI/CodeQL/Security evidence as current.
+    superseding_sha = "f" * 40
+    observed_dispatches.clear()
+    with (
+        patch(__name__ + "._live_main_sha", side_effect=[exact_sha, superseding_sha]),
+        patch(__name__ + "._ensure_post_merge_workflow", side_effect=_record_dispatch) as dispatch,
+    ):
+        try:
+            _ensure_post_merge_qualification(None, exact_sha, config)  # type: ignore[arg-type]
+        except MainSuperseded as exc:
+            if exc.expected_sha != exact_sha or exc.observed_sha != superseding_sha:
+                raise GovernanceError("main transition exception lost exact SHA evidence") from exc
+        else:
+            raise GovernanceError("main moved mid-repair but stale dispatch was accepted")
+        if dispatch.call_count != 1 or observed_dispatches != ["security"]:
+            raise GovernanceError("superseded main allowed further stale workflow dispatch")
+
+    class _ChangingMainRecoveryApi(_PostMergeRecoveryApi):
+        def __init__(self, routes: dict[str, Any], replacement_sha: str) -> None:
+            super().__init__(routes)
+            self.replacement_sha = replacement_sha
+            self.main_reads = 0
+
+        def get(self, path: str) -> Any:
+            if path == f"/branches/{config['baseBranch']}":
+                self.main_reads += 1
+                if self.main_reads > 1:
+                    return {"commit": {"sha": self.replacement_sha}}
+            return super().get(path)
+
+    with patch(
+        __name__ + "._ensure_post_merge_qualification",
+        side_effect=MainSuperseded(recovered_sha, superseding_sha),
+    ) as qualify:
+        if _repair_current_main_bot_qualification(
+            _ChangingMainRecoveryApi(recovered_routes, superseding_sha), config
+        ):
+            raise GovernanceError("superseded repair forged old-main qualification receipts")
+        qualify.assert_called_once()
+    for label, raised, routes in (
+        (
+            "main did not actually move",
+            MainSuperseded(recovered_sha, superseding_sha),
+            _PostMergeRecoveryApi(recovered_routes),
+        ),
+        (
+            "exception refers to wrong base",
+            MainSuperseded("2" * 40, superseding_sha),
+            _ChangingMainRecoveryApi(recovered_routes, superseding_sha),
+        ),
+        (
+            "independent actual governance failure",
+            GovernanceError("upstream post-merge dispatch was refused"),
+            _ChangingMainRecoveryApi(recovered_routes, superseding_sha),
+        ),
+    ):
+        with patch(__name__ + "._ensure_post_merge_qualification", side_effect=raised):
+            try:
+                _repair_current_main_bot_qualification(routes, config)
+            except GovernanceError:
+                pass
+            else:
+                raise GovernanceError(f"superseded repair ignored {label}")
 
     for mutation in ("human", "not-main-merge", "no-pr"):
         routes = copy.deepcopy(recovered_routes)
