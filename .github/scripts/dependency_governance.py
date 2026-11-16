@@ -2561,7 +2561,7 @@ dev = ["beta==2.0.0"]
         ),
         (
             "exception refers to wrong base",
-            MainSuperseded("1" * 40, superseding_sha),
+            MainSuperseded("2" * 40, superseding_sha),
             _ChangingMainRecoveryApi(recovered_routes, superseding_sha),
         ),
         (
