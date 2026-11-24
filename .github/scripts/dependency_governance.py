@@ -1620,9 +1620,7 @@ def selftest(config: dict[str, Any]) -> None:
         readiness = verify_scheduled_owner_readiness(api, config, "schedule")
         if readiness != {"checked": True, "identity": "verified"}:
             raise GovernanceError("valid scheduled owner credential was not accepted")
-        owner_probe.assert_called_once_with(
-            "GET", f"{API_ROOT}/user", token="fixture-owner-token"
-        )
+        owner_probe.assert_called_once_with("GET", f"{API_ROOT}/user", token="fixture-owner-token")
 
     with patch.dict(os.environ, {"DEPENDABOT_OWNER_TOKEN": ""}):
         try:
@@ -1668,7 +1666,6 @@ def selftest(config: dict[str, Any]) -> None:
         for event_name in ("push", "pull_request", "workflow_run", "workflow_dispatch"):
             if verify_scheduled_owner_readiness(api, config, event_name) != {"checked": False}:
                 raise GovernanceError("non-scheduled event acquired owner readiness check")
-
 
     def github_error(status: int) -> urllib.error.HTTPError:
         return urllib.error.HTTPError(
