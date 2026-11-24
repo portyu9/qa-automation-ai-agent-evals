@@ -1238,6 +1238,16 @@ def _verified_owner_token(api: GitHubApi, config: dict[str, Any]) -> str:
     return token
 
 
+def verify_scheduled_owner_readiness(
+    api: GitHubApi, config: dict[str, Any], event_name: str
+) -> dict[str, Any]:
+    """An empty scheduled bot queue must not mask an expired owner credential."""
+    if event_name != "schedule":
+        return {"checked": False}
+    _verified_owner_token(api, config)
+    return {"checked": True, "identity": "verified"}
+
+
 def _next_native_refresh_action(
     comments: list[dict[str, Any]],
     head_sha: str,
@@ -1527,6 +1537,11 @@ def reconcile(config: dict[str, Any], *, allow_merge: bool) -> int:
     if repository != config["repository"]:
         raise GovernanceError(f"workflow repository {repository!r} does not match bound config")
     api = GitHubApi(os.environ.get("GITHUB_TOKEN", ""), repository)
+    owner_readiness = verify_scheduled_owner_readiness(
+        api, config, os.environ.get("GITHUB_EVENT_NAME", "")
+    )
+    if owner_readiness["checked"]:
+        print(json.dumps({"decision": "owner-readiness", **owner_readiness}, sort_keys=True))
     eligible = 0
     for summary in open_dependabot_prs(api):
         number = summary.get("number")
@@ -1588,6 +1603,72 @@ def selftest(config: dict[str, Any]) -> None:
     # Real GitHubApi calls, with deterministic upstream failures: retries must
     # be safe, bounded and incapable of replaying owner approval or merge.
     api = GitHubApi("fixture-github-token", config["repository"])
+
+    # The exact same authoritative authenticated-user check must happen on an
+    # idle scheduled run before open_dependabot_prs can return an empty list.
+    with (
+        patch.dict(os.environ, {"DEPENDABOT_OWNER_TOKEN": "fixture-owner-token"}),
+        patch.object(
+            api,
+            "request",
+            return_value={
+                "login": config["ownerApprovalLogin"],
+                "id": config["ownerApprovalUserId"],
+            },
+        ) as owner_probe,
+    ):
+        readiness = verify_scheduled_owner_readiness(api, config, "schedule")
+        if readiness != {"checked": True, "identity": "verified"}:
+            raise GovernanceError("valid scheduled owner credential was not accepted")
+        owner_probe.assert_called_once_with(
+            "GET", f"{API_ROOT}/user", token="fixture-owner-token"
+        )
+
+    with patch.dict(os.environ, {"DEPENDABOT_OWNER_TOKEN": ""}):
+        try:
+            verify_scheduled_owner_readiness(api, config, "schedule")
+        except GovernanceError as exc:
+            if "DEPENDABOT_OWNER_TOKEN is required" not in str(exc):
+                raise
+        else:
+            raise GovernanceError("absent scheduled owner token was accepted")
+
+    with (
+        patch.dict(os.environ, {"DEPENDABOT_OWNER_TOKEN": "fixture-owner-token"}),
+        patch.object(
+            api,
+            "request",
+            return_value={
+                "login": config["ownerApprovalLogin"],
+                "id": config["ownerApprovalUserId"] + 1,
+            },
+        ),
+    ):
+        try:
+            verify_scheduled_owner_readiness(api, config, "schedule")
+        except GovernanceError as exc:
+            if "configured repository owner identity" not in str(exc):
+                raise
+        else:
+            raise GovernanceError("foreign scheduled owner credential was accepted")
+
+    with (
+        patch.dict(os.environ, {"DEPENDABOT_OWNER_TOKEN": "fixture-owner-token"}),
+        patch.object(api, "request", side_effect=GovernanceError("expired PAT")),
+    ):
+        try:
+            verify_scheduled_owner_readiness(api, config, "schedule")
+        except GovernanceError as exc:
+            if "expired PAT" not in str(exc):
+                raise
+        else:
+            raise GovernanceError("expired scheduled owner credential was accepted")
+
+    with patch.object(api, "request", side_effect=AssertionError("unexpected owner probe")):
+        for event_name in ("push", "pull_request", "workflow_run", "workflow_dispatch"):
+            if verify_scheduled_owner_readiness(api, config, event_name) != {"checked": False}:
+                raise GovernanceError("non-scheduled event acquired owner readiness check")
+
 
     def github_error(status: int) -> urllib.error.HTTPError:
         return urllib.error.HTTPError(
