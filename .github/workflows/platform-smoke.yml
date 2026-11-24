@@ -33,8 +33,10 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - platform: macOS 26 / Python 3.14
-            runner: macos-26
+          # Keep macOS 26 coverage on the documented Intel pool: the hosted
+          # macOS arm64 queue can cancel jobs before acquiring a runner.
+          - platform: macOS 26 Intel / Python 3.14
+            runner: macos-26-intel
           - platform: Windows 2025 / Python 3.14
             runner: windows-2025
     runs-on: ${{ matrix.runner }}
@@ -49,6 +51,9 @@ jobs:
         with:
           python-version: "3.14"
           cache: pip
+      - name: Verify expected macOS runner architecture
+        if: runner.os == 'macOS'
+        run: python -c "import platform; assert platform.machine() == 'x86_64', platform.machine()"
       - name: Install hash-pinned Windows supplement
         if: runner.os == 'Windows'
         shell: bash
